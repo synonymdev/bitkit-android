@@ -7,6 +7,7 @@ import coil3.memory.MemoryCache
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactProfileSource
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkySessionBootstrapResult
@@ -1312,6 +1313,78 @@ class PubkyRepoTest : BaseUnitTest() {
         repo.awaitInitialization()
 
         assertNull(repo.publicKey.value)
+        assertFalse(repo.sessionRestorationFailed.value)
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
+    fun `initialize should flag session restoration failure when service startup fails with identity error`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.initialize()).thenAnswer {
+            throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+        }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertTrue(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(pubkyService, never()).importSession(any())
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
+    fun `initialize preserves borrowed identity without exporting it when startup has an identity error`() = test {
+        val identity = stubRingIdentity()
+        pubkyDataFlow.value = PubkyStoreData(externalIdentityRef = identity)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("borrowed_session")
+        whenever(pubkyService.initialize()).thenAnswer {
+            throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+        }
+        clearInvocations(keychain, pubkyService, pubkyStore, sharedPubkyDiscovery)
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertTrue(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
+        assertNull(sharedExportEnabled)
+        verifyBlocking(keychain, never()) { delete(any()) }
+        verifyBlocking(keychain, never()) { upsertString(any(), any()) }
+        verifyBlocking(pubkyStore, never()) { reset() }
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
+        verifyBlocking(sharedPubkyDiscovery, never()) { readRingCredential(any()) }
+    }
+
+    @Test
+    fun `initialize should not flag session restoration failure when service startup fails with non-identity error`() =
+        test {
+            whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+            whenever(pubkyService.initialize()).thenAnswer {
+                throw AppError(PaykitException.Storage("storage_error", "Corrupted state"))
+            }
+            val repo = createSut()
+
+            repo.awaitInitialization()
+
+            assertFalse(repo.sessionRestorationFailed.value)
+            verify(pubkyService, never()).importSession(any())
+        }
+
+    @Test
+    fun `initialize should not flag session restoration failure on identity error without saved session`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+        whenever(pubkyService.initialize()).thenAnswer {
+            throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+        }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertFalse(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
         verify(pubkyService, never()).importSession(any())
     }
 

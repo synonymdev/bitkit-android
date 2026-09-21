@@ -126,6 +126,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             pubkyRepo,
             privatePaykitRepo,
             privatePaykitAddressReservationRepo,
+            migrationService,
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(lightningRepo).setWiping(true)
@@ -136,6 +137,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(privatePaykitRepo).closeAndClear()
         inOrder.verify(lightningRepo).wipeStorage(0)
+        inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
+        inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(pubkyRepo).wipeLocalState()
         inOrder.verify(keychain).wipe()
@@ -148,6 +151,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
         inOrder.verify(hwWalletRepo).resetState()
+        inOrder.verify(migrationService).markMigrationChecked()
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)
         inOrder.verify(lightningRepo).setWiping(false)
@@ -186,6 +190,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
 
         assertEquals(error, result.exceptionOrNull())
         verify(lightningRepo, never()).stop()
+        verify(migrationService, never()).setNeedsPostMigrationSync(any())
+        verify(migrationService, never()).cleanupAfterMigration()
         verify(pubkyRepo, never()).wipeLocalState()
         verify(keychain, never()).wipe()
         verify(db, never()).clearAllTables()
@@ -342,6 +348,63 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(db, never()).clearAllTables()
         assertFalse(onWipeCalled)
         assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should clear migration data before wiping the keychain`() = runTest {
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        val inOrder = inOrder(migrationService, keychain)
+        inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
+        inOrder.verify(migrationService).cleanupAfterMigration()
+        inOrder.verify(keychain).wipe()
+    }
+
+    @Test
+    fun `invoke should mark migration checked when migration data clear fails`() = runTest {
+        whenever { migrationService.cleanupAfterMigration() }.thenThrow(RuntimeException("clear failed"))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        verify(migrationService).markMigrationChecked()
+        assertTrue(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should clear post-migration sync flag even when migration data clear fails`() = runTest {
+        whenever { migrationService.cleanupAfterMigration() }.thenThrow(RuntimeException("clear failed"))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        verify(migrationService).setNeedsPostMigrationSync(false)
+        verify(migrationService).markMigrationChecked()
+    }
+
+    @Test
+    fun `invoke should clear migration data and finish when post-migration sync flag clear fails`() = runTest {
+        whenever { migrationService.setNeedsPostMigrationSync(false) }.thenThrow(RuntimeException("flag failed"))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        verify(migrationService).cleanupAfterMigration()
+        verify(migrationService).markMigrationChecked()
+        assertTrue(onSetWalletExistsStateCalled)
     }
 
     @Test
