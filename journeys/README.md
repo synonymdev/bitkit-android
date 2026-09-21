@@ -129,8 +129,8 @@ fixtures, push notifications) live in each suite's README.
 | [receive](receive) | 1 | Receive sheet tab selection; needs a spending channel, no README |
 | [restore-wallet](restore-wallet) | 1 | Pasting a seed fragment on Restore wallet; needs a wallet-free device; no README |
 | [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
-| [shop](shop) | 1 | Shop Discover category titles and web view handoff; needs Bitrefill reachable; no README |
 | [send](send) | 1 | Own-invoice guard on the send flow; needs a spending channel and savings; no README |
+| [shop](shop) | 1 | Shop Discover category titles and web view handoff; needs Bitrefill reachable; no README |
 | [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
 | [tags](tags) | 1 | Tag input length cap on an activity; no backend, no README |
 | [transfers](transfers) | 1 | Transfer to Spending settling after the LSP closes the channel; no README |
