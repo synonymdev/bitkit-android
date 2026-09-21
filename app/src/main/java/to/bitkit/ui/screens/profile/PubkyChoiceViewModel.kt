@@ -94,16 +94,18 @@ class PubkyChoiceViewModel @Inject constructor(
                             }
                         }
                         .onFailure {
-                            handleSelectionFailure("Preparing shared profile failed", it)
+                            reportSelectionError("Preparing shared profile failed", it)
+                            _effects.emit(PubkyChoiceEffect.NavigateToPayContacts)
                         }
                 }
                 .onFailure {
-                    handleSelectionFailure("Connecting shared profile failed", it)
+                    reportSelectionError("Connecting shared profile failed", it)
+                    refreshRingIdentities()
                 }
         }
     }
 
-    private suspend fun handleSelectionFailure(message: String, error: Throwable) {
+    private suspend fun reportSelectionError(message: String, error: Throwable) {
         Logger.error(message, error, context = TAG)
         _uiState.update { it.copy(selectedPubky = null) }
         ToastEventBus.send(
@@ -111,7 +113,6 @@ class PubkyChoiceViewModel @Inject constructor(
             title = context.getString(R.string.profile__choice_error),
             description = error.message,
         )
-        refreshRingIdentities()
     }
 }
 

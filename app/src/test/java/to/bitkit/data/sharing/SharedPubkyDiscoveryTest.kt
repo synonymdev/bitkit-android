@@ -64,9 +64,32 @@ class SharedPubkyDiscoveryTest : BaseUnitTest() {
     }
 
     @Test
-    fun `empty or absent credential responses are unavailable`() = test {
+    fun `empty credential response proves the identity is unavailable`() = test {
         assertSame(SharedPubkyError.IdentityUnavailable, readCredential(cursor()).exceptionOrNull())
-        assertSame(SharedPubkyError.IdentityUnavailable, readCredential(null).exceptionOrNull())
+    }
+
+    @Test
+    fun `null provider query results are retryable`() = test {
+        assertSame(SharedPubkyError.ProviderQueryFailed, discoverIdentities(null).exceptionOrNull())
+        assertSame(SharedPubkyError.ProviderQueryFailed, readCredential(null).exceptionOrNull())
+    }
+
+    @Test
+    fun `empty identity response proves no shared identities exist`() = test {
+        val result = discoverIdentities(MatrixCursor(SharedPubkyContract.publicColumns))
+
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrThrow().isEmpty())
+    }
+
+    @Test
+    fun `missing Ring provider is definitively unavailable`() = test {
+        whenever(
+            packageManager.resolveContentProvider(SharedPubkyContract.RING_AUTHORITY, PackageManager.MATCH_ALL),
+        ).thenReturn(null)
+
+        assertSame(SharedPubkyError.SourceUnavailable, discovery.discoverRingIdentities().exceptionOrNull())
+        verifyNoInteractions(contentResolver)
     }
 
     @Test
@@ -142,6 +165,22 @@ class SharedPubkyDiscoveryTest : BaseUnitTest() {
         ).thenReturn(cursor)
 
         return discovery.readRingCredential(WIRE_PUBKY).also {
+            if (cursor != null) assertTrue(cursor.isClosed)
+        }
+    }
+
+    private suspend fun discoverIdentities(cursor: MatrixCursor?): Result<List<SharedPubkyIdentity>> {
+        whenever(
+            contentResolver.query(
+                SharedPubkyContract.ringIdentitiesUri,
+                SharedPubkyContract.publicColumns,
+                null,
+                null,
+                null,
+            ),
+        ).thenReturn(cursor)
+
+        return discovery.discoverRingIdentities().also {
             if (cursor != null) assertTrue(cursor.isClosed)
         }
     }

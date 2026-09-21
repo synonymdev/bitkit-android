@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -130,6 +131,36 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
             effects,
         )
         job.cancel()
+    }
+
+    @Test
+    fun `failed import preparation reports error and opens Pay Contacts with adopted identity`() = test {
+        val identity = ringIdentity()
+        val error = IllegalStateException("Contacts unavailable")
+        whenever(pubkyRepo.discoverRingIdentities()).thenReturn(Result.success(listOf(identity)))
+        whenever(pubkyRepo.fetchRemoteProfile("pubky$WIRE_PUBKY"))
+            .thenReturn(Result.success(PubkyProfile.placeholder("pubky$WIRE_PUBKY")))
+        whenever(pubkyRepo.adoptRingIdentity(identity)).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.prepareImport()).thenReturn(Result.failure(error))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        val effects = mutableListOf<PubkyChoiceEffect>()
+        val toasts = mutableListOf<Toast>()
+        val effectsJob = launch { sut.effects.collect(effects::add) }
+        val toastsJob = launch { ToastEventBus.events.collect(toasts::add) }
+        sut.selectRingIdentity(sut.uiState.value.identities.single())
+        advanceUntilIdle()
+
+        assertEquals(listOf<PubkyChoiceEffect>(PubkyChoiceEffect.NavigateToPayContacts), effects)
+        assertNull(sut.uiState.value.selectedPubky)
+        assertEquals("Couldn't use this pubky", toasts.last().title)
+        assertEquals(error.message, toasts.last().description)
+        verify(pubkyRepo).adoptRingIdentity(identity)
+        verify(pubkyRepo).prepareImport()
+        verify(pubkyRepo, times(1)).discoverRingIdentities()
+        effectsJob.cancel()
+        toastsJob.cancel()
     }
 
     @Test

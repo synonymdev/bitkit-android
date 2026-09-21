@@ -302,7 +302,7 @@ class PubkyRepo @Inject constructor(
         identityRef: SharedPubkyIdentity,
     ): InitResult = withContext(ioDispatcher) {
         val sourceIdentity = sharedPubkyDiscovery.discoverRingIdentities().getOrElse {
-            return@withContext InitResult.ExternalSourceUnavailable
+            return@withContext externalSourceFailure(it)
         }.firstOrNull { it.matches(identityRef) }
             ?: return@withContext InitResult.ExternalSourceUnavailable
 
@@ -319,7 +319,7 @@ class PubkyRepo @Inject constructor(
         }
 
         val credential = sharedPubkyDiscovery.readRingCredential(sourceIdentity.pubky).getOrElse {
-            return@withContext InitResult.ExternalSourceUnavailable
+            return@withContext externalSourceFailure(it)
         }
         if (!credential.matches(identityRef)) return@withContext InitResult.ExternalSourceUnavailable
 
@@ -332,6 +332,17 @@ class PubkyRepo @Inject constructor(
             InitResult.RestorationFailed
         }
     }
+
+    private fun externalSourceFailure(error: Throwable): InitResult {
+        if (error.isDefinitiveExternalSourceFailure()) {
+            return InitResult.ExternalSourceUnavailable
+        }
+        Logger.warn("Failed to restore Pubky Ring identity source", error, context = TAG)
+        return InitResult.RestorationFailed
+    }
+
+    private fun Throwable.isDefinitiveExternalSourceFailure() =
+        this is SharedPubkyError && this !is SharedPubkyError.ProviderQueryFailed
 
     private suspend fun resolveSignedInSession(
         savedSessionSecret: String?,
@@ -973,9 +984,20 @@ class PubkyRepo @Inject constructor(
         } ?: return@withContext true
 
         val available = sharedPubkyDiscovery.discoverRingIdentities()
-            .getOrNull()
-            ?.any { it.matches(identityRef) }
-            ?: false
+            .getOrElse {
+                if (it.isDefinitiveExternalSourceFailure()) {
+                    clearUnavailableExternalIdentityLocked()
+                    Logger.warn(
+                        "Disconnected unavailable Pubky Ring identity '${redacted(identityRef.pubky)}'",
+                        it,
+                        context = TAG,
+                    )
+                    return@withContext false
+                }
+                Logger.warn("Failed to validate Pubky Ring identity source", it, context = TAG)
+                return@withContext false
+            }
+            .any { it.matches(identityRef) }
         if (available) return@withContext true
 
         clearUnavailableExternalIdentityLocked()
@@ -1209,7 +1231,7 @@ class PubkyRepo @Inject constructor(
                 if (identityRef != null) {
                     if (!validateExternalIdentitySourceLocked()) return@withContext false
                     val credential = sharedPubkyDiscovery.readRingCredential(identityRef.pubky).getOrElse {
-                        clearUnavailableExternalIdentityLocked()
+                        if (it.isDefinitiveExternalSourceFailure()) clearUnavailableExternalIdentityLocked()
                         return@withContext false
                     }
                     val publicKey = signInWithExternalCredential(credential)
@@ -1461,7 +1483,7 @@ class PubkyRepo @Inject constructor(
         }
 
         val credential = sharedPubkyDiscovery.readRingCredential(identityRef.pubky).getOrElse {
-            clearUnavailableExternalIdentityLocked()
+            if (it.isDefinitiveExternalSourceFailure()) clearUnavailableExternalIdentityLocked()
             return@withContext null
         }
         val isValid = runSuspendCatching {

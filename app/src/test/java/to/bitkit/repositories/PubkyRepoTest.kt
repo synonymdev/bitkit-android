@@ -398,6 +398,24 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `transient Ring credential query failure rejects auth without disconnecting identity`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        whenever(sharedPubkyDiscovery.readRingCredential(identity.pubky))
+            .thenReturn(Result.failure(SharedPubkyError.ProviderQueryFailed))
+        clearInvocations(pubkyService, pubkyStore)
+
+        val result = sut.approveAuth("pubkyauth://signin", "/pub/example/:rw", "paykit.test")
+
+        assertTrue(result.isFailure)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
+        verifyBlocking(pubkyService, never()) { approveAuth(any(), any(), any(), any()) }
+        verify(pubkyStore, never()).reset()
+    }
+
+    @Test
     fun `missing Ring source clears borrowed reference and local session`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
@@ -415,6 +433,45 @@ class PubkyRepoTest : BaseUnitTest() {
         }
         verifyBlocking(pubkyService, never()) { signOut() }
         verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+    }
+
+    @Test
+    fun `transient Ring discovery failures keep borrowed reference and local session for retry`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        clearInvocations(pubkyService, pubkyStore)
+
+        listOf(
+            TestAppError("Provider unavailable"),
+            SharedPubkyError.ProviderQueryFailed,
+        ).forEach {
+            whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.failure(it))
+
+            assertFalse(sut.validateExternalIdentitySource())
+            assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+            assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
+        }
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
+        verify(pubkyStore, never()).reset()
+    }
+
+    @Test
+    fun `unavailable Ring source clears borrowed reference and local session`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        whenever(sharedPubkyDiscovery.discoverRingIdentities())
+            .thenReturn(Result.failure(SharedPubkyError.SourceUnavailable))
+        clearInvocations(pubkyService, pubkyStore)
+
+        val available = sut.validateExternalIdentitySource()
+
+        assertFalse(available)
+        assertNull(sut.publicKey.value)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        inOrder(pubkyService, pubkyStore) {
+            verify(pubkyService).clearExternalSessionAccess()
+            verify(pubkyStore).reset()
+        }
     }
 
     @Test
@@ -1520,6 +1577,94 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals(identityRef, pubkyDataFlow.value.externalIdentityRef)
         verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
         verifyBlocking(pubkyStore, never()) { reset() }
+    }
+
+    @Test
+    fun `initialize preserves borrowed identity when Ring discovery failures are retryable`() = test {
+        val identity = stubRingIdentity()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("borrowed_session")
+        listOf(
+            TestAppError("Provider unavailable"),
+            SharedPubkyError.ProviderQueryFailed,
+        ).forEach {
+            pubkyDataFlow.value = PubkyStoreData(externalIdentityRef = identity)
+            whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.failure(it))
+            clearInvocations(pubkyService, pubkyStore)
+            val repo = createSut()
+
+            repo.awaitInitialization()
+
+            assertTrue(repo.sessionRestorationFailed.value)
+            assertFalse(repo.isAuthenticated.value)
+            assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
+            verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
+            verifyBlocking(pubkyStore, never()) { reset() }
+        }
+    }
+
+    @Test
+    fun `initialize clears borrowed identity when Ring source is unavailable`() = test {
+        val identity = stubRingIdentity()
+        pubkyDataFlow.value = PubkyStoreData(externalIdentityRef = identity)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("borrowed_session")
+        whenever(sharedPubkyDiscovery.discoverRingIdentities())
+            .thenReturn(Result.failure(SharedPubkyError.SourceUnavailable))
+        clearInvocations(pubkyService, pubkyStore)
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertFalse(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        inOrder(pubkyService, pubkyStore) {
+            verify(pubkyService).clearExternalSessionAccess()
+            verify(pubkyStore).reset()
+        }
+    }
+
+    @Test
+    fun `initialize preserves borrowed identity when Ring credential read fails transiently`() = test {
+        val identity = stubRingIdentity()
+        pubkyDataFlow.value = PubkyStoreData(externalIdentityRef = identity)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("stale_session")
+        whenever(pubkyService.importExternalSession("stale_session"))
+            .thenAnswer { throw TestAppError("Expired") }
+        whenever(sharedPubkyDiscovery.readRingCredential(identity.pubky))
+            .thenReturn(Result.failure(SharedPubkyError.ProviderQueryFailed))
+        clearInvocations(pubkyService, pubkyStore)
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertTrue(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
+        verifyBlocking(pubkyStore, never()) { reset() }
+    }
+
+    @Test
+    fun `initialize clears borrowed identity when Ring credential is unavailable`() = test {
+        val identity = stubRingIdentity()
+        pubkyDataFlow.value = PubkyStoreData(externalIdentityRef = identity)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("stale_session")
+        whenever(pubkyService.importExternalSession("stale_session"))
+            .thenAnswer { throw TestAppError("Expired") }
+        whenever(sharedPubkyDiscovery.readRingCredential(identity.pubky))
+            .thenReturn(Result.failure(SharedPubkyError.IdentityUnavailable))
+        clearInvocations(pubkyService, pubkyStore)
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertFalse(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        inOrder(pubkyService, pubkyStore) {
+            verify(pubkyService).clearExternalSessionAccess()
+            verify(pubkyStore).reset()
+        }
     }
 
     @Test

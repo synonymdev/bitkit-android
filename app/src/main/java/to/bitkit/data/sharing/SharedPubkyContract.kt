@@ -93,6 +93,7 @@ class SharedPubkyCredential(
 
 sealed class SharedPubkyError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     data object SourceUnavailable : SharedPubkyError("Pubky Ring identity sharing is unavailable")
+    data object ProviderQueryFailed : SharedPubkyError("Pubky Ring identity sharing query failed")
     class UntrustedSource(source: String) : SharedPubkyError("Untrusted Pubky identity source '$source'")
     class UnsupportedVersion(version: Int) : SharedPubkyError("Unsupported Pubky sharing version '$version'")
     data object InvalidResponse : SharedPubkyError("Pubky Ring returned an invalid shared identity")

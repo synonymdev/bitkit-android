@@ -25,7 +25,7 @@ class SharedPubkyDiscovery @Inject constructor(
                 null,
                 null,
                 null,
-            )?.use(::readPublicIdentities) ?: throw SharedPubkyError.SourceUnavailable
+            )?.use(::readPublicIdentities) ?: throw SharedPubkyError.ProviderQueryFailed
         }
     }
 
@@ -39,7 +39,7 @@ class SharedPubkyDiscovery @Inject constructor(
                 null,
                 null,
                 null,
-            )?.use { readCredential(it, expectedPubky) } ?: throw SharedPubkyError.IdentityUnavailable
+            )?.use { readCredential(it, expectedPubky) } ?: throw SharedPubkyError.ProviderQueryFailed
         }
     }
 
