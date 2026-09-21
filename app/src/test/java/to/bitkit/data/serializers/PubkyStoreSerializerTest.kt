@@ -20,6 +20,7 @@ class PubkyStoreSerializerTest : BaseUnitTest() {
                 "cachedName": "Ring user",
                 "cachedImageUri": "pubky://avatar",
                 "contactProfileOverrides": {},
+                "privatePaykitStateCleanupPending": false,
                 "externalIdentityRef": {
                     "protocolVersion": 1,
                     "sourcePackage": "app.pubkyring",
@@ -33,6 +34,29 @@ class PubkyStoreSerializerTest : BaseUnitTest() {
         PubkyStoreSerializer.writeTo(restored, output)
 
         assertEquals(SharedPubkyIdentity(1, "app.pubkyring", WIRE_PUBKY), restored.externalIdentityRef)
+        assertEquals(
+            json.parseToJsonElement(storedJson),
+            json.parseToJsonElement(output.toByteArray().decodeToString()),
+        )
+    }
+
+    @Test
+    fun `private Paykit cleanup marker survives persistence`() = test {
+        val storedJson = """
+            {
+                "cachedName": null,
+                "cachedImageUri": null,
+                "contactProfileOverrides": {},
+                "externalIdentityRef": null,
+                "privatePaykitStateCleanupPending": true
+            }
+        """.trimIndent()
+
+        val restored = PubkyStoreSerializer.readFrom(storedJson.byteInputStream())
+        val output = ByteArrayOutputStream()
+        PubkyStoreSerializer.writeTo(restored, output)
+
+        assertEquals(true, restored.privatePaykitStateCleanupPending)
         assertEquals(
             json.parseToJsonElement(storedJson),
             json.parseToJsonElement(output.toByteArray().decodeToString()),

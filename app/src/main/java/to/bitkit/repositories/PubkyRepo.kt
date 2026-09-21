@@ -32,6 +32,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
 import to.bitkit.data.PubkyStore
+import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.data.keychain.Keychain
@@ -60,6 +61,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.math.min
 
@@ -82,6 +84,7 @@ class PubkyRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val httpClient: HttpClient,
     private val sharedPubkyDiscovery: SharedPubkyDiscovery,
+    private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
 ) {
     companion object {
         private const val TAG = "PubkyRepo"
@@ -177,6 +180,7 @@ class PubkyRepo @Inject constructor(
         identityLifecycleMutex.withLock {
             _sessionRestorationFailed.update { false }
             val result = runSuspendCatching {
+                retryPendingPrivatePaykitStateCleanupLocked()
                 resolveStoredSessionInitialization()
             }.onFailure {
                 Logger.error("Failed to initialize paykit", it, context = TAG)
@@ -471,6 +475,7 @@ class PubkyRepo @Inject constructor(
         avatarBytes: ByteArray?,
     ): Result<Unit> = identityLifecycleMutex.withLock {
         runSuspendCatching {
+            retryPendingPrivatePaykitStateCleanupLocked()
             if (pubkyStore.data.first().externalIdentityRef != null) {
                 throw SharedPubkyError.IdentityConflict
             }
@@ -929,6 +934,7 @@ class PubkyRepo @Inject constructor(
                 runSuspendCatching {
                     withContext(ioDispatcher) {
                         ensureServiceInitialized()
+                        retryPendingPrivatePaykitStateCleanupLocked()
                         val canonicalIdentity = identity.validated()
                         val currentIdentityRef = pubkyStore.data.first().externalIdentityRef?.validated()
                         val currentPublicKey = _publicKey.value
@@ -1054,6 +1060,7 @@ class PubkyRepo @Inject constructor(
         runSuspendCatching {
             withContext(ioDispatcher) {
                 require(request.isSignup) { "Not a Pubky signup request" }
+                retryPendingPrivatePaykitStateCleanupLocked()
                 if (pubkyStore.data.first().externalIdentityRef != null) {
                     throw SharedPubkyError.IdentityConflict
                 }
@@ -1182,6 +1189,7 @@ class PubkyRepo @Inject constructor(
             ensureServiceInitialized()
 
             identityLifecycleMutex.withLock {
+                retryPendingPrivatePaykitStateCleanupLocked()
                 disableLocalIdentityExport()
                 runSuspendCatching { pubkyService.forgetSessionAccess() }
                     .onFailure {
@@ -1236,6 +1244,7 @@ class PubkyRepo @Inject constructor(
     suspend fun refreshSessionIfPossible(): Result<Boolean> = identityLifecycleMutex.withLock {
         runSuspendCatching {
             withContext(ioDispatcher) {
+                retryPendingPrivatePaykitStateCleanupLocked()
                 val identityRef = pubkyStore.data.first().externalIdentityRef?.validated()
                 if (identityRef != null) {
                     if (!validateExternalIdentitySourceLocked()) return@withContext false
@@ -1535,6 +1544,14 @@ class PubkyRepo @Inject constructor(
 
         // Published endpoints outlive the borrowed identity, so drop them while the session still
         // works and keep the cleanup pending when that fails.
+        val privatePaykit = privatePaykitRepo.get()
+        pubkyStore.update { it.copy(privatePaykitStateCleanupPending = true) }
+        val privateEndpointCleanupResult = runSuspendCatching {
+            privatePaykit.removePublishedEndpointsForCleanup(TAG)
+        }.getOrElse {
+            Logger.warn("Failed to remove private Paykit endpoints", it, context = TAG)
+            Result.failure(it)
+        }
         val hadPaykitState = settingsStore.data.first().hasPaykitState()
         val endpointCleanupResult = if (hadPaykitState) {
             removeBitkitPaymentEndpoints()
@@ -1544,12 +1561,28 @@ class PubkyRepo @Inject constructor(
         }
 
         pubkyService.clearExternalSessionAccess()
+        val privateStateCleanupResult = if (privateEndpointCleanupResult.isSuccess) {
+            runSuspendCatching { privatePaykit.closeAndClear() }
+                .getOrElse { Result.failure(it) }
+                .onFailure { Logger.warn("Failed to clear private Paykit state", it, context = TAG) }
+        } else {
+            null
+        }
         clearPublicPaykitSharingState(
             publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState,
         )
         clearAuthenticatedRuntimeState()
-        pubkyStore.reset()
+        if (privateStateCleanupResult?.isSuccess == true) {
+            pubkyStore.update { it.copy(privatePaykitStateCleanupPending = false) }
+        }
+        resetPubkyMetadataPreservingPrivatePaykitCleanupMarker()
         notifyBackupStateChanged()
+    }
+
+    private suspend fun retryPendingPrivatePaykitStateCleanupLocked() {
+        if (!pubkyStore.data.first().privatePaykitStateCleanupPending) return
+        privatePaykitRepo.get().closeAndClear().getOrThrow()
+        pubkyStore.update { it.copy(privatePaykitStateCleanupPending = false) }
     }
 
     private suspend fun managedSecretKeyFor(publicKey: String): String? = withContext(ioDispatcher) {
@@ -1595,8 +1628,16 @@ class PubkyRepo @Inject constructor(
     }
 
     private suspend fun clearAuthenticatedState() = withContext(ioDispatcher) {
-        runSuspendCatching { pubkyStore.reset() }
+        runSuspendCatching { resetPubkyMetadataPreservingPrivatePaykitCleanupMarker() }
         clearAuthenticatedRuntimeState()
+    }
+
+    private suspend fun resetPubkyMetadataPreservingPrivatePaykitCleanupMarker() {
+        if (pubkyStore.data.first().privatePaykitStateCleanupPending) {
+            pubkyStore.update { PubkyStoreData(privatePaykitStateCleanupPending = true) }
+        } else {
+            pubkyStore.reset()
+        }
     }
 
     private suspend fun clearAuthenticatedRuntimeState() = withContext(ioDispatcher) {

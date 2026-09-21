@@ -40,4 +40,5 @@ data class PubkyStoreData(
     val cachedImageUri: String? = null,
     val contactProfileOverrides: Map<String, PubkyProfileData> = emptyMap(),
     val externalIdentityRef: SharedPubkyIdentity? = null,
+    val privatePaykitStateCleanupPending: Boolean = false,
 )
