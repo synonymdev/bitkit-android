@@ -480,6 +480,13 @@ class PubkyRepo @Inject constructor(
             return@withLock runSuspendCatching {
                 withContext(ioDispatcher) {
                     val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
+                    val storedSecretKeyHex = loadUnquarantinedLocalSecretKey()
+                    if (
+                        storedSecretKeyHex.isNullOrBlank() ||
+                        pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix() != publicKey
+                    ) {
+                        throw PubkyAlreadySignedInError
+                    }
                     val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
                     finishIdentityCreation(publicKey, name, bio, links, tags, imageUrl)
                 }
@@ -491,15 +498,12 @@ class PubkyRepo @Inject constructor(
             val result = runSuspendCatching {
                 withContext(ioDispatcher) {
                     settingsStore.setPubkyProfileSetupPending(false)
-                    val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-                        .takeUnless {
-                            keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) ==
-                                MANAGED_SECRET_QUARANTINED
-                        }
+                    val storedSecretKeyHex = loadUnquarantinedLocalSecretKey()
                     val publicKeyZ32 = if (!storedSecretKeyHex.isNullOrEmpty()) {
                         pubkyService.signIn(storedSecretKeyHex)
                         pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
                     } else {
+                        if (_publicKey.value != null) throw PubkyAlreadySignedInError
                         val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
                         val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
                             ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
@@ -526,6 +530,11 @@ class PubkyRepo @Inject constructor(
             throw error
         }
     }
+
+    private fun loadUnquarantinedLocalSecretKey(): String? =
+        keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name).takeUnless {
+            keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) == MANAGED_SECRET_QUARANTINED
+        }
 
     private suspend fun publishIdentityProfile(
         name: String,

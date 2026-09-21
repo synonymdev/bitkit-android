@@ -835,6 +835,124 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `createIdentity preserves a restored legacy external session`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        stubSignupKeys()
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A, secret = "legacy-session")
+        val existingProfile = sut.profile.value
+        var storedSecretKeyHex: String? = null
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenAnswer { storedSecretKeyHex }
+        whenever(pubkyService.signUp("secret", "test-homeserver", "test-code")).thenAnswer {
+            storedSecretKeyHex = "secret"
+            Unit
+        }
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        clearInvocations(pubkyService, keychain, pubkyStore)
+
+        val result = sut.createIdentity("Replacement", "", emptyList(), emptyList(), null)
+
+        assertEquals(PubkyAlreadySignedInError, result.exceptionOrNull())
+        assertEquals(VALID_CONTACT_KEY_A, sut.publicKey.value)
+        assertEquals(existingProfile, sut.profile.value)
+        assertTrue(sut.isAuthenticated.value)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        assertEquals("legacy-session", keychain.loadString(Keychain.Key.PAYKIT_SESSION.name))
+        assertNull(storedSecretKeyHex)
+        assertTrue((httpClient.engine as MockEngine).requestHistory.isEmpty())
+        verify(keychain, never()).loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        verify(keychain, never()).upsertString(any(), any())
+        verify(keychain, never()).delete(any())
+        verify(pubkyStore, never()).reset()
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        httpClient.close()
+    }
+
+    @Test
+    fun `createIdentity does not resume a legacy session with stale pending setup`() = test {
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A, secret = "legacy-session")
+        profileSetupPending.value = true
+        val existingProfile = sut.profile.value
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        clearInvocations(pubkyService, keychain, pubkyStore)
+
+        val result = sut.createIdentity("Replacement", "", emptyList(), emptyList(), null)
+
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+        assertEquals(PubkyAlreadySignedInError, result.exceptionOrNull())
+        assertEquals(VALID_CONTACT_KEY_A, sut.publicKey.value)
+        assertEquals(existingProfile, sut.profile.value)
+        assertTrue(sut.isAuthenticated.value)
+        assertTrue(profileSetupPending.value)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        assertEquals("legacy-session", keychain.loadString(Keychain.Key.PAYKIT_SESSION.name))
+        verify(keychain, never()).upsertString(any(), any())
+        verify(keychain, never()).delete(any())
+        verify(pubkyStore, never()).reset()
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+    }
+
+    @Test
+    fun `pending setup rejects mismatched or quarantined managed keys without deleting them`() = test {
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A, secret = "legacy-session")
+        profileSetupPending.value = true
+        val existingProfile = sut.profile.value
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("managed-secret")
+
+        for ((derivedPublicKey, quarantined) in listOf(VALID_SELF_KEY to false, VALID_CONTACT_KEY_A to true)) {
+            whenever(pubkyService.publicKeyFromSecret("managed-secret")).thenReturn(derivedPublicKey)
+            whenever(keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name))
+                .thenReturn(if (quarantined) "1" else null)
+            clearInvocations(pubkyService, keychain, pubkyStore)
+
+            val result = sut.createIdentity("Replacement", "", emptyList(), emptyList(), null)
+
+            assertEquals(PubkyAlreadySignedInError, result.exceptionOrNull())
+            assertEquals(VALID_CONTACT_KEY_A, sut.publicKey.value)
+            assertEquals(existingProfile, sut.profile.value)
+            assertTrue(profileSetupPending.value)
+            verify(keychain, never()).upsertString(any(), any())
+            verify(keychain, never()).delete(any())
+            verify(pubkyStore, never()).reset()
+            verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+            verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+            verifyBlocking(pubkyService, never()) { signIn(any()) }
+            verifyBlocking(pubkyService, never()) { signOut() }
+            verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        }
+    }
+
+    @Test
+    fun `createIdentity creates a fresh identity without an existing session`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        stubSignupKeys()
+        var storedSecretKeyHex: String? = null
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenAnswer { storedSecretKeyHex }
+        whenever(pubkyService.signUp("secret", "test-homeserver", "test-code")).thenAnswer {
+            storedSecretKeyHex = "secret"
+            Unit
+        }
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+
+        val result = sut.createIdentity("Fresh", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals("Fresh", sut.profile.value?.name)
+        verifyBlocking(pubkyService) { signUp("secret", "test-homeserver", "test-code") }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        httpClient.close()
+    }
+
+    @Test
     fun `createIdentity signs up when a Ring session has no local key`() = test {
         val httpClient = identityHttpClient()
         sut = createSut(httpClient)
@@ -858,11 +976,12 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `createIdentity should preserve signup session when pending profile publication fails`() = test {
+    fun `createIdentity preserves owned pending signup after publication failure and retries`() = test {
         val registeredSession = mock<PubkySessionBootstrapResult>()
         stubSignupKeys()
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
         assertTrue(sut.approveSignupAuth(ringSignupRequest()).isSuccess)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("secret")
         clearInvocations(pubkyService)
         whenever(pubkyService.publishPaykitProfile(any())).thenAnswer { throw TestAppError("Publish failed") }
 
@@ -880,6 +999,15 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService, never()) { signIn(any()) }
         verifyBlocking(pubkyService, never()) { signOut() }
         assertTrue(profileSetupPending.value)
+
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        assertTrue(sut.createIdentity("Retried", "", emptyList(), emptyList(), null).isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals("Retried", sut.profile.value?.name)
+        assertFalse(profileSetupPending.value)
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
     }
 
     @Test
