@@ -1565,23 +1565,25 @@ class PubkyRepo @Inject constructor(
             Result.success(Unit)
         }
 
-        pubkyService.clearExternalSessionAccess()
-        val privateStateCleanupResult = if (privateEndpointCleanupResult.isSuccess) {
-            runSuspendCatching { privatePaykit.closeAndClear() }
-                .getOrElse { Result.failure(it) }
-                .onFailure { Logger.warn("Failed to clear private Paykit state", it, context = TAG) }
-        } else {
-            null
+        withContext(NonCancellable) {
+            pubkyService.clearExternalSessionAccess()
+            val privateStateCleanupResult = if (privateEndpointCleanupResult.isSuccess) {
+                runSuspendCatching { privatePaykit.closeAndClear() }
+                    .getOrElse { Result.failure(it) }
+                    .onFailure { Logger.warn("Failed to clear private Paykit state", it, context = TAG) }
+            } else {
+                null
+            }
+            clearPublicPaykitSharingState(
+                publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState,
+            )
+            clearAuthenticatedRuntimeState()
+            if (privateStateCleanupResult?.isSuccess == true) {
+                pubkyStore.update { it.copy(privatePaykitStateCleanupPending = false) }
+            }
+            resetPubkyMetadataPreservingPrivatePaykitCleanupMarker()
+            notifyBackupStateChanged()
         }
-        clearPublicPaykitSharingState(
-            publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState,
-        )
-        clearAuthenticatedRuntimeState()
-        if (privateStateCleanupResult?.isSuccess == true) {
-            pubkyStore.update { it.copy(privatePaykitStateCleanupPending = false) }
-        }
-        resetPubkyMetadataPreservingPrivatePaykitCleanupMarker()
-        notifyBackupStateChanged()
     }
 
     private suspend fun retryPendingPrivatePaykitStateCleanupLocked() {

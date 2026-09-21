@@ -675,6 +675,38 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cancellation after external session deletion completes local teardown`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        val sessionCleared = CompletableDeferred<Unit>()
+        val resumePrivateCleanup = CompletableDeferred<Unit>()
+        whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
+        whenever { pubkyService.clearExternalSessionAccess() }.thenAnswer {
+            sessionCleared.complete(Unit)
+        }
+        whenever { privatePaykitRepo.closeAndClear() }.doSuspendableAnswer {
+            resumePrivateCleanup.await()
+            Result.success(Unit)
+        }
+
+        val validation = async { sut.validateExternalIdentitySource() }
+        runCurrent()
+        assertTrue(sessionCleared.isCompleted)
+
+        validation.cancel()
+        runCurrent()
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
+
+        resumePrivateCleanup.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(validation.isCancelled)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
     fun `missing Ring source skips endpoint removal without Paykit state`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
