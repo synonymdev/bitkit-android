@@ -1,0 +1,87 @@
+<journey name="receive auto tab selection">
+  <description>
+    Verifies that the Receive sheet opens on the Auto tab without sliding to it, that a tab the user
+    picks is not overridden by the Auto tab, and that a leftover invoice amount from an earlier Edit
+    Invoice session does not open the sheet on Savings. Requires a wallet with a usable spending
+    channel so the Auto tab is available once the Lightning node is running. The selected tab is
+    shown only by its underline, which `android layout` does not expose, so tab assertions need a
+    screenshot; the Auto tab's presence can be read from the testTag "Tab-auto". The underline itself
+    crossfades over 200 ms even when the switch is instant, so the two steps that check for an
+    animation read the QR pager out of a screen recording instead of the underline. Each of those
+    steps first requires the recording to contain the frames it reasons about; a recording that ended
+    before the node started, or before the sheet opened, is a rerun with a longer `--time-limit`, not
+    a pass.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap the Receive button (testTag "Receive"), take a screenshot within one second, and verify the
+      Auto tab (testTag "Tab-auto") is selected on the first frame of the sheet
+    </action>
+    <action>
+      Swipe the QR code area from left to right once and verify the Savings tab (testTag
+      "Tab-savings") is selected
+    </action>
+    <action>
+      Wait 3 seconds, take a screenshot and verify the Savings tab is still selected
+    </action>
+    <action>
+      Close the sheet, then run `adb shell am force-stop to.bitkit.dev` and launch the app again
+    </action>
+    <action>
+      As soon as the home screen shows, tap the Receive button and verify the tab row has no Auto tab
+      (testTag "Tab-auto" absent) while the Lightning node starts
+    </action>
+    <action>
+      Tap the Trezor tab (testTag "Tab-trezor") if present, then tap the Savings tab (testTag
+      "Tab-savings")
+    </action>
+    <action>
+      Wait until the Auto tab (testTag "Tab-auto") appears, wait 5 more seconds, take a screenshot and
+      verify the Savings tab is still selected
+    </action>
+    <action>
+      Close the sheet, force-stop and relaunch the app, and start `adb shell screenrecord
+      --time-limit 20 /sdcard/receive-auto.mp4`. As soon as the home screen shows, tap the Receive
+      button without touching the tabs and verify the Auto tab (testTag "Tab-auto") is absent; do not
+      wait for the node, the tab row must still be Savings-first when the sheet opens
+    </action>
+    <action>
+      Wait until the Auto tab (testTag "Tab-auto") appears, and check that it appeared while the
+      recording was still running. The node has to finish `lightningService.start` and load its
+      channels before the Auto tab exists, which on a cold process can outlast the 20 second window;
+      if the Auto tab is still absent when the recording ends, the jump happened off-tape and the run
+      holds no evidence, so repeat the previous step with a longer `--time-limit` rather than reading
+      the empty recording as a pass
+    </action>
+    <action>
+      Let the recording finish, pull it (`adb pull /sdcard/receive-auto.mp4`), extract frames (`ffmpeg
+      -i receive-auto.mp4 -vf fps=30 frames/%03d.png`) and verify first that the recording contains
+      the jump at all: a frame showing the Savings page centred in the QR pager, followed by a later
+      frame showing the Auto page centred. If either frame is missing, the step did not capture the
+      switch and has to be rerun; it is not a pass. Then verify that no frame between those two shows
+      the QR pager part-way between the Savings and the Auto page: the sheet jumps to Auto in one
+      frame instead of sliding
+    </action>
+    <action>
+      Tap "Edit" (testTag "SpecifyInvoiceButton"), tap the amount field (testTag
+      "ReceiveNumberPadTextField"), enter an amount above the inbound Lightning capacity (for example
+      N3 N0 N0 N0 in USD), tap Continue (testTag "ReceiveNumberPadSubmit") and then "QR Code" (testTag
+      "ShowQrReceive"); verify the Auto tab (testTag "Tab-auto") is absent
+    </action>
+    <action>
+      Start `adb shell screenrecord --time-limit 20 /sdcard/receive-reopen.mp4`, close the sheet and
+      tap the Receive button again, then verify the Auto tab (testTag "Tab-auto") is present
+    </action>
+    <action>
+      Let the recording finish, pull it (`adb pull /sdcard/receive-reopen.mp4`), extract frames
+      (`ffmpeg -i receive-reopen.mp4 -vf fps=30 frames/%03d.png`) and verify that the recording holds
+      frames in which the sheet is visible — if it holds none, rerun the step, it is not a pass — then
+      that the first such frame already shows the Auto tab in the tab row with the selected underline,
+      and that no frame shows Savings selected. A sheet that opens on Savings and only then gains the
+      Auto tab means the leftover invoice amount was not cleared
+    </action>
+  </actions>
+</journey>

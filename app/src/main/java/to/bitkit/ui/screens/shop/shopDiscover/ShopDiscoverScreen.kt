@@ -194,12 +194,13 @@ private fun ShopTabContent(
         }
 
         items(items = BitrefillCategory.entries.toList(), key = { it.name }) { item ->
+            val title = stringResource(item.titleRes)
             Column {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clickableAlpha {
-                            navigateWebView(item.route, item.title)
+                            navigateWebView(item.route, title)
                         }
                         .padding(top = 8.5.dp, bottom = 10.5.dp)
                 ) {
@@ -218,7 +219,7 @@ private fun ShopTabContent(
                         )
                     }
                     BodyM(
-                        text = item.title,
+                        text = title,
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 8.dp)

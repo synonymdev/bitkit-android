@@ -6,6 +6,10 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import org.junit.Test
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.ext.create
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -194,6 +198,104 @@ class CoreServiceTest {
         assertEquals(listOf(lightning), result.toUpsert)
     }
 
+    @Test
+    fun `payment update refreshes amount fee preimage and status on successful retry`() {
+        val failed = failedSend(value = 300_000uL, fee = 5uL, preimage = null)
+
+        val result = failed.withPaymentUpdate(
+            payment = payment(amountMsat = 22_000uL, feePaidMsat = 1_999uL, latestUpdateTimestamp = 200uL),
+            kind = bolt11(preimage = "preimage"),
+            state = PaymentState.SUCCEEDED,
+            contact = "contact",
+        )
+
+        assertEquals(22uL, result.value)
+        assertEquals(1uL, result.fee)
+        assertEquals("preimage", result.preimage)
+        assertEquals(PaymentState.SUCCEEDED, result.status)
+        assertEquals(200uL, result.updatedAt)
+        assertEquals("contact", result.contact)
+    }
+
+    @Test
+    fun `payment update keeps untouched fields of the existing row`() {
+        val failed = failedSend(value = 300_000uL, fee = 5uL, preimage = null)
+
+        val result = failed.withPaymentUpdate(
+            payment = payment(amountMsat = 22_000uL, feePaidMsat = 1_000uL, latestUpdateTimestamp = 200uL),
+            kind = bolt11(preimage = "preimage", bolt11 = "other-invoice"),
+            state = PaymentState.SUCCEEDED,
+            contact = null,
+        )
+
+        assertEquals(failed.id, result.id)
+        assertEquals(failed.txType, result.txType)
+        assertEquals(failed.timestamp, result.timestamp)
+        assertEquals(failed.invoice, result.invoice)
+        assertEquals(failed.seenAt, result.seenAt)
+        assertEquals(failed.createdAt, result.createdAt)
+    }
+
+    @Test
+    fun `payment update keeps prior fee when fee paid is unknown`() {
+        val result = failedSend(fee = 5uL).withPaymentUpdate(
+            payment = payment(feePaidMsat = null),
+            kind = bolt11(),
+            state = PaymentState.SUCCEEDED,
+            contact = null,
+        )
+
+        assertEquals(5uL, result.fee)
+    }
+
+    @Test
+    fun `payment update keeps prior value when amount is unknown`() {
+        val result = failedSend(value = 300_000uL).withPaymentUpdate(
+            payment = payment(amountMsat = null),
+            kind = bolt11(),
+            state = PaymentState.SUCCEEDED,
+            contact = null,
+        )
+
+        assertEquals(300_000uL, result.value)
+    }
+
+    @Test
+    fun `payment update keeps prior preimage when retry has none`() {
+        val result = failedSend(preimage = "old-preimage").withPaymentUpdate(
+            payment = payment(),
+            kind = bolt11(preimage = null),
+            state = PaymentState.PENDING,
+            contact = null,
+        )
+
+        assertEquals("old-preimage", result.preimage)
+    }
+
+    @Test
+    fun `payment update keeps prior message when description is a description hash`() {
+        val result = failedSend(message = "lnurl comment").withPaymentUpdate(
+            payment = payment(),
+            kind = bolt11(description = "a".repeat(64)),
+            state = PaymentState.SUCCEEDED,
+            contact = null,
+        )
+
+        assertEquals("lnurl comment", result.message)
+    }
+
+    @Test
+    fun `payment update keeps prior message when description differs`() {
+        val result = failedSend(message = "coffee").withPaymentUpdate(
+            payment = payment(),
+            kind = bolt11(description = "tea"),
+            state = PaymentState.SUCCEEDED,
+            contact = null,
+        )
+
+        assertEquals("coffee", result.message)
+    }
+
     private fun mergePlan(
         existing: List<Activity.Onchain>,
         incoming: List<Activity>,
@@ -245,5 +347,50 @@ class CoreServiceTest {
             invoice = "",
             timestamp = 1uL,
         )
+    )
+
+    private fun failedSend(
+        value: ULong = 300_000uL,
+        fee: ULong = 0uL,
+        message: String = "",
+        preimage: String? = null,
+    ) = LightningActivity.create(
+        walletId = "wallet",
+        id = "payment-hash",
+        txType = PaymentType.SENT,
+        status = PaymentState.FAILED,
+        value = value,
+        invoice = "invoice",
+        timestamp = 100uL,
+        fee = fee,
+        message = message,
+        preimage = preimage,
+        seenAt = 150uL,
+    )
+
+    private fun payment(
+        amountMsat: ULong? = 22_000uL,
+        feePaidMsat: ULong? = 1_000uL,
+        latestUpdateTimestamp: ULong = 200uL,
+    ) = PaymentDetails(
+        id = "payment-hash",
+        kind = bolt11(),
+        amountMsat = amountMsat,
+        feePaidMsat = feePaidMsat,
+        direction = PaymentDirection.OUTBOUND,
+        status = PaymentStatus.SUCCEEDED,
+        latestUpdateTimestamp = latestUpdateTimestamp,
+    )
+
+    private fun bolt11(
+        preimage: String? = null,
+        description: String? = null,
+        bolt11: String? = "invoice",
+    ) = PaymentKind.Bolt11(
+        hash = "payment-hash",
+        preimage = preimage,
+        secret = null,
+        description = description,
+        bolt11 = bolt11,
     )
 }
