@@ -24,7 +24,6 @@ class EditInvoiceScreenTest {
                 EditInvoiceContent(
                     amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
                     noteText = "Dinner",
-                    isSoftKeyboardVisible = false,
                     keyboardVisible = false,
                     tags = persistentListOf(),
                     onBack = {},
@@ -51,7 +50,6 @@ class EditInvoiceScreenTest {
                 EditInvoiceContent(
                     amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
                     noteText = "",
-                    isSoftKeyboardVisible = false,
                     keyboardVisible = false,
                     tags = persistentListOf(),
                     onBack = {},

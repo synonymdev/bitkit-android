@@ -2607,6 +2607,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scanner sheet shows back button by default`() = test {
+        sut.showScannerSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.QrScanner(showBackButton = true), sut.currentSheet.value)
+
+        sut.hideScannerSheet()
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `scanner sheet can hide back button for tab bar entry`() = test {
+        sut.showScannerSheet(showBackButton = false)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.QrScanner(showBackButton = false), sut.currentSheet.value)
+    }
+
+    @Test
     fun `canSwitchWallet is false when amount equals dust limit`() = test {
         balanceState.value = BalanceState(
             maxSendOnchainSats = 100_000u,

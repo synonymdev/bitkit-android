@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -25,8 +26,6 @@ import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.CjitQuoteValidator
-import to.bitkit.models.PrimaryDisplay
-import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
@@ -34,8 +33,8 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.openNotificationSettings
@@ -43,6 +42,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberNotificationToggleClick
@@ -61,8 +61,6 @@ fun ReceiveConfirmScreen(
     val context = LocalContext.current
 
     val currency = currencyViewModel ?: return
-    val currencies = LocalCurrencies.current
-
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
 
     val networkFeeFormatted = remember(entry.networkFeeSat) {
@@ -77,20 +75,11 @@ fun ReceiveConfirmScreen(
             ?: entry.serviceFeeSat.toString()
     }
 
-    val displayUnit = currencies.displayUnit
-    val primaryDisplay = currencies.primaryDisplay
-    val receiveAmountFormatted = remember(entry.receiveAmountSats, entry.feeSat, primaryDisplay, displayUnit) {
-        val sats = entry.receiveAmountSats - entry.feeSat
-
-        currency.convert(sats)?.let { converted ->
-            if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                val btcComponents = converted.bitcoinDisplay(displayUnit)
-                "${btcComponents.symbol} ${btcComponents.value}"
-            } else {
-                converted.formattedWithSymbol()
-            }
-        } ?: sats.toString()
-    }
+    val receiveAmountSats = entry.receiveAmountSats - entry.feeSat
+    val receiveAmountFormatted = rememberMoneyText(
+        sats = receiveAmountSats,
+        showSymbol = true,
+    ) ?: receiveAmountSats.toString()
 
     val onNotificationSwitchClick = rememberNotificationToggleClick(
         isGranted = notificationsGranted,
@@ -161,7 +150,13 @@ private fun Content(
             Column {
                 Caption13Up(text = stringResource(R.string.wallet__receive_will), color = Colors.White64)
                 VerticalSpacer(4.dp)
-                Title(text = receiveAmountFormatted)
+                Text(
+                    text = receiveAmountFormatted.withAccent(
+                        defaultColor = Colors.White,
+                        accentColor = Colors.White64,
+                    ),
+                    style = AppTextStyles.Title,
+                )
             }
 
             FillHeight()
