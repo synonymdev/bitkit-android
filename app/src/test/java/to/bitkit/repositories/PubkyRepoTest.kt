@@ -1805,6 +1805,28 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initialize fails closed when managed secret quarantine cannot be read`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name))
+            .thenAnswer { throw TestAppError("Quarantine decryption failed") }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("readable_secret")
+        clearInvocations(keychain, pubkyService)
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertNull(repo.publicKey.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(keychain, never()).loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) }
+        verifyBlocking(keychain, never()) {
+            upsertString(eq(Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name), any())
+        }
+    }
+
+    @Test
     fun `initialize should keep saved session when re-sign-in is unavailable`() = test {
         val session = "stale_session"
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)

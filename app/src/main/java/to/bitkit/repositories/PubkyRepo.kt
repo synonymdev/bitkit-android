@@ -202,7 +202,10 @@ class PubkyRepo @Inject constructor(
         }.getOrNull()
         val isManagedSecretQuarantined = runCatching {
             keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name)
-        }.getOrNull() == MANAGED_SECRET_QUARANTINED
+        }.getOrElse {
+            Logger.warn("Failed to read managed Pubky secret quarantine", it, context = TAG)
+            return InitResult.RestorationFailed
+        } == MANAGED_SECRET_QUARANTINED
         val storedSecretKeyHex = runCatching {
             keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
         }.getOrNull().takeUnless { isManagedSecretQuarantined }

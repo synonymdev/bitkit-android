@@ -113,11 +113,11 @@ class SharedPubkyProvider : ContentProvider() {
         }.getOrNull() == EXPORT_ENABLED
         if (!isExportEnabled) return null
 
-        val isManagedSecretQuarantined = runCatching {
-            keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name)
+        val managedSecretQuarantine = runCatching {
+            keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) == QUARANTINED
         }.onFailure {
             Logger.warn("Failed to read managed Pubky secret quarantine", it, context = TAG)
-        }.getOrNull() == QUARANTINED
+        }
 
         val secretKeyHex = runCatching {
             keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
@@ -128,7 +128,7 @@ class SharedPubkyProvider : ContentProvider() {
         return runCatching {
             localSharedPubkyIdentity(
                 exportEnabled = true,
-                managedSecretQuarantined = isManagedSecretQuarantined,
+                managedSecretQuarantine = managedSecretQuarantine,
                 secretKeyHex = secretKeyHex,
                 publicKeyFromSecret = PaykitSdkService::publicKeyFromSecret,
             )
@@ -163,11 +163,12 @@ class SharedPubkyProvider : ContentProvider() {
 
 internal fun localSharedPubkyIdentity(
     exportEnabled: Boolean,
-    managedSecretQuarantined: Boolean,
+    managedSecretQuarantine: Result<Boolean>,
     secretKeyHex: String?,
     publicKeyFromSecret: (String) -> String,
 ): LocalIdentity? {
-    if (!exportEnabled || managedSecretQuarantined || secretKeyHex.isNullOrBlank()) return null
+    val isManagedSecretQuarantined = managedSecretQuarantine.getOrElse { return null }
+    if (!exportEnabled || isManagedSecretQuarantined || secretKeyHex.isNullOrBlank()) return null
     val canonicalSecretKeyHex = SharedPubkyContract.canonicalSecretKeyHex(secretKeyHex)
     val pubky = SharedPubkyContract.canonicalPubky(publicKeyFromSecret(canonicalSecretKeyHex))
     return LocalIdentity(pubky = pubky, secretKeyHex = canonicalSecretKeyHex)
