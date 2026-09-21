@@ -198,6 +198,12 @@ data class SettingsData(
     val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
     val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
     val pendingRestoreAddressTypePrune: Boolean = false,
+    /**
+     * After a seed restore, suppresses the on-chain received sheet for historical transactions replayed by the
+     * post-restore sync. Set when the user taps Get Started on the restore success screen and cleared by the
+     * first on-chain sync completion after that, which marks the replayed activities as seen.
+     */
+    val pendingRestoreActivitySeen: Boolean = false,
 )
 
 data class BalanceUnitSwitch(

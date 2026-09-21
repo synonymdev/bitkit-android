@@ -42,6 +42,8 @@ import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletViewModelTest : BaseUnitTest() {
@@ -250,6 +252,29 @@ class WalletViewModelTest : BaseUnitTest() {
         sut.onRestoreContinue()
 
         assertEquals(RestoreState.Settled, sut.restoreState.value)
+    }
+
+    @Test
+    fun `onRestoreContinue should defer marking restored activities seen until the first onchain sync`() = test {
+        val settingsData = stubSettingsUpdate()
+
+        sut.onRestoreContinue()
+        advanceUntilIdle()
+
+        assertTrue(settingsData.value.pendingRestoreActivitySeen)
+        assertTrue(settingsData.value.pendingRestoreAddressTypePrune)
+    }
+
+    @Test
+    fun `onRestoreContinue should skip address type pruning when backup had monitored types`() = test {
+        whenever(settingsStore.restoredMonitoredTypesFromBackup).thenReturn(true)
+        val settingsData = stubSettingsUpdate()
+
+        sut.onRestoreContinue()
+        advanceUntilIdle()
+
+        assertTrue(settingsData.value.pendingRestoreActivitySeen)
+        assertFalse(settingsData.value.pendingRestoreAddressTypePrune)
     }
 
     @Test
@@ -499,5 +524,15 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(testWalletRepo, never()).refreshBip21()
+    }
+
+    private fun stubSettingsUpdate(): MutableStateFlow<SettingsData> {
+        val settingsData = MutableStateFlow(SettingsData())
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsData.value = transform(settingsData.value)
+            Unit
+        }
+        return settingsData
     }
 }

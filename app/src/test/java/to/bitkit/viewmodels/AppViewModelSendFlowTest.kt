@@ -53,6 +53,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -4504,6 +4505,41 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(notifyPaymentReceivedHandler).present(eq(expectedCommand), any(), any())
         }
         assertEquals(sheetDetails, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `first onchain sync after restore marks unseen activities seen and clears the pending flag`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        whenever { activityRepo.markAllUnseenActivitiesAsSeen() }.thenReturn(Result.success(Unit))
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        inOrder(activityRepo, settingsStore) {
+            verify(activityRepo).markAllUnseenActivitiesAsSeen()
+            verify(settingsStore).update(any())
+        }
+        assertFalse(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `lightning sync after restore keeps the pending flag and activities untouched`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.LIGHTNING_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen()
+        assertTrue(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `onchain sync without a pending restore leaves unseen activities untouched`() = test {
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen()
+        verify(settingsStore, never()).update(any())
     }
 
     @Test

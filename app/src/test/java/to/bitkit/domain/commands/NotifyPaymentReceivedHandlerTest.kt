@@ -4,7 +4,6 @@ import android.content.Context
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.Event
@@ -58,6 +57,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     private val migrationService: MigrationService = mock()
     private val isRestoring = MutableStateFlow(false)
     private val isShowingMigrationLoading = MutableStateFlow(false)
+    private val settingsData = MutableStateFlow(SettingsData())
 
     private lateinit var sut: NotifyPaymentReceivedHandler
 
@@ -65,7 +65,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     fun setUp() {
         whenever(context.getString(R.string.notification__received__title)).thenReturn("Payment Received")
         whenever(context.getString(any(), any())).thenReturn("Received amount")
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        whenever(settingsStore.data).thenReturn(settingsData)
         whenever(backupRepo.isRestoring).thenReturn(isRestoring)
         whenever(migrationService.isShowingMigrationLoading).thenReturn(isShowingMigrationLoading)
         whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
@@ -88,6 +88,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             activityRepo = activityRepo,
             backupRepo = backupRepo,
             migrationService = migrationService,
+            settingsStore = settingsStore,
             clock = clock,
             receivedNotificationContent = ReceivedNotificationContent(
                 context = context,
@@ -515,6 +516,68 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
         assertTrue(result is NotifyPaymentReceived.Result.Skip)
         verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+    }
+
+    @Test
+    fun `onchain mempool receive returns Skip while the first sync after restore is pending`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = NotifyPaymentReceived.Command.Onchain(txid = "txidRestored", details = details)
+
+        val result = sut(command).getOrThrow()
+
+        assertEquals(NotifyPaymentReceived.Result.Skip, result)
+        verify(activityRepo).handleOnchainTransactionReceived("txidRestored", details)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive returns Skip while the first sync after restore is pending`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidRestored", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertEquals(NotifyPaymentReceived.Result.Skip, result)
+        verify(activityRepo).handleOnchainTransactionConfirmed("txidRestored", details)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive already marked seen after restore returns Skip`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet("txidHistorical", 5000uL)).thenReturn(false)
+        val command = confirmedCommand(txid = "txidHistorical", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), any())
+    }
+
+    @Test
+    fun `onchain receive notifies again once the first sync after restore is done`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val historical = confirmedCommand(txid = "txidHistorical", details = details, age = Duration.ZERO)
+        val fresh = NotifyPaymentReceived.Command.Onchain(txid = "txidFresh", details = details)
+
+        assertEquals(NotifyPaymentReceived.Result.Skip, sut(historical).getOrThrow())
+
+        settingsData.value = SettingsData(pendingRestoreActivitySeen = false)
+        val result = sut(fresh).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+        assertEquals("txidFresh", result.sheet.paymentHashOrTxId)
+        assertTrue(sut.present(fresh) {})
+        verify(activityRepo).markOnchainActivityAsSeen("txidFresh", WalletScope.default)
+        verify(activityRepo, never()).markOnchainActivityAsSeen("txidHistorical", WalletScope.default)
     }
 
     @Test

@@ -9,9 +9,13 @@ it in the mempool produces only the confirmed event. Both events go through
 the background.
 
 A confirmed-only receive is shown only when its block timestamp is within one hour of the device
-clock and no restore or migration is running. A full scan after a restore replays old confirmations
-and stays silent; that case cannot be driven on a funded device and is covered by
-`NotifyPaymentReceivedHandlerTest.kt`.
+clock and no restore or migration is running. After a seed restore, Get Started sets
+`pendingRestoreActivitySeen`, which holds every onchain received sheet and notification until the
+first onchain sync completes; that sync marks all unseen activities as seen and clears the flag, so
+the transactions it discovered stay silent when they later confirm while new deposits notify again.
+The same rule ships on iOS in bitkit-ios#588. A full scan after a restore also replays old
+confirmations, which the one-hour window keeps silent. Neither case can be driven on a funded
+device; both are covered by `NotifyPaymentReceivedHandlerTest.kt` and `AppViewModelSendFlowTest.kt`.
 
 ## Preconditions
 

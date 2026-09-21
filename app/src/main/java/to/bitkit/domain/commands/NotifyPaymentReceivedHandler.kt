@@ -2,7 +2,9 @@ package to.bitkit.domain.commands
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
@@ -23,12 +25,14 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
+@Suppress("LongParameterList")
 @Singleton
 class NotifyPaymentReceivedHandler @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
     private val backupRepo: BackupRepo,
     private val migrationService: MigrationService,
+    private val settingsStore: SettingsStore,
     private val clock: Clock,
     private val receivedNotificationContent: ReceivedNotificationContent,
 ) {
@@ -115,6 +119,11 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         } else {
             activityRepo.handleOnchainTransactionReceived(command.txid, command.details)
             if (command.details.amountSats <= 0) return false
+        }
+
+        if (settingsStore.data.first().pendingRestoreActivitySeen) {
+            Logger.debug("Skipping onchain receive '${command.txid}' until the first sync after restore", context = TAG)
+            return false
         }
 
         delay(DELAY_FOR_ACTIVITY_SYNC_MS)

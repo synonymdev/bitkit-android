@@ -74,6 +74,7 @@ import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
@@ -1336,7 +1337,7 @@ class AppViewModel @Inject constructor(
                     is Event.ProbeSuccessful -> Unit
                     is Event.SpliceFailed -> Unit
                     is Event.SplicePending -> Unit
-                    is Event.SyncCompleted -> handleSyncCompleted()
+                    is Event.SyncCompleted -> handleSyncCompleted(event)
                     is Event.SyncProgress -> Unit
                 }
             }.onFailure { e ->
@@ -1424,7 +1425,9 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleSyncCompleted() {
+    private suspend fun handleSyncCompleted(event: Event.SyncCompleted) {
+        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen()
+
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
         val needsPostMigrationSync = migrationService.needsPostMigrationSync()
@@ -1452,6 +1455,13 @@ class AppViewModel @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to reconcile private Paykit on-chain activity", it, context = TAG)
             }
+    }
+
+    private suspend fun completePendingRestoreActivitySeen() {
+        if (!settingsStore.data.first().pendingRestoreActivitySeen) return
+        Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
+        activityRepo.markAllUnseenActivitiesAsSeen()
+        settingsStore.update { it.copy(pendingRestoreActivitySeen = false) }
     }
 
     private suspend fun completeRNRemoteBackupRestore() {
