@@ -4646,10 +4646,16 @@ class AppViewModel @Inject constructor(
 
     fun showScannerSheet(
         isPubkyScan: Boolean = false,
+        showBackButton: Boolean = true,
         onResult: ((String) -> Unit)? = null,
     ) {
         scanResultHandler = onResult
-        showSheet(Sheet.QrScanner(isPubkyScan = isPubkyScan))
+        showSheet(
+            Sheet.QrScanner(
+                isPubkyScan = isPubkyScan,
+                showBackButton = showBackButton,
+            )
+        )
     }
 
     fun onScannerSheetResult(data: String) {

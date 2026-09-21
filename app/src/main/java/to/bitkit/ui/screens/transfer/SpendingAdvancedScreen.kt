@@ -204,7 +204,7 @@ private fun Content(
                 .fillMaxSize()
                 .testTag("SpendingAdvanced")
         ) {
-            VerticalSpacer(minHeight = 16.dp, maxHeight = 32.dp)
+            VerticalSpacer(32.dp)
 
             Display(
                 text = stringResource(R.string.lightning__spending_advanced__title)
@@ -212,7 +212,7 @@ private fun Content(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            FillHeight()
+            VerticalSpacer(32.dp)
 
             NumberPadTextField(
                 viewModel = amountInputViewModel,

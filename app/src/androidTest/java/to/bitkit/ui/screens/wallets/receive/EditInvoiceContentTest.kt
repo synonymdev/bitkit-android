@@ -28,7 +28,6 @@ class EditInvoiceContentTest {
                 EditInvoiceContent(
                     amountInputViewModel = previewAmountInputViewModel(sats = 12_345),
                     noteText = "Hardware payment",
-                    isSoftKeyboardVisible = false,
                     onchainOnly = true,
                     keyboardVisible = false,
                     tags = persistentListOf("Hardware"),

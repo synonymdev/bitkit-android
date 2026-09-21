@@ -316,7 +316,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
+            HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
             NumberPad(
                 viewModel = amountInputViewModel,
