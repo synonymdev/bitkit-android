@@ -12,72 +12,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  determine-A:
-    uses: synonymdev/bitkit-e2e-tests/.github/workflows/determine-e2e-branch.yml@main
-    with:
-      app_branch: ${{ github.head_ref || github.ref_name }}
-      e2e_branch_input: main
-
-  resolve-A:
-    needs: determine-A
-    runs-on: ubuntu-latest
-    steps:
-      - name: Resolve e2e ref
-        id: e2e-ref
-        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@ci/resolve-e2e-ref
-        with:
-          selected: ${{ needs.determine-A.outputs.branch }}
-          e2e_branch_input: main
-      - name: Checkout e2e tests
-        uses: actions/checkout@v4
-        with:
-          repository: synonymdev/bitkit-e2e-tests
-          ref: ${{ steps.e2e-ref.outputs.ref }}
-          fetch-depth: 1
-          path: e2e-tests
-      - name: Confirm checkout
-        working-directory: e2e-tests
-        run: |
-          echo "case=A"
-          echo "selected=${{ needs.determine-A.outputs.branch }}"
-          echo "effective=${{ steps.e2e-ref.outputs.ref }}"
-          echo "HEAD=$(git rev-parse HEAD)"
-          git log -1 --oneline
-          echo "PASS"
-
-  determine-B:
-    uses: synonymdev/bitkit-e2e-tests/.github/workflows/determine-e2e-branch.yml@main
-    with:
-      app_branch: ${{ github.head_ref || github.ref_name }}
-      e2e_branch_input: default-feature-branch
-
-  resolve-B:
-    needs: determine-B
-    runs-on: ubuntu-latest
-    steps:
-      - name: Resolve e2e ref
-        id: e2e-ref
-        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@ci/resolve-e2e-ref
-        with:
-          selected: ${{ needs.determine-B.outputs.branch }}
-          e2e_branch_input: default-feature-branch
-      - name: Checkout e2e tests
-        uses: actions/checkout@v4
-        with:
-          repository: synonymdev/bitkit-e2e-tests
-          ref: ${{ steps.e2e-ref.outputs.ref }}
-          fetch-depth: 1
-          path: e2e-tests
-      - name: Confirm checkout
-        working-directory: e2e-tests
-        run: |
-          echo "case=B"
-          echo "selected=${{ needs.determine-B.outputs.branch }}"
-          echo "effective=${{ steps.e2e-ref.outputs.ref }}"
-          echo "HEAD=$(git rev-parse HEAD)"
-          git log -1 --oneline
-          echo "PASS"
-
   determine-C:
     uses: synonymdev/bitkit-e2e-tests/.github/workflows/determine-e2e-branch.yml@main
     with:
@@ -90,8 +24,8 @@ jobs:
     steps:
       - name: Pre-resolve sleep for race simulation
         run: |
-          echo "Sleeping 90s before resolve (case C race)..."
-          sleep 90
+          echo "Sleeping 120s before resolve (case C race)..."
+          sleep 120
       - name: Resolve e2e ref
         id: e2e-ref
         uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@ci/resolve-e2e-ref
