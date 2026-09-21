@@ -953,8 +953,8 @@ private fun RootNavHost(
                     app = appViewModel,
                     wallet = walletViewModel,
                     transfer = transferViewModel,
-                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                    onTransferUnavailable = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onContinueClick = { navController.navigateOnSavingsTransferExit() },
+                    onTransferUnavailable = { navController.navigateOnSavingsTransferExit() },
                 )
             }
             deepLinkableComposable<Routes.SpendingIntro> {
@@ -2089,6 +2089,17 @@ fun NavController.navigateToDevSettings() = navigateTo(Routes.DevSettings)
 fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIntro)
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
+
+/**
+ * Exits the savings transfer to home. The coop close retry job holds on to this callback for up to
+ * 30 minutes, so it is ignored unless the savings progress screen that owns it is still on screen.
+ * Matching the whole transfer graph would also pop a transfer to spending the user started since.
+ */
+fun NavController.navigateOnSavingsTransferExit() {
+    val isOnSavingsProgress = currentDestination?.hasRoute<Routes.SavingsProgress>() == true
+    if (!isOnSavingsProgress) return
+    navigateToHome()
+}
 
 fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
     navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))
