@@ -1,0 +1,57 @@
+name: resolve-e2e-ref smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      e2e_branch:
+        description: "E2E branch input (main | default-feature-branch | custom)"
+        required: false
+        default: "default-feature-branch"
+        type: string
+      pre_resolve_sleep_seconds:
+        description: "Sleep before resolve job (race simulation)"
+        required: false
+        default: "0"
+        type: string
+
+jobs:
+  determine:
+    uses: synonymdev/bitkit-e2e-tests/.github/workflows/determine-e2e-branch.yml@main
+    with:
+      app_branch: ${{ github.ref_name }}
+      e2e_branch_input: ${{ inputs.e2e_branch }}
+
+  resolve:
+    needs: determine
+    runs-on: ubuntu-latest
+    steps:
+      - name: Optional pre-resolve sleep
+        if: inputs.pre_resolve_sleep_seconds != '0'
+        run: |
+          echo "Sleeping ${{ inputs.pre_resolve_sleep_seconds }}s before resolve..."
+          sleep "${{ inputs.pre_resolve_sleep_seconds }}"
+
+      - name: Resolve e2e ref
+        id: e2e-ref
+        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@ci/resolve-e2e-ref
+        with:
+          selected: ${{ needs.determine.outputs.branch }}
+          e2e_branch_input: ${{ inputs.e2e_branch }}
+
+      - name: Checkout e2e tests
+        uses: actions/checkout@v4
+        with:
+          repository: synonymdev/bitkit-e2e-tests
+          ref: ${{ steps.e2e-ref.outputs.ref }}
+          fetch-depth: 1
+          path: e2e-tests
+
+      - name: Confirm checkout
+        working-directory: e2e-tests
+        run: |
+          echo "selected=${{ needs.determine.outputs.branch }}"
+          echo "effective=${{ steps.e2e-ref.outputs.ref }}"
+          echo "HEAD=$(git rev-parse HEAD)"
+          git branch -r || true
+          git log -1 --oneline
+          echo "PASS"
