@@ -106,7 +106,7 @@ jobs:
     steps:
       - name: Resolve E2E tests ref
         id: e2e-ref
-        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@ci/resolve-e2e-ref
+        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main
         with:
           selected: ${{ needs.e2e-branch.outputs.branch }}
           e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
@@ -246,7 +246,7 @@ jobs:
     steps:
       - name: Resolve E2E tests ref
         id: e2e-ref
-        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@ci/resolve-e2e-ref
+        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main
         with:
           selected: ${{ needs.e2e-branch.outputs.branch }}
           e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
