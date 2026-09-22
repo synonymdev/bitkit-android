@@ -115,7 +115,7 @@ fixtures, push notifications) live in each suite's README.
 | Suite | Journeys | Notes |
 | --- | --- | --- |
 | [activity](activity) | 1 | Date range sheet under rapid month taps; needs no backend, no README |
-| [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
+| [amount-limits](amount-limits) | 5 | Number pad caps on all four amount screens, plus preset/unit-switch delete |
 | [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [coin-selection](coin-selection) | 1 | Manual coin selection screen; needs 3+ on-chain UTXOs; no README |
@@ -165,6 +165,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
+| `amount-limits/transfer-spending-preset-delete.xml` | not ported yet — the same fix shipped in synonymdev/bitkit-ios#289, so this one should port |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `receive/receive-auto-tab-selection.xml` | not ported — the Auto tab override fix is Android-only so far; iOS parity not checked |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
