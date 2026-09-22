@@ -2285,7 +2285,9 @@ class AppViewModel @Inject constructor(
         allowPubkyAuth: Boolean,
     ): Boolean {
         if (source != ScanSource.DEEPLINK) return true
-        val isContactLink = PubkyContactLink.matches(Uri.parse(data))
+        val uri = Uri.parse(data)
+        val isContactLink = PubkyContactLink.matches(uri)
+        if (isContactLink && PubkyContactLink.publicKey(uri) == null) return true
         if (!isContactLink && (!allowPubkyAuth || !PubkyAuthRequest.isProtocolUrl(data))) return true
 
         if (!PubkyAuthRequest.isSignupUrl(data)) {

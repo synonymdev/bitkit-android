@@ -2779,16 +2779,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `invalid contact deeplink cannot start payment or authorization`() = test {
+    fun `invalid contact deeplink rejects without waiting for initialization or starting payment or auth`() = test {
         enablePaykitUi()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { awaitCancellation() }
         sut.mainScreenEffect.test {
-            listOf("invalid", "bitcoin%3Abc1example", "pubkyauth%3A%2F%2Fsignin_grant").forEach { payload ->
-                sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$payload".toUri()))
+            listOf(
+                "bitkit://contact",
+                "bitkit://contact?pubky=$testPublicKey&pubky=$testPublicKey",
+                "bitkit://contact?pubky=invalid",
+                "bitkit://contact?pubky=bitcoin%3Abc1example",
+                "bitkit://contact?pubky=pubkyauth%3A%2F%2Fsignin_grant",
+            ).forEach { link ->
+                settingsData.value = SettingsData(isPinEnabled = true)
+                sut.resetIsAuthenticatedState()
+                runCurrent()
+                sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, link.toUri()))
+                runCurrent()
+                sut.setIsAuthenticated(true)
                 advanceUntilIdle()
             }
             expectNoEvents()
         }
         assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).awaitInitialization()
         verify(coreService, never()).decode(any())
         verify(pubkyRepo, never()).hasSecretKey()
     }
