@@ -40,10 +40,6 @@ class PubkyService @Inject constructor(
         paykitSdkService.importSession(secret).publicKey
     }
 
-    suspend fun importExternalSession(secret: String): String = ServiceQueue.CORE.background {
-        paykitSdkService.importSession(secret, includeLocalSecret = false).publicKey
-    }
-
     suspend fun currentPublicKey(): String? = ServiceQueue.CORE.background {
         paykitSdkService.currentPublicKey()
     }
@@ -111,23 +107,6 @@ class PubkyService @Inject constructor(
     suspend fun signIn(secretKeyHex: String): Unit = ServiceQueue.CORE.background {
         paykitSdkService.signIn(secretKeyHex)
         Unit
-    }
-
-    // endregion
-
-    // region Auth flow (Ring)
-
-    suspend fun startAuth(): String = ServiceQueue.CORE.background {
-        paykitSdkService.startAuth()
-    }
-
-    suspend fun completeAuth(): Unit = ServiceQueue.CORE.background {
-        paykitSdkService.completeAuth()
-        Unit
-    }
-
-    suspend fun cancelAuth() = ServiceQueue.CORE.background {
-        paykitSdkService.cancelAuth()
     }
 
     // endregion

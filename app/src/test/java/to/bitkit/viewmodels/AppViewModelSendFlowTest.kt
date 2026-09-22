@@ -2819,16 +2819,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pubky ring callback deeplink is ignored when Paykit UI is disabled`() = test {
-        val intent = Intent(Intent.ACTION_VIEW, "bitkit://pubky-auth/success".toUri())
-
-        sut.handleDeeplinkIntent(intent)
-        advanceUntilIdle()
-
-        verify(pubkyRepo, never()).handleAuthCallback(any())
-    }
-
-    @Test
     fun `pubky auth deeplink shows approval sheet when Paykit UI is enabled`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
@@ -3098,11 +3088,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pubky auth deeplink keeps Ring-only guidance for an imported identity`() = test {
+    fun `pubky auth deeplink shows identity required toast without a usable secret key`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
-        whenever(context.getString(R.string.profile__auth_approval_ring_only)).thenReturn("Use Ring")
+        whenever(context.getString(R.string.pubky_auth__no_identity)).thenReturn("Pubky Identity Required")
+        whenever(context.getString(R.string.pubky_auth__no_identity_desc)).thenReturn("Create a Pubky identity")
         advanceUntilIdle()
 
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
@@ -3112,8 +3103,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertNull(sut.currentSheet.value)
         verify(toastManager).enqueue(
             check {
-                assertEquals("Use Ring", it.title)
-                assertNull(it.description)
+                assertEquals("Pubky Identity Required", it.title)
+                assertEquals("Create a Pubky identity", it.description)
             }
         )
     }

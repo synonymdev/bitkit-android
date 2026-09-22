@@ -4,41 +4,29 @@ Paykit issuers should follow the [Paykit issuer interoperability contract](payki
 
 ## Overview
 
-Bitkit integrates [Pubky](https://pubky.org) decentralized identity, allowing users to connect their Pubky profile via [Pubky Ring](https://play.google.com/store/apps/details?id=to.pubky.ring) authentication. Once connected, the user's profile name and avatar appear on the home screen header, a full profile page shows their bio, links, and a shareable QR code, and the contacts screen shows followed Pubky users.
+Bitkit integrates [Pubky](https://pubky.org) decentralized identity. A user either creates a pubky in Bitkit or adopts one that [Pubky Ring](https://pubky.org) already owns, read through the shared pubky content provider. Once an identity is active, the user's profile name and avatar appear on the home screen header, a full profile page shows their bio, links, and a shareable QR code, and the contacts screen shows followed Pubky users.
 
-## Auth Flow
+## Identity Flow
 
 ```
-ProfileIntroScreen → PubkyRingAuthScreen → ProfileScreen
+ProfileIntroScreen → PubkyChoiceScreen → CreateProfileScreen → ProfileScreen
 ```
 
 1. **ProfileIntroScreen** — presents the Pubky feature and a "Continue" button
-2. **PubkyRingAuthScreen** — initiates authentication via Pubky Ring deep link (`pubkyauth://`), waits for approval via relay, then completes session import
-3. **ProfileScreen** — displays the authenticated user's profile (name, bio, links, QR code)
+2. **PubkyChoiceScreen** — lists the pubkys Pubky Ring owns, or offers creating one in Bitkit when there are none
+3. **CreateProfileScreen** — signs the identity up on a homeserver and publishes the profile
+4. **ProfileScreen** — displays the active identity's profile (name, bio, links, QR code)
 
-### Deep Link Flow
-
-The auth handshake uses a relay-based protocol:
-
-1. `PubkyService.startAuth()` generates a `pubkyauth://` URL with required capabilities
-2. The URL is opened via `ACTION_VIEW` intent, launching Pubky Ring
-3. Pubky Ring prompts the user to approve the requested capabilities
-4. `PubkyService.completeAuth()` blocks on the relay until Ring sends approval, returning a session secret
-5. `PubkyService.importSession()` activates the session, returning the user's public key
-6. The session secret is persisted in Keychain for restoration on next launch
-
-### Auth State Machine (`PubkyAuthState`)
-
-- **Idle** — no authentication in progress
-- **Authenticating** — `startAuth()` has been called, waiting for relay setup
-- **Authenticated** — session active, profile available
+An adopted Ring identity keeps its secret in Pubky Ring: Bitkit stores only the reference and reads the
+secret just-in-time for signing. Bitkit still acts as an authenticator for incoming `pubkyauth://`
+requests, which are approved from the Pubky auth approval sheet.
 
 ## Service Layer (`PubkyService`)
 
 Delegates Pubky operations to `PaykitSdkService`, which uses:
 
-- **paykit-ffi** (`com.synonym:paykit-android`) — session management, Ring auth, profile/contact resolution, and bounded file fetching
-  - `startSignInAuth()`, `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, `fetchPubkyFileBounded()`
+- **paykit-ffi** (`com.synonym:paykit-android`) — session management, auth approval, profile/contact resolution, and bounded file fetching
+  - `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, `fetchPubkyFileBounded()`
 - **bitkit-core** (`com.synonym:bitkit-core-android`) — mnemonic-to-seed conversion for receiver noise-key derivation
   - `mnemonicToSeed()`
 
@@ -46,7 +34,7 @@ All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensu
 
 ## Repository Layer (`PubkyRepo`)
 
-Manages auth state, session lifecycle, and profile data. Singleton scoped.
+Manages session lifecycle, identity adoption, and profile data. Singleton scoped.
 
 ### Initialization
 
@@ -69,7 +57,7 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 |---|---|
 | `profile` | Full `PubkyProfile` or null |
 | `publicKey` | Authenticated user's public key |
-| `isAuthenticated` | Derived from internal auth state |
+| `isAuthenticated` | True while a public key is set |
 | `displayName` | Profile name with cached fallback |
 | `displayImageUri` | Profile image URI with cached fallback |
 | `isLoadingProfile` | Loading indicator |
@@ -88,7 +76,7 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 
 ```
 ContactsIntroScreen → (if authenticated) ContactsScreen → ContactDetailScreen
-                     → (if not authenticated) PubkyRingAuthScreen → ContactsScreen
+                     → (if not authenticated) PubkyChoiceScreen → ContactsScreen
 ```
 
 1. **ContactsIntroScreen** — presents the contacts feature with a "Continue" button; marks `hasSeenContactsIntro` in settings
@@ -148,15 +136,16 @@ bodies can still be buffered by the Pubky client before Paykit regains control.
 | File | Purpose |
 |---|---|
 | `services/PubkyService.kt` | FFI wrapper |
-| `repositories/PubkyRepo.kt` | Auth state and session management |
+| `repositories/PubkyRepo.kt` | Session management and identity adoption |
+| `data/sharedpubky/SharedPubkyClient.kt` | Reads Pubky Ring's shared pubky provider |
 | `data/PubkyImageFetcher.kt` | Coil fetcher for pubky:// URIs |
 | `di/ImageModule.kt` | Hilt module providing ImageLoader |
 | `data/PubkyStore.kt` | DataStore for cached profile metadata |
 | `models/PubkyProfile.kt` | Domain model |
 | `ui/components/PubkyImage.kt` | Image composable |
 | `ui/screens/profile/ProfileIntroScreen.kt` | Intro screen |
-| `ui/screens/profile/PubkyRingAuthScreen.kt` | Auth screen |
-| `ui/screens/profile/PubkyRingAuthViewModel.kt` | Auth ViewModel |
+| `ui/screens/profile/PubkyChoiceScreen.kt` | Identity choice screen |
+| `ui/screens/profile/PubkyChoiceViewModel.kt` | Identity choice ViewModel |
 | `ui/screens/profile/ProfileScreen.kt` | Profile display |
 | `ui/screens/profile/ProfileViewModel.kt` | Profile ViewModel |
 | `ui/screens/contacts/ContactsIntroScreen.kt` | Contacts intro screen |
