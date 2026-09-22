@@ -9,6 +9,7 @@ import com.synonym.paykit.PubkyAuthCompanionClaim
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,6 +39,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.paykitDisabled
+import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isPaykitIdentityError
@@ -87,6 +89,7 @@ class PubkyRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val pubkyService: PubkyService,
     private val keychain: Keychain,
+    private val sharedPubkyClient: SharedPubkyClient,
     private val imageLoader: ImageLoader,
     private val pubkyStore: PubkyStore,
     private val settingsStore: SettingsStore,
@@ -286,6 +289,12 @@ class PubkyRepo @Inject constructor(
     fun clearSessionRestorationFailed() {
         _sessionRestorationFailed.update { false }
     }
+
+    // endregion
+
+    // region Shared pubky
+
+    suspend fun ringIdentities(): Result<ImmutableList<String>> = sharedPubkyClient.listRingIdentities()
 
     // endregion
 

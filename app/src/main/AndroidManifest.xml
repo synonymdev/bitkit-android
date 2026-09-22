@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
-        <package android:name="to.pubky.ring" />
+        <package android:name="app.pubkyring" />
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
         </intent>
@@ -17,6 +17,7 @@
         android:name="android.hardware.camera"
         android:required="false" />
 
+    <uses-permission android:name="app.pubkyring.permission.READ_SHARED_PUBKY" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CLIPBOARD" />
     <uses-permission android:name="android.permission.INTERNET" />
