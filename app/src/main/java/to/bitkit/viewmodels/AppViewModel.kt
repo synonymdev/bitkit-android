@@ -4002,6 +4002,8 @@ class AppViewModel @Inject constructor(
             }
         }
 
+        val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
+
         sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
@@ -4013,6 +4015,7 @@ class AppViewModel @Inject constructor(
                     sats = displayAmountSats.toLong(),
                 ),
             )
+            lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
             if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
@@ -4022,10 +4025,12 @@ class AppViewModel @Inject constructor(
                 preserveContactPaymentContext(pendingHash)
                 refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
+                lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
             }
             cancelPaymentProofPreparation(proofRequest)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
                 is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
@@ -4033,6 +4038,14 @@ class AppViewModel @Inject constructor(
             }
             setSendEffect(SendEffect.NavigateToError(failure))
         }
+    }
+
+    private suspend fun savePendingLnurlComment(invoice: LightningInvoice, paymentHash: String): String? {
+        val state = _sendUiState.value
+        if (state.lnurl !is LnurlParams.LnurlPay || state.comment.isBlank()) return null
+        if (!invoice.description.isNullOrEmpty()) return null
+        activityRepo.savePendingLightningMessage(paymentHash, state.comment)
+        return state.comment
     }
 
     private suspend fun clearFailedLightningPayment(

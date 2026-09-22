@@ -133,6 +133,15 @@ class CacheStore internal constructor(
         }
     }
 
+    suspend fun setPendingLightningMessage(paymentHash: String, message: String) {
+        store.updateData { it.copy(pendingLightningMessages = it.pendingLightningMessages + (paymentHash to message)) }
+    }
+
+    suspend fun removePendingLightningMessage(paymentHash: String) {
+        if (paymentHash !in store.data.first().pendingLightningMessages) return
+        store.updateData { it.copy(pendingLightningMessages = it.pendingLightningMessages - paymentHash) }
+    }
+
     suspend fun setBackgroundReceive(details: NewTransactionSheetDetails) = store.updateData {
         it.copy(backgroundReceive = details)
     }
@@ -168,6 +177,8 @@ data class AppCacheData(
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
     val quickPayLedger: QuickPayLedger? = null,
     val blocktankRefundAddress: BlocktankRefundAddress? = null,
+    /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
+    val pendingLightningMessages: Map<String, String> = mapOf(),
 ) {
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||
