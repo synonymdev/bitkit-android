@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -78,6 +79,7 @@ fun ReportIssueContent(
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
+                .imePadding()
                 .testTag(ReportIssueTestTags.SCREEN)
         ) {
             Spacer(modifier = Modifier.height(32.dp))
