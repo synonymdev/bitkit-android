@@ -14,6 +14,8 @@ import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
+import com.synonym.paykit.PrivateOperationError
+import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -127,6 +129,28 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = sut.pendingRequests.value.single()
         assertEquals(100_000uL, request.amountSats)
         assertEquals(listOf(MethodId.Bolt11.rawValue), request.acceptedPaymentEndpointIdentifiers)
+    }
+
+    @Test
+    fun `peer intake failure reports unsuccessful refresh without losing requests`() = test {
+        val record = paymentRequestRecord()
+        val error = mock<PrivateOperationError> {
+            on { redactedContext() } doReturn "transport failure"
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(
+            listOf(
+                PrivateStreamCounterpartyIntakeReport(
+                    counterparty = COUNTERPARTY,
+                    counterpartyReceiverPath = PaykitReceiverPaths.WALLET,
+                    report = null,
+                    error = error,
+                ),
+            ),
+        )
+
+        assertFalse(sut.refresh().getOrThrow())
+        assertEquals(record.paymentRequestId, sut.pendingRequests.value.single().paymentRequestId)
     }
 
     @Test

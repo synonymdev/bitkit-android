@@ -359,6 +359,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.automaticSubscriptionProposals()).thenReturn(emptyList())
         whenever(paykitPaymentRequestRepo.eligibleTargets).thenReturn(MutableStateFlow(emptyList()))
         whenever(paykitPaymentRequestRepo.isCreatingRequest).thenReturn(MutableStateFlow(false))
+        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(true))
         whenever { paykitPaymentRequestRepo.refreshEligibleTargets(any(), any()) }.thenReturn(Result.success(Unit))
         whenever(paykitPaymentRequestRepo.automaticPendingRequests()).thenAnswer {
             pendingPaykitPaymentRequests.value.filterNot { it.id in surfacedPaykitPaymentRequestIds }
@@ -554,6 +555,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `identity republish follows maintenance intervals instead of each payment request poll`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         sut.startPaykitPaymentRequestPolling()
         try {
             runCurrent()
@@ -573,7 +577,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `offline polling skips foreground and maintenance identity republish`() = test {
+    fun `offline periodic polling skips inbox and maintenance`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
         connectivityState.value = ConnectivityState.DISCONNECTED
         runCurrent()
 
@@ -582,9 +588,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCurrent()
             verify(pubkyRepo, never()).republishIdentityIfNeeded()
 
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo, privatePaykitRepo)
+
             advanceTimeBy(210.seconds.inWholeMilliseconds)
             runCurrent()
             verify(pubkyRepo, never()).republishIdentityIfNeeded()
+            verify(paykitPaymentRequestRepo, never()).refresh()
+            verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+            verify(paykitPaymentProofRepo, never()).reconcile()
+            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints("payment request polling")
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }
@@ -612,7 +626,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `payment requests refresh promptly without repeating maintenance on each poll`() = test {
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         runCurrent()
         clearInvocations(paykitPaymentRequestRepo)
 
@@ -630,14 +644,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             clearInvocations(paykitPaymentRequestRepo)
             clearInvocations(privatePaykitRepo, paykitPaymentProofRepo)
 
-            advanceTimeBy(29.seconds.inWholeMilliseconds)
+            advanceTimeBy(9.seconds.inWholeMilliseconds)
             runCurrent()
             verify(paykitPaymentRequestRepo, never()).refresh()
 
             val request = paymentRequest()
             whenever(paykitPaymentRequestRepo.refresh()).doSuspendableAnswer {
                 pendingPaykitPaymentRequests.value = listOf(request)
-                Result.success(Unit)
+                Result.success(true)
             }
             advanceTimeBy(1.seconds.inWholeMilliseconds)
             runCurrent()
@@ -646,9 +660,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(paykitPaymentProofRepo, never()).reconcile()
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), eq(true))
 
-            for (delay in listOf(5.seconds, 10.seconds, 15.seconds)) {
+            repeat(5) {
                 clearInvocations(paykitPaymentRequestRepo)
-                advanceTimeBy(delay.inWholeMilliseconds - 1)
+                advanceTimeBy(10.seconds.inWholeMilliseconds - 1)
                 runCurrent()
                 verify(paykitPaymentRequestRepo, never()).refresh()
                 advanceTimeBy(1)
@@ -675,12 +689,48 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed inbox checks back off and recover to ten seconds`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            whenever(paykitPaymentRequestRepo.refresh()).thenReturn(
+                Result.failure(IllegalStateException("offline")),
+                Result.success(false),
+            )
+
+            for (delay in listOf(10.seconds, 30.seconds, 60.seconds, 120.seconds)) {
+                clearInvocations(paykitPaymentRequestRepo)
+                advanceTimeBy(delay.inWholeMilliseconds - 1)
+                runCurrent()
+                verify(paykitPaymentRequestRepo, never()).refresh()
+                advanceTimeBy(1)
+                runCurrent()
+                verify(paykitPaymentRequestRepo).refresh()
+            }
+
+            whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
+            advanceTimeBy(120.seconds.inWholeMilliseconds)
+            runCurrent()
+            clearInvocations(paykitPaymentRequestRepo)
+            advanceTimeBy(10.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(paykitPaymentRequestRepo).refresh()
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
     fun `payment request waiting for a newer private list is retried after backoff`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
         val bolt11 = "lnbcrt1updatedpaymentrequest"
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 8uL)
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList),
             Result.success(
@@ -866,7 +916,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 endsAt = Instant.parse("2026-09-01T12:00:00Z"),
             ),
         )
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         whenever(privatePaykitRepo.beginPaymentRequest(targetRequest)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
@@ -898,7 +948,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 endsAt = Instant.parse("2026-09-01T12:00:00Z"),
             ),
         )
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         whenever(privatePaykitRepo.beginPaymentRequest(targetRequest)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
@@ -1510,7 +1560,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val latestActivationStarted = CompletableDeferred<Unit>()
         val finishLatestActivation = CompletableDeferred<Unit>()
         sut.setIsAuthenticated(true)
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
@@ -1561,7 +1611,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val finishClear = CompletableDeferred<Unit>()
         runCurrent()
         sut.setIsAuthenticated(true)
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
@@ -1637,7 +1687,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `unresolvable automatic request falls back to low frequency retries`() = test {
         val request = paymentRequest()
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         whenever(privatePaykitRepo.beginPaymentRequest(request))
             .thenReturn(Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList))
         pendingPaykitPaymentRequests.value = listOf(request)
@@ -1674,7 +1724,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(pendingRequest)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         runCurrent()
 
         sut.startPaykitPaymentRequestPolling()
@@ -1701,7 +1751,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(firstRequest, secondRequest)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.onHomeResumed()
         sut.currentSheet.first {
@@ -1736,7 +1786,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.onHomeResumed()
         runCurrent()
@@ -1760,7 +1810,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.startPaykitPaymentRequestPolling()
         advanceTimeBy(30.seconds.inWholeMilliseconds)
@@ -1801,7 +1851,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.onHomeResumed()
         resolutionStarted.await()
@@ -1848,7 +1898,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.onHomeResumed()
         requestScanStarted.await()
@@ -2021,7 +2071,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.onHomeResumed()
         resolutionStarted.await()
@@ -2062,7 +2112,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         sut.onHomeResumed()
         runCurrent()
 
@@ -2096,7 +2146,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         sut.onHomeResumed()
         runCurrent()
 
@@ -2128,7 +2178,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(unavailableRequest, payableRequest)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.startPaykitPaymentRequestPolling()
         advanceTimeBy(30.seconds.inWholeMilliseconds)
@@ -2165,7 +2215,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(expiredRequest, payableRequest)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.startPaykitPaymentRequestPolling()
         advanceTimeBy(30.seconds.inWholeMilliseconds)
@@ -2191,7 +2241,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         sut.startPaykitPaymentRequestPolling()
         advanceTimeBy(30.seconds.inWholeMilliseconds)
@@ -3205,7 +3255,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
         whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
         stubOpenedPaymentRequest(request, bolt11)
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         pendingPaykitPaymentRequests.value = listOf(request)
 
         sut.onHomeResumed()
@@ -3224,7 +3274,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         stubOpenedPaymentRequest(request, signupAuthUrl)
 
         sut.onHomeResumed()
@@ -5026,7 +5076,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
         whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
         val privateContext = stubOpenedPaymentRequest(request, bolt11)
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         pendingPaykitPaymentRequests.value = listOf(request)
         sut.startPaykitPaymentRequestPolling()
@@ -5196,7 +5246,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
         stubOpenedPaymentRequest(request, bolt11)
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
 
         pendingPaykitPaymentRequests.value = listOf(request)
         sut.startPaykitPaymentRequestPolling()
@@ -5796,7 +5846,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         stubSuccessfulOnchainSend(address, request.amountSats)
@@ -5948,7 +5998,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `initial subscription retry keeps the send sheet presented`() = test {
         val request = paymentRequest()
         pendingPaykitPaymentRequests.value = listOf(request)
-        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         whenever(privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(request)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
