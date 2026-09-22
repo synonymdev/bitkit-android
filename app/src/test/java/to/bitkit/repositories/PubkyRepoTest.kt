@@ -774,7 +774,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.isAuthenticated.value)
 
         assertTrue(sut.createIdentity("Updated", "", emptyList(), emptyList(), null).isSuccess)
-        verifyBlocking(pubkyService, times(2)) { signIn("local-secret") }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
         verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
         verifyBlocking(pubkyService, never()) { signOut() }
         verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
@@ -1287,6 +1287,31 @@ class PubkyRepoTest : BaseUnitTest() {
             ),
             result.getOrNull(),
         )
+    }
+
+    @Test
+    fun `snapshotSessionBackupState should return null for an adopted ring identity`() = test {
+        whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(true)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session_secret")
+
+        val result = sut.snapshotSessionBackupState()
+
+        assertNull(result.getOrNull())
+    }
+
+    @Test
+    fun `adoptRingIdentity should reject a mismatching credential and clear the reference`() = test {
+        val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
+        whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("ring_secret"))
+        whenever(pubkyService.publicKeyFromSecret("ring_secret"))
+            .thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertTrue(result.isFailure)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(keychain) { delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
     }
 
     @Test

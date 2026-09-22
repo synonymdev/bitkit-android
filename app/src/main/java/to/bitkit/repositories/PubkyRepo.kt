@@ -40,6 +40,7 @@ import to.bitkit.data.hasPaykitState
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.paykitDisabled
 import to.bitkit.data.sharedpubky.SharedPubkyClient
+import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isPaykitIdentityError
@@ -295,6 +296,37 @@ class PubkyRepo @Inject constructor(
     // region Shared pubky
 
     suspend fun ringIdentities(): Result<ImmutableList<String>> = sharedPubkyClient.listRingIdentities()
+
+    suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            ensureServiceInitialized()
+            val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
+            val publicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
+            require(PubkyPublicKeyFormat.matches(publicKey, pubky)) {
+                "Ring credential does not match '${redacted(pubky)}'"
+            }
+            keychain.upsertString(
+                Keychain.Key.SHARED_PUBKY_SOURCE.name,
+                "${SharedPubkyContract.RING_SOURCE_PREFIX}$pubky",
+            )
+
+            runSuspendCatching { pubkyService.signIn(secretKeyHex) }.getOrElse {
+                Logger.warn("Retrying sign up after sign in failed", it, context = TAG)
+                val homegate = fetchHomegateSignupCode()
+                pubkyService.signUp(secretKeyHex, homegate.homeserverPubky, homegate.signupCode)
+            }
+
+            _publicKey.update { publicKey.ensurePubkyPrefix() }
+            _authState.update { PubkyAuthState.Authenticated }
+            notifyBackupStateChanged()
+            Logger.info("Adopted ring identity for '${redacted(publicKey)}'", context = TAG)
+            loadProfile()
+            loadContacts()
+            _profile.value != null
+        }.onFailure {
+            runCatching { keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+        }
+    }
 
     // endregion
 
@@ -601,24 +633,8 @@ class PubkyRepo @Inject constructor(
             val result = runSuspendCatching {
                 withContext(ioDispatcher) {
                     settingsStore.setPubkyProfileSetupPending(false)
-                    val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-                    val publicKeyZ32 = if (!storedSecretKeyHex.isNullOrEmpty()) {
-                        pubkyService.signIn(storedSecretKeyHex)
-                        pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
-                    } else {
-                        val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
-                        val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
-                            ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
-
-                        shouldRevokeSessionOnFailure = true
-                        runSuspendCatching {
-                            pubkyService.signUp(secretKeyHex, signupDetails.first, signupDetails.second)
-                        }.getOrElse {
-                            Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
-                            pubkyService.signIn(secretKeyHex)
-                        }
-                        publicKey
-                    }
+                    val publicKeyZ32 = _publicKey.value
+                        ?: createLocalIdentitySession { shouldRevokeSessionOnFailure = true }
 
                     val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
                     shouldRevokeSessionOnFailure = false
@@ -631,6 +647,28 @@ class PubkyRepo @Inject constructor(
             revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
             throw error
         }
+    }
+
+    private suspend fun createLocalIdentitySession(markSessionCreated: () -> Unit): String {
+        keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        if (!storedSecretKeyHex.isNullOrEmpty()) {
+            pubkyService.signIn(storedSecretKeyHex)
+            return pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
+        }
+
+        val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
+        val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
+            ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
+
+        markSessionCreated()
+        runSuspendCatching {
+            pubkyService.signUp(secretKeyHex, signupDetails.first, signupDetails.second)
+        }.getOrElse {
+            Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
+            pubkyService.signIn(secretKeyHex)
+        }
+        return publicKey
     }
 
     private suspend fun publishIdentityProfile(
@@ -1091,7 +1129,7 @@ class PubkyRepo @Inject constructor(
         approvedClientId: String,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
-            val secretKeyHex = requireNotNull(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)) {
+            val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
                 "No secret key available — use Ring to manage authorizations"
             }
             pubkyService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
@@ -1104,7 +1142,7 @@ class PubkyRepo @Inject constructor(
         unsignedPayload: ByteArray,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
-            val secretKeyHex = requireNotNull(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)) {
+            val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
                 "No secret key available — use Ring to manage authorizations"
             }
             pubkyService.approveAuthWithCompanionClaim(
@@ -1127,6 +1165,8 @@ class PubkyRepo @Inject constructor(
 
     suspend fun snapshotSessionBackupState(): Result<PubkySessionBackupV1?> = runSuspendCatching {
         withContext(ioDispatcher) {
+            if (keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)) return@withContext null
+
             val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
             if (!secretKeyHex.isNullOrEmpty()) {
                 return@withContext PubkySessionBackupV1(kind = PubkySessionBackupKind.LocalSeed)
@@ -1166,6 +1206,7 @@ class PubkyRepo @Inject constructor(
                 clearAuthenticatedState()
                 runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+                runCatching { keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
 
                 when (backup?.kind) {
                     null -> Unit
@@ -1207,8 +1248,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun refreshSessionIfPossible(): Result<Boolean> = runSuspendCatching {
         withContext(ioDispatcher) {
-            val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-                ?: return@withContext false
+            val storedSecretKeyHex = activeSecretKeyHex() ?: return@withContext false
 
             pubkyService.signIn(storedSecretKeyHex)
             val publicKey = pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
@@ -1378,8 +1418,14 @@ class PubkyRepo @Inject constructor(
     }
 
     private suspend fun managedSecretKeyFor(publicKey: String): String? = withContext(ioDispatcher) {
+        val bareKey = publicKey.removePrefix(PUBKY_PREFIX)
         val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-            ?: return@withContext null
+            ?: return@withContext bareKey
+                .takeIf {
+                    keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ==
+                        "${SharedPubkyContract.RING_SOURCE_PREFIX}$bareKey"
+                }
+                ?.let { sharedPubkyClient.ringCredential(it).getOrNull() }
 
         val derivedPublicKey = runCatching {
             pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix()
@@ -1397,6 +1443,11 @@ class PubkyRepo @Inject constructor(
         runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
             .onSuccess { notifyBackupStateChanged() }
         null
+    }
+
+    private suspend fun activeSecretKeyHex(): String? {
+        val publicKey = _publicKey.value ?: return keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        return managedSecretKeyFor(publicKey)
     }
 
     private suspend fun deriveLocalSecretKeyFromWalletSeed(): String = withContext(ioDispatcher) {

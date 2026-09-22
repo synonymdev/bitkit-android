@@ -15,6 +15,7 @@ object SharedPubkyContract {
     const val RING_PACKAGE = "app.pubkyring"
     const val RING_AUTHORITY = RING_PACKAGE + AUTHORITY_SUFFIX
     const val RING_PERMISSION = "$RING_PACKAGE.permission.READ_SHARED_PUBKY"
+    const val RING_SOURCE_PREFIX = "$RING_PACKAGE:"
 
     fun isValidSecret(
         secretKeyHex: String,

@@ -20,6 +20,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyAuthRequestError
@@ -32,6 +33,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PaykitSdkServiceTest {
+    companion object {
+        private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
     @Test
     fun `registered identity activation persists credentials or clears partial activation`() = runTest {
         for (failure in listOf(null, "session", "secret", "initialize", "cancel")) {
@@ -224,7 +229,7 @@ class PaykitSdkServiceTest {
     fun `external session retains private payment access`() {
         val keychain = mock<Keychain>()
         val sessionSecret = "external-session"
-        val provider = PaykitSdkSessionProvider(keychain)
+        val provider = PaykitSdkSessionProvider(keychain, mock())
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(sessionSecret)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
 
@@ -233,9 +238,23 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `adopted identity loads its secret key from the ring provider`() {
+        val keychain = mock<Keychain>()
+        val sharedPubky = mock<SharedPubkyClient>()
+        val provider = PaykitSdkSessionProvider(keychain, sharedPubky)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn("app.pubkyring:$RING_PUBKY")
+        whenever(sharedPubky.readCredential(RING_PUBKY)).thenReturn(null)
+
+        assertEquals(RING_PUBKY, provider.adoptedPubky())
+        assertNull(provider.loadLocalSecretKey())
+        verify(sharedPubky).readCredential(RING_PUBKY)
+    }
+
+    @Test
     fun `stale session can be deferred until sdk initialization completes`() {
         val keychain = mock<Keychain>()
-        val provider = PaykitSdkSessionProvider(keychain)
+        val provider = PaykitSdkSessionProvider(keychain, mock())
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
 
         assertTrue(provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
@@ -247,7 +266,7 @@ class PaykitSdkServiceTest {
     @Test
     fun `missing session or unrelated identity failures are not deferred`() {
         val keychain = mock<Keychain>()
-        val provider = PaykitSdkSessionProvider(keychain)
+        val provider = PaykitSdkSessionProvider(keychain, mock())
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
 
         assertTrue(!provider.canDeferStaleSession("restore Pubky grant session from platform provider"))

@@ -48,6 +48,11 @@ class CreateProfileViewModel @Inject constructor(
     private fun deriveAndCheckRemote() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
+            pubkyRepo.publicKey.value?.let { publicKey ->
+                _uiState.update { it.copy(derivedPublicKey = publicKey) }
+                checkForExistingProfile(publicKey)
+                return@launch
+            }
             pubkyRepo.deriveKeys()
                 .onSuccess { (publicKey, _) ->
                     _uiState.update { it.copy(derivedPublicKey = publicKey) }

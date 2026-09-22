@@ -89,6 +89,7 @@ fun PubkyChoiceScreen(
         uiState = uiState,
         onBackClick = onBackClick,
         onCreateProfile = onNavigateToCreateProfile,
+        onIdentityClick = viewModel::onIdentityClick,
     )
 }
 
@@ -97,6 +98,7 @@ private fun Content(
     uiState: PubkyChoiceUiState,
     onBackClick: () -> Unit,
     onCreateProfile: () -> Unit,
+    onIdentityClick: (String) -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -157,7 +159,8 @@ private fun Content(
                 VerticalSpacer(24.dp)
 
                 when {
-                    uiState.isLoading -> LoadingState(text = stringResource(R.string.profile__choice_loading_profile))
+                    uiState.isLoading || uiState.adoptingPubky != null ->
+                        LoadingState(text = stringResource(R.string.profile__choice_loading_profile))
 
                     uiState.identities.isEmpty() -> OptionCard(
                         iconResId = R.drawable.ic_user_plus,
@@ -172,7 +175,7 @@ private fun Content(
                         OptionCard(
                             iconResId = R.drawable.ic_lock_key,
                             text = identity.name,
-                            onClick = {},
+                            onClick = { onIdentityClick(identity.pubky) },
                             caption = identity.caption,
                             trailing = {
                                 PubkyContactAvatar(
@@ -267,6 +270,7 @@ private fun PreviewIdentities() {
             ),
             onBackClick = {},
             onCreateProfile = {},
+            onIdentityClick = {},
         )
     }
 }
@@ -279,6 +283,7 @@ private fun PreviewCreate() {
             uiState = PubkyChoiceUiState(isLoading = false),
             onBackClick = {},
             onCreateProfile = {},
+            onIdentityClick = {},
         )
     }
 }

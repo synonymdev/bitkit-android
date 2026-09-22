@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.profile
 
 import android.content.Context
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -28,6 +29,7 @@ class CreateProfileViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization Failed")
         whenever(context.getString(R.string.profile__create_error)).thenReturn("Create failed")
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.deriveKeys() }.thenReturn(Result.success("pubkyalice" to "secret"))
         whenever { pubkyRepo.fetchRemoteProfile(any()) }.thenReturn(Result.success(null))
 

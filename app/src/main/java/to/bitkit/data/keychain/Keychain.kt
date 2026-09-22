@@ -237,6 +237,7 @@ class Keychain @Inject constructor(
         PAYKIT_PENDING_PAYMENT_PROOFS,
         PAYKIT_PRESENTED_PAYMENT_REQUESTS,
         PUBKY_SECRET_KEY,
+        SHARED_PUBKY_SOURCE,
     }
 }
 
