@@ -2781,15 +2781,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `invalid contact deeplink rejects without waiting for initialization or starting payment or auth`() = test {
         enablePaykitUi()
+        val invalidLinks = listOf(
+            "bitkit://contact",
+            "bitkit://contact?pubky=$testPublicKey&pubky=$testPublicKey",
+            "bitkit://contact/recovery-mode?pubky=$testPublicKey",
+            "bitkit://contact?pubky=invalid",
+            "bitkit://contact?pubky=bitcoin%3Abc1example",
+            "bitkit://contact?pubky=pubkyauth%3A%2F%2Fsignin_grant",
+        )
         whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { awaitCancellation() }
+        whenever(context.getString(R.string.other__scan_err_decoding)).thenReturn("Decoding Error")
+        whenever(context.getString(R.string.other__scan__error__generic)).thenReturn("Unable to read data")
         sut.mainScreenEffect.test {
-            listOf(
-                "bitkit://contact",
-                "bitkit://contact?pubky=$testPublicKey&pubky=$testPublicKey",
-                "bitkit://contact?pubky=invalid",
-                "bitkit://contact?pubky=bitcoin%3Abc1example",
-                "bitkit://contact?pubky=pubkyauth%3A%2F%2Fsignin_grant",
-            ).forEach { link ->
+            invalidLinks.forEach { link ->
                 settingsData.value = SettingsData(isPinEnabled = true)
                 sut.resetIsAuthenticatedState()
                 runCurrent()
@@ -2803,7 +2807,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertNull(sut.currentSheet.value)
         verify(pubkyRepo, never()).awaitInitialization()
         verify(coreService, never()).decode(any())
+        verify(lightningRepo, never()).setRecoveryMode(true)
         verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager, times(invalidLinks.size)).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Decoding Error", it.title)
+                assertEquals("Unable to read data", it.description)
+            }
+        )
     }
 
     @Test

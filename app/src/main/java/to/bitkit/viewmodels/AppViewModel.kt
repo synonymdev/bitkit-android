@@ -5481,6 +5481,7 @@ class AppViewModel @Inject constructor(
 
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
         val value = uri.toString()
+        val isContactLink = PubkyContactLink.matches(uri)
         if (SamRockSetupRequest.isProtocolUrl(value)) {
             if (!walletRepo.walletExists()) return@launch
 
@@ -5498,7 +5499,7 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        if (uri.isRecoveryModeDeeplink()) {
+        if (!isContactLink && uri.isRecoveryModeDeeplink()) {
             lightningRepo.setRecoveryMode(enabled = true)
             delay(SCREEN_TRANSITION_DELAY)
             mainScreenEffect(
@@ -5532,7 +5533,7 @@ class AppViewModel @Inject constructor(
             source = ScanSource.DEEPLINK,
             data = value,
             startDelay = SCREEN_TRANSITION_DELAY,
-            routePubkyKeys = PubkyContactLink.matches(uri),
+            routePubkyKeys = isContactLink,
         )
     }
 
