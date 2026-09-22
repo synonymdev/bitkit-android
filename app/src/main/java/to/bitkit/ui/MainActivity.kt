@@ -175,12 +175,15 @@ class MainActivity : FragmentActivity() {
                     },
                     migrationLoading = { MigrationLoadingScreen(isVisible = true) },
                     onboarding = {
-                        OnboardingNav(
-                            startupNavController = rememberNavController(),
-                            scope = scope,
-                            appViewModel = appViewModel,
-                            walletViewModel = walletViewModel,
-                        )
+                        CompositionLocalProvider(LocalAppViewModel provides appViewModel) {
+                            OnboardingNav(
+                                startupNavController = rememberNavController(),
+                                scope = scope,
+                                appViewModel = appViewModel,
+                                walletViewModel = walletViewModel,
+                                modifier = Modifier.hazeSource(hazeState, zIndex = 0f)
+                            )
+                        }
                     },
                     wallet = {
                         val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
@@ -408,10 +411,12 @@ private fun OnboardingNav(
     scope: CoroutineScope,
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
+    modifier: Modifier = Modifier,
 ) {
     NavHost(
         navController = startupNavController,
         startDestination = StartupRoutes.Terms,
+        modifier = modifier,
     ) {
         composable<StartupRoutes.Terms> {
             TermsOfUseScreen(

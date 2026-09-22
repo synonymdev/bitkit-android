@@ -63,8 +63,8 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.startActivityAppSettings
+import to.bitkit.models.QrCodePayload
 import to.bitkit.models.Toast
-import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -72,9 +72,11 @@ import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
+import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
@@ -86,13 +88,17 @@ private const val TAG = "QrScanningScreen"
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrScanningScreen(
-    onScanSuccess: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onScanSuccess: (QrCodePayload) -> Unit,
     onBack: (() -> Unit)? = null,
     isPubkyScan: Boolean = false,
+    isFullScreen: Boolean = false,
+    acceptsBinaryPayload: Boolean = false,
+    showsGradientBackground: Boolean = true,
 ) {
     val app = appViewModel ?: return
 
-    val (scanResult, setScanResult) = remember { mutableStateOf<String?>(null) }
+    val (scanResult, setScanResult) = remember { mutableStateOf<QrCodePayload?>(null) }
 
     // Handle scan result
     LaunchedEffect(scanResult) {
@@ -124,22 +130,23 @@ fun QrScanningScreen(
     val context = LocalContext.current
     val previewView = remember { PreviewView(context) }
     val preview = remember { Preview.Builder().build() }
-    val analyzer = remember {
-        QrCodeAnalyzer { result ->
-            if (result.isSuccess) {
-                val qrCode = result.getOrThrow()
-                Logger.debug("Scanned QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
-                setScanResult(qrCode)
-            } else {
-                val error = requireNotNull(result.exceptionOrNull())
-                Logger.error("Failed to scan QR code", error)
-                app.toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__qr_error_text),
-                )
-            }
-        }
+    val analyzer = remember(acceptsBinaryPayload) {
+        QrCodeAnalyzer(
+            onScanResult = { result ->
+                if (result.isSuccess) {
+                    setScanResult(result.getOrThrow())
+                } else {
+                    val error = requireNotNull(result.exceptionOrNull())
+                    Logger.error("Failed to scan QR code", error, context = TAG)
+                    app.toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.other__qr_error_header),
+                        description = context.getString(R.string.other__qr_error_text),
+                    )
+                }
+            },
+            acceptsBinaryPayload = acceptsBinaryPayload,
+        )
     }
     val imageAnalysis = remember {
         ImageAnalysis.Builder()
@@ -150,12 +157,28 @@ fun QrScanningScreen(
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri ->
-            uri?.let { processImageFromGallery(context, it, setScanResult, onError = { e -> app.toast(e) }) }
+            uri?.let {
+                processImageFromGallery(
+                    context = context,
+                    uri = it,
+                    acceptsBinaryPayload = acceptsBinaryPayload,
+                    onScanSuccess = setScanResult,
+                    onError = { e -> app.toast(e) },
+                )
+            }
         }
     )
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { processImageFromGallery(context, it, setScanResult, onError = { e -> app.toast(e) }) }
+        uri?.let {
+            processImageFromGallery(
+                context = context,
+                uri = it,
+                acceptsBinaryPayload = acceptsBinaryPayload,
+                onScanSuccess = setScanResult,
+                onError = { e -> app.toast(e) },
+            )
+        }
     }
 
     LaunchedEffect(lensFacing) {
@@ -185,11 +208,18 @@ fun QrScanningScreen(
     }
 
     Column(
-        modifier = Modifier
-            .gradientBackground()
+        modifier = modifier
+            .then(if (showsGradientBackground) Modifier.gradientBackground() else Modifier)
             .navigationBarsPadding()
     ) {
-        SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
+        if (isFullScreen) {
+            AppTopBar(
+                titleText = stringResource(R.string.other__qr_scan),
+                onBackClick = onBack,
+            )
+        } else {
+            SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
+        }
 
         CameraPermissionView(
             permissionState = cameraPermissionState,
@@ -202,6 +232,7 @@ fun QrScanningScreen(
             grantedContent = {
                 Content(
                     isPubkyScan = isPubkyScan,
+                    isFlashlightOn = isFlashlightOn,
                     previewView = previewView,
                     onClickFlashlight = {
                         isFlashlightOn = !isFlashlightOn
@@ -226,7 +257,7 @@ fun QrScanningScreen(
 private fun handlePaste(
     context: Context,
     app: AppViewModel,
-    setScanResult: (String?) -> Unit,
+    setScanResult: (QrCodePayload?) -> Unit,
 ): () -> Unit = {
     val clipboard = context.getClipboardText()?.trim()
     if (clipboard.isNullOrBlank()) {
@@ -236,18 +267,28 @@ private fun handlePaste(
             description = context.getString(R.string.wallet__send_clipboard_empty_text),
         )
     }
-    setScanResult(clipboard)
+    setScanResult(
+        clipboard?.let {
+            textQrCodePayload(it)
+        }
+    )
 }
+
+internal fun textQrCodePayload(text: String) = QrCodePayload(
+    text = text,
+    rawBytes = null,
+)
 
 @Composable
 private fun Content(
     isPubkyScan: Boolean,
+    isFlashlightOn: Boolean,
     previewView: PreviewView,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
     onPasteFromClipboard: () -> Unit,
     modifier: Modifier = Modifier,
-    onSubmitDebug: (String?) -> Unit,
+    onSubmitDebug: (QrCodePayload?) -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -272,7 +313,7 @@ private fun Content(
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
-                    .background(Colors.White64)
+                    .background(Colors.White32)
                     .size(CameraOverlayButtonSize)
                     .align(Alignment.TopStart)
             ) {
@@ -288,7 +329,7 @@ private fun Content(
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
-                    .background(Colors.White64)
+                    .background(if (isFlashlightOn) Colors.White64 else Colors.White32)
                     .size(CameraOverlayButtonSize)
                     .align(Alignment.TopEnd)
             ) {
@@ -354,7 +395,9 @@ private fun Content(
                 AppAlertDialog(
                     title = "",
                     confirmText = stringResource(R.string.common__yes_proceed),
-                    onConfirm = { onSubmitDebug(debugValue) },
+                    onConfirm = {
+                        onSubmitDebug(textQrCodePayload(debugValue))
+                    },
                     onDismiss = { showDialog = false },
                     modifier = Modifier
                         .semantics { testTagsAsResourceId = true }
@@ -378,7 +421,8 @@ private fun Content(
 private fun processImageFromGallery(
     context: Context,
     uri: Uri,
-    onScanSuccess: (String) -> Unit,
+    acceptsBinaryPayload: Boolean,
+    onScanSuccess: (QrCodePayload) -> Unit,
     onError: (Throwable) -> Unit,
 ) {
     runCatching {
@@ -390,18 +434,24 @@ private fun processImageFromGallery(
 
         scanner.process(image)
             .addOnSuccessListener { barcodes ->
-                for (barcode in barcodes) {
-                    barcode.rawValue?.let { qrCode ->
-                        onScanSuccess(qrCode)
-                        Logger.info("Found QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
-                        return@addOnSuccessListener
-                    }
+                selectQrCodePayload(
+                    payloads = barcodes.map {
+                        QrCodePayload(
+                            text = it.rawValue,
+                            rawBytes = it.rawBytes,
+                        )
+                    },
+                    acceptsBinaryPayload = acceptsBinaryPayload,
+                )?.let {
+                    onScanSuccess(it)
+                    return@addOnSuccessListener
                 }
-                Logger.error("No QR code found in the image")
-                onError(Exception("No QR code found in the image"))
+                val error = AppError("No QR code found in the image")
+                Logger.error("Failed to find QR code in image", error, context = TAG)
+                onError(error)
             }
             .addOnFailureListener { e ->
-                Logger.error("Failed to scan QR code from gallery", e)
+                Logger.error("Failed to scan QR code from gallery", e, context = TAG)
                 onError(e)
             }
     }.onFailure {
