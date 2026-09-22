@@ -1413,6 +1413,25 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initialize should complete contacts load after contact fetch failure`() = test {
+        val session = "saved_session"
+        val unprefixedPublicKey = VALID_SELF_KEY.removePrefix("pubky")
+        val pubkyProfile = createPubkyProfile(name = "Restored User")
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(pubkyService.importSession(session)).thenReturn(unprefixedPublicKey)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = pubkyProfile))
+        whenever(pubkyService.contactRecords()).thenAnswer { throw TestAppError("Offline") }
+
+        sut.initialize()
+
+        assertEquals(1L, sut.contactsLoadCompletionVersion.value)
+        assertEquals(0L, sut.contactsLoadVersion.value)
+        assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
     fun `initialize should restore session from local secret key when saved session is missing`() = test {
         val secretKey = "local_secret"
         val publicKey = VALID_SELF_KEY.removePrefix("pubky")

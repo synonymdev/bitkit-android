@@ -119,7 +119,7 @@ fixtures, push notifications) live in each suite's README.
 | [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [coin-selection](coin-selection) | 1 | Manual coin selection screen; needs 3+ on-chain UTXOs; no README |
-| [deeplinks](deeplinks) | 3 | Pubky contact handoff, plus `bitkit://screen/…` and sheet routing behind the dev-mode gate |
+| [deeplinks](deeplinks) | 3 | Pubky contact handoff, plus `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
 | [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
 | [node-lifecycle](node-lifecycle) | 1 | Detached LDK restart completes; a cancelled RGS server change reconciles and recovers to Running; reads the app log; no README |

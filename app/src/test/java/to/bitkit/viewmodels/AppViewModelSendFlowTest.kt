@@ -246,6 +246,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pubkyPublicKey = MutableStateFlow<String?>(null)
     private val pubkyContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     private val pubkyContactsLoadVersion = MutableStateFlow(0L)
+    private val pubkyContactsLoadCompletionVersion = MutableStateFlow(0L)
     private val pendingPaykitPaymentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
@@ -353,6 +354,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(Unit))
         whenever(pubkyRepo.contactsLoadVersion).thenReturn(pubkyContactsLoadVersion)
+        whenever(pubkyRepo.contactsLoadCompletionVersion).thenReturn(pubkyContactsLoadCompletionVersion)
         whenever(paykitPaymentRequestRepo.pendingRequests).thenReturn(pendingPaykitPaymentRequests)
         whenever(paykitPaymentRequestRepo.paymentRequestHistory).thenReturn(paykitPaymentRequestHistory)
         whenever(paykitPaymentRequestRepo.subscriptions).thenReturn(paykitSubscriptions)
@@ -2724,6 +2726,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             pubkyPublicKey.value = testPublicKey
             pubkyContactsLoadVersion.value = 1L
+            pubkyContactsLoadCompletionVersion.value = 1L
             sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
             assertEquals(MainScreenEffect.Navigate(Routes.Profile), awaitItem())
         }
@@ -2749,6 +2752,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.resetIsAuthenticatedState()
             pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
             pubkyContactsLoadVersion.value = 1L
+            pubkyContactsLoadCompletionVersion.value = 1L
             advanceUntilIdle()
             expectNoEvents()
 
@@ -2758,6 +2762,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             expectNoEvents()
         }
         verify(refreshContactPaykitReceivers).invoke(testPublicKey)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink continues after contacts load failure`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            runCurrent()
+            expectNoEvents()
+
+            pubkyContactsLoadCompletionVersion.value = 1L
+
+            assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
+        }
         verify(coreService, never()).decode(any())
     }
 

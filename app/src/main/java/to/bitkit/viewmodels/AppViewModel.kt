@@ -2294,7 +2294,7 @@ class AppViewModel @Inject constructor(
             val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
                 pubkyRepo.awaitInitialization()
                 if (isContactLink && pubkyRepo.publicKey.value != null) {
-                    pubkyRepo.contactsLoadVersion.first { it > 0 }
+                    pubkyRepo.contactsLoadCompletionVersion.first { it > 0 }
                 }
                 true
             } ?: false

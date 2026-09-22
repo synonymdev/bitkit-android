@@ -128,6 +128,9 @@ class PubkyRepo @Inject constructor(
     private val _contactsLoadVersion = MutableStateFlow(0L)
     val contactsLoadVersion: StateFlow<Long> = _contactsLoadVersion.asStateFlow()
 
+    private val _contactsLoadCompletionVersion = MutableStateFlow(0L)
+    val contactsLoadCompletionVersion: StateFlow<Long> = _contactsLoadCompletionVersion.asStateFlow()
+
     private val _isLoadingContacts = MutableStateFlow(false)
     val isLoadingContacts: StateFlow<Boolean> = _isLoadingContacts.asStateFlow()
 
@@ -836,7 +839,9 @@ class PubkyRepo @Inject constructor(
                 }
                 _contacts.update { loadedContacts }
                 markContactsLoaded()
+                markContactsLoadCompleted()
             }.onFailure {
+                if (_publicKey.value == pk) markContactsLoadCompleted()
                 Logger.error("Failed to load contacts", it, context = TAG)
             }
         } finally {
@@ -1408,6 +1413,7 @@ class PubkyRepo @Inject constructor(
         _profile.update { null }
         _contacts.update { emptyList() }
         _contactsLoadVersion.update { 0L }
+        _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
         _sessionRestorationFailed.update { false }
         _authState.update { PubkyAuthState.Idle }
@@ -1415,6 +1421,10 @@ class PubkyRepo @Inject constructor(
 
     private fun markContactsLoaded() {
         _contactsLoadVersion.update { it + 1 }
+    }
+
+    private fun markContactsLoadCompleted() {
+        _contactsLoadCompletionVersion.update { it + 1 }
     }
 
     private suspend fun clearLocalState(publicPaykitCleanupPending: Boolean = false) = withContext(ioDispatcher) {
