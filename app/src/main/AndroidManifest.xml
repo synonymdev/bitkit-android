@@ -52,6 +52,11 @@
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="31" />
 
+    <!-- Guards the read-only pubky ContentProvider; only same-signature apps may hold it. -->
+    <permission
+        android:name="${applicationId}.permission.READ_SHARED_PUBKY"
+        android:protectionLevel="signature" />
+
     <application
         android:name=".App"
         android:allowBackup="false"
@@ -243,6 +248,13 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="@string/app_notifications_channel_id" />
+
+        <provider
+            android:name=".data.sharedpubky.SharedPubkyProvider"
+            android:authorities="${applicationId}.sharedpubky"
+            android:exported="true"
+            android:grantUriPermissions="false"
+            android:readPermission="${applicationId}.permission.READ_SHARED_PUBKY" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
