@@ -2714,6 +2714,86 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `contact deeplink opens add contact or own profile through scanner routing`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
+            advanceUntilIdle()
+
+            pubkyPublicKey.value = testPublicKey
+            pubkyContactsLoadVersion.value = 1L
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            assertEquals(MainScreenEffect.Navigate(Routes.Profile), awaitItem())
+        }
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink waits for restored contacts and unlock before opening saved contact`() = test {
+        enablePaykitUi()
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            runCurrent()
+            expectNoEvents()
+
+            pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+            initialized.complete(Unit)
+            runCurrent()
+            expectNoEvents()
+
+            settingsData.value = SettingsData(isPinEnabled = true)
+            sut.resetIsAuthenticatedState()
+            pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+            pubkyContactsLoadVersion.value = 1L
+            advanceUntilIdle()
+            expectNoEvents()
+
+            sut.setIsAuthenticated(true)
+            assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        verify(refreshContactPaykitReceivers).invoke(testPublicKey)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink does not route when Paykit is disabled or wallet is missing`() = test {
+        val intent = Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri())
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(intent)
+            advanceUntilIdle()
+            expectNoEvents()
+
+            enablePaykitUi()
+            whenever(walletRepo.walletExists()).thenReturn(false)
+            sut.handleDeeplinkIntent(intent)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `invalid contact deeplink cannot start payment or authorization`() = test {
+        enablePaykitUi()
+        sut.mainScreenEffect.test {
+            listOf("invalid", "bitcoin%3Abc1example", "pubkyauth%3A%2F%2Fsignin_grant").forEach { payload ->
+                sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$payload".toUri()))
+                advanceUntilIdle()
+            }
+            expectNoEvents()
+        }
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(any())
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
     fun `manual address input rejects pubky when Paykit UI is disabled`() = test {
         sut.setSendEvent(SendEvent.AddressChange(testPublicKey))
         advanceUntilIdle()

@@ -118,6 +118,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyContactLink
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkyRingAuthCallback
@@ -2283,20 +2284,32 @@ class AppViewModel @Inject constructor(
         data: String,
         allowPubkyAuth: Boolean,
     ): Boolean {
-        if (source != ScanSource.DEEPLINK || !allowPubkyAuth) return true
-        if (!PubkyAuthRequest.isProtocolUrl(data)) return true
+        if (source != ScanSource.DEEPLINK) return true
+        val isContactLink = PubkyContactLink.matches(Uri.parse(data))
+        if (!isContactLink && (!allowPubkyAuth || !PubkyAuthRequest.isProtocolUrl(data))) return true
 
         if (!PubkyAuthRequest.isSignupUrl(data)) {
             val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
                 pubkyRepo.awaitInitialization()
+                if (isContactLink && pubkyRepo.publicKey.value != null) {
+                    pubkyRepo.contactsLoadVersion.first { it > 0 }
+                }
                 true
             } ?: false
             if (!isInitializationReady) {
                 Logger.warn("Timed out waiting for Pubky initialization", context = TAG)
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__auth_error_title),
-                    description = context.getString(R.string.profile__auth_error_timeout),
+                    title = context.getString(
+                        if (isContactLink) R.string.other__scan_err_decoding else R.string.profile__auth_error_title,
+                    ),
+                    description = context.getString(
+                        if (isContactLink) {
+                            R.string.other__scan__error__generic
+                        } else {
+                            R.string.profile__auth_error_timeout
+                        },
+                    ),
                 )
                 return false
             }
@@ -2825,7 +2838,18 @@ class AppViewModel @Inject constructor(
     ) = withContext(bgDispatcher) {
         if (rejectPubkyAuthScan(result, allowPubkyAuth, contactPaymentContext)) return@withContext
 
-        val input = result.removeLightningSchemes()
+        val input = if (routePubkyKeys && PubkyContactLink.matches(Uri.parse(result))) {
+            PubkyContactLink.publicKey(Uri.parse(result)) ?: run {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.other__scan__error__generic),
+                )
+                return@withContext
+            }
+        } else {
+            result.removeLightningSchemes()
+        }
 
         val contactPaymentProfile = activeContactPaymentProfile()
         val incomingPaymentRequest = activeIncomingPaymentRequest()
@@ -2886,12 +2910,12 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        if (routePubkyKeys && isPaykitEnabled.value) {
+        if (routePubkyKeys && isPaykitUiEnabledFromSettings()) {
             val route = resolvePastedPubkyRoute(
                 input = input,
                 ownPublicKey = pubkyRepo.publicKey.value,
                 contacts = pubkyRepo.contacts.value,
-                isPaykitEnabled = isPaykitEnabled.value,
+                isPaykitEnabled = true,
             )
 
             if (route != null) {
@@ -5502,7 +5526,12 @@ class AppViewModel @Inject constructor(
 
         if (!walletRepo.walletExists()) return@launch
 
-        launchScan(source = ScanSource.DEEPLINK, data = value, startDelay = SCREEN_TRANSITION_DELAY)
+        launchScan(
+            source = ScanSource.DEEPLINK,
+            data = value,
+            startDelay = SCREEN_TRANSITION_DELAY,
+            routePubkyKeys = PubkyContactLink.matches(uri),
+        )
     }
 
     fun consumeScreenDeepLink() {
