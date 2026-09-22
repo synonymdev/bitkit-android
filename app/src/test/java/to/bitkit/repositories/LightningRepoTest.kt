@@ -1356,6 +1356,22 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
+    // Regression: the settings write after a successful restart must surface as a failed Result.
+    // Thrown out of the returned Result it escapes the caller's coroutine, which leaves the
+    // Electrum config screen spinning with no toast.
+    @Test
+    fun `restartWithElectrumServer returns failure when persisting the server fails`() = test {
+        startNodeForTesting()
+        val customServerUrl = "ssl://test.example.com:50002"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(settingsStore.update(any())).thenThrow(RuntimeException("write failed"))
+
+        val result = sut.restartWithElectrumServer(customServerUrl)
+
+        assertTrue(result.isFailure)
+    }
+
     @Test
     fun `restartWithElectrumServer should handle stop failure`() = test {
         startNodeForTesting()

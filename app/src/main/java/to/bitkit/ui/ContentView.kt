@@ -806,7 +806,7 @@ private fun RootNavHost(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         transferViewModel.transferEffects.collect { effect ->
-            transferEffectDestination(effect)?.let { navController.navigateTo(it) }
+            navController.navigateForTransferEffect(effect)
         }
     }
 
@@ -986,7 +986,7 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingConfirm) },
+                    onQuoteReady = { navController.navigateTo(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
                     toast = { title, description ->
                         appViewModel.toast(
@@ -1005,7 +1005,7 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
+                    onQuoteReady = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
@@ -1041,8 +1041,7 @@ private fun RootNavHost(
                 SpendingAdvancedScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
-                    // Pops back to whoever opened Advanced: SpendingConfirm or SpendingHwSign.
-                    onOrderCreated = { navController.popBackStack() },
+                    onQuoteReady = { navController.popBackStack() },
                 )
             }
             deepLinkableComposable<Routes.TransferLiquidity> {
@@ -2121,6 +2120,15 @@ internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (
     TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned
     TransferEffect.OnSpendingFundingPaid -> Routes.SettingUp
     else -> null
+}
+
+internal fun NavController.navigateForTransferEffect(effect: TransferEffect) {
+    val destination = transferEffectDestination(effect) ?: return
+    navigateTo(destination) {
+        if (effect is TransferEffect.OnSpendingFundingPaid) {
+            popUpTo<Routes.SpendingConfirm> { inclusive = true }
+        }
+    }
 }
 
 internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes = when {
