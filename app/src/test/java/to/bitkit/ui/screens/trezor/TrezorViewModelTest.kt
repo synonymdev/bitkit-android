@@ -19,6 +19,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.toTrezorCoinType
 import to.bitkit.repositories.TrezorRepo
 import to.bitkit.repositories.TrezorState
 import to.bitkit.services.TrezorWalletMode
@@ -330,6 +331,45 @@ class TrezorViewModelTest : BaseUnitTest() {
         val finalState = sut.uiState.value
         assertFalse(finalState.isBroadcasting)
         assertEquals("second-broadcast-txid", finalState.broadcastTxid)
+    }
+
+    @Test
+    fun `broadcastSignedTx should use network the tx was signed for`() = test {
+        val signedNetwork = sut.uiState.value.selectedNetwork
+        val otherNetwork = BitkitCoreNetwork.entries.first { it != signedNetwork }
+        loadSignedTx()
+        whenever(trezorRepo.broadcastRawTx(any(), any())).thenReturn(Result.success("broadcast-txid"))
+
+        sut.setSelectedNetwork(otherNetwork)
+        sut.broadcastSignedTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo).broadcastRawTx(TrezorPreviewData.sampleSignedTx.serializedTx, signedNetwork)
+    }
+
+    @Test
+    fun `signComposedTx should use network the tx was composed for`() = test {
+        val composedNetwork = sut.uiState.value.selectedNetwork
+        val composedCoin = composedNetwork.toTrezorCoinType()
+        val otherNetwork = BitkitCoreNetwork.entries.first { it.toTrezorCoinType() != composedCoin }
+        loadAccountInfo()
+        whenever(trezorRepo.composeTransaction(any(), any(), any(), any(), anyOrNull(), any()))
+            .thenReturn(Result.success(listOf(TrezorPreviewData.sampleComposeResult)))
+        whenever(trezorRepo.signTxFromPsbt(any(), anyOrNull()))
+            .thenReturn(Result.success(TrezorPreviewData.sampleSignedTx))
+        sut.setSendAddress("bc1qtest123")
+        sut.setSendAmount("1000")
+        sut.composeTx()
+        advanceUntilIdle()
+
+        sut.setSelectedNetwork(otherNetwork)
+        sut.signComposedTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo).signTxFromPsbt(
+            TrezorPreviewData.sampleComposeResult.psbt,
+            composedCoin,
+        )
     }
 
     @Test

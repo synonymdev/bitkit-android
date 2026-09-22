@@ -238,13 +238,13 @@ internal object TrezorPreviewData {
             address = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
             amountSats = "45000",
             feeRate = "5",
-            step = SendStep.Review(sampleComposeResult),
+            step = SendStep.Review(composeResult = sampleComposeResult, network = BitkitCoreNetwork.REGTEST),
         ),
     )
 
     val uiStateSigned = TrezorUiState(
         network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
-        send = TrezorSendState(step = SendStep.Signed(sampleSignedTx)),
+        send = TrezorSendState(step = SendStep.Signed(signedTx = sampleSignedTx, network = BitkitCoreNetwork.REGTEST)),
     )
 
     val sampleWalletBalance = WalletBalance(
@@ -364,6 +364,7 @@ internal object TrezorPreviewData {
         send = TrezorSendState(
             step = SendStep.Signed(
                 signedTx = sampleSignedTx,
+                network = BitkitCoreNetwork.REGTEST,
                 broadcastTxid = "c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5",
             ),
         ),
