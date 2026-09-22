@@ -573,11 +573,12 @@
     <string name="settings__widgets__section_reset">Repor predefinições</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__intro__title">Pagamentos\n&lt;accent&gt;Sem atrito&lt;/accent&gt;</string>
-    <string name="settings__quickpay__intro__description">O Bitkit QuickPay agiliza o check-out pagando automaticamente os códigos QR quando escaneados.</string>
+    <string name="settings__quickpay__intro__description">O Bitkit QuickPay torna o pagamento mais rápido ao pagar automaticamente pequenas faturas.</string>
     <string name="settings__quickpay__settings__toggle">Ativar o QuickPay</string>
     <string name="settings__quickpay__settings__text">Se ativado, os invoices digitalizados abaixo de ${amount} serão pagos automaticamente sem a necessidade de confirmação ou PIN*.</string>
     <string name="settings__quickpay__settings__label">Limite do Quickpay</string>
     <string name="settings__quickpay__settings__note">* O QuickPay suporta exclusivamente pagamentos a partir do seu saldo de gastos.</string>
+    <string name="settings__quickpay__sheet__description">O QuickPay torna o pagamento mais rápido ao pagar automaticamente códigos QR digitalizados.</string>
     <string name="settings__security__swipe_balance_to_hide">Arraste o saldo para ocultar</string>
     <string name="settings__security__hide_balance_on_open">Ocultar saldo ao abrir o app</string>
     <string name="settings__security__clipboard">Ler área de transferência</string>

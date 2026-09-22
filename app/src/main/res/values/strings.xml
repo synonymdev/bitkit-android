@@ -477,6 +477,7 @@
     <string name="onboarding__restore_passphrase_placeholder">Passphrase*</string>
     <string name="onboarding__restore_phrase">Please type in your recovery phrase from any (paper) backup.</string>
     <string name="onboarding__restore_red_explain">If a word is shown in &lt;accent&gt;red&lt;/accent&gt;, it means that it was not found in the recovery phrase dictionary. Check for spelling errors.</string>
+    <string name="onboarding__restore_seedqr_error">This QR code does not contain a valid 12-word SeedQR.</string>
     <string name="onboarding__restore_success_header">Wallet &lt;accent&gt;restored&lt;/accent&gt;</string>
     <string name="onboarding__restore_success_text">You have successfully restored your wallet from backup. Enjoy Bitkit!</string>
     <string name="onboarding__restore_suggestions">SUGGESTIONS</string>
@@ -935,7 +936,10 @@
     <string name="settings__es__port">Port</string>
     <string name="settings__es__protocol">Protocol</string>
     <string name="settings__es__server_error">Electrum Connection Failed</string>
+    <string name="settings__es__server_error_certificate">This server\'s certificate is not trusted. Use a server with a trusted certificate, or connect to its TCP port.</string>
     <string name="settings__es__server_error_description">Bitkit could not establish a connection to Electrum.</string>
+    <string name="settings__es__server_error_network">This server is on a different Bitcoin network. Choose a server for the network Bitkit is using.</string>
+    <string name="settings__es__server_error_protocol">Secure connection failed. Check that the protocol (TCP or TLS) matches the server port.</string>
     <string name="settings__es__server_updated_message">Successfully connected to {host}:{port}</string>
     <string name="settings__es__server_updated_title">Electrum Server Updated</string>
     <string name="settings__fee__custom__description">Depends on fee</string>
@@ -981,7 +985,7 @@
     <string name="settings__hardware_wallets__rename_title">Rename Hardware Wallet</string>
     <string name="settings__language_system_default">System Settings</string>
     <string name="settings__language_title">Language</string>
-    <string name="settings__quickpay__intro__description">Bitkit QuickPay makes checking out faster by automatically paying QR codes when scanned.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay makes checking out faster by automatically paying small invoices.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Frictionless&lt;/accent&gt;\npayments</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__settings__daily_label">Daily QuickPay limit</string>
@@ -991,6 +995,7 @@
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay exclusively supports payments from your Spending Balance.</string>
     <string name="settings__quickpay__settings__text">If enabled, scanned invoices below ${amount} will be paid automatically without requiring your confirmation or PIN*.</string>
     <string name="settings__quickpay__settings__toggle">Enable QuickPay</string>
+    <string name="settings__quickpay__sheet__description">QuickPay makes checking out faster by automatically paying scanned QR codes.</string>
     <string name="settings__rgs__button_connect">Connect</string>
     <string name="settings__rgs__server_url">Rapid-Gossip-Sync Server URL</string>
     <string name="settings__rgs__update_success_description">You may need to restart the app once or twice for this change to take effect.</string>

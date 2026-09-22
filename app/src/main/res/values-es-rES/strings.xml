@@ -665,13 +665,14 @@
     <string name="settings__general_title">General</string>
     <string name="settings__language_system_default">Ajustes del sistema</string>
     <string name="settings__language_title">Idioma</string>
-    <string name="settings__quickpay__intro__description">Bitkit QuickPay hace que pagar sea más rápido pagando automáticamente los códigos QR cuando se escanean.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay hace que pagar sea más rápido pagando automáticamente facturas pequeñas.</string>
     <string name="settings__quickpay__intro__title">Pagos\n&lt;accent&gt;sin fricción&lt;/accent&gt;</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__settings__label">Umbral de QuickPay</string>
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay solo admite pagos desde tu saldo de gasto.</string>
     <string name="settings__quickpay__settings__text">Si está activado, las facturas escaneadas por debajo de ${amount} se pagarán automáticamente sin requerir tu confirmación o PIN*.</string>
     <string name="settings__quickpay__settings__toggle">Activar QuickPay</string>
+    <string name="settings__quickpay__sheet__description">QuickPay hace que pagar sea más rápido pagando automáticamente códigos QR escaneados.</string>
     <string name="settings__rgs__button_connect">Conectar</string>
     <string name="settings__rgs__server_url">URL del Servidor Rapid-Gossip-Sync</string>
     <string name="settings__rgs__update_success_description">Es posible que necesites reiniciar la aplicación una o dos veces para que este cambio surta efecto.</string>

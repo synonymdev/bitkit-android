@@ -536,19 +536,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `network restoration triggers identity republish while polling`() = test {
+    fun `network restoration republishes identity and resumes ten second polling`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         sut.startPaykitPaymentRequestPolling()
         try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
             runCurrent()
             clearInvocations(pubkyRepo)
 
             connectivityState.value = ConnectivityState.DISCONNECTED
+            runCurrent()
+            advanceTimeBy(110.seconds.inWholeMilliseconds)
             runCurrent()
             verify(pubkyRepo, never()).republishIdentityIfNeeded()
 
             connectivityState.value = ConnectivityState.CONNECTED
             runCurrent()
             verify(pubkyRepo).republishIdentityIfNeeded()
+
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            clearInvocations(paykitPaymentRequestRepo)
+            advanceTimeBy(10.seconds.inWholeMilliseconds - 1)
+            runCurrent()
+            verify(paykitPaymentRequestRepo, never()).refresh()
+            advanceTimeBy(1)
+            runCurrent()
+            verify(paykitPaymentRequestRepo).refresh()
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }
@@ -556,6 +572,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `identity republish follows maintenance intervals instead of each payment request poll`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         sut.startPaykitPaymentRequestPolling()
         try {
             runCurrent()
@@ -575,7 +594,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `offline polling skips foreground and maintenance identity republish`() = test {
+    fun `offline periodic polling skips inbox and maintenance`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
         connectivityState.value = ConnectivityState.DISCONNECTED
         runCurrent()
 
@@ -584,9 +605,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCurrent()
             verify(pubkyRepo, never()).republishIdentityIfNeeded()
 
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo, privatePaykitRepo)
+
             advanceTimeBy(210.seconds.inWholeMilliseconds)
             runCurrent()
             verify(pubkyRepo, never()).republishIdentityIfNeeded()
+            verify(paykitPaymentRequestRepo, never()).refresh()
+            verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+            verify(paykitPaymentProofRepo, never()).reconcile()
+            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints("payment request polling")
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }
@@ -632,7 +661,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             clearInvocations(paykitPaymentRequestRepo)
             clearInvocations(privatePaykitRepo, paykitPaymentProofRepo)
 
-            advanceTimeBy(29.seconds.inWholeMilliseconds)
+            advanceTimeBy(9.seconds.inWholeMilliseconds)
             runCurrent()
             verify(paykitPaymentRequestRepo, never()).refresh()
 
@@ -648,9 +677,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(paykitPaymentProofRepo, never()).reconcile()
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), eq(true))
 
-            for (delay in listOf(5.seconds, 10.seconds, 15.seconds)) {
+            repeat(5) {
                 clearInvocations(paykitPaymentRequestRepo)
-                advanceTimeBy(delay.inWholeMilliseconds - 1)
+                advanceTimeBy(10.seconds.inWholeMilliseconds - 1)
                 runCurrent()
                 verify(paykitPaymentRequestRepo, never()).refresh()
                 advanceTimeBy(1)
@@ -674,6 +703,39 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(paykitPaymentRequestRepo, never()).refresh()
+    }
+
+    @Test
+    fun `failed inbox checks keep ten second cadence`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            whenever(paykitPaymentRequestRepo.refresh()).thenReturn(
+                Result.failure(IllegalStateException("transport failure")),
+            )
+
+            repeat(4) {
+                clearInvocations(paykitPaymentRequestRepo)
+                advanceTimeBy(10.seconds.inWholeMilliseconds - 1)
+                runCurrent()
+                verify(paykitPaymentRequestRepo, never()).refresh()
+                advanceTimeBy(1)
+                runCurrent()
+                verify(paykitPaymentRequestRepo).refresh()
+            }
+
+            whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+            clearInvocations(paykitPaymentRequestRepo)
+            advanceTimeBy(10.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(paykitPaymentRequestRepo).refresh()
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
     }
 
     @Test
@@ -6719,6 +6781,87 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `LNURL pay comment is saved and applied as the activity note`() = test {
+        val paymentHash = "010203"
+        val bolt11 = "lnbcrt1lnurlcomment"
+        stubLnurlPayment(bolt11 = bolt11, description = null, payResult = Result.success(paymentHash))
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        inOrder(activityRepo, lightningRepo) {
+            verify(activityRepo).savePendingLightningMessage(paymentHash, "thanks")
+            verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = 1_000uL)
+            verify(activityRepo).setLightningMessageIfEmpty(paymentHash, "thanks")
+        }
+        verify(activityRepo, never()).clearPendingLightningMessage(any())
+    }
+
+    @Test
+    fun `LNURL pay comment is applied when the payment is pending`() = test {
+        val paymentHash = "010203"
+        val bolt11 = "lnbcrt1lnurlpending"
+        stubLnurlPayment(
+            bolt11 = bolt11,
+            description = null,
+            payResult = Result.failure(PaymentPendingException(paymentHash)),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(activityRepo).savePendingLightningMessage(paymentHash, "thanks")
+        verify(activityRepo).setLightningMessageIfEmpty(paymentHash, "thanks")
+        verify(activityRepo, never()).clearPendingLightningMessage(any())
+    }
+
+    @Test
+    fun `LNURL pay comment does not replace the invoice description`() = test {
+        val paymentHash = "010203"
+        val bolt11 = "lnbcrt1lnurldescription"
+        stubLnurlPayment(bolt11 = bolt11, description = "Invoice description", payResult = Result.success(paymentHash))
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = 1_000uL)
+        verify(activityRepo, never()).savePendingLightningMessage(any(), any())
+        verify(activityRepo, never()).setLightningMessageIfEmpty(any(), any())
+    }
+
+    @Test
+    fun `failed LNURL payment clears the pending comment`() = test {
+        val paymentHash = "010203"
+        val bolt11 = "lnbcrt1lnurlfailed"
+        stubLnurlPayment(bolt11 = bolt11, description = null, payResult = Result.failure(AppError("boom")))
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(activityRepo).savePendingLightningMessage(paymentHash, "thanks")
+        verify(activityRepo).clearPendingLightningMessage(paymentHash)
+        verify(activityRepo, never()).setLightningMessageIfEmpty(any(), any())
+    }
+
+    @Test
     fun `channel ready refreshes public Paykit endpoints when sharing enabled`() = test {
         enablePublicPaykitSharing()
         advanceUntilIdle()
@@ -7074,6 +7217,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         thresholdSats?.let {
             whenever(currencyRepo.convertFiatToSats(5.0, "USD")).thenReturn(Result.success(it))
         }
+    }
+
+    private suspend fun stubLnurlPayment(bolt11: String, description: String?, payResult: Result<String>) {
+        val data = LnurlPayData(
+            uri = "lnurl1comment",
+            callback = "https://example.com/callback",
+            minSendable = 1_000uL,
+            maxSendable = 100_000_000uL,
+            metadataStr = "[]",
+            commentAllowed = 100u,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever { lightningRepo.fetchLnurlInvoice(data, 1_000_000uL, "thanks") }
+            .thenReturn(Result.success(lightningInvoice(bolt11, amountSats = 0uL).copy(description = description)))
+        whenever { lightningRepo.payInvoice(bolt11 = bolt11, sats = 1_000uL) }.thenReturn(payResult)
+        whenever { activityRepo.savePendingLightningMessage(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.setLightningMessageIfEmpty(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.clearPendingLightningMessage(any()) }.thenReturn(Result.success(Unit))
+        setSendState(
+            SendUiState(
+                address = data.uri,
+                amount = 1_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(data),
+                comment = "thanks",
+            ),
+        )
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {

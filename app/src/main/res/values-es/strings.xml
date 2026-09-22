@@ -622,13 +622,14 @@
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Selección aleatoria para privacidad</string>
     <string name="settings__cs__srd_title">Single Random Draw</string>
-    <string name="settings__quickpay__intro__description">Ahorra tiempo pagando facturas Lightning automáticamente. Configura un límite de cantidad y paga sin confirmaciones.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay hace que pagar sea más rápido pagando automáticamente facturas pequeñas.</string>
     <string name="settings__quickpay__intro__title">PAGA\n&lt;accent&gt;RÁPIDAMENTE&lt;/accent&gt;</string>
     <string name="settings__quickpay__nav_title">Configuración de QuickPay</string>
     <string name="settings__quickpay__settings__label">QuickPay hasta</string>
     <string name="settings__quickpay__settings__note">*Se aplica a todas las facturas Lightning, incluyendo aquellas a tus contactos.</string>
     <string name="settings__quickpay__settings__text">Ahorra tiempo pagando facturas Lightning automáticamente. Configura un límite de cantidad y paga sin confirmaciones.</string>
     <string name="settings__quickpay__settings__toggle">QuickPay activado</string>
+    <string name="settings__quickpay__sheet__description">QuickPay hace que pagar sea más rápido pagando automáticamente códigos QR escaneados.</string>
     <string name="settings__support__title">Soporte</string>
     <string name="settings__support__text">¿Necesita ayuda? Reporte su problema desde el propio Bitkit, visite el centro de ayuda, compruebe el estado o póngase en contacto con nosotros en nuestras redes sociales.</string>
     <string name="settings__support__report">Reportar Problema</string>
