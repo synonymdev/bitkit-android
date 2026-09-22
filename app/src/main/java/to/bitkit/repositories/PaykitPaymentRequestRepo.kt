@@ -401,7 +401,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    suspend fun refresh(): Result<Boolean> {
+    suspend fun refresh(): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
         return withContext(ioDispatcher) {
@@ -409,7 +409,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 operationMutex.withLock {
                     if (!isAvailable()) {
                         clearStateLocked()
-                        return@withLock false
+                        return@withLock
                     }
                     runSuspendCatching { synchronizeLocked(generation, expectedIdentity) }
                         .onFailure { discardExpiredRequestsLocked() }
@@ -828,9 +828,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun synchronizeLocked(
         generation: Long,
         expectedIdentity: String?,
-    ): Boolean {
+    ) {
         processPendingMessages()
-        val intakeReports = paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
+        paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         val now = clock.now()
         val records = paykitSdkService.paymentRequests()
         val locallyCompletedProofKinds = expectedIdentity
@@ -907,7 +907,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
         val history = (recurringHistory + oneTimeHistory)
             .sortedByDescending { it.createdAt }
-        if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return false
+        if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return
         val subscriptionStateChanged =
             subscriptionAcceptedAt != updatedSubscriptionAcceptedAt ||
                 dismissedSubscriptionPaymentIds != updatedDismissedPaymentIds
@@ -927,7 +927,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         )
         prunePresentedRequestIds(incoming)
         scheduleExpirationLocked()
-        return intakeReports.none { it.error != null }
     }
 
     private fun requestsThroughAcceptance(

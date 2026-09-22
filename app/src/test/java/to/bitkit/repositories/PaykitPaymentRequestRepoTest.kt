@@ -132,7 +132,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `peer intake failure reports unsuccessful refresh without losing requests`() = test {
+    fun `peer intake failure does not drop received requests`() = test {
         val record = paymentRequestRecord()
         val error = mock<PrivateOperationError> {
             on { redactedContext() } doReturn "transport failure"
@@ -149,7 +149,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             ),
         )
 
-        assertFalse(sut.refresh().getOrThrow())
+        sut.refresh().getOrThrow()
         assertEquals(record.paymentRequestId, sut.pendingRequests.value.single().paymentRequestId)
     }
 

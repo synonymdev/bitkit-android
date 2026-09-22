@@ -818,16 +818,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true): Boolean {
-        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return false
+    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true) {
+        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
-        return paykitPaymentRequestRepo.refresh().fold(
-            onSuccess = {
-                presentNextIncomingPaykitPaymentRequest()
-                it
-            },
-            onFailure = { false },
-        )
+        paykitPaymentRequestRepo.refresh().onSuccess {
+            presentNextIncomingPaykitPaymentRequest()
+        }
     }
 
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
@@ -843,18 +839,12 @@ class AppViewModel @Inject constructor(
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
-            var refreshIntervalIndex = 0
             var maintenanceIntervalIndex = 0
             var maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
-                val refreshInterval = PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex]
-                delay(refreshInterval)
-                maintenanceDelay -= refreshInterval
-                if (isOnline.value != ConnectivityState.CONNECTED) {
-                    refreshIntervalIndex =
-                        (refreshIntervalIndex + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.lastIndex)
-                    continue
-                }
+                delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
+                maintenanceDelay -= PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL
+                if (isOnline.value != ConnectivityState.CONNECTED) continue
                 val refreshMaintenance = maintenanceDelay <= Duration.ZERO
                 if (refreshMaintenance) {
                     pubkyRepo.republishIdentityIfNeeded()
@@ -863,13 +853,8 @@ class AppViewModel @Inject constructor(
                         (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
                     maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
                 }
-                val succeeded = refreshIncomingPaykitPaymentRequests(refreshMaintenance)
+                refreshIncomingPaykitPaymentRequests(refreshMaintenance)
                 if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
-                refreshIntervalIndex = if (succeeded) {
-                    0
-                } else {
-                    (refreshIntervalIndex + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.lastIndex)
-                }
             }
         }
         startInitialPaykitPaymentRequestPolling()
@@ -5644,7 +5629,7 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
-        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS = listOf(10.seconds, 30.seconds, 60.seconds, 120.seconds)
+        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 10.seconds
         private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
         private val INITIAL_PAYKIT_SYNC_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }
