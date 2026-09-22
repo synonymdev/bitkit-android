@@ -130,6 +130,7 @@ journey PR, which is what made this file conflict on every merge.
 | An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked on receiver path `bitkit/server` — [payment-requests](payment-requests/README.md) |
 | Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
 | A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
+| An LNURL-pay endpoint that allows comments and issues description-hash invoices | an lnurl-node `LNURL.createServer` backed by a local LND on the app's Lightning network, set up as the `bitkit-e2e-tests` lnurl suite does; the staging backend has none and the `bitkit-docker` lnurl-server issues memo invoices — [lnurl](lnurl) |
 | Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
 
 ## Cross-platform

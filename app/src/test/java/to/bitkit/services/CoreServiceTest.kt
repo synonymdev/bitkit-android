@@ -296,6 +296,42 @@ class CoreServiceTest {
         assertEquals("coffee", result.message)
     }
 
+    @Test
+    fun `pending message fills an empty message`() {
+        val result = failedSend(message = "").withPendingMessage(pendingMessage = "thanks", description = null)
+
+        assertEquals("thanks", result.message)
+    }
+
+    @Test
+    fun `pending message replaces the description hash reported by LDK`() {
+        val descriptionHash = "a".repeat(64)
+        val created = failedSend(message = descriptionHash)
+
+        val result = created.withPendingMessage(pendingMessage = "thanks", description = descriptionHash)
+
+        assertEquals("thanks", result.message)
+    }
+
+    @Test
+    fun `pending message keeps a stored message that differs from the description`() {
+        val result = failedSend(message = "coffee").withPendingMessage(
+            pendingMessage = "thanks",
+            description = "a".repeat(64),
+        )
+
+        assertEquals("coffee", result.message)
+    }
+
+    @Test
+    fun `missing pending message keeps the stored message`() {
+        val descriptionHash = "a".repeat(64)
+        val created = failedSend(message = descriptionHash)
+
+        assertEquals(created, created.withPendingMessage(pendingMessage = null, description = descriptionHash))
+        assertEquals(created, created.withPendingMessage(pendingMessage = " ", description = descriptionHash))
+    }
+
     private fun mergePlan(
         existing: List<Activity.Onchain>,
         incoming: List<Activity>,
