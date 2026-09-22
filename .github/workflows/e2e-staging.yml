@@ -246,6 +246,7 @@ jobs:
     steps:
       - name: Resolve E2E tests ref
         id: e2e-ref
+        continue-on-error: true
         uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main
         with:
           selected: ${{ needs.e2e-branch.outputs.branch }}
@@ -255,7 +256,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: synonymdev/bitkit-e2e-tests
-          ref: ${{ steps.e2e-ref.outputs.ref }}
+          ref: ${{ steps.e2e-ref.outputs.ref || 'main' }}
 
       - name: Post Slack summary
         run: python3 scripts/slack_summary.py e2e-staging
