@@ -56,6 +56,10 @@ class PubkyService @Inject constructor(
         paykitSdkService.forgetSessionAccess()
     }
 
+    suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.clearSessionAccess()
+    }
+
     suspend fun removeBitkitPaymentEndpoints() = ServiceQueue.CORE.background {
         val endpointError = runSuspendCatching {
             val report = paykitSdkService.syncPublicEndpoints(emptyList())

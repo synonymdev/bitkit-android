@@ -20,6 +20,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -45,6 +46,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
+import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
@@ -114,6 +116,11 @@ class PubkyRepoTest : BaseUnitTest() {
         settingsStore = settingsStore,
         httpClient = httpClient,
     )
+
+    private fun stubAdoptedRingSource() {
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name))
+            .thenReturn(SharedPubkyContract.RING_SOURCE_PREFIX + VALID_SELF_KEY.removePrefix("pubky"))
+    }
 
     @Test
     fun `initial state should have no public key`() = test {
@@ -1312,6 +1319,29 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(sut.publicKey.value)
         verifyBlocking(pubkyService, never()) { signIn(any()) }
         verifyBlocking(keychain) { delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+    }
+
+    @Test
+    fun `initialize should clear an adopted identity that is gone from pubky ring`() = test {
+        stubAdoptedRingSource()
+        whenever(sharedPubkyClient.listRingIdentities())
+            .thenReturn(Result.success(persistentListOf(VALID_CONTACT_KEY_A.removePrefix("pubky"))))
+
+        sut.initialize()
+
+        assertTrue(sut.adoptedSourceLost.value)
+        verifyBlocking(pubkyService) { clearSessionAccess() }
+    }
+
+    @Test
+    fun `initialize should keep an adopted identity when the ring listing fails`() = test {
+        stubAdoptedRingSource()
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.failure(TestAppError("Unavailable")))
+
+        sut.initialize()
+
+        assertFalse(sut.adoptedSourceLost.value)
+        verifyBlocking(pubkyService, never()) { clearSessionAccess() }
     }
 
     @Test

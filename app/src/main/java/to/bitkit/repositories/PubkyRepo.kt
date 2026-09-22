@@ -138,6 +138,9 @@ class PubkyRepo @Inject constructor(
     private val _sessionRestorationFailed = MutableStateFlow(false)
     val sessionRestorationFailed: StateFlow<Boolean> = _sessionRestorationFailed.asStateFlow()
 
+    private val _adoptedSourceLost = MutableStateFlow(false)
+    val adoptedSourceLost: StateFlow<Boolean> = _adoptedSourceLost.asStateFlow()
+
     private val _pendingImportProfile = MutableStateFlow<PubkyProfile?>(null)
     val pendingImportProfile: StateFlow<PubkyProfile?> = _pendingImportProfile.asStateFlow()
 
@@ -230,6 +233,8 @@ class PubkyRepo @Inject constructor(
                 loadContacts()
             }
         }
+
+        checkAdoptedSourcePresent()
     }
 
     private fun hasSavedSession(): Boolean = runCatching {
@@ -296,6 +301,22 @@ class PubkyRepo @Inject constructor(
     // region Shared pubky
 
     suspend fun ringIdentities(): Result<ImmutableList<String>> = sharedPubkyClient.listRingIdentities()
+
+    fun clearAdoptedSourceLost() {
+        _adoptedSourceLost.update { false }
+    }
+
+    private suspend fun checkAdoptedSourcePresent() {
+        val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: return
+        val ringPubkys = sharedPubkyClient.listRingIdentities().getOrElse { return }
+        if (ringPubkys.any { "${SharedPubkyContract.RING_SOURCE_PREFIX}$it" == reference }) return
+
+        Logger.warn("Adopted ring identity '${redacted(reference)}' is gone, clearing session", context = TAG)
+        runSuspendCatching { pubkyService.clearSessionAccess() }
+            .onFailure { Logger.warn("Failed to clear adopted session access", it, context = TAG) }
+        clearLocalState()
+        _adoptedSourceLost.update { true }
+    }
 
     suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {

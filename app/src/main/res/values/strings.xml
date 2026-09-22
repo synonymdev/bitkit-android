@@ -711,6 +711,7 @@
     <string name="profile__sign_out">Disconnect</string>
     <string name="profile__sign_out_description">This will disconnect your Pubky profile from Bitkit. You can reconnect at any time.</string>
     <string name="profile__sign_out_title">Disconnect Profile</string>
+    <string name="profile__source_lost">This pubky is no longer available in Pubky Ring. Your profile has been disconnected.</string>
     <string name="profile__suggestions">Suggestions</string>
     <string name="profile__suggestions_to_add">Suggestions To Add</string>
     <string name="profile__your_name">Your Name</string>

@@ -510,6 +510,18 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            pubkyRepo.adoptedSourceLost.collect { lost ->
+                if (lost) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__source_lost),
+                    )
+                    mainScreenEffect(MainScreenEffect.Navigate(route = Routes.PubkyChoice))
+                    pubkyRepo.clearAdoptedSourceLost()
+                }
+            }
+        }
         observeReceiveSheetInvoice()
         observeLdkNodeEvents()
         observeLightningUsableChannels()

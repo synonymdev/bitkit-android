@@ -345,6 +345,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever { pubkyRepo.republishIdentityIfNeeded() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.hasIdentity() }.thenAnswer { pubkyPublicKey.value != null }

@@ -956,6 +956,8 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    suspend fun clearSessionAccess() = operationMutex.withLock { clearRegisteredIdentityActivationLocked() }
+
     suspend fun forgetSessionAccess() {
         isSetup.await()
         operationMutex.withLock {
