@@ -113,6 +113,7 @@ import com.synonym.bitkitcore.TxInput as BitkitCoreTxInput
 import com.synonym.bitkitcore.TxOutput as BitkitCoreTxOutput
 import com.synonym.bitkitcore.getLnurlInvoiceForPayData as coreGetLnurlInvoiceForPayData
 import com.synonym.bitkitcore.getTransactionDetails as getBitkitCoreTransactionDetails
+import com.synonym.bitkitcore.markActivityAsSeen as coreMarkActivityAsSeen
 
 // region Core
 
@@ -1695,18 +1696,13 @@ class ActivityService(
         walletId: String = defaultWalletId,
         seenAt: ULong? = null,
     ) = ServiceQueue.CORE.background {
-        val activity = getActivityById(walletId = walletId, activityId = activityId) ?: run {
+        if (getActivityById(walletId = walletId, activityId = activityId) == null) {
             Logger.warn("Cannot mark activity as seen - activity not found: $activityId", context = TAG)
             return@background
         }
 
         val timestamp = seenAt ?: nowTimestamp().epochSecond.toULong()
-        val updatedActivity = when (activity) {
-            is Activity.Lightning -> Activity.Lightning(activity.v1.copy(seenAt = timestamp))
-            is Activity.Onchain -> Activity.Onchain(activity.v1.copy(seenAt = timestamp))
-        }
-
-        updateActivity(activityId = activityId, activity = updatedActivity)
+        coreMarkActivityAsSeen(walletId = walletId, activityId = activityId, seenAt = timestamp)
         Logger.info("Marked activity $activityId as seen at $timestamp", context = TAG)
     }
 
