@@ -938,7 +938,10 @@
     <string name="settings__es__port">Port</string>
     <string name="settings__es__protocol">Protocol</string>
     <string name="settings__es__server_error">Electrum Connection Failed</string>
+    <string name="settings__es__server_error_certificate">This server\'s certificate is not trusted. Use a server with a trusted certificate, or connect to its TCP port.</string>
     <string name="settings__es__server_error_description">Bitkit could not establish a connection to Electrum.</string>
+    <string name="settings__es__server_error_network">This server is on a different Bitcoin network. Choose a server for the network Bitkit is using.</string>
+    <string name="settings__es__server_error_protocol">Secure connection failed. Check that the protocol (TCP or TLS) matches the server port.</string>
     <string name="settings__es__server_updated_message">Successfully connected to {host}:{port}</string>
     <string name="settings__es__server_updated_title">Electrum Server Updated</string>
     <string name="settings__fee__custom__description">Depends on fee</string>

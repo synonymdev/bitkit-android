@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings.advanced
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,6 +27,7 @@ import to.bitkit.models.MAX_VALID_PORT
 import to.bitkit.models.Toast
 import to.bitkit.models.getDefaultPort
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.services.ElectrumProbeError
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
@@ -150,33 +152,33 @@ class ElectrumConfigViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(bgDispatcher) {
-            runCatching {
-                val electrumServer = ElectrumServer.fromUserInput(
-                    host = currentState.host,
-                    port = port,
-                    protocol = protocol,
-                )
-                val serverUrl = electrumServer.toString()
+            val serverUrl = ElectrumServer.fromUserInput(
+                host = currentState.host,
+                port = port,
+                protocol = protocol,
+            ).toString()
 
-                lightningRepo.restartWithElectrumServer(serverUrl)
-                    .onSuccess {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                connectionResult = Result.success(Unit),
-                                hasEdited = false,
-                            )
-                        }
-                    }
-                    .onFailure { error -> throw error }
-            }.onFailure { e ->
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        connectionResult = Result.failure(e),
+            lightningRepo.restartWithElectrumServer(serverUrl)
+                .onSuccess {
+                    _uiState.update { it.copy(isLoading = false, hasEdited = false) }
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.settings__es__server_updated_title),
+                        description = context.getString(R.string.settings__es__server_updated_message)
+                            .replace("{host}", currentState.host)
+                            .replace("{port}", currentState.port),
+                        testTag = "ElectrumUpdatedToast",
                     )
                 }
-            }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isLoading = false) }
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.settings__es__server_error),
+                        description = context.getString(error.toServerErrorDescriptionRes()),
+                        testTag = "ElectrumErrorToast",
+                    )
+                }
         }
     }
 
@@ -246,10 +248,6 @@ class ElectrumConfigViewModel @Inject constructor(
             protocol = protocol,
         )
         return uiPeer != state.connectedPeer
-    }
-
-    fun clearConnectionResult() {
-        _uiState.update { it.copy(connectionResult = null) }
     }
 
     fun onClickConnect() {
@@ -357,6 +355,13 @@ data class ElectrumConfigUiState(
     val port: String = "",
     val protocol: ElectrumProtocol? = null,
     val isLoading: Boolean = false,
-    val connectionResult: Result<Unit>? = null,
     val hasEdited: Boolean = false,
 )
+
+@StringRes
+private fun Throwable.toServerErrorDescriptionRes(): Int = when (this) {
+    is ElectrumProbeError.NetworkMismatch -> R.string.settings__es__server_error_network
+    is ElectrumProbeError.ProtocolMismatch -> R.string.settings__es__server_error_protocol
+    is ElectrumProbeError.UntrustedCertificate -> R.string.settings__es__server_error_certificate
+    else -> R.string.settings__es__server_error_description
+}
