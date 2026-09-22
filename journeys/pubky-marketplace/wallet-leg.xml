@@ -1,0 +1,46 @@
+<journey name="pubky marketplace wallet leg">
+  <description>
+    Verifies a Bitkit seller grants a watch-only account claim and a separate linked Bitkit buyer
+    receives, approves, pays, and confirms the resulting marketplace Payment Request on regtest.
+    Precondition: two clean wallets and the integration fixture runtime described in this suite's
+    README.
+    Configure the fixture Electrum endpoint and Android emulator port mappings before either
+    wallet's first launch. After creating both wallets, enable Paykit UI in Dev Settings (testTag
+    "PaykitUiToggle"), confirm the warning, and verify activation (testTag "PaykitUiEnabledToast").
+    Then create a Bitkit-generated Pubky identity in each wallet. Pubky Ring-imported identities
+    cannot approve the fixture setup auth URL. Start with the seller wallet open and the fixture's
+    fresh setup auth URL available.
+  </description>
+  <actions>
+    <action>Open the fixture setup auth URL in the seller wallet</action>
+    <action>Verify the watch-only consent screen (testTag "PubkyAuthWatchOnlyConsent") is visible</action>
+    <action>Capture the watch-only consent evidence, then tap Approve (testTag "PubkyAuthWatchOnlyApprove")</action>
+    <action>Verify the authorization screen shows exactly /pub/paykit/v0/bitkit/server and /pub/paykit/v0/private/bitkit/server, each with READ, WRITE access</action>
+    <action>Tap Authorize (testTag "PubkyAuthAuthorize")</action>
+    <action>Verify authorization succeeds (testTag "PubkyAuthOK")</action>
+    <action>Verify the fixture completes setup with the seller account xpub and no spending authority</action>
+    <action>Open General Settings in both wallets and verify contact payments (testTag "ContactPaymentsToggle") are enabled</action>
+    <action>Open Contacts in the buyer wallet and save the fixture's seller public key</action>
+    <action>Verify the seller contact (testTag "Contact_&lt;seller-public-key&gt;") is visible</action>
+    <action>Open Contacts in the seller wallet and save the buyer public key</action>
+    <action>Verify the buyer contact (testTag "Contact_&lt;buyer-public-key&gt;") is visible</action>
+    <action>Verify the fixture reports the seller and buyer as linked peers</action>
+    <action>Return the buyer wallet to Home</action>
+    <action>Have the fixture create one marketplace purchase for the buyer and record its Payment Request id</action>
+    <action>Verify the request uses lowercase "btc", a regtest endpoint identifier, and a JSON endpoint value</action>
+    <action>Verify the fresh request opens payment review automatically (testTag "ReviewAmount")</action>
+    <action>Press Android back to dismiss the automatic review, verify the requests bell (testTag "PaymentRequestsBell") is visible, then tap it</action>
+    <action>Verify the incoming requests sheet (testTag "PaymentRequestsSheet") is visible</action>
+    <action>Verify the request row (testTag "PaymentRequestRow-&lt;payment-request-id&gt;") shows the seller and expected amount, plus the fixture note when present</action>
+    <action>Capture the incoming-request evidence, then tap Pay (testTag "PaymentRequestPay-&lt;payment-request-id&gt;")</action>
+    <action>Verify the review amount (testTag "ReviewAmount") matches the fixture amount</action>
+    <action>Show details and verify the recipient (testTag "ReviewContactRecipient") is the seller contact</action>
+    <action>Capture the payment-approval evidence, then swipe to send (testTag "GRAB")</action>
+    <action>Verify Bitcoin Sent (testTag "SendSuccess") appears after the backend accepts the transaction</action>
+    <action>Verify the fixture mempool contains the transaction with an amount-matched output</action>
+    <action>Mine one block with the fixture and wait for both Bitkit and the marketplace status to refresh</action>
+    <action>Open the latest sent on-chain activity and verify its amount (testTag "ActivityAmount") and transaction details (testTag "ActivityTxDetails")</action>
+    <action>Verify the fixture reports the transaction confirmed and the marketplace purchase completed</action>
+    <action>Capture the final activity, transaction id, confirmation height, and completed purchase evidence</action>
+  </actions>
+</journey>

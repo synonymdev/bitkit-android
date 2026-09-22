@@ -1,17 +1,14 @@
 package to.bitkit.ui.settings.quickPay
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -22,7 +19,8 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.StepSlider
+import to.bitkit.ui.components.Slider
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -38,12 +36,15 @@ fun QuickPaySettingsScreen(
 ) {
     val isQuickPayEnabled by settingsViewModel.isQuickpayEnabled.collectAsStateWithLifecycle()
     val quickPayAmount by settingsViewModel.quickPayAmount.collectAsStateWithLifecycle()
+    val quickPayDailyLimitMultiplier by settingsViewModel.quickPayDailyLimitMultiplier.collectAsStateWithLifecycle()
 
     QuickPaySettingsScreenContent(
         isQuickPayEnabled = isQuickPayEnabled,
         quickPayAmount = quickPayAmount,
+        quickPayDailyLimitMultiplier = quickPayDailyLimitMultiplier,
         onToggleQuickPay = settingsViewModel::setIsQuickPayEnabled,
         onQuickPayAmountChange = settingsViewModel::setQuickPayAmount,
+        onQuickPayDailyLimitMultiplierChange = settingsViewModel::setQuickPayDailyLimitMultiplier,
         onBack = onBack,
     )
 }
@@ -52,11 +53,16 @@ fun QuickPaySettingsScreen(
 fun QuickPaySettingsScreenContent(
     isQuickPayEnabled: Boolean,
     quickPayAmount: Int,
+    quickPayDailyLimitMultiplier: Int,
     onToggleQuickPay: (Boolean) -> Unit = {},
     onQuickPayAmountChange: (Int) -> Unit = {},
+    onQuickPayDailyLimitMultiplierChange: (Int) -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     val sliderSteps = remember { persistentListOf(1, 5, 10, 20, 50) }
+    val dailyLimitSteps = remember { persistentListOf(1, 3, 5, 10, 50) }
+    val dailyLimitUsd = quickPayAmount * quickPayDailyLimitMultiplier
+    val multiplierFormat = stringResource(R.string.settings__quickpay__settings__multiplier_format)
 
     ScreenColumn {
         AppTopBar(
@@ -66,9 +72,11 @@ fun QuickPaySettingsScreenContent(
         )
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__quickpay__settings__toggle),
@@ -77,7 +85,7 @@ fun QuickPaySettingsScreenContent(
                 modifier = Modifier.testTag("QuickpayToggle")
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             BodyM(
                 text = stringResource(R.string.settings__quickpay__settings__text)
@@ -85,38 +93,55 @@ fun QuickPaySettingsScreenContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Caption13Up(
                 text = stringResource(R.string.settings__quickpay__settings__label),
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
-            StepSlider(
+            Slider(
                 value = quickPayAmount,
                 steps = sliderSteps,
                 onValueChange = onQuickPayAmountChange,
-                modifier = Modifier.testTag("quickpay_amount_slider")
+                modifier = Modifier.testTag("QuickpayAmountSlider")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
-            Image(
-                painter = painterResource(R.drawable.fast_forward),
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(256.dp)
+            VerticalSpacer(32.dp)
+
+            Caption13Up(
+                text = stringResource(R.string.settings__quickpay__settings__daily_label),
+                color = Colors.White64,
             )
-            Spacer(modifier = Modifier.weight(1f))
+
+            VerticalSpacer(16.dp)
+
+            BodyM(
+                text = stringResource(R.string.settings__quickpay__settings__daily_text)
+                    .replace("{limit}", dailyLimitUsd.toString()),
+                color = Colors.White64,
+            )
+
+            VerticalSpacer(16.dp)
+
+            Slider(
+                value = quickPayDailyLimitMultiplier,
+                steps = dailyLimitSteps,
+                onValueChange = onQuickPayDailyLimitMultiplierChange,
+                formatLabel = { multiplierFormat.replace("{multiplier}", it.toString()) },
+                modifier = Modifier.testTag("QuickpayDailyLimitSlider")
+            )
+
+            VerticalSpacer(32.dp)
 
             BodyS(
                 text = stringResource(R.string.settings__quickpay__settings__note),
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -128,6 +153,7 @@ private fun Preview() {
         QuickPaySettingsScreenContent(
             isQuickPayEnabled = true,
             quickPayAmount = 5,
+            quickPayDailyLimitMultiplier = 5,
         )
     }
 }

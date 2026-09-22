@@ -45,6 +45,7 @@ If no base branch argument provided, detect the repo's default branch:
 - Fetch 10 most recent PRs (open or closed) from the extracted repo for writing style reference
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
+- Read `docs/screens-map.md` as the starting point for locating relevant Figma frames when the diff has user-visible UI changes
 - **If custom instructions provided:**
   - If instructions reference a specific commit SHA (pattern like `commit [a-f0-9]{7,40}`):
     - Read full commit message: `git log -1 --format='%B' <commit_sha>`
@@ -110,6 +111,7 @@ This PR adds support for...
 - Each list item should start with a verb (Adds, Fixes, Updates, Removes, Refactors, etc.)
 
 **Description Rules:**
+- One bullet per change under `### Description`: what changed and why, in one sentence each (`Adds X so that Y`, `Fixes X because Y`)
 - Base content around all commit messages in the branch
 - Use branch name as the conceptual anchor
 - Match writing style of recent PRs
@@ -117,6 +119,12 @@ This PR adds support for...
 - Avoid excessive bold formatting like `**this:** that`
 - Minimize code and file references like `TheClassName` or `someFunctionName`, `thisFileName.ext`
 - Exception: for refactoring PRs (1:10 ratio of functionality to code changes), more technical detail is ok
+
+**Out of Scope (`#### Out of Scope`, a subsection at the end of `### Description`):**
+- Required for `feat`, `fix`, and `refactor` PRs: one bullet per item the PR deliberately leaves out, with the file or area it covers when there is one (`path/or/area: item`); `None.` when nothing is left out
+- Not needed for version bumps, changelog-only changes, dependency bumps, and release PRs; other `chore`, `docs`, and `test` PRs include it at the author's discretion
+- Derive candidates from commit messages, linked issues, and review discussion (deferred follow-ups, adjacent behaviour left unchanged); ask the user when unsure
+- Reviewers, human and automated, read the bullets as the author's non-goals
 
 **Custom Instructions (if provided):**
 When the user provides custom instructions after `--`:
@@ -156,6 +164,15 @@ When the user provides custom instructions after `--`:
 - Always use `→` to denote navigation, for example `Send → Amount`.
 - Use screen names from code, formatted as separate words without the `Screen` suffix, for example `SendAmountScreen` becomes `Send Amount`.
 - Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
+
+**Design Section:**
+Include `### Design` when the PR template contains a `### Design` heading, and apply exactly one case:
+- User-visible UI changes with an existing design: link the relevant Figma frames. Start with `docs/screens-map.md` for mapped screens; link known handoff frames directly for sheets, dialogs, reusable views, and other UI outside the map.
+- UI changes mapped to `todo` or `n/a`, or other UI changes without an available design, including new features: write `N/A — no design available.` Creating a design is never required.
+- Changes without user-visible UI changes: write `N/A — no UI changes.`
+- Genuinely uncertain frame matches: report the uncertainty honestly; never invent links.
+
+Reviewers may make at most one advisory request per PR when an existing-design UI link is omitted or an out-of-map `N/A — no design available.` claim is unverified. Valid mapped `todo`/`n/a` cases and `N/A — no UI changes.` require no request. Missing links never block approval, CI, PR creation, or review readiness.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
 Structure manual QA around integration validation only. Automated checks belong under `#### Automated Checks`.

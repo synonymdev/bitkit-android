@@ -1,5 +1,7 @@
 # Pubky Integration
 
+Paykit issuers should follow the [Paykit issuer interoperability contract](paykit-issuer-interoperability.md) for payment request and endpoint shapes accepted by Bitkit.
+
 ## Overview
 
 Bitkit integrates [Pubky](https://pubky.org) decentralized identity, allowing users to connect their Pubky profile via [Pubky Ring](https://play.google.com/store/apps/details?id=to.pubky.ring) authentication. Once connected, the user's profile name and avatar appear on the home screen header, a full profile page shows their bio, links, and a shareable QR code, and the contacts screen shows followed Pubky users.
@@ -33,12 +35,12 @@ The auth handshake uses a relay-based protocol:
 
 ## Service Layer (`PubkyService`)
 
-Wraps two FFI libraries:
+Delegates Pubky operations to `PaykitSdkService`, which uses:
 
-- **paykit-ffi** (`com.synonym:paykit-android`) — session management
-  - `paykitInitialize()`, `paykitImportSession()`, `paykitSignOut()`, `paykitForceSignOut()`
-- **bitkit-core** (`com.synonym:bitkit-core-android`) — auth relay, profile/contacts fetching, and file fetching
-  - `startPubkyAuth()`, `completePubkyAuth()`, `cancelPubkyAuth()`, `fetchPubkyProfile()`, `fetchPubkyContacts()`, `fetchPubkyFile()`
+- **paykit-ffi** (`com.synonym:paykit-android`) — session management, Ring auth, profile/contact resolution, and bounded file fetching
+  - `startSignInAuth()`, `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, `fetchPubkyFileBounded()`
+- **bitkit-core** (`com.synonym:bitkit-core-android`) — mnemonic-to-seed conversion for receiver noise-key derivation
+  - `mnemonicToSeed()`
 
 All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensure serial access to the underlying Rust state.
 
@@ -76,8 +78,9 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 
 ### Contacts
 
-- `loadContacts()` fetches the authenticated user's contact keys via `fetchPubkyContacts`, then concurrently fetches each contact's profile
-- Contact keys from the FFI may lack the `pubky` prefix; `ensurePubkyPrefix()` normalizes them before passing to `fetchPubkyProfile`
+- `loadContacts()` reads saved Paykit contact records, then concurrently resolves any missing profiles via `resolveContactProfile()`
+- Contact keys from the FFI may lack the `pubky` prefix; `ensurePubkyPrefix()` normalizes them before profile resolution
+- `prepareImport()` discovers followed keys via `fetchPubkyFollows()`, then resolves each profile
 - If a contact profile fetch fails, a `PubkyProfile.placeholder()` is used to ensure the contact still appears in the list with a truncated public key
 - `fetchContactProfile()` fetches a single contact's profile on demand (used by the detail screen)
 
@@ -99,7 +102,7 @@ Composable for loading and displaying images from `pubky://` URIs, backed by Coi
 ### Architecture
 
 - `PubkyImage` is a stateless composable wrapping Coil's `AsyncImage`
-- `PubkyImageFetcher` is a Coil `Fetcher` that handles `pubky://` URIs via `PubkyService.fetchFile()`
+- `PubkyImageFetcher` is a Coil `Fetcher` that handles `pubky://` URIs via Paykit's bounded file fetch
 - `ImageModule` provides a singleton `ImageLoader` with `PubkyImageFetcher.Factory`, memory cache, and disk cache
 
 ### Caching Strategy (Coil)
@@ -113,9 +116,12 @@ Coil manages a two-tier cache automatically:
 
 1. Coil checks memory cache → return if hit
 2. Coil checks disk cache → return if hit
-3. `PubkyImageFetcher.fetch()` calls `PubkyService.fetchFile(uri)`
-4. If response is a JSON file descriptor with a `src` field, follow the indirection and fetch the blob
+3. `PubkyImageFetcher.fetch()` limits the successful response body to 1 MiB
+4. If the response is a JSON file descriptor with a Pubky `src`, follow the indirection with the same limit
 5. Coil decodes and caches the result
+
+The bound is enforced while successful response bodies are read, before the bytes cross the FFI boundary. HTTP error
+bodies can still be buffered by the Pubky client before Paykit regains control.
 
 ### Display States
 
@@ -128,7 +134,7 @@ Coil manages a two-tier cache automatically:
 - `publicKey`, `name`, `bio`, `imageUrl`, `links`, `status`
 - `truncatedPublicKey` — uses `String.ellipsisMiddle()` extension
 - `PubkyProfileLink` — `label` + `url` pair
-- `fromFfi()` — maps from bitkitcore's `PubkyProfile` FFI type
+- `fromPubkyProfile()` and `fromPaykitProfile()` — map Paykit SDK profile types
 - `placeholder()` — creates a stub profile with the truncated public key as the name
 
 ## Home Screen Integration

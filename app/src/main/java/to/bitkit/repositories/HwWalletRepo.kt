@@ -15,6 +15,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -33,10 +34,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.isTrezorSessionFailure
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.scopedId
 import to.bitkit.ext.timestamp
@@ -46,6 +48,7 @@ import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
@@ -72,11 +75,12 @@ import kotlin.time.Duration.Companion.seconds
  * Built on top of [TrezorRepo], which owns the device list, connect orchestration
  * and the underlying watcher transport.
  */
-@Suppress("TooManyFunctions")
+@Suppress("LargeClass", "TooManyFunctions")
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
     private val activityRepo: ActivityRepo,
+    private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -87,7 +91,7 @@ class HwWalletRepo @Inject constructor(
         private val WATCHER_START_RETRY_DELAY = 30.seconds
         const val DEVICE_LABEL_MAX_LENGTH = 50
 
-        /** Trezor v1 (2.4.0) tracks native segwit only; multi-type HW support is follow-up work. */
+        /** Trezor v1 (2.4.0) tracks native SegWit accounts. */
         private val SUPPORTED_WATCHER_ADDRESS_TYPES = setOf(HwFundingAddressType.NATIVE_SEGWIT.settingsKey)
     }
 
@@ -297,9 +301,11 @@ class HwWalletRepo @Inject constructor(
 
                 Logger.warn("Rejected hardware session for '$walletId': opened wallet '$opened'", context = TAG)
                 // Reading the accounts of the wrong wallet already stored it; a mistyped passphrase
-                // must not leave a stray watch-only wallet behind.
+                // must not leave a stray watch-only wallet behind. Its backup data is kept: the wallet
+                // is a real one the user owns, and storing it has already consumed any name restored
+                // for it into the entry about to be forgotten.
                 if (opened !in watchedBefore) {
-                    removeDevice(opened)
+                    removeDevice(opened, keepBackupData = true)
                         .onFailure { Logger.warn("Failed to drop unwatched wallet '$opened'", it, context = TAG) }
                 }
                 trezorRepo.disconnectStaleSession(deviceId)
@@ -326,13 +332,89 @@ class HwWalletRepo @Inject constructor(
             }
             val balanceSats = _watcherData.value
                 .values
-                .filter { it.addressType == addressType.settingsKey && it.walletId == walletId }
+                .filter { it.addressType == addressType && it.walletId == walletId }
                 .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
             HwFundingAccount.Trezor(
                 xpub = xpub,
                 addressType = addressType,
                 balanceSats = balanceSats,
             )
+        }
+    }
+
+    /** Resolves the next unused external address from watcher state, falling back to an account scan. */
+    suspend fun getReceiveAddress(
+        walletId: String,
+        addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,
+    ): Result<HwReceiveAddress> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            watcherReceiveAddress(walletId, addressType)?.let { return@runSuspendCatching it }
+            val account = getFundingAccount(walletId, addressType).getOrThrow()
+            val accountInfo = trezorRepo.getAccountInfo(
+                extendedKey = account.xpub,
+                network = Env.network.toCoreNetwork(),
+                scriptType = account.accountType,
+            ).getOrThrow()
+            val unused = requireNotNull(accountInfo.account.addresses.unused.firstOrNull()) {
+                "No unused external address returned for hardware wallet '$walletId'"
+            }
+            val scannedAddress = HwReceiveAddress(
+                address = unused.address,
+                path = unused.path,
+                addressType = addressType,
+            )
+            watcherReceiveAddress(walletId, addressType) ?: scannedAddress
+        }
+    }
+
+    fun observeReceiveAddress(
+        walletId: String,
+        addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,
+    ): Flow<HwReceiveAddress?> = _watcherData
+        .map { watcherData -> watcherData.receiveAddress(walletId, addressType) }
+        .distinctUntilChanged()
+
+    private fun watcherReceiveAddress(
+        walletId: String,
+        addressType: HwFundingAddressType,
+    ): HwReceiveAddress? = _watcherData.value.receiveAddress(walletId, addressType)
+
+    /** Displays the exact address currently shown by Bitkit on the device and rejects a mismatch. */
+    suspend fun verifyReceiveAddress(
+        walletId: String,
+        receiveAddress: HwReceiveAddress,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            suspend fun readOnDevice() = trezorRepo.getAddress(
+                path = receiveAddress.path,
+                showOnTrezor = true,
+                scriptType = receiveAddress.addressType.trezorScriptType,
+                coin = Env.network.toTrezorCoinType(),
+            ).getOrThrow()
+
+            ensureConnected(walletId).getOrThrow()
+            val firstAttempt = runSuspendCatching { readOnDevice() }
+            val firstError = firstAttempt.exceptionOrNull()
+            val response = if (firstError == null) {
+                firstAttempt.getOrThrow()
+            } else {
+                if (!firstError.isTrezorSessionFailure()) throw firstError
+                disconnectStaleSession(walletId).getOrThrow()
+                ensureConnected(walletId).getOrThrow()
+                runSuspendCatching { readOnDevice() }
+                    .onFailure {
+                        if (it.isTrezorSessionFailure()) {
+                            disconnectStaleSession(walletId).getOrThrow()
+                        }
+                    }
+                    .getOrThrow()
+            }
+            if (response.address != receiveAddress.address) {
+                throw HwReceiveAddressMismatchError(
+                    "Address verification failed: Trezor returned '${response.address}' for " +
+                        "'${receiveAddress.path}', expected '${receiveAddress.address}'"
+                )
+            }
         }
     }
 
@@ -369,6 +451,59 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    /** Estimates the exact funding fee from the public account key without opening the device. */
+    suspend fun estimateFundingMiningFee(
+        walletId: String,
+        address: String,
+        sats: ULong,
+        satsPerVByte: ULong,
+    ): Result<ULong> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            composeFundingOffline(
+                walletId = walletId,
+                output = ComposeOutput.Payment(address = address, amountSats = sats),
+                satsPerVByte = satsPerVByte,
+            ).fee
+        }
+    }
+
+    /** Exact amount available after the coin-selection fee, computed offline from the account xpub. */
+    suspend fun maxSpendableFunding(
+        walletId: String,
+        address: String,
+        satsPerVByte: ULong,
+    ): Result<ULong> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val success = composeFundingOffline(
+                walletId = walletId,
+                output = ComposeOutput.SendMax(address = address),
+                satsPerVByte = satsPerVByte,
+            )
+            success.totalSpent.safe() - success.fee.safe()
+        }
+    }
+
+    private suspend fun composeFundingOffline(
+        walletId: String,
+        output: ComposeOutput,
+        satsPerVByte: ULong,
+    ): ComposeResult.Success {
+        val account = getFundingAccount(walletId).getOrThrow()
+        val composed = trezorRepo.composeTransactionOffline(
+            extendedKey = account.xpub,
+            outputs = listOf(output),
+            feeRates = listOf(satsPerVByte.toFloat()),
+            network = Env.network.toCoreNetwork(),
+            accountType = account.accountType,
+            coinSelection = CoinSelection.BRANCH_AND_BOUND,
+        ).getOrThrow()
+        return composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
+            ?: throw AppError(
+                composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
+                    ?: "Failed to compose hardware wallet payment"
+            )
+    }
+
     /** Signs a composed funding payment on the Trezor. */
     suspend fun signFunding(
         walletId: String,
@@ -384,7 +519,7 @@ class HwWalletRepo @Inject constructor(
                 psbtBase64 = funding.psbt,
                 network = Env.network.toTrezorCoinType(),
             ).getOrElse {
-                if (!it.isTrezorUserCancellation()) {
+                if (it.isTrezorSessionFailure()) {
                     transportDeviceIdOrNull(walletId)?.let { deviceId -> trezorRepo.disconnectStaleSession(deviceId) }
                 }
                 throw it
@@ -447,8 +582,15 @@ class HwWalletRepo @Inject constructor(
      * is stored once per transport but shares an xpub-derived identity, so forgetting a single id
      * would leave the tile reappearing through the other transport. Other identities on the same
      * device — the standard wallet, or another passphrase wallet — are left paired.
+     *
+     * @param keepBackupData whether to carry the wallet's name and tags in the backup, so re-pairing
+     * the device restores them. Off by default: only a user removing a wallet is asked, and internal
+     * cleanup of a wallet the user never meant to watch must not leave its data behind.
      */
-    suspend fun removeDevice(walletId: String): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun removeDevice(
+        walletId: String,
+        keepBackupData: Boolean = false,
+    ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             watcherMutex.withLock {
                 val knownDevices = hwWalletStore.loadKnownDevices()
@@ -456,6 +598,16 @@ class HwWalletRepo @Inject constructor(
                 // Without an entry there is nothing to forget, and the check below would pass on an
                 // empty set: report the failure instead of telling the user the wallet was removed.
                 require(targets.isNotEmpty()) { "Unknown hardware wallet '$walletId'" }
+                // Read before the deletion below, which takes the tags with the activities they are on.
+                val keptName = targets.firstNotNullOfOrNull { it.customLabel?.takeIf(String::isNotBlank) }
+                    .takeIf { keepBackupData }
+                // Nothing has been deleted yet, so failing here costs nothing and keeps the choice with
+                // the user: retry, or remove the wallet without keeping its data.
+                val keptTagMetadata = when {
+                    keepBackupData -> activityRepo.getTagMetadataForWallet(walletId)
+                        .getOrElse { throw HwBackupDataUnreadableError(it) }
+                    else -> emptyList()
+                }
                 activeWatchers.toList()
                     .filter { it.toWalletId() == walletId }
                     .forEach {
@@ -464,10 +616,25 @@ class HwWalletRepo @Inject constructor(
                         }
                     }
                 activityRepo.deleteForWallet(walletId).getOrThrow()
+                // Written back only now: the deletion above drops the wallet's stored tag metadata
+                // along with its activities. Core re-attaches these once the watcher recreates them,
+                // so re-pairing the device brings the tags back.
+                if (keptTagMetadata.isNotEmpty()) {
+                    // Nothing to roll back to at this point, and the wallet is already half removed,
+                    // so a failure here loses the tags rather than failing the removal.
+                    preActivityMetadataRepo.upsertPreActivityMetadata(keptTagMetadata)
+                }
                 trackedWalletIds -= walletId
                 lastPersistedHwSnapshots -= walletId
-                val failures = targets.mapNotNull {
-                    trezorRepo.forgetDevice(it.id, walletKey = it.walletKey).exceptionOrNull()
+                // The name is stored in the same write that forgets the entries carrying it, so the
+                // store never publishes a device list still holding this wallet. A separate write would,
+                // and a reconcile reading it restarts the watcher of the wallet being removed.
+                val failures = targets.mapNotNull { device ->
+                    trezorRepo.forgetDevice(
+                        device.id,
+                        walletKey = device.walletKey,
+                        pendingName = PendingNameUpdate(walletId, keptName),
+                    ).exceptionOrNull()
                 }
                 val remaining = hwWalletStore.loadKnownDevices()
                 failures.firstOrNull()?.let { throw it }
@@ -499,7 +666,7 @@ class HwWalletRepo @Inject constructor(
                 val ids = devices.map { it.id }.toSet()
                 val walletWatchers = watcherData.values.filter { it.walletId == walletId }
                 val fundingBalanceSats = walletWatchers
-                    .filter { it.addressType == HwFundingAddressType.DEFAULT.settingsKey }
+                    .filter { it.addressType == HwFundingAddressType.DEFAULT }
                     .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
                 HwWallet(
                     id = walletId,
@@ -563,11 +730,13 @@ class HwWalletRepo @Inject constructor(
                     val transactionDetails = event.transactionDetails
                         .filter { it.walletId == walletId }
                         .toImmutableList()
+                    val addressType = watcherId.toFundingAddressType() ?: return@withLock emptyList()
                     val watcher = HwWatcherData(
                         walletId = walletId,
-                        addressType = watcherId.toAddressTypeKey(),
+                        addressType = addressType,
                         balanceSats = event.balance.total,
                         activities = activities,
+                        receiveAddress = event.toReceiveAddress(addressType),
                     )
                     _watcherData.update { it + (watcherId to watcher) }
                     val previousIds = persistedActivityIds.getOrPut(watcherId) {
@@ -579,7 +748,7 @@ class HwWalletRepo @Inject constructor(
                     )
                     val snapshotCacheKey = snapshot.toCacheKey()
                     lastPersistedHwSnapshots[walletId]
-                        ?.takeIf { it.source == snapshotCacheKey }
+                        ?.takeIf { it.source == snapshotCacheKey && !it.hasRetainedPendingSend() }
                         ?.let {
                             _watcherData.update { data ->
                                 data + (watcherId to watcher.copy(activities = it.activities))
@@ -600,7 +769,6 @@ class HwWalletRepo @Inject constructor(
                     val persistedWatcher = watcher.copy(activities = immutablePersistedActivities)
                     val updatedWatcherData = _watcherData.value + (watcherId to persistedWatcher)
                     _watcherData.update { updatedWatcherData }
-
                     persistedActivityIds[watcherId] = persistedActivities.map { it.scopedId() }.toSet()
                     buildReceivedTxs(previousIds, persistedActivities, updatedWatcherData)
                 }
@@ -668,15 +836,21 @@ class HwWalletRepo @Inject constructor(
         knownDevices: List<KnownDevice>,
         watcherSettings: WatcherSettings,
     ) {
-        val persistedWalletIds = activityRepo.getWalletIds().getOrDefault(emptySet())
-            .filterNot { it == WalletScope.default }
-            .toSet()
         watcherMutex.withLock {
+            // Read under the lock: a removal deletes a wallet's activities while holding it, and this
+            // set decides what to delete. Reading it first would let a removal complete in between and
+            // then be undone here, taking the tag metadata it deliberately kept with it.
+            val persistedWalletIds = activityRepo.getWalletIds().getOrDefault(emptySet())
+                .filterNot { it == WalletScope.default }
+                .toSet()
             val specs = knownDevices.toWatcherSpecs(watcherSettings.electrumUrl)
             val desiredIds = specs.map { it.watcherId }.toSet()
             val knownWalletIds = knownDevices.mapNotNull { it.resolvedWalletId() }.toSet()
             trackedWalletIds += persistedWalletIds
-            val removedWalletIds = trackedWalletIds - knownWalletIds
+            // Only wallets that still have activities to clear. Core drops a wallet's tag metadata
+            // along with its activities whether or not any matched, so cleaning up a wallet that has
+            // none is not a no-op: it takes the metadata a removal deliberately kept.
+            val removedWalletIds = (trackedWalletIds - knownWalletIds).intersect(persistedWalletIds)
             trackedWalletIds += knownWalletIds
 
             specs.forEach { spec ->
@@ -831,6 +1005,9 @@ class HwWalletRepo @Inject constructor(
     private fun String.toWalletId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 
     private fun String.toAddressTypeKey(): String = substringAfter(WATCHER_ID_SEPARATOR)
+
+    private fun String.toFundingAddressType(): HwFundingAddressType? =
+        HwFundingAddressType.entries.firstOrNull { it.settingsKey == toAddressTypeKey() }
 }
 
 private data class WatcherSettings(
@@ -873,11 +1050,36 @@ class HwPassphraseRequiredError : AppError("Passphrase needed to reopen this wal
 /** The entered passphrase opened a different wallet than the one being signed from. */
 class HwPassphraseMismatchError : AppError("Passphrase opened a different wallet")
 
+class HwReceiveAddressMismatchError(message: String) : AppError(message)
+
+/**
+ * A removal asked to keep the wallet's backup data, but its tags could not be read. Raised before
+ * anything is deleted, so the wallet is untouched and the removal can be retried or repeated without
+ * keeping the data.
+ */
+class HwBackupDataUnreadableError(cause: Throwable) : AppError("Could not read the backup data", cause)
+
 private data class HwWatcherData(
     val walletId: String,
-    val addressType: String,
+    val addressType: HwFundingAddressType,
     val balanceSats: ULong,
     val activities: ImmutableList<Activity>,
+    val receiveAddress: HwReceiveAddress,
+)
+
+private fun Map<String, HwWatcherData>.receiveAddress(
+    walletId: String,
+    addressType: HwFundingAddressType,
+): HwReceiveAddress? = values.firstOrNull {
+    it.walletId == walletId && it.addressType == addressType
+}?.receiveAddress
+
+private fun WatcherEvent.TransactionsChanged.toReceiveAddress(
+    addressType: HwFundingAddressType,
+) = HwReceiveAddress(
+    address = nextUnusedExternalAddress.address,
+    path = nextUnusedExternalAddress.path,
+    addressType = addressType,
 )
 
 private data class HwSnapshot(
@@ -898,3 +1100,15 @@ private data class PersistedHwSnapshot(
     val source: HwSnapshot,
     val activities: ImmutableList<Activity>,
 )
+
+private fun PersistedHwSnapshot.hasRetainedPendingSend(): Boolean {
+    val sourceIds = source.activities.map { it.scopedId() }.toSet()
+    return activities.any {
+        val activity = (it as? Activity.Onchain)?.v1 ?: return@any false
+        it.scopedId() !in sourceIds &&
+            activity.txType == PaymentType.SENT &&
+            !activity.confirmed &&
+            !activity.isTransfer &&
+            activity.doesExist
+    }
+}

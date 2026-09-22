@@ -14,6 +14,7 @@ import to.bitkit.ui.sheets.WidgetsRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import kotlin.reflect.KClass
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -59,7 +60,8 @@ class SheetDeepLinksTest : BaseUnitTest() {
         val widgets = SheetDeepLinks.sheetFor(Uri.parse("bitkit://screen/widgets"))
 
         assertEquals(Sheet.Send(SendRoute.Recipient), send)
-        assertEquals(Sheet.Receive(ReceiveRoute.QR), receive)
+        assertIs<Sheet.Receive>(receive)
+        assertEquals(ReceiveRoute.QR, receive.route)
         assertEquals(Sheet.Widgets(WidgetsRoute.Gallery), widgets)
     }
 
@@ -78,7 +80,8 @@ class SheetDeepLinksTest : BaseUnitTest() {
 
         assertEquals(Sheet.Send(SendRoute.Amount), amount)
         assertEquals(Sheet.Widgets(WidgetsRoute.PriceEdit), priceEdit)
-        assertEquals(Sheet.Receive(ReceiveRoute.EditInvoice), editInvoice)
+        assertIs<Sheet.Receive>(editInvoice)
+        assertEquals(ReceiveRoute.EditInvoice, editInvoice.route)
     }
 
     @Test

@@ -72,6 +72,7 @@ fun BalanceHeaderView(
             showEyeIcon = showEyeIcon,
             onClick = {},
             onToggleHideBalance = {},
+            onRevealBalance = {},
             testTag = testTag,
             modifier = modifier,
         )
@@ -110,8 +111,9 @@ fun BalanceHeaderView(
             hideBalance = shouldHideBalance,
             isSwipeToHideEnabled = allowSwipeToHide,
             showEyeIcon = showEyeIcon,
-            onClick = onClick ?: { currency.switchUnit() },
-            onToggleHideBalance = { settings.setHideBalance(!hideBalance) },
+            onClick = onClick ?: { currency.switchBalanceUnit() },
+            onToggleHideBalance = { settings.toggleHideBalanceFromSwipe() },
+            onRevealBalance = { settings.setHideBalance(false) },
             testTag = testTag,
             modifier = modifier,
         )
@@ -137,6 +139,7 @@ fun BalanceHeader(
     isSwipeToHideEnabled: Boolean = false,
     showEyeIcon: Boolean = false,
     onToggleHideBalance: () -> Unit = {},
+    onRevealBalance: () -> Unit = {},
     testTag: String? = null,
 ) {
     val smallRowState = remember(
@@ -254,7 +257,7 @@ fun BalanceHeader(
                             tint = Colors.White64,
                             modifier = Modifier
                                 .size(24.dp)
-                                .clickableAlpha { onToggleHideBalance() }
+                                .clickableAlpha { onRevealBalance() }
                                 .testTag("ShowBalance")
                         )
                     }

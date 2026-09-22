@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -30,18 +31,24 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.supportPaymentRequest
 import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
+import to.bitkit.ui.screens.wallets.send.HARDWARE_SIGN_CANCELLED_RESULT_KEY
+import to.bitkit.ui.screens.wallets.send.HwSendSignScreen
+import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.SendAddressScreen
 import to.bitkit.ui.screens.wallets.send.SendAmountScreen
@@ -74,31 +81,35 @@ import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.WalletViewModel
 
+private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
+
 @Suppress("CyclomaticComplexMethod")
 @Composable
 fun SendSheet(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
+    hwSendViewModel: HwSendViewModel,
     startDestination: SendRoute = SendRoute.Recipient,
+    hardwareWalletId: String? = null,
 ) {
     val context = LocalContext.current
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
     val isOffline by remember { derivedStateOf { connectivityState != ConnectivityState.CONNECTED } }
     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+    val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
     var routingCacheResetAttempted by rememberSaveable(startDestination) { mutableStateOf(false) }
 
-    val shouldShowSyncOverlay by remember {
-        derivedStateOf {
-            if (!lightningState.nodeLifecycleState.isRunning()) return@derivedStateOf true
-            val hasAnyChannels = lightningState.channels.isNotEmpty()
-            hasAnyChannels && lightningState.channels.none { it.isUsable }
-        }
+    val shouldShowSyncOverlay = run {
+        if (sendUiState.hardwareWalletId != null) return@run false
+        if (!lightningState.nodeLifecycleState.isRunning()) return@run true
+        val hasAnyChannels = lightningState.channels.isNotEmpty()
+        hasAnyChannels && lightningState.channels.none { it.isUsable }
     }
 
     LaunchedEffect(startDestination) {
         // always reset state on new user-initiated send
         if (startDestination == SendRoute.Recipient) {
-            appViewModel.resetSendState()
+            appViewModel.resetSendState(hardwareWalletId = hardwareWalletId)
             appViewModel.resetQuickPay()
             routingCacheResetAttempted = false
         }
@@ -115,6 +126,27 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
+            LaunchedEffect(hwSendViewModel, navController) {
+                hwSendViewModel.results.collect { result ->
+                    appViewModel.completeHardwareContactPayment(result.txId)
+                    appViewModel.onSendSuccess(
+                        details = NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.ONCHAIN,
+                            direction = NewTransactionSheetDirection.SENT,
+                            paymentHashOrTxId = result.txId,
+                            activityWalletId = result.walletId,
+                            sats = result.amountSats.toLong(),
+                        ),
+                        walletId = result.walletId,
+                        navigate = false,
+                    )
+                    appViewModel.clearClipboardForAutoRead()
+                    navController.navigateTo(SendRoute.Success) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                    hwSendViewModel.completeBroadcast()
+                }
+            }
             LaunchedEffect(appViewModel, navController) {
                 appViewModel.sendEffect.collect {
                     when (it) {
@@ -123,6 +155,7 @@ fun SendSheet(
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
                         is SendEffect.NavigateToCoinSelection -> navController.navigateTo(SendRoute.CoinSelection)
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
+                        is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
                             appViewModel.clearClipboardForAutoRead()
@@ -141,7 +174,7 @@ fun SendSheet(
                         is SendEffect.NavigateToComingSoon -> navController.navigateTo(SendRoute.ComingSoon)
                         is SendEffect.NavigateToContacts -> navController.navigateTo(SendRoute.ContactSelect)
                         is SendEffect.NavigateToPending -> navController.navigateTo(
-                            SendRoute.Pending(it.paymentHash, it.amount)
+                            SendRoute.Pending(it.paymentHash, it.amount, observeResolution = it.observeResolution)
                         ) { popUpTo(startDestination) { inclusive = true } }
                         is SendEffect.NavigateToError -> navController.navigateTo(
                             SendRoute.errorFromFailure(
@@ -186,7 +219,11 @@ fun SendSheet(
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
                     SendAmountScreen(
                         uiState = uiState,
-                        nodeLifecycleState = lightningState.nodeLifecycleState,
+                        nodeLifecycleState = if (uiState.hardwareWalletId != null) {
+                            NodeLifecycleState.Running
+                        } else {
+                            lightningState.nodeLifecycleState
+                        },
                         canGoBack = startDestination != SendRoute.Amount,
                         onBack = {
                             if (!navController.popBackStack()) {
@@ -248,7 +285,9 @@ fun SendSheet(
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
                         uiState = uiState,
-                        isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+                        isNodeRunning = uiState.hardwareWalletId != null ||
+                            lightningState.nodeLifecycleState.isRunning(),
+                        canAutoStart = !isOffline && !shouldShowSyncOverlay,
                         canGoBack = startDestination != SendRoute.Confirm,
                         onBack = {
                             val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
@@ -262,18 +301,53 @@ fun SendSheet(
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
                     )
                 }
-                composableWithDefaultTransitions<SendRoute.Success> {
-                    val sendDetail by appViewModel.successSendUiState.collectAsStateWithLifecycle()
-                    NewTransactionSheetView(
-                        details = sendDetail,
-                        onCloseClick = { appViewModel.hideSheet() },
-                        onDetailClick = { appViewModel.onClickSendDetail() },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .gradientBackground()
-                            .navigationBarsPadding()
-                            .testTag("SendSuccess")
+                composableWithDefaultTransitions<SendRoute.HardwareSign> {
+                    val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                    val walletId = uiState.hardwareWalletId ?: run {
+                        navController.popBackStack()
+                        return@composableWithDefaultTransitions
+                    }
+                    val satsPerVByte = uiState.feeRates
+                        ?.getSatsPerVByteFor(uiState.speed)
+                        ?.toULong()
+                        ?.takeIf { rate -> rate > 0uL }
+                        ?: HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE
+                    HwSendSignScreen(
+                        walletId = walletId,
+                        sendUiState = uiState,
+                        satsPerVByte = satsPerVByte,
+                        viewModel = hwSendViewModel,
+                        prepareContactPayment = appViewModel::prepareHardwareContactPayment,
+                        onBack = {
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(HARDWARE_SIGN_CANCELLED_RESULT_KEY, true)
+                            appViewModel.onHardwareSignCancelled()
+                            if (!navController.popBackStack()) appViewModel.hideSheet()
+                        },
                     )
+                }
+                composableWithDefaultTransitions<SendRoute.Success> {
+                    val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                    val sendDetail by appViewModel.successSendUiState.collectAsStateWithLifecycle()
+                    if (sendUiState.isInitialSubscriptionPayment) {
+                        SubscriptionSuccess(
+                            onClose = appViewModel::hideSheet,
+                            paymentType = sendDetail.type,
+                            modifier = Modifier.gradientBackground(),
+                        )
+                    } else {
+                        NewTransactionSheetView(
+                            details = sendDetail,
+                            onCloseClick = { appViewModel.hideSheet() },
+                            onDetailClick = { appViewModel.onClickSendDetail() },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .gradientBackground()
+                                .navigationBarsPadding()
+                                .testTag("SendSuccess")
+                        )
+                    }
                 }
                 composableWithDefaultTransitions<SendRoute.WithdrawConfirm> {
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
@@ -325,42 +399,59 @@ fun SendSheet(
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.QuickPay> {
-                    val quickPayData by appViewModel.quickPayData.collectAsStateWithLifecycle()
-                    SendQuickPayScreen(
-                        quickPayData = requireNotNull(quickPayData),
-                        onPaymentComplete = { paymentHash, amountWithFee ->
-                            appViewModel.onSendSuccess(
-                                NewTransactionSheetDetails(
-                                    type = NewTransactionSheetType.LIGHTNING,
-                                    direction = NewTransactionSheetDirection.SENT,
-                                    paymentHashOrTxId = paymentHash,
-                                    sats = amountWithFee,
-                                ),
-                            )
-                        },
-                        onPaymentPending = { paymentHash, amount, paymentRequest ->
-                            appViewModel.preserveContactPaymentContext(paymentHash)
-                            navController.navigateTo(
-                                SendRoute.Pending(
-                                    paymentHash = paymentHash,
-                                    amount = amount,
-                                    retryRoute = SendRetryRoute.QuickPay,
-                                    paymentRequest = paymentRequest,
+                    val quickPayRequest by appViewModel.quickPayData.collectAsStateWithLifecycle()
+                    var displayedRequest by remember { mutableStateOf(quickPayRequest) }
+                    LaunchedEffect(quickPayRequest) {
+                        if (quickPayRequest != null) displayedRequest = quickPayRequest
+                    }
+                    val request = displayedRequest ?: return@composableWithDefaultTransitions
+                    key(request.id) {
+                        SendQuickPayScreen(
+                            quickPayData = request.data,
+                            isRequestActive = quickPayRequest?.id == request.id,
+                            onPaymentComplete = { paymentHash, amountWithFee ->
+                                appViewModel.onSendSuccess(
+                                    NewTransactionSheetDetails(
+                                        type = NewTransactionSheetType.LIGHTNING,
+                                        direction = NewTransactionSheetDirection.SENT,
+                                        paymentHashOrTxId = paymentHash,
+                                        sats = amountWithFee,
+                                    ),
+                                    allowDuplicateHash = true,
                                 )
-                            ) {
-                                popUpTo(startDestination) { inclusive = true }
+                            },
+                            onPaymentPending = { paymentHash, amount, paymentRequest ->
+                                appViewModel.preserveContactPaymentContext(paymentHash)
+                                navController.navigateTo(
+                                    SendRoute.Pending(
+                                        paymentHash = paymentHash,
+                                        amount = amount,
+                                        retryRoute = SendRetryRoute.QuickPay,
+                                        paymentRequest = paymentRequest,
+                                    )
+                                ) {
+                                    popUpTo(startDestination) { inclusive = true }
+                                }
+                            },
+                            onFallBackToConfirm = {
+                                appViewModel.resetQuickPay()
+                                navController.navigateTo(SendRoute.Confirm) {
+                                    popUpTo<SendRoute.QuickPay> { inclusive = true }
+                                }
+                            },
+                            onShowError = { failure ->
+                                appViewModel.clearActiveContactPaymentContext()
+                                navController.navigateTo(
+                                    SendRoute.errorFromFailure(
+                                        failure = failure,
+                                        retryRoute = SendRetryRoute.QuickPay,
+                                    )
+                                ) {
+                                    popUpTo<SendRoute.QuickPay> { inclusive = true }
+                                }
                             }
-                        },
-                        onShowError = { failure ->
-                            appViewModel.clearActiveContactPaymentContext()
-                            navController.navigateTo(
-                                SendRoute.errorFromFailure(
-                                    failure = failure,
-                                    retryRoute = SendRetryRoute.QuickPay,
-                                )
-                            )
-                        }
-                    )
+                        )
+                    }
                 }
                 composableWithDefaultTransitions<SendRoute.Pending> {
                     val route = it.toRoute<SendRoute.Pending>()
@@ -368,13 +459,14 @@ fun SendSheet(
                     SendPendingScreen(
                         paymentHash = route.paymentHash,
                         amount = route.amount,
-                        onPaymentSuccess = { paymentHash ->
+                        observeResolution = route.observeResolution,
+                        onPaymentSuccess = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
                                     direction = NewTransactionSheetDirection.SENT,
                                     paymentHashOrTxId = paymentHash,
-                                    sats = route.amount,
+                                    sats = amountWithFee,
                                 ),
                             )
                         },
@@ -406,13 +498,33 @@ fun SendSheet(
                     val route = it.toRoute<SendRoute.Error>()
                     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val isRetrying by walletViewModel.isRetryingLightningPayment.collectAsStateWithLifecycle()
+                    val isRetryingInitialSubscriptionPayment by
+                        appViewModel.isRetryingInitialSubscriptionPayment.collectAsStateWithLifecycle()
                     val scope = rememberCoroutineScope()
                     SendErrorScreen(
-                        title = stringResource(route.failureTitle(sendUiState.payMethod)),
-                        message = route.message,
-                        isRetrying = isRetrying,
+                        title = if (sendUiState.isInitialSubscriptionPayment) {
+                            stringResource(R.string.subscriptions__first_payment_failed)
+                        } else {
+                            stringResource(route.failureTitle(sendUiState.payMethod))
+                        },
+                        message = if (sendUiState.isInitialSubscriptionPayment) {
+                            stringResource(R.string.subscriptions__first_payment_failed_description)
+                        } else {
+                            route.message
+                        },
+                        isRetrying = isRetrying || isRetryingInitialSubscriptionPayment,
+                        retryText = stringResource(R.string.subscriptions__retry_payment)
+                            .takeIf { sendUiState.isInitialSubscriptionPayment },
+                        secondaryText = stringResource(R.string.wallet__payment_requests_not_now)
+                            .takeIf { sendUiState.isInitialSubscriptionPayment },
                         onRetry = {
-                            if (isRetrying) return@SendErrorScreen
+                            if (isRetrying || isRetryingInitialSubscriptionPayment) return@SendErrorScreen
+                            if (sendUiState.isInitialSubscriptionPayment) {
+                                sendUiState.incomingPaymentRequestId?.let {
+                                    appViewModel.retryIncomingPaymentRequest(it)
+                                    return@SendErrorScreen
+                                }
+                            }
                             scope.launch {
                                 val shouldResetRoutingCaches = route.shouldResetRoutingCaches(
                                     routingCacheResetAttempted = routingCacheResetAttempted
@@ -435,12 +547,16 @@ fun SendSheet(
                             }
                         },
                         onContactSupport = {
-                            appViewModel.navigateToReportIssue(
-                                route.supportMessage(
-                                    paymentMethod = route.supportPaymentMethod(sendUiState.payMethod),
-                                    routingCacheResetAttempted = routingCacheResetAttempted,
+                            if (sendUiState.isInitialSubscriptionPayment) {
+                                appViewModel.hideSheet()
+                            } else {
+                                appViewModel.navigateToReportIssue(
+                                    route.supportMessage(
+                                        paymentMethod = route.supportPaymentMethod(sendUiState.payMethod),
+                                        routingCacheResetAttempted = routingCacheResetAttempted,
+                                    )
                                 )
-                            )
+                            }
                         },
                     )
                 }
@@ -524,6 +640,9 @@ sealed interface SendRoute {
     data object Confirm : InternalOnly
 
     @Serializable
+    data object HardwareSign : InternalOnly
+
+    @Serializable
     data object Success : InternalOnly
 
     @Serializable
@@ -533,6 +652,7 @@ sealed interface SendRoute {
     data class Pending(
         val paymentHash: String,
         val amount: Long,
+        val observeResolution: Boolean = true,
         val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
         val paymentRequest: String? = null,
     ) : InternalOnly

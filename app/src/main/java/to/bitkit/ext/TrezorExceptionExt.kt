@@ -20,3 +20,27 @@ fun Throwable.isTrezorFirmwareError(): Boolean =
         val message = it.message.orEmpty()
         "Device error (code $FIRMWARE_ERROR_CODE)" in message && "Firmware error" in message
     }
+
+fun Throwable.isTrezorSessionFailure(): Boolean =
+    generateSequence(this) { it.cause }.any { error ->
+        when (error) {
+            is TrezorException.TransportException,
+            is TrezorException.DeviceDisconnected,
+            is TrezorException.ConnectionException,
+            is TrezorException.Timeout,
+            is TrezorException.NotConnected,
+            is TrezorException.SessionException,
+            is TrezorException.IoException,
+            -> true
+
+            is TrezorException.ProtocolException -> error.errorDetails.lowercase().let { details ->
+                "thp decryption" in details ||
+                    "thp encryption" in details ||
+                    "thp ack" in details ||
+                    "thp invalid sync" in details ||
+                    "thp state missing" in details
+            }
+
+            else -> false
+        }
+    }

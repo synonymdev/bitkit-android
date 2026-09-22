@@ -26,7 +26,7 @@ fun SendCell(
     }
 }
 
-@Preview(showSystemUi = true)
+@Preview
 @Composable
 private fun Preview() {
     AppThemeSurface {

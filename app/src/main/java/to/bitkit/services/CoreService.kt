@@ -27,6 +27,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
+import com.synonym.bitkitcore.ValidationResult
 import com.synonym.bitkitcore.WordCount
 import com.synonym.bitkitcore.addTags
 import com.synonym.bitkitcore.createCjitEntry
@@ -223,6 +224,10 @@ class CoreService @Inject constructor(
         com.synonym.bitkitcore.decode(input)
     }
 
+    suspend fun validateBitcoinAddress(address: String): ValidationResult = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.validateBitcoinAddress(address)
+    }
+
     suspend fun getLnurlInvoiceForPayData(
         data: LnurlPayData,
         amountMsats: ULong,
@@ -240,6 +245,7 @@ class CoreService @Inject constructor(
 
 // region Activity
 private const val CHUNK_SIZE = 50
+private const val HW_PENDING_SEND_GRACE_PERIOD_SECONDS = 86_400L
 
 /**
  * Outcome of replacing a hardware wallet's on-chain snapshot.
@@ -261,6 +267,9 @@ internal data class HwSnapshotMerge(
 /**
  * Builds the delete/upsert plan for a hardware wallet's on-chain snapshot.
  *
+ * Recent pending sends remain during the watcher's eventual-consistency window. Their persisted
+ * creation timestamp keeps that protection across process restarts.
+ *
  * @param transferChannelIdsByFundingTxId funding tx id to channel id for transfers Bitkit recorded
  * itself. Re-pairing a wallet that was removed leaves nothing to carry forward, because removal
  * deleted its activities, and [to.bitkit.repositories.TransferRepo.syncTransferStates] only re-marks
@@ -271,10 +280,15 @@ internal data class HwSnapshotMerge(
 internal fun mergeHwSnapshot(
     existing: List<Activity.Onchain>,
     incoming: List<Activity>,
+    currentTimestamp: ULong,
     transferChannelIdsByFundingTxId: Map<String, String>,
 ): HwSnapshotMerge {
     val incomingIds = incoming.map { it.rawId() }.toSet()
-    val toDelete = existing.filter { !it.v1.isTransfer && it.v1.id !in incomingIds }
+    val toDelete = existing.filter {
+        !it.v1.isTransfer &&
+            !it.v1.isRecentPendingSend(currentTimestamp) &&
+            it.v1.id !in incomingIds
+    }
     val existingByTxId = existing.associateBy { it.v1.txId }
     val toUpsert = incoming.map { activity ->
         val onchain = activity as? Activity.Onchain ?: return@map activity
@@ -286,12 +300,21 @@ internal fun mergeHwSnapshot(
     return HwSnapshotMerge(toDelete = toDelete, toUpsert = toUpsert)
 }
 
+private fun OnchainActivity.isRecentPendingSend(currentTimestamp: ULong): Boolean {
+    val createdAt = createdAt ?: return false
+    if (txType != PaymentType.SENT || confirmed || !doesExist) return false
+    val age = (currentTimestamp.toLong() - createdAt.toLong()).coerceAtLeast(0)
+    return age <= HW_PENDING_SEND_GRACE_PERIOD_SECONDS
+}
+
 private fun OnchainActivity.mergedWith(stored: OnchainActivity?): OnchainActivity = when (stored) {
     null -> this
     else -> copy(
         isTransfer = isTransfer || stored.isTransfer,
         channelId = channelId ?: stored.channelId,
         transferTxId = transferTxId ?: stored.transferTxId,
+        contact = contact ?: stored.contact,
+        seenAt = seenAt ?: stored.seenAt,
     )
 }
 
@@ -300,6 +323,27 @@ private fun OnchainActivity.withRecoveredTransfer(recoveredChannelId: String?): 
         isTransfer || recoveredChannelId == null -> this
         else -> copy(isTransfer = true, channelId = channelId ?: recoveredChannelId)
     }
+
+/**
+ * Applies the latest LDK payment details to a stored Lightning activity.
+ *
+ * A retry of the same invoice reuses the payment hash, so the stored row must take the final
+ * attempt's amount, fee and preimage. Missing values keep the stored ones. The stored message is
+ * never replaced, because LDK reports a description-hash invoice's hash as its description.
+ */
+internal fun LightningActivity.withPaymentUpdate(
+    payment: PaymentDetails,
+    kind: PaymentKind.Bolt11,
+    state: PaymentState,
+    contact: String?,
+): LightningActivity = copy(
+    value = payment.amountSats ?: value,
+    fee = payment.feePaidMsat?.let { msatFloorOf(it) } ?: fee,
+    preimage = kind.preimage ?: preimage,
+    updatedAt = payment.latestUpdateTimestamp,
+    status = state,
+    contact = contact,
+)
 
 @Suppress("LargeClass", "TooManyFunctions")
 class ActivityService(
@@ -380,6 +424,7 @@ class ActivityService(
         val merge = mergeHwSnapshot(
             existing = existingActivities,
             incoming = activities,
+            currentTimestamp = nowTimestamp().epochSecond.toULong(),
             transferChannelIdsByFundingTxId = transferChannelIdsByFundingTxId,
         )
         merge.toDelete.forEach {
@@ -389,7 +434,6 @@ class ActivityService(
 
         if (merge.toUpsert.isNotEmpty()) upsertActivities(merge.toUpsert)
         if (transactionDetails.isNotEmpty()) upsertTransactionDetails(transactionDetails)
-
         HwSnapshotResult(
             activities = getActivities(
                 walletId = walletId,
@@ -723,9 +767,10 @@ class ActivityService(
             ?: privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(payment.id, payment.direction)
 
         val ln = if (existingActivity is Activity.Lightning) {
-            existingActivity.v1.copy(
-                updatedAt = payment.latestUpdateTimestamp,
-                status = state,
+            existingActivity.v1.withPaymentUpdate(
+                payment = payment,
+                kind = kind,
+                state = state,
                 contact = contact,
             )
         } else {
@@ -1925,9 +1970,10 @@ class BlocktankService(
         orderIds: List<String>? = null,
         filter: BtOrderState2? = null,
         refresh: Boolean = true,
+        refreshActive: Boolean = refresh,
     ): List<IBtOrder> {
         return ServiceQueue.CORE.background {
-            if (refresh) {
+            if (refreshActive) {
                 refreshActiveOrders()
             }
             getOrders(orderIds = orderIds, filter = filter, refresh = refresh)

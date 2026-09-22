@@ -1,0 +1,60 @@
+<journey name="Hardware Wallet On-chain Send">
+  <description>
+    Sends a normal on-chain payment from a paired Trezor through Bitkit's standard Send flow,
+    including funding-source selection, transaction preparation, device signing, broadcast, and
+    success handling. Requires a paired Bridge emulator whose native-segwit account holds
+    spendable regtest funds and a valid regtest destination address.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap the Send button (testTag "Send")
+    </action>
+    <action>
+      If a camera permission dialog appears, dismiss it by choosing "Don't allow"
+    </action>
+    <action>
+      Tap "Enter Manually" (testTag "RecipientManual"), type a valid regtest bitcoin address into
+      the recipient field (testTag "RecipientInput"), then tap Continue (testTag "AddressContinue")
+    </action>
+    <action>
+      Verify the Send amount screen is visible (testTag "send_amount_screen")
+    </action>
+    <action>
+      Tap the funding-source button (testTag "AssetButton-switch"), waiting for any balance loading
+      to finish between taps, until it shows the paired Trezor name in blue
+    </action>
+    <action>
+      Verify AVAILABLE shows a positive Trezor balance, then enter a valid amount smaller than it
+      with the number pad
+    </action>
+    <action>
+      Tap Continue once (testTag "ContinueAmount") and verify it shows a loading state and cannot
+      start transaction preparation again while the confirmation is being prepared
+    </action>
+    <action>
+      Verify the Send review screen opens and the FROM field (testTag "SendConfirmAssetButton")
+      shows the paired Trezor name
+    </action>
+    <action>
+      Swipe to confirm the payment
+    </action>
+    <action>
+      Verify the hardware sign screen opens, showing the amount (testTag "HardwareSendAmount"), the
+      destination address (testTag "HardwareSendAddress"), and the "Open Trezor Connect" button
+      (testTag "HardwareSendOpenTrezorConnect")
+    </action>
+    <action>
+      Tap "Open Trezor Connect" and approve every transaction prompt shown by the Bridge emulator
+    </action>
+    <action>
+      Verify the payment broadcasts and the success screen appears (testTag "SendSuccess")
+    </action>
+    <action>
+      Close the success screen, return to the wallet home screen, and verify the new payment appears
+      once in recent activity with the blue hardware-wallet icon
+    </action>
+  </actions>
+</journey>

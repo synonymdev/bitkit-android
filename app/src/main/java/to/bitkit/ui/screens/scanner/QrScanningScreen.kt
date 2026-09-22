@@ -202,6 +202,7 @@ fun QrScanningScreen(
             grantedContent = {
                 Content(
                     isPubkyScan = isPubkyScan,
+                    isFlashlightOn = isFlashlightOn,
                     previewView = previewView,
                     onClickFlashlight = {
                         isFlashlightOn = !isFlashlightOn
@@ -242,6 +243,7 @@ private fun handlePaste(
 @Composable
 private fun Content(
     isPubkyScan: Boolean,
+    isFlashlightOn: Boolean,
     previewView: PreviewView,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
@@ -272,7 +274,7 @@ private fun Content(
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
-                    .background(Colors.White64)
+                    .background(Colors.White32)
                     .size(CameraOverlayButtonSize)
                     .align(Alignment.TopStart)
             ) {
@@ -288,7 +290,7 @@ private fun Content(
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
-                    .background(Colors.White64)
+                    .background(if (isFlashlightOn) Colors.White64 else Colors.White32)
                     .size(CameraOverlayButtonSize)
                     .align(Alignment.TopEnd)
             ) {

@@ -11,7 +11,6 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.BalanceState
@@ -22,6 +21,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.KEY_DELETE
+import to.bitkit.viewmodels.OnchainFeeUi
 import to.bitkit.viewmodels.SendUiState
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -42,7 +42,7 @@ class SendFeeViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(context.getString(any())).thenReturn("text")
 
-        wheneverBlocking { lightningRepo.calculateTotalFee(any(), any(), any(), any(), any()) }
+        whenever { lightningRepo.calculateTotalFee(any(), any(), any(), any(), any()) }
             .thenReturn(Result.success(fee))
 
         whenever(walletRepo.balanceState)
@@ -141,6 +141,6 @@ class SendFeeViewModelTest : BaseUnitTest() {
         address = address,
         speed = TransactionSpeed.Medium,
         feeRates = FeeRates(fast = 10u, mid = 5u, slow = 2u),
-        fees = fees.toImmutableMap(),
+        onchainFeeUi = OnchainFeeUi(estimates = fees.toImmutableMap()),
     )
 }

@@ -347,11 +347,30 @@ class ActivityRepo @Inject constructor(
         type: ActivityFilter,
         txType: PaymentType?,
         retry: Boolean = true,
+    ): Result<Activity> = findActivityByPaymentId(
+        paymentHashOrTxId = paymentHashOrTxId,
+        type = type,
+        txType = txType,
+        retry = retry,
+        walletId = WalletScope.default,
+    )
+
+    suspend fun findActivityByPaymentId(
+        paymentHashOrTxId: String,
+        type: ActivityFilter,
+        txType: PaymentType?,
+        retry: Boolean,
+        walletId: String,
     ): Result<Activity> = withContext(bgDispatcher) {
         runCatching {
             require(paymentHashOrTxId.isNotEmpty()) { "paymentHashOrTxId is empty" }
 
-            suspend fun findActivity(): Activity? = getActivities(filter = type, txType = txType, limit = 10u)
+            suspend fun findActivity(): Activity? = getActivities(
+                walletId = walletId,
+                filter = type,
+                txType = txType,
+                limit = 10u,
+            )
                 .getOrNull()
                 ?.firstOrNull { it.matchesPaymentId(paymentHashOrTxId) }
 
@@ -362,13 +381,16 @@ class ActivityRepo @Inject constructor(
                     context = TAG
                 )
 
-                lightningRepo.sync().onSuccess { Logger.debug("Syncing LN node SUCCESS", context = TAG) }
-
-                syncActivities().onSuccess {
-                    Logger.debug(
-                        "Sync success, searching again the activity with paymentHashOrTxId:'$paymentHashOrTxId'",
-                        context = TAG,
-                    )
+                if (walletId == WalletScope.default) {
+                    lightningRepo.sync().onSuccess { Logger.debug("Syncing LN node SUCCESS", context = TAG) }
+                    syncActivities().onSuccess {
+                        Logger.debug(
+                            "Sync success, searching again the activity with paymentHashOrTxId:'$paymentHashOrTxId'",
+                            context = TAG,
+                        )
+                        activity = findActivity()
+                    }
+                } else {
                     activity = findActivity()
                 }
             }
@@ -376,7 +398,8 @@ class ActivityRepo @Inject constructor(
             checkNotNull(activity) { "Activity not found" }
         }.onFailure {
             Logger.error(
-                "findActivityByPaymentId error (paymentHashOrTxId:'$paymentHashOrTxId' type:'$type' txType:'$txType')",
+                "findActivityByPaymentId error " +
+                    "(paymentHashOrTxId:'$paymentHashOrTxId' type:'$type' txType:'$txType' walletId:'$walletId')",
                 context = TAG,
             )
         }
@@ -434,15 +457,20 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun contactActivities(publicKey: String): Result<List<Activity>> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
-            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
-            getActivities(
+            val matches = getActivities(
+                walletId = null,
                 filter = ActivityFilter.ALL,
                 sortDirection = SortDirection.DESC,
             ).getOrThrow()
-                .filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
                 .filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
+            val boostTxIdsByWallet = matches.map { it.walletId() }.distinct().associateWith {
+                getTxIdsInBoostTxIds(it)
+            }
+            matches.filterNot {
+                it.isReplacedSentTransaction(boostTxIdsByWallet[it.walletId()].orEmpty())
+            }
         }.onFailure {
             Logger.error("Failed to load contact activities for '$publicKey'", it, context = TAG)
         }
@@ -452,6 +480,7 @@ class ActivityRepo @Inject constructor(
         contactPublicKey: String,
         forPaymentId: String,
         syncLdkPayments: Boolean = true,
+        walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (syncLdkPayments) {
@@ -461,7 +490,7 @@ class ActivityRepo @Inject constructor(
             }
 
             val normalizedKey = PubkyPublicKeyFormat.normalized(contactPublicKey) ?: contactPublicKey
-            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments)
+            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments, walletId)
             if (activity == null) {
                 Logger.warn(
                     "Skipped setting contact for payment '$forPaymentId' because activity was not found",
@@ -476,7 +505,7 @@ class ActivityRepo @Inject constructor(
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(normalizedKey, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
-            updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt)
+            updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt, walletId)
         }.onFailure {
             Logger.error("Failed to set contact for payment '$forPaymentId'", it, context = TAG)
         }
@@ -485,6 +514,7 @@ class ActivityRepo @Inject constructor(
     suspend fun clearContact(
         forPaymentId: String,
         syncLdkPayments: Boolean = true,
+        walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (syncLdkPayments) {
@@ -493,7 +523,7 @@ class ActivityRepo @Inject constructor(
                 }.getOrThrow()
             }
 
-            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments)
+            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments, walletId)
             if (activity == null) {
                 Logger.warn(
                     "Skipped clearing contact for payment '$forPaymentId' because activity was not found",
@@ -506,7 +536,7 @@ class ActivityRepo @Inject constructor(
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(null, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
-            updateReplacementContactIfNeeded(updatedActivity, null, updatedAt)
+            updateReplacementContactIfNeeded(updatedActivity, null, updatedAt, walletId)
         }.onFailure {
             Logger.error("Failed to clear contact for payment '$forPaymentId'", it, context = TAG)
         }
@@ -516,10 +546,11 @@ class ActivityRepo @Inject constructor(
         activity: Activity,
         normalizedKey: String?,
         updatedAt: ULong,
+        walletId: String = WalletScope.default,
     ) {
         if (activity !is Activity.Onchain || activity.v1.doesExist || activity.v1.txType != PaymentType.SENT) return
 
-        getActivities(filter = ActivityFilter.ONCHAIN).getOrThrow()
+        getActivities(walletId = walletId, filter = ActivityFilter.ONCHAIN).getOrThrow()
             .filterIsInstance<Activity.Onchain>()
             .filter { activity.v1.txId in it.v1.boostTxIds }
             .filterNot { PubkyPublicKeyFormat.matches(it.v1.contact, normalizedKey) }
@@ -529,18 +560,24 @@ class ActivityRepo @Inject constructor(
             }
     }
 
-    private suspend fun findActivityForPaymentId(forPaymentId: String, syncLdkPayments: Boolean): Activity? {
-        val activity = getActivityByPaymentId(forPaymentId)
+    private suspend fun findActivityForPaymentId(
+        forPaymentId: String,
+        syncLdkPayments: Boolean,
+        walletId: String = WalletScope.default,
+    ): Activity? {
+        val activity = getActivityByPaymentId(forPaymentId, walletId)
         if (activity != null) return activity
         if (!syncLdkPayments) return null
 
         syncActivities().getOrThrow()
-        return getActivityByPaymentId(forPaymentId)
+        return getActivityByPaymentId(forPaymentId, walletId)
     }
 
-    private suspend fun getActivityByPaymentId(forPaymentId: String): Activity? =
-        coreService.activity.getActivity(forPaymentId, WalletScope.default)
-            ?: getOnchainActivityByTxId(forPaymentId)?.let { Activity.Onchain(it) }
+    private suspend fun getActivityByPaymentId(
+        forPaymentId: String,
+        walletId: String = WalletScope.default,
+    ): Activity? = coreService.activity.getActivity(forPaymentId, walletId)
+        ?: getOnchainActivityByTxId(forPaymentId, walletId)?.let { Activity.Onchain(it) }
 
     private fun Activity.withContact(normalizedKey: String?, updatedAt: ULong): Activity = when (this) {
         is Activity.Lightning -> Activity.Lightning(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
@@ -902,6 +939,27 @@ class ActivityRepo @Inject constructor(
         }
 
     /**
+     * The slice of the metadata backup's tag data that belongs to [walletId], built the same way the
+     * envelope builds it so a caller can preserve a wallet's tags across a deletion.
+     *
+     * Both sources are needed: Core drops the stored [PreActivityMetadata] of a wallet along with its
+     * activities, and those rows are not covered by [getHardwareTagsAsPreActivityMetadata], which only
+     * renders tags that already reached an activity.
+     */
+    suspend fun getTagMetadataForWallet(walletId: String): Result<List<PreActivityMetadata>> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val stored = coreService.activity.getAllPreActivityMetadata()
+                    .filter { it.walletId == walletId }
+                val rendered = getHardwareTagsAsPreActivityMetadata().getOrThrow()
+                    .filter { it.walletId == walletId }
+                (stored + rendered).distinctBy { it.walletId to it.paymentId }
+            }.onFailure {
+                Logger.error("Failed to read tag metadata of '$walletId'", it, context = TAG)
+            }
+        }
+
+    /**
      * Fill in wallet ids missing from a backup envelope's `activities` slice, letting Core migrate its own
      * model JSON before the app decodes it.
      */
@@ -928,19 +986,41 @@ class ActivityRepo @Inject constructor(
         }
     }
 
+    /**
+     * Applies each slice of the backup envelope on its own so one rejected record cannot discard the others.
+     * Core fails a bulk write as a whole, so applying all three slices together would let a single unusable tag cost
+     * the activities and the closed channels too. The overall result still fails when any slice failed, keeping
+     * [BackupRepo] from treating a partial restore as authoritative and rewriting a good backup with it.
+     * Observers are notified whenever at least one slice was applied, and the tag signal only fires when the
+     * tags slice itself was applied, so a rejected tags slice cannot mark the metadata backup as changed.
+     */
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
-            coreService.activity.upsertList(payload.activities)
-            coreService.activity.upsertTags(payload.activityTags)
+        val activities = runSuspendCatching { coreService.activity.upsertList(payload.activities) }
+        val activityTags = runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) }
+        val closedChannels = runSuspendCatching {
             coreService.activity.upsertClosedChannelList(payload.closedChannels)
-        }.onSuccess {
-            Logger.debug(
-                "Restored ${payload.activities.size} activities, ${payload.activityTags.size} activity tags, " +
-                    "${payload.closedChannels.size} closed channels",
-                context = TAG,
-            )
-            notifyActivitiesChanged(tagsChanged = true)
         }
+        val results = listOf(
+            "activities" to activities,
+            "activityTags" to activityTags,
+            "closedChannels" to closedChannels,
+        )
+        val failures = results.mapNotNull { (slice, result) ->
+            result.exceptionOrNull()?.also {
+                Logger.error("Failed to restore '$slice' activity backup slice", it, context = TAG)
+            }
+        }
+
+        if (failures.size < results.size) notifyActivitiesChanged(tagsChanged = activityTags.isSuccess)
+
+        failures.firstOrNull()?.let { return@withContext Result.failure(it) }
+
+        Logger.debug(
+            "Restored ${payload.activities.size} activities, ${payload.activityTags.size} activity tags, " +
+                "${payload.closedChannels.size} closed channels",
+            context = TAG,
+        )
+        return@withContext Result.success(Unit)
     }
 
     suspend fun markAllUnseenActivitiesAsSeen(): Result<Unit> = withContext(bgDispatcher) {

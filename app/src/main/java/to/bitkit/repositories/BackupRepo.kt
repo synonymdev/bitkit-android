@@ -31,11 +31,13 @@ import to.bitkit.R
 import to.bitkit.async.appScope
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
+import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
+import to.bitkit.data.hwWalletNames
 import to.bitkit.data.resetPin
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
@@ -61,6 +63,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -91,6 +94,7 @@ class BackupRepo @Inject constructor(
     private val widgetsStore: WidgetsStore,
     private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo,
+    private val hwWalletStore: HwWalletStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val pubkyRepo: PubkyRepo,
@@ -119,6 +123,9 @@ class BackupRepo @Inject constructor(
     val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
 
     private val _isWiping = MutableStateFlow(false)
+    val isWiping: StateFlow<Boolean> = _isWiping.asStateFlow()
+
+    private val restorePendingUntil = MutableStateFlow(0L)
 
     fun reset() {
         stopObservingBackups()
@@ -127,8 +134,25 @@ class BackupRepo @Inject constructor(
     }
 
     fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
+
+    /**
+     * Holds ordinary uploads from the moment a restore is announced, closing the window between the
+     * restore flow starting and [performFullRestoreFromLatestBackup] raising [_isRestoring]: the node
+     * starts and syncs while the backup is still being read, and the resulting activity upload would
+     * replace the stored envelope with the fresh wallet's state before it is read.
+     *
+     * The gate cannot suppress uploads indefinitely: it expires after [RESTORE_PENDING_TIMEOUT_MS], it is
+     * held in memory only so a process death clears it, and it never blocks an explicit
+     * [triggerBackup], including the migration rewrite a restore ends with.
+     */
+    fun setRestorePending(isPending: Boolean) {
+        restorePendingUntil.update { if (isPending) currentTimeMillis() + RESTORE_PENDING_TIMEOUT_MS else 0L }
+        Logger.debug("Set restore pending to '$isPending'", context = TAG)
+    }
+
     private fun currentTimeMillis(): Long = nowMillis(clock)
-    private fun shouldSkipBackup(): Boolean = _isRestoring.value || _isWiping.value
+    private fun isRestorePending(): Boolean = currentTimeMillis() < restorePendingUntil.value
+    private fun shouldSkipBackup(): Boolean = _isRestoring.value || _isWiping.value || isRestorePending()
     private fun BackupItemStatus.shouldBackup(category: BackupCategory) =
         this.isRequired &&
             !this.running &&
@@ -137,6 +161,10 @@ class BackupRepo @Inject constructor(
 
     fun startObservingBackups() {
         if (isObserving) return
+        if (_isWiping.value) {
+            Logger.debug("Skipped observing backups while wiping", context = TAG)
+            return
+        }
 
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
@@ -297,6 +325,20 @@ class BackupRepo @Inject constructor(
                 }
         }
         dataListenerJobs.add(preActivityMetadataJob)
+
+        // METADATA - Observe hardware wallet names only: the store is also rewritten by every connect,
+        // and reconnect traffic must not re-upload the whole metadata envelope.
+        val hwWalletNamesJob = scope.launch {
+            hwWalletStore.data
+                .map { it.hwWalletNames() }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.METADATA)
+                }
+        }
+        dataListenerJobs.add(hwWalletNamesJob)
 
         dataListenerJobs.add(observeBackupChanges(pubkyRepo.backupStateVersion, BackupCategory.METADATA))
         dataListenerJobs.add(observeBackupChanges(privatePaykitRepo.get().backupStateVersion, BackupCategory.WALLET))
@@ -548,6 +590,9 @@ class BackupRepo @Inject constructor(
         val hardwareTagMetadata = activityRepo.getHardwareTagsAsPreActivityMetadata().getOrThrow()
         val tagMetadata = (preActivityMetadata + hardwareTagMetadata)
             .distinctBy { it.walletId to it.paymentId }
+        // Like the tags above, this envelope is the only copy of the names, so a read failure must
+        // propagate and fail the backup rather than upload an empty set over the stored ones.
+        val hwWalletNames = hwWalletStore.backupSnapshot().takeIf { it.isNotEmpty() }
         val cacheData = cacheStore.data.first()
         val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
         val pubkyContactProfileOverrides = pubkyRepo.snapshotContactProfileOverrides().getOrDefault(null)
@@ -558,6 +603,7 @@ class BackupRepo @Inject constructor(
             cache = cacheData,
             pubkySession = pubkySession,
             pubkyContactProfileOverrides = pubkyContactProfileOverrides,
+            hwWalletNames = hwWalletNames,
         )
 
         json.encodeToString(payload).toByteArray()
@@ -661,7 +707,13 @@ class BackupRepo @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
             }
+        // App-owned, so it takes no part in the Core field migration above and never sets needsRewrite.
+        // Restored names wait as pending ones until each wallet is paired again. Failing to store them
+        // must not discard the rest of this envelope, which has already been applied by here.
+        runSuspendCatching { hwWalletStore.restoreNames(parsed.hwWalletNames.orEmpty()) }
+            .onFailure { Logger.warn("Failed to restore hardware wallet names", it, context = TAG) }
         Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
+        Logger.debug("Restored ${parsed.hwWalletNames.orEmpty().size} hardware wallet names", TAG)
 
         return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
     }
@@ -676,7 +728,7 @@ class BackupRepo @Inject constructor(
         )
         val parsed = json.decodeFromString<ActivityBackupV1>(migration.json)
         val persisted = activityRepo.restoreFromBackup(parsed)
-            .onFailure { Logger.warn("Failed to restore activity backup", it, context = TAG) }
+            .onFailure { Logger.warn("Skipped activity backup rewrite after a failed restore", context = TAG) }
             .isSuccess
 
         return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
@@ -832,6 +884,12 @@ class BackupRepo @Inject constructor(
         private const val FAILED_BACKUP_NOTIFICATION_INTERVAL = 10 * 60 * 1000L // 10 minutes
         private const val SYNC_STATUS_DEBOUNCE = 500L // 500ms debounce for sync status updates
         private val VSS_TIMESTAMP_TIMEOUT = 60.seconds
+
+        /**
+         * How long a pending restore gates ordinary uploads for. Longer than any restore in practice,
+         * short enough that a restore that never returns cannot hold the gate for the session.
+         */
+        private val RESTORE_PENDING_TIMEOUT_MS = 10.minutes.inWholeMilliseconds
     }
 }
 

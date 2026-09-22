@@ -45,7 +45,8 @@ import to.bitkit.ui.theme.Colors
 fun SendPendingScreen(
     paymentHash: String,
     amount: Long,
-    onPaymentSuccess: (String) -> Unit,
+    observeResolution: Boolean = true,
+    onPaymentSuccess: (String, Long) -> Unit,
     onPaymentError: (PendingPaymentResolution.Failure) -> Unit,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
@@ -53,12 +54,17 @@ fun SendPendingScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) { viewModel.init(paymentHash, amount) }
+    if (observeResolution) {
+        LaunchedEffect(Unit) { viewModel.init(paymentHash, amount) }
+    }
 
-    uiState.resolution?.let { resolution ->
+    uiState.resolution?.takeIf { observeResolution }?.let { resolution ->
         LaunchedEffect(resolution) {
             when (resolution) {
-                is PendingPaymentResolution.Success -> onPaymentSuccess(resolution.paymentHash)
+                is PendingPaymentResolution.Success -> onPaymentSuccess(
+                    resolution.paymentHash,
+                    resolution.amountWithFeeSats ?: amount,
+                )
                 is PendingPaymentResolution.Failure -> onPaymentError(resolution)
             }
             viewModel.onResolutionHandled()
@@ -66,7 +72,7 @@ fun SendPendingScreen(
     }
 
     Content(
-        amount = uiState.amount,
+        amount = if (observeResolution) uiState.amount else amount,
         activityId = uiState.activityId,
         onClose = onClose,
         onViewDetails = onViewDetails,

@@ -4,13 +4,26 @@
 
 ### Description
 
-<!-- Extended summary of the changes, can be a list. -->
+<!-- One bullet per change: what changed and why. -->
+
+#### Out of Scope
+
+<!-- One bullet per item this PR deliberately leaves out (`path/or/area: item`); reviewers treat them as your non-goals. `None.` when nothing is left out. Required for feat, fix, and refactor PRs; delete it for version, changelog, or dependency bumps and release PRs; other chore, docs, and test PRs at your discretion. -->
+
+### Design
+
+<!-- Figma frames for the changed UI (start from docs/screens-map.md). Otherwise `N/A — no UI changes.` or `N/A — no design available.` State an uncertain match; never invent a link. -->
 
 ### Preview
 
-<!-- Insert relevant screenshot / recording -->
+<!-- Screenshot or recording of the changed UI; `N/A` when there is no user-visible change. -->
 
 ### QA Notes
 
-<!-- Add testing instructions for the PR reviewer to validate the changes. -->
-<!-- List the tests you ran, including regression tests if applicable. -->
+#### Manual Tests
+
+<!-- Unchecked, numbered steps for the reviewer: action → expectation. `N/A` when there is nothing to verify by hand. -->
+
+#### Automated Checks
+
+<!-- Coverage added, changed, or removed, by test file name; non-standard commands you ran. `N/A` when nothing changed. -->

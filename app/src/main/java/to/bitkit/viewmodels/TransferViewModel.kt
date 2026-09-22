@@ -48,6 +48,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.isBroadcastConnectivityFailure
 import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.ext.isTrezorFirmwareError
+import to.bitkit.ext.isTrezorSessionFailure
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
@@ -116,11 +117,12 @@ class TransferViewModel @Inject constructor(
 
     val transferEffects = MutableSharedFlow<TransferEffect>()
     fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
-    var maxLspFee = 0uL
     private var hwTransferSignJob: Job? = null
     private var hwFeeEstimateJob: Job? = null
     private var confirmFeeJob: Job? = null
     private var confirmPayJob: Job? = null
+    private var receivingFeeQuoteJob: Job? = null
+    private var advancedLimitsJob: Job? = null
     private var spendingConfirmFundingPlan: SpendingConfirmFundingPlan? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferWalletId: String? = null
@@ -150,6 +152,20 @@ class TransferViewModel @Inject constructor(
                 isNodeRunning.first { it }
             }
 
+            if (!canFundOrder(satsAmount.toULong())) {
+                Logger.info("Rejected spending amount '$satsAmount' over funding budget", context = TAG)
+                setTransferEffect(
+                    TransferEffect.ToastError(
+                        title = context.getString(R.string.lightning__spending_amount__error_balance__title),
+                        description = context.getString(
+                            R.string.lightning__spending_amount__error_balance__description
+                        ),
+                    )
+                )
+                _spendingUiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
             blocktankRepo.createOrder(
                 spendingBalanceSats = satsAmount.toULong(),
                 receivingBalanceSats = lspBalance,
@@ -173,7 +189,8 @@ class TransferViewModel @Inject constructor(
     }
 
     fun onReceivingAmountChange(amount: Long) {
-        viewModelScope.launch {
+        receivingFeeQuoteJob?.cancel()
+        receivingFeeQuoteJob = viewModelScope.launch {
             _spendingUiState.update { it.copy(receivingAmount = amount, feeEstimate = null) }
 
             if (amount == 0L) return@launch
@@ -207,10 +224,40 @@ class TransferViewModel @Inject constructor(
         }
     }
 
+    private suspend fun canFundAdvancedOrder(clientBalance: ULong, receivingAmount: ULong): Boolean {
+        val budget = currentFundingBudget()
+        if (budget == null) {
+            Logger.warn("Skipped advanced capacity check, no sized budget available", context = TAG)
+            return true
+        }
+        val fee = quoteAdvancedOrderFee(clientBalance, receivingAmount)
+        if (fee == null) {
+            Logger.warn("Skipped advanced capacity check, fee quote unavailable", context = TAG)
+            return true
+        }
+        val canFund = clientBalance.safe() + fee.safe() <= budget
+        if (!canFund) {
+            Logger.info("Priced advanced capacity '$receivingAmount' over funding budget '$budget'", context = TAG)
+        }
+        return canFund
+    }
+
     fun onSpendingAdvancedContinue(receivingAmountSats: Long) {
         viewModelScope.launch {
-            runCatching {
-                val oldOrder = _spendingUiState.value.order ?: return@launch
+            runSuspendCatching {
+                val oldOrder = _spendingUiState.value.order ?: return@runSuspendCatching
+                if (!canFundAdvancedOrder(oldOrder.clientBalanceSat, receivingAmountSats.toULong())) {
+                    Logger.info("Rejected advanced capacity '$receivingAmountSats' over funding budget", context = TAG)
+                    setTransferEffect(
+                        TransferEffect.ToastError(
+                            title = context.getString(R.string.lightning__spending_advanced__error_balance__title),
+                            description = context.getString(
+                                R.string.lightning__spending_advanced__error_balance__description
+                            ),
+                        )
+                    )
+                    return@runSuspendCatching
+                }
                 val newOrder = blocktankRepo.createOrder(
                     spendingBalanceSats = oldOrder.clientBalanceSat,
                     receivingBalanceSats = receivingAmountSats.toULong(),
@@ -602,17 +649,9 @@ class TransferViewModel @Inject constructor(
 
             awaitNodeRunning()
 
-            // Match iOS: start from raw spendable (not maxSendOnchainSats — that already reserved
-            // a default-tier send-all fee), then subtract exactly one fast mining fee.
-            val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats
-                ?: 0uL
-            val miningFee = lightningRepo.estimateSendAllFee(
-                speed = TransactionSpeed.Fast,
-            ).getOrElse {
-                Logger.warn("Failed to estimate transfer mining fee reserve", it, context = TAG)
-                (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
-            }
-            val availableAmount = spendable.safe() - miningFee.safe()
+            val fundingBudget = loadFundingBudget()
+            _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget, hwFundingWalletId = null) }
+            val availableAmount = fundingBudget ?: 0uL
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -673,9 +712,12 @@ class TransferViewModel @Inject constructor(
             spendingBalanceSats = cappedClientBalance,
             receivingBalanceSats = receivingAmount,
         ).onSuccess { estimate ->
-            maxLspFee = estimate.feeSat
             val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
-            val maxClientBalance = availableAmount.safe() - lspFees.safe()
+            val maxClientBalance = resolveAffordableClientBalance(
+                availableAmount = availableAmount,
+                quotedBalance = cappedClientBalance,
+                quotedFee = lspFees,
+            )
             val maxSend = min(
                 liquidity.maxClientBalanceSat.toLong(),
                 maxClientBalance.toLong()
@@ -695,6 +737,170 @@ class TransferViewModel @Inject constructor(
             Logger.error("Failure", it, context = TAG)
             setTransferEffect(TransferEffect.ToastException(it))
         }
+    }
+
+    /**
+     * Largest client balance that still covers its own order fee, settled against live quotes.
+     *
+     * [quotedFee] prices [quotedBalance], but the advertised max is usually a different balance, and
+     * the LSP charges the client and LSP sides of the channel at different rates. The fee at that
+     * other balance can therefore be higher, leaving an order the user cannot fund. Each round
+     * re-quotes and steps down by the shortfall; the fee moves by a small fraction of a satoshi per
+     * satoshi of balance, so this settles well within [MAX_AFFORDABILITY_ROUNDS].
+     */
+    private suspend fun resolveAffordableClientBalance(
+        availableAmount: ULong,
+        quotedBalance: ULong,
+        quotedFee: ULong,
+    ): ULong {
+        var candidate = quotedBalance
+        var fee = quotedFee
+        repeat(MAX_AFFORDABILITY_ROUNDS) {
+            if (candidate.safe() + fee.safe() <= availableAmount) return candidate
+            candidate = availableAmount.safe() - fee.safe()
+            fee = quoteOrderFee(candidate) ?: run {
+                Logger.warn(
+                    "Advertising unverified max '$candidate', fee quote unavailable",
+                    context = TAG,
+                )
+                return candidate
+            }
+        }
+        if (candidate.safe() + fee.safe() <= availableAmount) return candidate
+
+        val fallback = availableAmount.safe() - fee.safe()
+        Logger.warn(
+            "Max '$candidate' still over budget '$availableAmount' after " +
+                "'$MAX_AFFORDABILITY_ROUNDS' rounds, advertising unverified '$fallback'",
+            context = TAG,
+        )
+        return fallback
+    }
+
+    private suspend fun quoteAdvancedOrderFee(clientBalance: ULong, receivingAmount: ULong): ULong? =
+        blocktankRepo.estimateOrderFee(
+            spendingBalanceSats = clientBalance,
+            receivingBalanceSats = receivingAmount,
+        ).getOrNull()?.feeSat
+
+    private suspend fun resolveAffordableLspBalance(
+        clientBalance: ULong,
+        budget: ULong,
+        minLspBalance: ULong,
+        maxLspBalance: ULong,
+    ): ULong? {
+        val headroom = budget.safe() - clientBalance.safe()
+        val maxFee = quoteAdvancedOrderFee(clientBalance, maxLspBalance) ?: run {
+            Logger.warn("Advertising unsettled max capacity '$maxLspBalance', fee quote unavailable", context = TAG)
+            return maxLspBalance
+        }
+        if (maxFee <= headroom) return maxLspBalance
+
+        val minFee = quoteAdvancedOrderFee(clientBalance, minLspBalance)
+        if (minFee == null || minFee > headroom) return null
+
+        return settleCapacity(
+            clientBalance = clientBalance,
+            headroom = headroom,
+            affordable = minLspBalance,
+            affordableFee = minFee,
+            overBudget = maxLspBalance,
+            overBudgetFee = maxFee,
+        )
+    }
+
+    private suspend fun settleCapacity(
+        clientBalance: ULong,
+        headroom: ULong,
+        affordable: ULong,
+        affordableFee: ULong,
+        overBudget: ULong,
+        overBudgetFee: ULong,
+    ): ULong {
+        var settled = affordable
+        var settledFee = affordableFee
+        var ceiling = overBudget
+        var ceilingFee = overBudgetFee
+        repeat(MAX_AFFORDABILITY_ROUNDS) {
+            val feeSpan = ceilingFee.safe() - settledFee.safe()
+            if (feeSpan == 0uL) return settled
+            val span = ceiling.safe() - settled.safe()
+            val feeHeadroom = headroom.safe() - settledFee.safe()
+            val candidate = settled.safe() + ((span.safe() * feeHeadroom.safe()) / feeSpan).safe()
+            if (candidate <= settled) return settled
+            val candidateFee = quoteAdvancedOrderFee(clientBalance, candidate) ?: return settled
+            if (candidateFee <= headroom) {
+                settled = candidate
+                settledFee = candidateFee
+            } else {
+                ceiling = candidate
+                ceilingFee = candidateFee
+            }
+        }
+        return settled
+    }
+
+    /**
+     * Order cost the on-chain balance can fund, or null when the balance itself is unreadable.
+     *
+     * Matches iOS by starting from raw spendable rather than `maxSendOnchainSats`, which has already
+     * reserved a default-tier send-all fee, and subtracting exactly one fast mining fee.
+     */
+    private suspend fun loadFundingBudget(): ULong? {
+        val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: return null
+        val miningFee = lightningRepo.estimateSendAllFee(speed = TransactionSpeed.Fast).getOrElse {
+            Logger.warn("Failed to estimate transfer mining fee reserve", it, context = TAG)
+            (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
+        }
+        return spendable.safe() - miningFee.safe()
+    }
+
+    private suspend fun currentFundingBudget(): ULong? {
+        val sizedBudget = _spendingUiState.value.fundingBudgetSats
+        val hwWalletId = _spendingUiState.value.hwFundingWalletId
+        val liveBudget = if (hwWalletId != null) loadHwFundingBudget(hwWalletId) else loadFundingBudget()
+        return liveBudget ?: sizedBudget
+    }
+
+    private suspend fun loadHwFundingBudget(walletId: String): ULong? {
+        val balance = hwWalletRepo.getFundingAccount(walletId).getOrNull()?.balanceSats ?: return null
+        return balance.safe() - hwFundingFeeReserve(balance).safe()
+    }
+
+    /**
+     * Whether an order at [clientBalance] still fits what the wallet can fund.
+     *
+     * The advertised max can be a settled estimate rather than a verified one when a re-quote fails
+     * or does not converge, so both sides are taken fresh before the order is placed: the fee is
+     * re-quoted and the budget comes from [currentFundingBudget]. A budget that was never sized, or
+     * a quote the LSP will not give, leaves the decision to the confirm step rather than blocking
+     * the user here.
+     */
+    private suspend fun canFundOrder(clientBalance: ULong): Boolean {
+        val budget = currentFundingBudget()
+        if (budget == null) {
+            Logger.warn("Skipped funding check, no sized budget available", context = TAG)
+            return true
+        }
+        val fee = quoteOrderFee(clientBalance)
+        if (fee == null) {
+            Logger.warn("Skipped funding check, fee quote unavailable", context = TAG)
+            return true
+        }
+        return clientBalance.safe() + fee.safe() <= budget
+    }
+
+    /**
+     * LSP fee for an order at [clientBalance], priced against the channel split that order creation
+     * will pick for that same balance, so the settled max is checked against the order it produces.
+     */
+    private suspend fun quoteOrderFee(clientBalance: ULong): ULong? {
+        val liquidity = blocktankRepo.calculateLiquidityOptions(clientBalance).getOrNull() ?: return null
+        val receivingAmount = maxOf(liquidity.defaultLspBalanceSat, liquidity.minLspBalanceSat)
+        return blocktankRepo.estimateOrderFee(
+            spendingBalanceSats = clientBalance,
+            receivingBalanceSats = receivingAmount,
+        ).getOrNull()?.let { it.networkFeeSat.safe() + it.serviceFeeSat.safe() }
     }
 
     fun onUseDefaultLspBalanceClick() {
@@ -761,6 +967,7 @@ class TransferViewModel @Inject constructor(
             updateTransferValues(0uL)
 
             val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve(account.balanceSats).safe()
+            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount, hwFundingWalletId = walletId) }
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -991,26 +1198,36 @@ class TransferViewModel @Inject constructor(
         throw HardwareFundingError(it)
     }
 
-    @Suppress("ThrowsCount")
     private suspend fun signHardwareFunding(
         walletId: String,
         funding: HwFundingTransaction,
     ): HwFundingSignedTx {
-        return runCatching {
-            withTimeout(HW_SIGN_TIMEOUT) {
-                hwWalletRepo.signFunding(
-                    walletId = walletId,
-                    funding = funding,
-                ).getOrThrow()
-            }
-        }.getOrElse {
-            it.rethrowIfCancellation()
-            if (it is TimeoutCancellationException) {
-                hwWalletRepo.disconnectStaleSession(walletId)
-                throw HardwareSigningTimeoutError(it)
-            }
-            throw it
+        val firstAttempt = runSuspendCatching { signHardwareFundingOnce(walletId, funding) }
+        val error = firstAttempt.exceptionOrNull() ?: return firstAttempt.getOrThrow()
+        if (!error.isTrezorSessionFailure()) throw error
+
+        ensureHardwareConnected(walletId)
+        return signHardwareFundingOnce(walletId, funding)
+    }
+
+    @Suppress("ThrowsCount")
+    private suspend fun signHardwareFundingOnce(
+        walletId: String,
+        funding: HwFundingTransaction,
+    ): HwFundingSignedTx = runCatching {
+        withTimeout(HW_SIGN_TIMEOUT) {
+            hwWalletRepo.signFunding(
+                walletId = walletId,
+                funding = funding,
+            ).getOrThrow()
         }
+    }.getOrElse {
+        it.rethrowIfCancellation()
+        if (it is TimeoutCancellationException) {
+            hwWalletRepo.disconnectStaleSession(walletId)
+            throw HardwareSigningTimeoutError(it)
+        }
+        throw it
     }
 
     private suspend fun broadcastHardwareFunding(
@@ -1157,6 +1374,36 @@ class TransferViewModel @Inject constructor(
     // endregion
 
     // region Balance Calc
+
+    fun updateAdvancedTransferValues(order: IBtOrder) {
+        advancedLimitsJob?.cancel()
+        advancedLimitsJob = viewModelScope.launch {
+            _spendingUiState.update { it.copy(isLoading = true) }
+            updateTransferValues(order.clientBalanceSat)
+
+            val values = _transferValues.value
+            val budget = currentFundingBudget()
+            if (values.maxLspBalance == 0uL || budget == null) {
+                _spendingUiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
+            val affordableMax = resolveAffordableLspBalance(
+                clientBalance = order.clientBalanceSat,
+                budget = budget,
+                minLspBalance = values.minLspBalance,
+                maxLspBalance = values.maxLspBalance,
+            )
+            if (affordableMax != null && affordableMax < values.maxLspBalance) {
+                Logger.info(
+                    "Settled max capacity '${values.maxLspBalance}' on affordable '$affordableMax'",
+                    context = TAG,
+                )
+                _transferValues.update { it.copy(maxLspBalance = affordableMax) }
+            }
+            _spendingUiState.update { it.copy(isLoading = false) }
+        }
+    }
 
     fun updateTransferValues(clientBalanceSat: ULong) {
         val options = blocktankRepo.calculateLiquidityOptions(clientBalanceSat).getOrNull()
@@ -1578,6 +1825,9 @@ class TransferViewModel @Inject constructor(
         private const val POLL_INTERVAL_MS = 2_500L
         private const val MAX_CONSECUTIVE_ERRORS = 5
 
+        /** Live re-quotes allowed while settling the advertised max transfer on an affordable balance. */
+        private const val MAX_AFFORDABILITY_ROUNDS = 2
+
         /** Conservative vbyte reserve for multi-input hardware funding before exact compose runs. */
         private const val HW_FUNDING_TX_VBYTES = 1_200uL
 
@@ -1653,6 +1903,10 @@ data class TransferToSpendingUiState(
     val shouldUseSendAll: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
+    /** Budget the transfer limits were sized against, or null while unknown. */
+    val fundingBudgetSats: ULong? = null,
+    /** Hardware wallet the budget was sized from, or null when it came from this wallet's savings. */
+    val hwFundingWalletId: String? = null,
 )
 
 private data class SpendingConfirmFundingPlan(
