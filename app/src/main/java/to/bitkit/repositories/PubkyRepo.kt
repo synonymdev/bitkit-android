@@ -808,6 +808,7 @@ class PubkyRepo @Inject constructor(
         if (!loadContactsMutex.tryLock()) return
 
         _isLoadingContacts.update { true }
+        var shouldMarkLoadCompleted = false
         try {
             runSuspendCatching {
                 withContext(ioDispatcher) {
@@ -839,14 +840,15 @@ class PubkyRepo @Inject constructor(
                 }
                 _contacts.update { loadedContacts }
                 markContactsLoaded()
-                markContactsLoadCompleted()
+                shouldMarkLoadCompleted = true
             }.onFailure {
-                if (_publicKey.value == pk) markContactsLoadCompleted()
+                shouldMarkLoadCompleted = _publicKey.value == pk
                 Logger.error("Failed to load contacts", it, context = TAG)
             }
         } finally {
             _isLoadingContacts.update { false }
             loadContactsMutex.unlock()
+            if (shouldMarkLoadCompleted && _publicKey.value == pk) markContactsLoadCompleted()
         }
     }
 

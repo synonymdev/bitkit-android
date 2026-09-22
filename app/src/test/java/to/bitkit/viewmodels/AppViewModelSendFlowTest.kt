@@ -2766,9 +2766,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `contact deeplink continues after contacts load failure`() = test {
+    fun `contact deeplink retries contacts after initial load failure`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        whenever(pubkyRepo.loadContacts()).thenAnswer {
+            pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+            pubkyContactsLoadVersion.value = 1L
+        }
         sut.mainScreenEffect.test {
             sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
             runCurrent()
@@ -2776,8 +2780,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             pubkyContactsLoadCompletionVersion.value = 1L
 
-            assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
+            assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
+            advanceUntilIdle()
         }
+        verify(pubkyRepo).loadContacts()
+        verify(refreshContactPaykitReceivers).invoke(testPublicKey)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink rejects when contacts retry fails`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        whenever(context.getString(R.string.other__scan_err_decoding)).thenReturn("Decoding Error")
+        whenever(context.getString(R.string.other__scan__error__generic)).thenReturn("Unable to read data")
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            runCurrent()
+            expectNoEvents()
+
+            pubkyContactsLoadCompletionVersion.value = 1L
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+        verify(pubkyRepo).loadContacts()
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Decoding Error", it.title)
+                assertEquals("Unable to read data", it.description)
+            }
+        )
         verify(coreService, never()).decode(any())
     }
 

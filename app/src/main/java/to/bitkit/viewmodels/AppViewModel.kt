@@ -2293,13 +2293,10 @@ class AppViewModel @Inject constructor(
         if (!PubkyAuthRequest.isSignupUrl(data)) {
             val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
                 pubkyRepo.awaitInitialization()
-                if (isContactLink && pubkyRepo.publicKey.value != null) {
-                    pubkyRepo.contactsLoadCompletionVersion.first { it > 0 }
-                }
-                true
+                awaitContactDataForDeeplink(isContactLink)
             } ?: false
             if (!isInitializationReady) {
-                Logger.warn("Timed out waiting for Pubky initialization", context = TAG)
+                Logger.warn("Failed to initialize Pubky deeplink", context = TAG)
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(
@@ -2317,6 +2314,16 @@ class AppViewModel @Inject constructor(
             }
         }
         return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
+    }
+
+    private suspend fun awaitContactDataForDeeplink(isContactLink: Boolean): Boolean {
+        if (!isContactLink || pubkyRepo.publicKey.value == null) return true
+
+        pubkyRepo.contactsLoadCompletionVersion.first { it > 0 }
+        if (pubkyRepo.contactsLoadVersion.value > 0L) return true
+
+        pubkyRepo.loadContacts()
+        return pubkyRepo.contactsLoadVersion.value > 0L
     }
 
     private suspend fun isPaykitUiEnabledFromSettings() =

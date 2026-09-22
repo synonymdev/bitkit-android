@@ -21,11 +21,15 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
@@ -1737,6 +1741,26 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.loadContacts()
 
         verify(pubkyService, never()).contactRecords()
+    }
+
+    @Test
+    fun `loadContacts should allow retry when failure completion is observed`() = test {
+        authenticateForTesting()
+        val completionVersion = sut.contactsLoadCompletionVersion.value
+        clearInvocations(pubkyService)
+        whenever(pubkyService.contactRecords())
+            .thenAnswer { throw TestAppError("Offline") }
+            .thenReturn(emptyList())
+        val retry = launch(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            sut.contactsLoadCompletionVersion.first { it > completionVersion }
+            sut.loadContacts()
+        }
+
+        sut.loadContacts()
+        retry.join()
+
+        verifyBlocking(pubkyService, times(2)) { contactRecords() }
+        assertEquals(completionVersion + 2, sut.contactsLoadCompletionVersion.value)
     }
 
     @Test
