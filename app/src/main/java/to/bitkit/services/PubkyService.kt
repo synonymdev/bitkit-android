@@ -1,23 +1,38 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.approvePubkyAuth
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PaykitPublicKeys
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkySessionBootstrapResult
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import com.synonym.bitkitcore.parsePubkyAuthUrl as parseLegacyPubkyAuthUrl
 
 @Suppress("TooManyFunctions")
 @Singleton
 class PubkyService @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
 ) {
+    companion object {
+        /** Maximum wait for a Pubky authorization network response. */
+        internal val AUTHORIZATION_TIMEOUT = 30.seconds
+    }
+
     suspend fun initialize() = ServiceQueue.CORE.background {
         paykitSdkService.initialize()
     }
+
+    suspend fun republishIdentityIfNeeded(publicKey: String? = null) =
+        paykitSdkService.republishIdentityIfNeeded(publicKey)
 
     // region Session management
 
@@ -76,6 +91,19 @@ class PubkyService @Inject constructor(
             Unit
         }
 
+    suspend fun registerIdentity(
+        secretKeyHex: String,
+        homeserverZ32: String,
+        signupCode: String?,
+    ): PubkySessionBootstrapResult =
+        ServiceQueue.CORE.background {
+            paykitSdkService.registerIdentity(secretKeyHex, homeserverZ32, signupCode)
+        }
+
+    suspend fun activateRegisteredIdentity(result: PubkySessionBootstrapResult) = ServiceQueue.CORE.background {
+        paykitSdkService.activateRegisteredIdentity(result)
+    }
+
     suspend fun signIn(secretKeyHex: String): Unit = ServiceQueue.CORE.background {
         paykitSdkService.signIn(secretKeyHex)
         Unit
@@ -106,13 +134,32 @@ class PubkyService @Inject constructor(
         PaykitSdkService.parseAuthUrl(url)
     }
 
+    suspend fun validateSignupRequest(authorizationUrl: String?, homeserverPublicKey: String): Unit =
+        ServiceQueue.CORE.background {
+            authorizationUrl?.let { parseLegacyPubkyAuthUrl(it) }
+            PaykitPublicKeys.normalize(homeserverPublicKey)
+            Unit
+        }
+
     suspend fun approveAuth(
         authUrl: String,
         expectedCapabilities: String,
         approvedClientId: String,
         secretKeyHex: String,
     ) = ServiceQueue.CORE.background {
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         paykitSdkService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
+    }
+
+    suspend fun approveRingAuth(
+        authUrl: String,
+        secretKeyHex: String,
+        timeout: Duration = AUTHORIZATION_TIMEOUT,
+    ) = ServiceQueue.CORE.background {
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
+        withTimeoutOrNull(timeout) {
+            approvePubkyAuth(authUrl, secretKeyHex)
+        } ?: throw PubkyRingAuthTimeoutError()
     }
 
     suspend fun approveAuthWithCompanionClaim(
@@ -122,6 +169,7 @@ class PubkyService @Inject constructor(
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
     ) = ServiceQueue.CORE.background {
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         paykitSdkService.approveAuthWithCompanionClaim(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
@@ -135,8 +183,8 @@ class PubkyService @Inject constructor(
 
     // region File operations
 
-    suspend fun fetchFile(uri: String): ByteArray = ServiceQueue.CORE.background {
-        paykitSdkService.fetchFile(uri)
+    suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray = ServiceQueue.CORE.background {
+        paykitSdkService.fetchFile(uri, maxBytes)
     }
 
     // endregion
@@ -188,3 +236,5 @@ class PubkyService @Inject constructor(
 
     // endregion
 }
+
+class PubkyRingAuthTimeoutError : AppError("Ring authorization timed out")

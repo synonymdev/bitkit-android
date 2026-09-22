@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -67,6 +68,8 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
+import to.bitkit.ui.components.BottomSheetOverlayHost
+import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.Sheet
@@ -120,6 +123,7 @@ import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
+import to.bitkit.ui.screens.subscriptions.CreateSubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionDetailScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionsScreen
@@ -242,6 +246,7 @@ import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 @Suppress("CyclomaticComplexMethod")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContentView(
     appViewModel: AppViewModel,
@@ -253,6 +258,7 @@ fun ContentView(
     settingsViewModel: SettingsViewModel,
     backupsViewModel: BackupsViewModel,
     hazeState: HazeState,
+    bottomSheetOverlayState: BottomSheetOverlayState,
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -450,6 +456,7 @@ fun ContentView(
         LocalSettingsViewModel provides settingsViewModel,
         LocalBackupsViewModel provides backupsViewModel,
         LocalDrawerState provides drawerState,
+        LocalBottomSheetOverlayState provides bottomSheetOverlayState,
         LocalIs24HourFormat provides rememberIs24HourFormat(),
         LocalBalances provides balance,
         LocalCurrencies provides currencies,
@@ -459,6 +466,7 @@ fun ContentView(
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
         val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        val isPubkyProfileSetupPending by settingsViewModel.isPubkyProfileSetupPending.collectAsStateWithLifecycle()
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
@@ -508,6 +516,9 @@ fun ContentView(
                 },
                 sheetContainerColor = when (currentSheet) {
                     is Sheet.Widgets -> Colors.Gray7
+                    // Meet the top of the subscription sheets' own gradient, so the grabber strip
+                    // does not sit a shade darker than the content right below it.
+                    is Sheet.Subscription -> Colors.Gray6
                     else -> DefaultSheetContainerColor
                 },
                 sheets = {
@@ -554,6 +565,8 @@ fun ContentView(
                                 navController.navigateTo(it.toRoute())
                             },
                         )
+
+                        Sheet.CreateSubscription -> CreateSubscriptionSheet(appViewModel)
 
                         is Sheet.Subscription -> SubscriptionSheet(appViewModel, sheet.route)
 
@@ -623,7 +636,12 @@ fun ContentView(
 
                                 TimedSheetType.QUICK_PAY -> {
                                     QuickPayIntroSheet(
+                                        onLater = {
+                                            settingsViewModel.setQuickPayIntroSeen(true)
+                                            appViewModel.dismissTimedSheet()
+                                        },
                                         onContinue = {
+                                            settingsViewModel.setQuickPayIntroSeen(true)
                                             appViewModel.dismissTimedSheet()
                                             navController.navigateTo(Routes.QuickPaySettings)
                                         },
@@ -648,6 +666,7 @@ fun ContentView(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     var isHomeCalculatorInputActive by remember { mutableStateOf(false) }
+                    val pubkyProfileSetupNavigation = remember { PubkyProfileSetupNavigation() }
 
                     RootNavHost(
                         navController = navController,
@@ -668,6 +687,25 @@ fun ContentView(
 
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    LaunchedEffect(
+                        isPaykitEnabled,
+                        isPubkyProfileSetupPending,
+                        isProfileAuthenticated,
+                        currentSheet,
+                        currentRoute,
+                    ) {
+                        val canNavigate = currentSheet == null &&
+                            currentRoute != Routes.CreateProfile::class.qualifiedName
+                        if (pubkyProfileSetupNavigation.shouldNavigate(
+                                isEnabled = isPaykitEnabled,
+                                isPending = isPubkyProfileSetupPending,
+                                isAuthenticated = isProfileAuthenticated,
+                                canNavigate = canNavigate,
+                            )
+                        ) {
+                            navController.navigateTo(Routes.CreateProfile)
+                        }
+                    }
                     val currentHardwareWalletId = navBackStackEntry
                         ?.takeIf { it.destination.hasRoute<Routes.HardwareWallet>() }
                         ?.toRoute<Routes.HardwareWallet>()
@@ -696,7 +734,7 @@ fun ContentView(
                             onReceiveClick = {
                                 appViewModel.showSheet(Sheet.Receive(hardwareWalletId = currentHardwareWalletId))
                             },
-                            onScanClick = { appViewModel.showScannerSheet() },
+                            onScanClick = { appViewModel.showScannerSheet(showBackButton = false) },
                         )
                     }
                 }
@@ -723,7 +761,29 @@ fun ContentView(
                 onOpenWidgetsSheet = { appViewModel.showSheet(Sheet.Widgets()) },
                 modifier = Modifier.align(Alignment.TopEnd)
             )
+
+            BottomSheetOverlayHost(state = bottomSheetOverlayState)
         }
+    }
+}
+
+internal class PubkyProfileSetupNavigation {
+    private var didResume = false
+
+    fun shouldNavigate(
+        isEnabled: Boolean,
+        isPending: Boolean,
+        isAuthenticated: Boolean,
+        canNavigate: Boolean,
+    ): Boolean {
+        if (!isPending) {
+            didResume = false
+            return false
+        }
+        if (didResume) return false
+        if (!isEnabled || !isAuthenticated || !canNavigate) return false
+        didResume = true
+        return true
     }
 }
 
@@ -778,6 +838,7 @@ private fun RootNavHost(
                     onRequestPayment = {
                         appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
                     },
+                    onCreateSubscription = appViewModel::showSubscriptionCreator,
                     onDetails = {
                         navController.navigateTo(
                             Routes.SubscriptionDetail(
@@ -897,8 +958,8 @@ private fun RootNavHost(
                     app = appViewModel,
                     wallet = walletViewModel,
                     transfer = transferViewModel,
-                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                    onTransferUnavailable = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onContinueClick = { navController.navigateOnSavingsTransferExit() },
+                    onTransferUnavailable = { navController.navigateOnSavingsTransferExit() },
                 )
             }
             deepLinkableComposable<Routes.SpendingIntro> {
@@ -1577,7 +1638,7 @@ private fun NavGraphBuilder.shop(
             page = it.toRoute<Routes.ShopWebView>().page,
             title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
-                appViewModel.onScanResult(data)
+                appViewModel.onScanResult(data, allowPubkyAuth = false)
             },
             onBlockedNavigation = {
                 appViewModel.toast(
@@ -1620,7 +1681,6 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
         }
         BackgroundPaymentsIntroScreen(
             onBack = { navController.popBackStack() },
-            onLater = { navController.popBackStack() },
             onEnable = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -2033,6 +2093,17 @@ fun NavController.navigateToDevSettings() = navigateTo(Routes.DevSettings)
 fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIntro)
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
+
+/**
+ * Exits the savings transfer to home. The coop close retry job holds on to this callback for up to
+ * 30 minutes, so it is ignored unless the savings progress screen that owns it is still on screen.
+ * Matching the whole transfer graph would also pop a transfer to spending the user started since.
+ */
+fun NavController.navigateOnSavingsTransferExit() {
+    val isOnSavingsProgress = currentDestination?.hasRoute<Routes.SavingsProgress>() == true
+    if (!isOnSavingsProgress) return
+    navigateToHome()
+}
 
 fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
     navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))

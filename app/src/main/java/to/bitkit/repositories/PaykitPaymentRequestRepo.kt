@@ -26,6 +26,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -42,10 +44,12 @@ import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.satsToMsat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
+import to.bitkit.services.PaykitPaymentRequestRecurrenceTerms
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.SubscriptionIcon
 import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
@@ -207,6 +211,21 @@ data class PaykitPaymentRequestCreation(
     val wasPublishedToActiveState: Boolean,
 )
 
+class PaykitSubscriptionDraft(
+    val amountSats: ULong,
+    val name: String,
+    val description: String,
+    val frequency: PaykitRecurrenceUnit,
+    val expiresAt: Instant,
+    val iconBytes: ByteArray? = null,
+)
+
+data class PaykitSubscriptionCreation(
+    val subscription: PaykitSubscription,
+    val creatorIdentity: String,
+    val wasPublishedToActiveState: Boolean,
+)
+
 private data class PaykitPaymentRequestTargetContext(
     val savedPublicKeys: List<String>,
     val linkedReceiverPaths: Map<String, Set<String>>,
@@ -221,6 +240,7 @@ sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
     data object RequestUnavailable : PaykitPaymentRequestError("Payment request is unavailable")
     data object RequestExpired : PaykitPaymentRequestError("Payment request has expired")
     data object OperationInProgress : PaykitPaymentRequestError("Payment request operation is already in progress")
+    data object SubscriptionTooLong : PaykitPaymentRequestError("Subscription proposal exceeds the message size limit")
 }
 
 @Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
@@ -301,7 +321,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         _pendingRequests.value.filterNot { it.id in presentedRequestIds }
 
     fun subscriptionProposals(): List<PaykitSubscription> =
-        _subscriptions.value.filter { it.isProposalVisible(clock.now()) }
+        _subscriptions.value.filter { it.isPayer && it.isProposalVisible(clock.now()) }
 
     fun automaticSubscriptionProposals(): List<PaykitSubscription> =
         subscriptionProposals().filterNot { it.id in presentedSubscriptionProposalIds }
@@ -336,7 +356,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     ): Boolean = withContext(ioDispatcher) {
         operationMutex.withLock {
             val current = _subscriptions.value.firstOrNull { it.id == subscription.id }
-                ?.takeIf { it.isProposalVisible(clock.now()) }
+                ?.takeIf { it.isPayer && it.isProposalVisible(clock.now()) }
                 ?: return@withLock false
             if (current.id in presentedSubscriptionProposalIds) return@withLock true
             val identity = activeIdentity ?: return@withLock false
@@ -499,6 +519,171 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
+    suspend fun proposeSubscription(
+        draft: PaykitSubscriptionDraft,
+        target: PaykitPaymentRequestTarget,
+        savedPublicKeys: List<String>,
+    ): Result<PaykitSubscriptionCreation> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            if (!creationMutex.tryLock()) throw PaykitPaymentRequestError.OperationInProgress
+            _isCreatingRequest.update { true }
+            try {
+                operationMutex.withLock {
+                    createSubscriptionLocked(draft, target, savedPublicKeys)
+                }
+            } finally {
+                _isCreatingRequest.update { false }
+                creationMutex.unlock()
+            }
+        }.onFailure {
+            Logger.warn("Failed to create Paykit subscription proposal", it, context = TAG)
+        }
+    }
+
+    private suspend fun createSubscriptionLocked(
+        draft: PaykitSubscriptionDraft,
+        target: PaykitPaymentRequestTarget,
+        savedPublicKeys: List<String>,
+    ): PaykitSubscriptionCreation {
+        val generation = stateGeneration.get()
+        val expectedIdentity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
+        val validationDate = clock.now()
+        val name = draft.name.trim()
+        val description = draft.description.trim()
+        validateSubscriptionDraft(draft, name, validationDate)
+
+        val endpoints = subscriptionProposalEndpoints(target, savedPublicKeys, expectedIdentity)
+        val reservedIconUri = PaykitSubscriptionProposal.reservedIconUri.takeIf { draft.iconBytes != null }
+        val preflight = buildSubscriptionProposal(draft, name, description, reservedIconUri, endpoints, validationDate)
+        PaykitSubscriptionProposal.validate(preflight)
+        val iconUri = draft.iconBytes?.let {
+            paykitSdkService.uploadProfileAvatar(
+                bytes = SubscriptionIcon.compress(it),
+                contentType = "image/jpeg",
+                expectedIdentity = expectedIdentity,
+            )
+        }
+        val proposalDate = clock.now()
+        validateProposalExpiration(draft.expiresAt, proposalDate)
+        val proposal = buildSubscriptionProposal(draft, name, description, iconUri, endpoints, proposalDate)
+        PaykitSubscriptionProposal.validate(proposal)
+        val record = paykitSdkService.proposePaymentRequest(
+            counterparty = target.publicKey,
+            counterpartyReceiverPath = target.receiverPath,
+            proposal = proposal,
+            expectedIdentity = expectedIdentity,
+        )
+        val deliveryStatus = if (proposalWasSent(record, processPendingMessages())) {
+            PaykitPaymentRequestDeliveryStatus.Sent
+        } else {
+            PaykitPaymentRequestDeliveryStatus.Queued
+        }
+        val subscription = record.toPaykitSubscription(deliveryStatus)
+            ?: throw PaykitPaymentRequestError.RequestUnavailable
+        val wasPublished = publishCreatedSubscription(subscription, generation, expectedIdentity)
+        return PaykitSubscriptionCreation(subscription, expectedIdentity, wasPublished)
+    }
+
+    private suspend fun validateSubscriptionDraft(
+        draft: PaykitSubscriptionDraft,
+        name: String,
+        proposalDate: Instant,
+    ) {
+        val hasValidContent = draft.amountSats != 0uL && name.isNotEmpty()
+        val canPropose = draft.frequency.isSupported && isAvailable()
+        if (!hasValidContent || !canPropose) {
+            throw PaykitPaymentRequestError.RequestUnavailable
+        }
+        validateProposalExpiration(draft.expiresAt, proposalDate)
+    }
+
+    private fun validateProposalExpiration(expiresAt: Instant, proposalDate: Instant) {
+        if (expiresAt <= proposalDate) throw PaykitPaymentRequestError.RequestExpired
+    }
+
+    private suspend fun subscriptionProposalEndpoints(
+        target: PaykitPaymentRequestTarget,
+        savedPublicKeys: List<String>,
+        expectedIdentity: String,
+    ): List<String> {
+        val selectedSavedKey = savedPublicKeys.firstOrNull {
+            PubkyPublicKeyFormat.matches(it, target.publicKey)
+        }
+        val targets = selectedSavedKey?.let { savedKey ->
+            targetContext(listOf(savedKey), expectedIdentity)?.let { eligibleTargets(it).targets }
+        }
+            .orEmpty()
+        val settings = settingsStore.data.first()
+        val endpoints = acceptedPaymentEndpointIdentifiers(settings)
+        if (target !in targets || !settings.sharesPrivatePaykitEndpoints || endpoints.isEmpty()) {
+            throw PaykitPaymentRequestError.RequestUnavailable
+        }
+        return endpoints
+    }
+
+    private fun buildSubscriptionProposal(
+        draft: PaykitSubscriptionDraft,
+        name: String,
+        description: String,
+        iconUri: String?,
+        endpointIdentifiers: List<String>,
+        proposalDate: Instant,
+    ): PaykitPaymentRequestProposalTerms {
+        val subscriptionMetadata = mutableMapOf<String, JsonElement>(
+            "version" to JsonPrimitive(1),
+            "description" to JsonPrimitive(description),
+            "benefits" to JsonArray(emptyList()),
+        )
+        iconUri?.let { subscriptionMetadata["icon_uri"] = JsonPrimitive(it) }
+        val timestamp = Instant.fromEpochSeconds(proposalDate.epochSeconds).toString()
+        return PaykitPaymentRequestProposalTerms(
+            amountValue = draft.amountSats.toBitcoinAmount(),
+            paymentReference = "bitkit-${UUID.randomUUID()}",
+            proposalExpiresAt = draft.expiresAt.toString(),
+            acceptedPaymentEndpointIdentifiers = endpointIdentifiers,
+            metadataJson = JsonObject(
+                mapOf(
+                    "note" to JsonPrimitive(name),
+                    "subscription" to JsonObject(subscriptionMetadata),
+                )
+            ).toString(),
+            recurrence = PaykitPaymentRequestRecurrenceTerms(
+                every = 1u,
+                unit = draft.frequency.rawValue,
+                startsAt = timestamp,
+                anchor = timestamp,
+            ),
+        )
+    }
+
+    private fun proposalWasSent(
+        record: PaymentRequestRecord,
+        reports: List<OutboundPrivateCounterpartySendReport>,
+    ): Boolean {
+        if (record.proposalOutboundStatus == OutboundPrivateMessageStatus.SENT) return true
+        val messageId = record.proposalOutboundMessageId ?: return false
+        return reports.any {
+            PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
+                it.counterpartyReceiverPath == record.counterpartyReceiverPath &&
+                messageId in it.report?.sent.orEmpty()
+        }
+    }
+
+    private fun publishCreatedSubscription(
+        subscription: PaykitSubscription,
+        generation: Long,
+        expectedIdentity: String,
+    ): Boolean {
+        val isCurrent = isCurrentState(generation, expectedIdentity)
+        if (isCurrent) {
+            _subscriptions.update { subscriptions ->
+                subscriptions.filterNot { it.id == subscription.id } + subscription
+            }
+            scheduleExpirationLocked()
+        }
+        return isCurrent
+    }
+
     private fun publishCreatedRequest(
         request: PaykitPaymentRequest,
         generation: Long,
@@ -580,7 +765,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
                 val validationDate = clock.now()
                 val current = _subscriptions.value.firstOrNull { it.id == subscription.id }
-                    ?.takeIf { it == subscription && it.isProposalActionable(validationDate) }
+                    ?.takeIf { it == subscription && it.isPayer && it.isProposalActionable(validationDate) }
                     ?: throw PaykitPaymentRequestError.RequestUnavailable
                 val record = paykitSdkService.acceptPaymentRequest(
                     current.counterparty,
@@ -601,14 +786,16 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     suspend fun cancel(subscription: PaykitSubscription): Result<Unit> = updateSubscription(subscription) {
-        if (!it.isActive(clock.now())) throw PaykitPaymentRequestError.RequestUnavailable
-        val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
-        val protectedRequestIds = paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(
-            identity = identity,
-            subscriptionId = it.id,
-        ).getOrThrow()
-        if (protectedRequestIds.isNotEmpty()) {
-            throw PaykitPaymentRequestError.OperationInProgress
+        if (!it.canCancel(clock.now())) throw PaykitPaymentRequestError.RequestUnavailable
+        if (it.isPayer) {
+            val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
+            val protectedRequestIds = paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(
+                identity = identity,
+                subscriptionId = it.id,
+            ).getOrThrow()
+            if (protectedRequestIds.isNotEmpty()) {
+                throw PaykitPaymentRequestError.OperationInProgress
+            }
         }
         paykitSdkService.cancelPaymentRequest(it.counterparty, it.counterpartyReceiverPath, it.paymentRequestId)
     }
@@ -657,7 +844,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .map { it.withExpiredLifecycle(now) }
         val restoredAcceptances = subscriptions
             .filter {
-                it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING || it.paidPeriods.isNotEmpty()
+                it.isPayer &&
+                    (it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING || it.paidPeriods.isNotEmpty())
             }
             .filterNot { it.id in subscriptionAcceptedAt }
             .associate { subscription ->
@@ -667,7 +855,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 subscription.id to acceptedAt
             }
         val updatedSubscriptionAcceptedAt = subscriptionAcceptedAt + restoredAcceptances
-        val recurringRequestsBySubscription = subscriptions.associateWith { subscription ->
+        val recurringRequestsBySubscription = subscriptions.filter { it.isPayer }.associateWith { subscription ->
             updatedSubscriptionAcceptedAt[subscription.id]
                 ?.let { subscription.requestsThrough(now, it) }
                 .orEmpty()
@@ -904,6 +1092,19 @@ class PaykitPaymentRequestRepo @Inject constructor(
             subscriptions.filterNot { it.id == subscription.id } + subscription
         }
 
+        if (!subscription.isPayer) {
+            prunePresentedSubscriptionProposalIds(_subscriptions.value)
+            subscriptionNotificationScheduler.synchronize(
+                subscriptions = _subscriptions.value,
+                acceptedAt = { subscriptionAcceptedAt[it.id] },
+                pendingRequestIds = _pendingRequests.value.mapTo(mutableSetOf()) { it.id },
+                payerIdentity = activeIdentity ?: return,
+                notificationsEnabled = settingsStore.data.first().notificationsGranted,
+            )
+            scheduleExpirationLocked()
+            return
+        }
+
         val recurringRequests = requestsThroughAcceptance(subscription, now)
         val unpaidRequests = if (subscription.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING) {
             recurringRequests.filter { it.lifecycleState != PaymentRequestLifecycleState.PROOF_SUBMITTED }
@@ -991,7 +1192,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     private suspend fun prunePresentedSubscriptionProposalIds(subscriptions: List<PaykitSubscription>) {
         val proposalIds = subscriptions
-            .filter { it.isProposalVisible(clock.now()) }
+            .filter { it.isPayer && it.isProposalVisible(clock.now()) }
             .mapTo(mutableSetOf()) { it.id }
         val prunedIds = presentedSubscriptionProposalIds.intersect(proposalIds)
         if (prunedIds == presentedSubscriptionProposalIds) return

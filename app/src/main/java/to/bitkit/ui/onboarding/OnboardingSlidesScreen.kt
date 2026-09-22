@@ -206,7 +206,7 @@ fun OnboardingTab(
                 .defaultMinSize(minHeight = 255.dp)
         ) {
             Display(text = title.withAccent(accentColor = titleAccentColor))
-            VerticalSpacer(14.dp)
+            VerticalSpacer(8.dp)
             BodyM(
                 text = text,
                 color = Colors.White64,

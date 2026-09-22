@@ -73,6 +73,7 @@ sealed interface Sheet {
         val presentationId: String = UUID.randomUUID().toString(),
     ) : Sheet
     data object PaymentRequests : Sheet
+    data object CreateSubscription : Sheet
     data class Subscription(val route: SubscriptionRoute) : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet
     data object ChangePin : Sheet
@@ -91,7 +92,10 @@ sealed interface Sheet {
         val isConnecting: Boolean = false,
         val errorText: String? = null,
     ) : Sheet
-    data class QrScanner(val isPubkyScan: Boolean = false) : Sheet
+    data class QrScanner(
+        val isPubkyScan: Boolean = false,
+        val showBackButton: Boolean = true,
+    ) : Sheet
     data class PubkyAuth(val authUrl: String) : Sheet
 
     data class TimedSheet(val type: TimedSheetType) : Sheet
@@ -110,23 +114,28 @@ enum class TimedSheetType(val priority: Int) {
 @Composable
 fun SheetHost(
     shouldExpand: Boolean,
+    modifier: Modifier = Modifier,
     onDismiss: () -> Unit = {},
     visibilityKey: Any? = null,
     onVisible: () -> Unit = {},
     dismissEnabled: Boolean = true,
     sheetHandlePlacement: SheetHandlePlacement = SheetHandlePlacement.ScaffoldSlot,
+    sheetDragHandle: @Composable (() -> Unit)? = { SheetDragHandle() },
+    scaffoldContainerColor: Color = MaterialTheme.colorScheme.surface,
     sheetContainerColor: Color = DefaultSheetContainerColor,
+    sheetState: SheetState? = null,
     sheets: @Composable ColumnScope.() -> Unit,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val currentDismissEnabled by rememberUpdatedState(dismissEnabled)
     val currentShouldExpand by rememberUpdatedState(shouldExpand)
+    val resolvedSheetState = rememberSheetHostState(
+        sheetState = sheetState,
+        dismissEnabled = dismissEnabled,
+        shouldExpand = shouldExpand,
+    )
     val scaffoldState = rememberBottomSheetScaffoldState(
-        bottomSheetState = rememberModalBottomSheetState(
-            skipPartiallyExpanded = true,
-            confirmValueChange = { currentDismissEnabled || !currentShouldExpand || it != SheetValue.Hidden },
-        )
+        bottomSheetState = resolvedSheetState,
     )
     var wasSheetVisible by remember { mutableStateOf(false) }
     var visibleKey by remember { mutableStateOf<Any?>(null) }
@@ -155,9 +164,10 @@ fun SheetHost(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         BottomSheetScaffold(
             scaffoldState = scaffoldState,
+            containerColor = scaffoldContainerColor,
             sheetPeekHeight = 0.dp,
             sheetShape = AppShapes.sheet,
             sheetContent = {
@@ -168,7 +178,7 @@ fun SheetHost(
             },
             sheetDragHandle = when (sheetHandlePlacement) {
                 SheetHandlePlacement.ScaffoldSlot -> {
-                    { SheetDragHandle() }
+                    sheetDragHandle
                 }
                 SheetHandlePlacement.ContentOverlay -> null
             },
@@ -182,19 +192,35 @@ fun SheetHost(
                 if (dismissEnabled) {
                     scope.launch {
                         scaffoldState.bottomSheetState.hide()
-                        onDismiss()
                     }
                 }
             }
 
             Scrim(scaffoldState.bottomSheetState, enabled = dismissEnabled) {
                 scope.launch {
+                    val dismissBeforeVisible = !scaffoldState.bottomSheetState.isVisible &&
+                        scaffoldState.bottomSheetState.targetValue != SheetValue.Hidden
                     scaffoldState.bottomSheetState.hide()
-                    onDismiss()
+                    if (dismissBeforeVisible) onDismiss()
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberSheetHostState(
+    sheetState: SheetState?,
+    dismissEnabled: Boolean,
+    shouldExpand: Boolean,
+): SheetState {
+    val currentDismissEnabled by rememberUpdatedState(dismissEnabled)
+    val currentShouldExpand by rememberUpdatedState(shouldExpand)
+    return sheetState ?: rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { currentDismissEnabled || !currentShouldExpand || it != SheetValue.Hidden },
+    )
 }
 
 @Composable

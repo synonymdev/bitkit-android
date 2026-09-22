@@ -41,6 +41,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.WipeInProgressError
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
@@ -99,6 +100,7 @@ class WalletViewModel @Inject constructor(
 
     val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
     val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = migrationService.isRestoringFromRNRemoteBackup
+    val isWiping: StateFlow<Boolean> = backupRepo.isWiping
 
     private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Initial)
     val restoreState: StateFlow<RestoreState> = _restoreState.asStateFlow()
@@ -217,6 +219,7 @@ class WalletViewModel @Inject constructor(
             Logger.error("Restore from backup failed", it, context = TAG)
         }
         _restoreState.update { RestoreState.Completed }
+        backupRepo.setRestorePending(false)
     }
 
     private suspend fun restoreFromMostRecentBackup() {
@@ -340,10 +343,12 @@ class WalletViewModel @Inject constructor(
                 // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
-                Logger.error("Node startup error", it, context = TAG)
-                if (it !is RecoveryModeError) {
-                    ToastEventBus.send(it)
+                if (it is RecoveryModeError || it is WipeInProgressError) {
+                    Logger.debug("Skipped node start: '${it.message}'", context = TAG)
+                    return@onFailure
                 }
+                Logger.error("Node startup error", it, context = TAG)
+                ToastEventBus.send(it)
             }
     }
 
@@ -519,6 +524,16 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun updateOnchainBip21Amount(amountSats: ULong?) = viewModelScope.launch {
+        walletRepo.updateOnchainBip21Amount(amountSats).onFailure { error ->
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__error_invoice_update),
+                description = error.message ?: context.getString(R.string.common__error_body)
+            )
+        }
+    }
+
     fun refreshReceiveState() = viewModelScope.launch {
         launch { blocktankRepo.refreshInfo() }
         lightningRepo.syncState()
@@ -546,11 +561,16 @@ class WalletViewModel @Inject constructor(
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?) {
         setInitNodeLifecycleState()
         _restoreState.update { RestoreState.InProgress.Wallet }
+        // The node starts and syncs long before the backup is read, so ordinary uploads are held from
+        // here rather than from the restore itself, which would upload over the backup it has not read.
+        backupRepo.setRestorePending(true)
 
         walletRepo.restoreWallet(
             mnemonic = mnemonic,
             bip39Passphrase = bip39Passphrase,
         ).onFailure {
+            // Nothing reaches restoreFromBackup when the wallet was never created, so release here.
+            backupRepo.setRestorePending(false)
             ToastEventBus.send(it)
         }
     }

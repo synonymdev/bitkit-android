@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -17,10 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,9 +29,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
@@ -56,9 +53,9 @@ import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
-import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
@@ -72,9 +69,9 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppTextFieldDefaults
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.keyboardAsState
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.viewmodels.AmountInputViewModel
@@ -103,9 +100,9 @@ fun EditInvoiceScreen(
     editInvoiceVM: EditInvoiceVM = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
+    val context = LocalContext.current
     val blocktankVM = blocktankViewModel ?: return
     var keyboardVisible by remember { mutableStateOf(false) }
-    var isSoftKeyboardVisible by keyboardAsState()
     var isCreatingCjit by remember { mutableStateOf(false) }
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentReceiveSats by rememberUpdatedState(amountInputUiState.sats.toULong())
@@ -128,20 +125,16 @@ fun EditInvoiceScreen(
                         }
                         is ReceiveAdditionalLiquidityAction.CreateCjit -> {
                             isCreatingCjit = true
-                            runSuspendCatching { blocktankVM.createCjit(action.amountSats) }.onSuccess { entry ->
-                                navigateReceiveConfirm(
-                                    CjitEntryDetails(
-                                        networkFeeSat = entry.networkFeeSat.toLong(),
-                                        serviceFeeSat = entry.serviceFeeSat.toLong(),
-                                        channelSizeSat = entry.channelSizeSat.toLong(),
-                                        feeSat = entry.feeSat.toLong(),
-                                        receiveAmountSats = action.amountSats.toLong(),
-                                        invoice = entry.invoice.request,
-                                    )
-                                )
+                            runSuspendCatching {
+                                val entry = blocktankVM.createCjit(action.amountSats)
+                                CjitEntryDetails.from(entry, action.amountSats).getOrThrow()
+                            }.onSuccess {
+                                navigateReceiveConfirm(it)
                             }.onFailure {
                                 Logger.error("Failed to create CJIT invoice", it, context = "EditInvoiceScreen")
-                                if (it !is ServiceError.ChannelSizeExceedsMaximum) {
+                                if (!app.toastReceiveCjitError(context, it) &&
+                                    it !is ServiceError.ChannelSizeExceedsMaximum
+                                ) {
                                     app.toast(it)
                                 }
                                 navigateCjitAmount()
@@ -185,7 +178,6 @@ fun EditInvoiceScreen(
         isLoading = isLoading || isCreatingCjit,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
-        isSoftKeyboardVisible = isSoftKeyboardVisible,
         showPaymentRequestButton = showPaymentRequestButton,
         onClickPaymentRequest = {
             onClickPaymentRequest(amountInputUiState.sats.toULong(), walletUiState.bip21Description)
@@ -208,7 +200,6 @@ private fun ReceiveTab.toReceiveLiquiditySource(): ReceiveLiquiditySource {
 fun EditInvoiceContent(
     amountInputViewModel: AmountInputViewModel,
     noteText: String,
-    isSoftKeyboardVisible: Boolean,
     onchainOnly: Boolean = false,
     keyboardVisible: Boolean,
     tags: ImmutableList<String>,
@@ -236,24 +227,6 @@ fun EditInvoiceContent(
     ) {
         val maxHeight = this.maxHeight
 
-        AnimatedVisibility(
-            visible = !keyboardVisible && !isSoftKeyboardVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomEnd)
-        ) {
-            Image(
-                painter = painterResource(R.drawable.coin_stack),
-                contentDescription = null,
-                contentScale = ContentScale.FillWidth,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp)
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -274,6 +247,7 @@ fun EditInvoiceContent(
 
                 NumberPadTextField(
                     viewModel = amountInputViewModel,
+                    showEditButton = !keyboardVisible,
                     onClick = onClickBalance,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -310,7 +284,7 @@ fun EditInvoiceContent(
                             )
                         }
 
-                        HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
+                        HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
                         NumberPad(
                             viewModel = amountInputViewModel,
@@ -339,7 +313,7 @@ fun EditInvoiceContent(
                     Column {
                         VerticalSpacer(44.dp)
                         Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
-                        VerticalSpacer(16.dp)
+                        VerticalSpacer(8.dp)
 
                         TextField(
                             placeholder = {
@@ -350,12 +324,17 @@ fun EditInvoiceContent(
                             },
                             value = noteText,
                             onValueChange = onTextChanged,
+                            textStyle = AppTextStyles.BodySSB,
                             minLines = 4,
                             keyboardOptions = KeyboardOptions.Default.copy(
                                 imeAction = ImeAction.Done
                             ),
-                            colors = AppTextFieldDefaults.semiTransparent,
-                            shape = MaterialTheme.shapes.medium,
+                            colors = AppTextFieldDefaults.semiTransparent.copy(
+                                focusedContainerColor = Colors.White06,
+                                unfocusedContainerColor = Colors.White06,
+                                errorContainerColor = Colors.White06,
+                            ),
+                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("ReceiveNote")
@@ -369,9 +348,7 @@ fun EditInvoiceContent(
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 16.dp)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 tags.forEach { tagText ->
                                     TagButton(
@@ -380,21 +357,11 @@ fun EditInvoiceContent(
                                         onClick = { onClickTag(tagText) },
                                     )
                                 }
+                                AddTagButton(
+                                    onClick = onClickAddTag,
+                                    modifier = Modifier.testTag("TagsAdd")
+                                )
                             }
-                            PrimaryButton(
-                                text = stringResource(R.string.wallet__tags_add),
-                                size = ButtonSize.Small,
-                                onClick = { onClickAddTag() },
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_tag),
-                                        contentDescription = null,
-                                        tint = Colors.Brand
-                                    )
-                                },
-                                fullWidth = false,
-                                modifier = Modifier.testTag("TagsAdd")
-                            )
                         }
 
                         FillHeight()
@@ -447,7 +414,6 @@ private fun Preview() {
                 tags = persistentListOf(),
                 onClickAddTag = {},
                 onClickTag = {},
-                isSoftKeyboardVisible = false,
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -471,7 +437,6 @@ private fun PreviewWithTags() {
                 tags = persistentListOf("Team", "Dinner", "Home", "Work"),
                 onClickAddTag = {},
                 onClickTag = {},
-                isSoftKeyboardVisible = false,
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -495,7 +460,6 @@ private fun PreviewWithKeyboard() {
                 tags = persistentListOf("Team", "Dinner", "Home"),
                 onClickAddTag = {},
                 onClickTag = {},
-                isSoftKeyboardVisible = false,
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -519,7 +483,6 @@ private fun PreviewSmallScreen() {
                 tags = persistentListOf("Team", "Dinner", "Home"),
                 onClickAddTag = {},
                 onClickTag = {},
-                isSoftKeyboardVisible = false,
                 modifier = Modifier.sheetHeight(),
             )
         }

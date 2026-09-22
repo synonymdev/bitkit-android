@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
@@ -28,14 +30,20 @@ import java.math.BigDecimal
 @Composable
 fun MoneyDisplay(
     sats: Long,
+    modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    showSymbol: Boolean? = null,
+    showSymbol: Boolean = true,
 ) {
-    val text = showSymbol?.let { rememberMoneyText(sats, showSymbol = it) } ?: rememberMoneyText(sats)
+    val text = rememberMoneyText(sats, showSymbol = showSymbol)
     text?.let {
         Display(
-            text = it.withAccent(accentColor = Colors.White64),
-            modifier = Modifier
+            text = it.withAccent(
+                accentStyle = SpanStyle(
+                    color = Colors.White64,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+            ),
+            modifier = modifier
                 .clickableAlpha(onClick = onClick)
                 .testTag("MoneyText")
         )
@@ -47,20 +55,43 @@ fun MoneyCell(
     sats: Long,
     modifier: Modifier = Modifier,
     prefix: String = "",
+    showBitcoinSymbol: Boolean = true,
+    fiatReplacement: String? = null,
 ) {
     val currencies = LocalCurrencies.current
+    val primaryUnit = currencies.primaryDisplay
+    val secondaryUnit = primaryUnit.not()
+
+    val primaryMoney = rememberMoneyText(
+        sats = sats,
+        unit = primaryUnit,
+        showSymbol = primaryUnit != PrimaryDisplay.BITCOIN || showBitcoinSymbol,
+    )
+    val secondaryMoney = rememberMoneyText(
+        sats = sats,
+        unit = secondaryUnit,
+        showSymbol = secondaryUnit != PrimaryDisplay.BITCOIN || showBitcoinSymbol,
+    )
+    val primaryIsReplaced = fiatReplacement != null && primaryUnit == PrimaryDisplay.FIAT
+    val primary = if (primaryIsReplaced) fiatReplacement else primaryMoney
+    val secondary = if (fiatReplacement != null && secondaryUnit == PrimaryDisplay.FIAT) {
+        fiatReplacement
+    } else {
+        secondaryMoney
+    }
+
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = modifier,
     ) {
-        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay, showSymbol = true)?.let { text ->
+        primary?.let { text ->
             BodyMSB(
-                text = "$prefix$text".withAccent(accentColor = Colors.White64),
+                text = (if (primaryIsReplaced) text else "$prefix$text").withAccent(accentColor = Colors.White64),
                 modifier = Modifier.testTag("MoneyPrimary"),
             )
         }
-        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay.not(), showSymbol = true)?.let { text ->
+        secondary?.let { text ->
             CaptionB(
                 text = text.withAccent(accentColor = Colors.White64),
                 color = Colors.White64,
@@ -95,9 +126,28 @@ fun MoneyMSB(
     unit: PrimaryDisplay = LocalCurrencies.current.primaryDisplay,
     color: Color = MaterialTheme.colorScheme.primary,
     accent: Color = Colors.White64,
+    showSymbol: Boolean = unit == PrimaryDisplay.FIAT,
 ) {
-    rememberMoneyText(sats = sats, unit = unit)?.let { text ->
+    rememberMoneyText(sats = sats, unit = unit, showSymbol = showSymbol)?.let { text ->
         BodyMSB(
+            text = text.withAccent(accentColor = accent),
+            color = color,
+            modifier = modifier.testTag("MoneyText")
+        )
+    }
+}
+
+@Composable
+fun MoneyCaptionM(
+    sats: Long,
+    modifier: Modifier = Modifier,
+    unit: PrimaryDisplay = LocalCurrencies.current.primaryDisplay,
+    color: Color = MaterialTheme.colorScheme.primary,
+    accent: Color = Colors.White64,
+    showSymbol: Boolean = false,
+) {
+    rememberMoneyText(sats = sats, unit = unit, showSymbol = showSymbol)?.let { text ->
+        CaptionM(
             text = text.withAccent(accentColor = accent),
             color = color,
             modifier = modifier.testTag("MoneyText")

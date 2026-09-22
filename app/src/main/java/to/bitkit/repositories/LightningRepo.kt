@@ -19,6 +19,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -144,6 +145,9 @@ class LightningRepo @Inject constructor(
     private val _eventHandlers = ConcurrentHashMap.newKeySet<NodeEventHandler>()
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
+
+    @Volatile
+    private var isWiping = false
 
     private val channelCache = ConcurrentHashMap<String, ChannelDetails>()
     private val probeOutcomeCache = ConcurrentHashMap<PaymentId, ProbeOutcome>()
@@ -293,7 +297,7 @@ class LightningRepo @Inject constructor(
         customRgsServerUrl: String? = null,
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val trustedPeers = fetchTrustedPeers()
             lightningService.setup(
                 walletIndex,
@@ -307,7 +311,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runCatching {
+    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runSuspendCatching {
         val info = coreService.blocktank.info(refresh = false)
             ?: coreService.blocktank.info(refresh = true)
         info?.nodes?.toPeerDetailsList()?.also {
@@ -317,7 +321,7 @@ class LightningRepo @Inject constructor(
         Logger.warn("fetchTrustedPeers error", it, context = TAG)
     }.getOrNull()
 
-    @Suppress("LongMethod", "LongParameterList")
+    @Suppress("LongParameterList")
     suspend fun start(
         walletIndex: Int = 0,
         timeout: Duration? = null,
@@ -327,12 +331,36 @@ class LightningRepo @Inject constructor(
         eventHandler: NodeEventHandler? = null,
         channelMigration: ChannelDataMigration? = null,
         shouldValidateGraph: Boolean = true,
+    ): Result<Unit> = startNode(
+        walletIndex = walletIndex,
+        timeout = timeout,
+        shouldRetry = shouldRetry,
+        customServerUrl = customServerUrl,
+        customRgsServerUrl = customRgsServerUrl,
+        eventHandler = eventHandler,
+        channelMigration = channelMigration,
+        shouldValidateGraph = shouldValidateGraph,
+        shouldRetryYieldToStop = false,
+    )
+
+    @Suppress("LongMethod", "LongParameterList")
+    private suspend fun startNode(
+        walletIndex: Int = 0,
+        timeout: Duration? = null,
+        shouldRetry: Boolean = true,
+        customServerUrl: String? = null,
+        customRgsServerUrl: String? = null,
+        eventHandler: NodeEventHandler? = null,
+        channelMigration: ChannelDataMigration? = null,
+        shouldValidateGraph: Boolean = true,
+        shouldRetryYieldToStop: Boolean = false,
+        shouldCancelPendingStop: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeError())
         }
 
-        cancelPendingStop()
+        if (shouldCancelPendingStop) cancelPendingStop()
 
         eventHandler?.let { _eventHandlers.add(it) }
 
@@ -342,6 +370,7 @@ class LightningRepo @Inject constructor(
         var initialLifecycleState: NodeLifecycleState
 
         val result = lifecycleMutex.withLock {
+            if (isWiping) return@withLock Result.failure(WipeInProgressError())
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 return@withLock skipStartForRunningNode(
@@ -376,12 +405,7 @@ class LightningRepo @Inject constructor(
                         .onFailure {
                             Logger.warn("Failed to reconcile Paykit Server accounts during startup", it, context = TAG)
                         }
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                    lightningService.startEventListener(::onEvent).onFailure {
-                        Logger.warn("Failed to start event listener", it, context = TAG)
-                        return@withLock Result.failure(it)
-                    }
-                    return@withLock Result.success(Unit)
+                    return@withLock adoptRunningNode()
                 }
 
                 lightningService.start(timeout, ::onEvent)
@@ -417,10 +441,20 @@ class LightningRepo @Inject constructor(
                 scope.launch { registerForNotifications() }
                 Result.success(Unit)
             }.getOrElse { e ->
+                if (e is CancellationException) {
+                    withContext(NonCancellable) { reconcileCancelledStart(initialLifecycleState) }
+                    throw e
+                }
+
                 val currentState = _lightningState.value.nodeLifecycleState
                 if (currentState.isRunning()) {
                     Logger.warn("Start error but node is $currentState, skipping retry", e, context = TAG)
                     return@withLock Result.success(Unit)
+                }
+
+                if (lightningService.status?.isRunning == true) {
+                    Logger.warn("Start error but LDK node is running, adopting it", e, context = TAG)
+                    return@withLock adoptRunningNode()
                 }
 
                 if (shouldRetry) {
@@ -438,7 +472,12 @@ class LightningRepo @Inject constructor(
         // Retry OUTSIDE the mutex to avoid deadlock (Kotlin Mutex is non-reentrant)
         if (shouldRetryStart) {
             delay(2.seconds)
-            return@withContext start(
+            // A stop requested after this start began wins over the retry; a foreground start cancels it
+            if (shouldRetryYieldToStop && pendingStopJob.get() != null) {
+                Logger.info("Skipped start retry because a stop was requested", context = TAG)
+                return@withContext Result.failure(NodeStartYieldedToStopError(result.exceptionOrNull()))
+            }
+            return@withContext startNode(
                 walletIndex = walletIndex,
                 timeout = timeout,
                 shouldRetry = false,
@@ -446,6 +485,7 @@ class LightningRepo @Inject constructor(
                 customRgsServerUrl = customRgsServerUrl,
                 channelMigration = channelMigration,
                 shouldValidateGraph = shouldValidateGraph,
+                shouldCancelPendingStop = !shouldRetryYieldToStop,
             )
         }
 
@@ -464,6 +504,29 @@ class LightningRepo @Inject constructor(
         }
 
         result
+    }
+
+    private suspend fun adoptRunningNode(): Result<Unit> {
+        _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+        return lightningService.startEventListener(::onEvent).onFailure {
+            Logger.warn("Failed to start event listener", it, context = TAG)
+        }
+    }
+
+    private suspend fun reconcileCancelledStart(initialLifecycleState: NodeLifecycleState) {
+        if (lightningService.status?.isRunning == true) {
+            if (_lightningState.value.nodeLifecycleState.isRunning()) {
+                // This start already installed the event listener. Re-arming it would cancel and join
+                // the live listener, aborting an in-flight handler for an event LDK already acknowledged.
+                Logger.info("Kept running LDK node and its event listener after start cancellation", context = TAG)
+                return
+            }
+            Logger.info("Adopted running LDK node after start cancellation", context = TAG)
+            adoptRunningNode()
+            return
+        }
+        Logger.info("Restored lifecycle state '$initialLifecycleState' after start cancellation", context = TAG)
+        _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
     }
 
     private suspend fun skipStartForRunningNode(
@@ -575,6 +638,8 @@ class LightningRepo @Inject constructor(
 
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
+    fun setWiping(enabled: Boolean) = run { isWiping = enabled }
+
     suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
         _lightningState.update {
             it.copy(isGeoBlocked = coreService.isGeoBlocked())
@@ -615,30 +680,32 @@ class LightningRepo @Inject constructor(
     fun cancelPendingStop() = synchronized(pendingStopLock) { pendingStopJob.getAndSet(null)?.cancel() }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        lifecycleMutex.withLock {
-            if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
-                clearProbeOutcomes()
-                return@withLock Result.success(Unit)
-            }
+        lifecycleMutex.withLock { stopLocked() }
+    }
 
-            runCatching {
-                withContext(NonCancellable) {
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
-                    lightningService.stop()
-                    clearProbeOutcomes()
-                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-                }
-            }.onFailure {
-                Logger.error("Node stop error", it, context = TAG)
-                // On failure, check actual node state and update accordingly
-                // If node is still running, revert to Running state to allow retry
-                if (lightningService.node != null && lightningService.status?.isRunning == true) {
-                    Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
-                    _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                } else {
-                    // Node appears stopped, update state
-                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-                }
+    private suspend fun stopLocked(): Result<Unit> {
+        if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping() && lightningService.node == null) {
+            clearProbeOutcomes()
+            return Result.success(Unit)
+        }
+
+        return runCatching {
+            withContext(NonCancellable) {
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
+                lightningService.stop()
+                clearProbeOutcomes()
+                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+            }
+        }.onFailure {
+            Logger.error("Node stop error", it, context = TAG)
+            // On failure, check actual node state and update accordingly
+            // If node is still running, revert to Running state to allow retry
+            if (lightningService.node != null && lightningService.status?.isRunning == true) {
+                Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
+                _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+            } else {
+                // Node appears stopped, update state
+                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
             }
         }
     }
@@ -811,17 +878,19 @@ class LightningRepo @Inject constructor(
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
-        stop().mapCatching {
-            Logger.debug("node stopped, calling wipeStorage", context = TAG)
-            lightningService.wipeStorage(walletIndex)
-            clearProbeOutcomes()
-            _lightningState.update {
-                LightningState(
-                    nodeStatus = it.nodeStatus,
-                    nodeLifecycleState = it.nodeLifecycleState,
-                )
+        lifecycleMutex.withLock {
+            stopLocked().mapCatching {
+                Logger.debug("node stopped, calling wipeStorage", context = TAG)
+                lightningService.wipeStorage(walletIndex)
+                clearProbeOutcomes()
+                _lightningState.update {
+                    LightningState(
+                        nodeStatus = it.nodeStatus,
+                        nodeLifecycleState = it.nodeLifecycleState,
+                    )
+                }
+                setRecoveryMode(false)
             }
-            setRecoveryMode(false)
         }.onFailure {
             Logger.error("wipeStorage error", it, context = TAG)
         }
@@ -837,17 +906,20 @@ class LightningRepo @Inject constructor(
 
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-            stop().onFailure {
-                Logger.error("Failed to stop node during electrum server change", it, context = TAG)
-                return@withContext Result.failure(it)
-            }
 
-            Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
+            recoverOnCancellation {
+                stop().onFailure {
+                    Logger.error("Failed to stop node during electrum server change", it, context = TAG)
+                    return@withContext Result.failure(it)
+                }
 
-            start(
-                shouldRetry = false,
-                customServerUrl = newServerUrl,
-            ).onFailure {
+                Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
+
+                start(
+                    shouldRetry = false,
+                    customServerUrl = newServerUrl,
+                )
+            }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
@@ -870,17 +942,20 @@ class LightningRepo @Inject constructor(
 
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-            stop().onFailure {
-                Logger.error("Failed to stop node during RGS server change", it, context = TAG)
-                return@withContext Result.failure(it)
-            }
 
-            Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+            recoverOnCancellation {
+                stop().onFailure {
+                    Logger.error("Failed to stop node during RGS server change", it, context = TAG)
+                    return@withContext Result.failure(it)
+                }
 
-            start(
-                shouldRetry = false,
-                customRgsServerUrl = newRgsUrl,
-            ).onFailure {
+                Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+
+                start(
+                    shouldRetry = false,
+                    customRgsServerUrl = newRgsUrl,
+                )
+            }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
@@ -890,6 +965,20 @@ class LightningRepo @Inject constructor(
 
                 Logger.info("Successfully changed RGS server", context = TAG)
             }
+        }
+    }
+
+    private inline fun <T> recoverOnCancellation(block: () -> T): T {
+        try {
+            return block()
+        } catch (e: CancellationException) {
+            // The caller is route-scoped: leaving the screen cancels the change mid-rebuild. stop()
+            // and start() rethrow the cancellation instead of reporting a failure, so the onFailure
+            // recovery never runs and the node would stay down until the next ON_START. Hand the
+            // recovery to the repo scope, which outlives the caller, then preserve the cancellation.
+            Logger.warn("Cancelled ldk-node config change, recovering in background…", context = TAG)
+            scope.launch { restartWithPreviousConfig() }
+            throw e
         }
     }
 
@@ -1681,7 +1770,13 @@ class LightningRepo @Inject constructor(
 
     fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
 
+    @Suppress("KotlinConstantConditions")
     suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
+        if (Env.isE2eTest) {
+            Logger.info("Skipped push registration in E2E build", context = TAG)
+            return@executeWhenNodeRunning Result.success(Unit)
+        }
+
         runCatching {
             val token = token ?: firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
@@ -2034,14 +2129,29 @@ class LightningRepo @Inject constructor(
     }
     // endregion
 
+    /**
+     * Runs [restartNode] on the repo scope, for the same reason [stopDebounced] does: the node
+     * lifecycle outlives any screen that asks to change it. A caller cancelled mid-restart — a
+     * ViewModel cleared inside the bounded start retry delay — cannot drop the retry and strand the
+     * node Stopped.
+     *
+     * The caller still awaits the [Result], so a live caller keeps reporting the outcome; a cancelled
+     * one only loses the reporting, never the restart.
+     */
+    suspend fun restartNodeDetached(): Result<Unit> = scope.async { restartNode() }.await()
+
     suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Restarting node", context = TAG)
         stop().onFailure {
             Logger.error("Failed to stop node during restart", it, context = TAG)
             return@withContext Result.failure(it)
         }
-        start(shouldRetry = false).onFailure {
-            Logger.error("Failed to start node during restart", it, context = TAG)
+        startNode(shouldRetryYieldToStop = true).onFailure {
+            if (it is NodeStartYieldedToStopError) {
+                Logger.info("Deferred node restart to a requested stop", context = TAG)
+            } else {
+                Logger.error("Failed to start node during restart", it, context = TAG)
+            }
             return@withContext Result.failure(it)
         }.onSuccess {
             Logger.info("Node restarted successfully", context = TAG)
@@ -2122,8 +2232,12 @@ private data class PaymentRoutingRefreshStatus(
 }
 
 class RecoveryModeError : AppError("App in recovery mode, skipping node start")
+
+class WipeInProgressError : AppError("Wallet wipe in progress, refusing node start")
 class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
+class NodeStartYieldedToStopError(cause: Throwable?) :
+    AppError("Node start retry skipped because a stop was requested", cause)
 class NodeConfigNotAppliedError : AppError("Node already running, requested config was not applied")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
 class NodeNotRunningError(opName: String, state: NodeLifecycleState) :

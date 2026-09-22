@@ -294,9 +294,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `uncertain lightning submission preserves proof until settlement`() = test {
         val errors = listOf(
-            NodeException.PersistenceFailed("io"),
-            LdkError(NodeException.PersistenceFailed("io")),
-            NodeException.DuplicatePayment("pending"),
+            NodeException.PersistenceFailed(),
+            LdkError(NodeException.PersistenceFailed()),
+            NodeException.DuplicatePayment(),
             AppError("payment outcome unknown"),
         )
         val record = paymentRequestRecord()
@@ -333,10 +333,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             ServiceError.NodeNotStarted(),
             NodeNotRunningError("payInvoice", NodeLifecycleState.Stopped),
             NodeRunTimeoutError("payInvoice"),
-            NodeException.NotRunning("stopped"),
-            NodeException.InvalidInvoice("invalid"),
-            NodeException.InvalidAmount("invalid"),
-            LdkError(NodeException.PaymentSendingFailed("no route")),
+            NodeException.NotRunning(),
+            NodeException.InvalidInvoice(),
+            NodeException.InvalidAmount(),
+            LdkError(NodeException.PaymentSendingFailed()),
         )
         for (error in errors) {
             val request = paymentRequest(MethodId.Bolt11.rawValue)
@@ -468,7 +468,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(txid, storedProofs.single().paymentIdentifier)
         assertNull(storedProofs.single().proofData)
         verify(lightningRepo, never()).getPayments()
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
         verify(lightningRepo, never()).acknowledgeOnchainBroadcastOutcome(any())
     }
 
@@ -496,7 +496,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(replacementTxid, storedProofs.single().paymentIdentifier)
         assertEquals(listOf(txid, replacementTxid), storedProofs.single().broadcastLineage)
         assertNull(storedProofs.single().proofData)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
         verify(lightningRepo, never()).acknowledgeOnchainBroadcastOutcome(any())
     }
 
@@ -515,7 +515,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.reconcile()
 
         assertEquals(expectedProof, storedProofs.single())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
         verify(lightningRepo, never()).acknowledgeOnchainBroadcastOutcome(any())
     }
 
@@ -528,7 +528,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         val repo = paymentProofRepo()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(record)
         val preparationId = repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
         repo.associateOnchainPayment(request, txid, endpoint, preparationId).getOrThrow()
         whenever(lightningRepo.getOnchainBroadcastOutcome(txid)).thenReturn(
@@ -550,6 +550,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paymentRequestId = any(),
             paymentEndpointIdentifier = eq(endpoint),
             proofJson = proofCaptor.capture(),
+            billingPeriod = isNull(),
         )
         assertEquals(
             """{"data":"$acceptedTxid","type":"${PaykitPaymentProofKind.Onchain.type}"}""",
@@ -580,7 +581,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         repo.reconcile()
 
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
         verify(lightningRepo).acknowledgeOnchainBroadcastOutcome(abandonedTxid)
         assertTrue(storedProofs.isEmpty())
     }
@@ -594,7 +595,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         val repo = paymentProofRepo()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(record)
         whenever(lightningRepo.acknowledgeOnchainBroadcastOutcome(acceptedTxid))
             .thenReturn(Result.failure(IllegalStateException("temporary acknowledgment failure")))
             .thenReturn(Result.success(Unit))
@@ -617,7 +618,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         paymentProofRepo().reconcile()
 
-        verify(paykitSdkService, times(1)).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(paykitSdkService, times(1)).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
         verify(lightningRepo, times(2)).acknowledgeOnchainBroadcastOutcome(acceptedTxid)
         assertTrue(storedProofs.isEmpty())
     }
@@ -860,7 +861,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val secondTxid = "cd".repeat(32)
         whenever(onchainPaymentLookup.transactionId(any(), any(), any(), any()))
             .thenReturn(firstTxid, secondTxid)
-        whenever(lightningRepo.getOnchainBroadcastOutcome(any())).thenAnswer {
+        whenever(lightningRepo.getOnchainBroadcastOutcome(any())).doSuspendableAnswer {
             val txid = it.getArgument<String>(0)
             Result.success(
                 BroadcastOutcome(

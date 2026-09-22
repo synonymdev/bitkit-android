@@ -121,7 +121,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| SubscriptionsScreen.kt | Subscriptions › Subscriptions overview |
+| CreateSubscriptionScreen.kt | Subscriptions › Create Subscription / Choose Subscription Recipient / Sent Subscription Proposal |
+| SubscriptionsScreen.kt | Subscriptions › Subscriptions Intro / Subscriptions overview |
 
 ## ui/screens/transfer
 
@@ -322,7 +323,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | PinConfirmScreen.kt | Security › Create passcode |
 | PinManagementScreen.kt | Settings > Security › PIN Enabled |
 | PinPromptScreen.kt | Settings > Security › PIN Change Enter Current |
-| PinResultScreen.kt | Settings > Security › PIN Change Succes |
+| PinResultScreen.kt | Security › Create passcode |
 
 ## ui/settings/quickPay
 

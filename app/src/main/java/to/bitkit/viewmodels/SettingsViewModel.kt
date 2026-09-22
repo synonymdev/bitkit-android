@@ -23,6 +23,7 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.paykitDisabled
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -128,6 +129,9 @@ class SettingsViewModel @Inject constructor(
     }
 
     val hasSeenProfileIntro = settingsStore.data.map { it.hasSeenProfileIntro }
+        .asStateFlow(initialValue = false)
+
+    val isPubkyProfileSetupPending = settingsStore.isPubkyProfileSetupPending
         .asStateFlow(initialValue = false)
 
     fun setHasSeenProfileIntro(value: Boolean) {
@@ -378,6 +382,25 @@ class SettingsViewModel @Inject constructor(
     fun setHideBalance(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(hideBalance = value) }
+        }
+    }
+
+    fun toggleHideBalanceFromSwipe() {
+        viewModelScope.launch {
+            runSuspendCatching { settingsStore.toggleHideBalanceFromSwipe() }
+                .onSuccess { firstHide ->
+                    if (!firstHide) return@onSuccess
+                    ToastEventBus.send(
+                        type = Toast.ToastType.INFO,
+                        title = context.getString(R.string.wallet__balance_hidden_title),
+                        description = context.getString(R.string.wallet__balance_hidden_message),
+                        visibilityTime = 5000L,
+                        testTag = "BalanceHiddenToast",
+                    )
+                }
+                .onFailure {
+                    Logger.error("Failed to hide balance from swipe", it, context = TAG)
+                }
         }
     }
 

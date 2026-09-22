@@ -45,6 +45,7 @@ import to.bitkit.models.toDerivationPath
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
+import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
@@ -477,7 +478,9 @@ class WalletRepo @Inject constructor(
             walletIndex = walletIndex,
             resetWalletState = ::resetState,
             onSuccess = ::setWalletExistsState,
-        )
+        ).onFailure {
+            if (it is WipeIncomplete) setWalletExistsState()
+        }
     }
 
     fun resetState() {
@@ -630,6 +633,20 @@ class WalletRepo @Inject constructor(
 
     fun setBip21AmountSats(amount: ULong?) = _walletState.update { it.copy(bip21AmountSats = amount) }
 
+    suspend fun updateOnchainBip21Amount(amountSats: ULong?): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val normalizedAmount = amountSats?.takeIf { it > 0uL }
+            setBip21AmountSats(normalizedAmount)
+            setBolt11("")
+            val newBip21 = buildBip21Url(
+                bitcoinAddress = getOnchainAddress(),
+                amountSats = normalizedAmount,
+                message = walletState.value.bip21Description,
+            )
+            setBip21(newBip21)
+        }
+    }
+
     fun setBip21Description(description: String) = _walletState.update { it.copy(bip21Description = description) }
 
     fun clearBip21State(clearTags: Boolean = true) {
@@ -756,14 +773,14 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun inboundLiquiditySats(): ULong = withContext(bgDispatcher) {
-        return@withContext currentUsableChannels().calculateRemoteBalance()
+        return@withContext currentReadyChannels().calculateRemoteBalance()
     }
 
     private fun canCreateLightningInvoice(amountSats: ULong?): Boolean {
-        val usableChannels = currentUsableChannels()
+        val readyChannels = currentReadyChannels()
         return ReceiveLiquidityDecision.canCreateLightningInvoice(
-            hasUsableChannels = usableChannels.isNotEmpty(),
-            inboundCapacitySats = usableChannels.calculateRemoteBalance(),
+            hasReadyChannels = readyChannels.isNotEmpty(),
+            inboundCapacitySats = readyChannels.calculateRemoteBalance(),
             invoiceAmountSats = amountSats,
         )
     }
@@ -772,8 +789,8 @@ class WalletRepo @Inject constructor(
         return lightningRepo.getChannels() ?: lightningRepo.lightningState.value.channels
     }
 
-    private fun currentUsableChannels(): List<ChannelDetails> {
-        return currentChannels().filter { it.isUsable }
+    private fun currentReadyChannels(): List<ChannelDetails> {
+        return currentChannels().filter { it.isChannelReady }
     }
 
     private suspend fun Scanner.OnChain.extractLightningHash(): String? {

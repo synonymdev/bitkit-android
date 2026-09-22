@@ -57,12 +57,13 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.ZigzagDivider
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.uiDateText
@@ -113,7 +114,7 @@ private fun IncomingPaymentRequestDetailsContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .gradientBackground()
+            .background(Colors.Black)
             .navigationBarsPadding()
             .testTag("PaymentRequestDetailsScreen")
     ) {
@@ -149,11 +150,10 @@ private fun IncomingPaymentRequestDetailsContent(
             }
             rememberMoneyText(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-                showSymbol = true,
             )?.let {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Display(
-                        text = "${request.detailsAmountPrefix()}$it".withAccent(accentColor = Colors.White64),
+                        text = "${request.detailsAmountPrefix()} $it".withAccent(accentColor = Colors.White64),
                     )
                     FillWidth()
                     PaymentRequestDetailsIcon(request)
@@ -183,28 +183,32 @@ private fun IncomingPaymentRequestDetailsContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
                     .background(Colors.Gray6, RoundedCornerShape(16.dp))
                     .padding(16.dp),
             ) {
                 PubkyContactAvatar(profile = contact, size = 40.dp)
                 BodyMSB(text = contact.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            VerticalSpacer(20.dp)
+            VerticalSpacer(16.dp)
+            HorizontalDivider(color = Colors.White10)
+            VerticalSpacer(16.dp)
             PaymentRequestTags(
                 tags = selectedTags,
                 onRemove = { selectedTags = (selectedTags - it).toImmutableList() },
                 onAdd = { isAddingTag = true },
             )
-            VerticalSpacer(20.dp)
+            VerticalSpacer(16.dp)
+            HorizontalDivider(color = Colors.White10)
+            VerticalSpacer(16.dp)
             Caption13Up(text = stringResource(R.string.wallet__payment_request_note), color = Colors.White64)
             VerticalSpacer(8.dp)
-            BodyMSB(
+            ZigzagDivider()
+            Title(
                 text = request.note ?: stringResource(R.string.wallet__payment_request),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Colors.Gray6, RoundedCornerShape(16.dp))
-                    .padding(16.dp),
+                    .background(Colors.White10)
+                    .padding(24.dp)
             )
         }
 

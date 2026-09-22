@@ -111,6 +111,7 @@ This PR adds support for...
 - Each list item should start with a verb (Adds, Fixes, Updates, Removes, Refactors, etc.)
 
 **Description Rules:**
+- One bullet per change under `### Description`: what changed and why, in one sentence each (`Adds X so that Y`, `Fixes X because Y`)
 - Base content around all commit messages in the branch
 - Use branch name as the conceptual anchor
 - Match writing style of recent PRs
@@ -118,6 +119,12 @@ This PR adds support for...
 - Avoid excessive bold formatting like `**this:** that`
 - Minimize code and file references like `TheClassName` or `someFunctionName`, `thisFileName.ext`
 - Exception: for refactoring PRs (1:10 ratio of functionality to code changes), more technical detail is ok
+
+**Out of Scope (`#### Out of Scope`, a subsection at the end of `### Description`):**
+- Required for `feat`, `fix`, and `refactor` PRs: one bullet per item the PR deliberately leaves out, with the file or area it covers when there is one (`path/or/area: item`); `None.` when nothing is left out
+- Not needed for version bumps, changelog-only changes, dependency bumps, and release PRs; other `chore`, `docs`, and `test` PRs include it at the author's discretion
+- Derive candidates from commit messages, linked issues, and review discussion (deferred follow-ups, adjacent behaviour left unchanged); ask the user when unsure
+- Reviewers, human and automated, read the bullets as the author's non-goals
 
 **Custom Instructions (if provided):**
 When the user provides custom instructions after `--`:

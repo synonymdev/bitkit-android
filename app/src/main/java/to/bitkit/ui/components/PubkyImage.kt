@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -38,6 +39,7 @@ fun PubkyImage(
     uri: String,
     size: Dp,
     modifier: Modifier = Modifier,
+    shape: Shape = CircleShape,
 ) {
     var imageState by remember { mutableStateOf(ImageState.Loading) }
 
@@ -54,7 +56,7 @@ fun PubkyImage(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .size(size)
-            .clip(CircleShape)
+            .clip(shape)
     ) {
         AsyncImage(
             model = uri,
@@ -108,7 +110,7 @@ private fun ImageOverlay(state: ImageState, size: Dp) {
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = errorAlpha }
-                    .background(Colors.Gray5, CircleShape)
+                    .background(Colors.Gray5)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_user_square),

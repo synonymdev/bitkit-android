@@ -31,15 +31,15 @@ class VssBackupClient @Inject constructor(
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val keychain: Keychain,
 ) {
+    @Volatile
     private var isSetup = CompletableDeferred<Unit>()
     private val setupMutex = Mutex()
 
     suspend fun setup(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
         setupMutex.withLock {
+            val gate = isSetup
             runCatching {
-                if (isSetup.isCompleted && !isSetup.isCancelled) {
-                    runCatching { isSetup.await() }.onSuccess { return@runCatching }
-                }
+                if (gate.isCompleted && !gate.isCancelled) return@runCatching
 
                 val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                     ?: throw MnemonicNotAvailableException()
@@ -63,11 +63,12 @@ class VssBackupClient @Inject constructor(
                         passphrase = passphrase,
                         lnurlAuthServerUrl = lnurlAuthServerUrl,
                     )
-                    isSetup.complete(Unit)
+                    gate.complete(Unit)
                     Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
                 }
             }.onFailure {
-                isSetup.completeExceptionally(it)
+                gate.completeExceptionally(it)
+                if (isSetup === gate) isSetup = CompletableDeferred()
                 Logger.error("VSS client setup error", it, context = TAG)
             }
         }

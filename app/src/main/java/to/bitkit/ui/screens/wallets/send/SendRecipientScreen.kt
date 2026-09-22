@@ -241,6 +241,7 @@ fun SendRecipientScreen(
 
     SendRecipientContent(
         previewView = previewView,
+        isFlashlightOn = isFlashlightOn,
         onClickFlashlight = {
             camera?.cameraControl?.let { control ->
                 isFlashlightOn = !isFlashlightOn
@@ -275,6 +276,7 @@ fun SendRecipientScreen(
 @Composable
 private fun SendRecipientContent(
     previewView: PreviewView?,
+    isFlashlightOn: Boolean,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
     onClickContact: () -> Unit,
@@ -306,6 +308,7 @@ private fun SendRecipientContent(
                 if (cameraPermissionGranted && previewView != null) {
                     CameraPreviewWithControls(
                         previewView = previewView,
+                        isFlashlightOn = isFlashlightOn,
                         onClickFlashlight = onClickFlashlight,
                         onClickGallery = onClickGallery,
                         modifier = Modifier.fillMaxSize()
@@ -355,6 +358,7 @@ private fun SendRecipientContent(
 @Composable
 private fun CameraPreviewWithControls(
     previewView: PreviewView,
+    isFlashlightOn: Boolean,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
     modifier: Modifier = Modifier,
@@ -377,7 +381,7 @@ private fun CameraPreviewWithControls(
             modifier = Modifier
                 .padding(16.dp)
                 .clip(CircleShape)
-                .background(Colors.White64)
+                .background(Colors.White32)
                 .size(CameraOverlayButtonSize)
                 .align(Alignment.TopStart)
         ) {
@@ -402,7 +406,7 @@ private fun CameraPreviewWithControls(
             modifier = Modifier
                 .padding(16.dp)
                 .clip(CircleShape)
-                .background(Colors.White64)
+                .background(if (isFlashlightOn) Colors.White64 else Colors.White32)
                 .size(CameraOverlayButtonSize)
                 .align(Alignment.TopEnd)
         ) {
@@ -494,6 +498,7 @@ private fun Preview() {
         BottomSheetPreview {
             SendRecipientContent(
                 previewView = null,
+                isFlashlightOn = false,
                 onClickFlashlight = {},
                 onClickGallery = {},
                 onClickContact = {},

@@ -1210,6 +1210,8 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 any(),
                 any(),
+                any(),
+                any(),
             ),
         ).thenReturn(Result.failure(AppError(PendingOnchainBroadcastError(txid))))
         whenever(context.getString(R.string.wallet__send_broadcast_unknown__title))
