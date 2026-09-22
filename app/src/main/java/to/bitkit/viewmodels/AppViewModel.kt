@@ -2322,7 +2322,9 @@ class AppViewModel @Inject constructor(
         pubkyRepo.contactsLoadCompletionVersion.first { it > 0 }
         if (pubkyRepo.contactsLoadVersion.value > 0L) return true
 
+        val completionVersion = pubkyRepo.contactsLoadCompletionVersion.value
         pubkyRepo.loadContacts()
+        pubkyRepo.contactsLoadCompletionVersion.first { it > completionVersion }
         return pubkyRepo.contactsLoadVersion.value > 0L
     }
 

@@ -2730,6 +2730,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
             assertEquals(MainScreenEffect.Navigate(Routes.Profile), awaitItem())
         }
+        verify(pubkyRepo, never()).loadContacts()
         verify(coreService, never()).decode(any())
     }
 
@@ -2761,6 +2762,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             expectNoEvents()
         }
+        verify(pubkyRepo, never()).loadContacts()
         verify(refreshContactPaykitReceivers).invoke(testPublicKey)
         verify(coreService, never()).decode(any())
     }
@@ -2772,6 +2774,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.loadContacts()).thenAnswer {
             pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
             pubkyContactsLoadVersion.value = 1L
+            pubkyContactsLoadCompletionVersion.value = 2L
         }
         sut.mainScreenEffect.test {
             sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
@@ -2789,9 +2792,39 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `contact deeplink waits for in-flight contacts retry`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val retryAttempted = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.loadContacts()).thenAnswer { retryAttempted.complete(Unit) }
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            runCurrent()
+            expectNoEvents()
+
+            pubkyContactsLoadCompletionVersion.value = 1L
+            retryAttempted.await()
+            expectNoEvents()
+
+            pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+            pubkyContactsLoadVersion.value = 1L
+            pubkyContactsLoadCompletionVersion.value = 2L
+
+            assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
+            advanceUntilIdle()
+        }
+        verify(pubkyRepo).loadContacts()
+        verify(refreshContactPaykitReceivers).invoke(testPublicKey)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
     fun `contact deeplink rejects when contacts retry fails`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        whenever(pubkyRepo.loadContacts()).thenAnswer {
+            pubkyContactsLoadCompletionVersion.value = 2L
+        }
         whenever(context.getString(R.string.other__scan_err_decoding)).thenReturn("Decoding Error")
         whenever(context.getString(R.string.other__scan__error__generic)).thenReturn("Unable to read data")
         sut.mainScreenEffect.test {
