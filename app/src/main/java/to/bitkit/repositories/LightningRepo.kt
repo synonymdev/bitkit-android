@@ -43,6 +43,7 @@ import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
 import org.lightningdevkit.ldknode.Bolt11Invoice
+import org.lightningdevkit.ldknode.BroadcastOutcome
 import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -1545,6 +1546,16 @@ class LightningRepo @Inject constructor(
             ?: return@executeWhenNodeRunning Result.failure(GetPaymentsError())
         Result.success(payments)
     }
+
+    suspend fun getOnchainBroadcastOutcome(txid: Txid): Result<BroadcastOutcome?> =
+        executeWhenNodeRunning("getOnchainBroadcastOutcome") {
+            runSuspendCatching { lightningService.getOnchainBroadcastOutcome(txid) }
+        }
+
+    suspend fun acknowledgeOnchainBroadcastOutcome(txid: Txid): Result<Unit> =
+        executeWhenNodeRunning("acknowledgeOnchainBroadcastOutcome") {
+            runSuspendCatching { lightningService.acknowledgeOnchainBroadcastOutcome(txid) }
+        }
 
     suspend fun getAddressBalance(address: String): Result<ULong> = executeWhenNodeRunning("getAddressBalance") {
         runCatching {

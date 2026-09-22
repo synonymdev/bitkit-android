@@ -1,0 +1,23 @@
+<journey name="onchain send accepted broadcast">
+  <description>
+    Verifies that a normal on-chain send reaches Bitcoin Sent only after the configured regtest
+    backend accepts the transaction. Requires a funded wallet, a valid destination address, camera
+    permission already resolved, and the LDK Node broadcast-result contract from
+    synonymdev/ldk-node#112.
+  </description>
+  <actions>
+    <action>Verify the Bitkit wallet home screen is visible</action>
+    <action>Tap the Send button (testTag "Send")</action>
+    <action>Tap Enter Manually (testTag "RecipientManual")</action>
+    <action>Type the valid regtest destination address into the recipient field (testTag "RecipientInput")</action>
+    <action>Tap Continue (testTag "AddressContinue")</action>
+    <action>Verify the amount screen is visible (testTag "send_amount_screen")</action>
+    <action>Tap the 1 key (testTag "N1"), then the triple-zero key (testTag "N000"), to enter 1,000 sats</action>
+    <action>Tap Continue (testTag "ContinueAmount")</action>
+    <action>Verify the send review screen is visible</action>
+    <action>Swipe the confirm handle (testTag "GRAB") from left to right</action>
+    <action>Verify the accepted transaction success screen is visible (testTag "SendSuccess")</action>
+    <action>Close the send sheet and open All Activity</action>
+    <action>Verify the accepted transaction appears as a pending sent on-chain activity</action>
+  </actions>
+</journey>

@@ -23,6 +23,7 @@ import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
+import org.lightningdevkit.ldknode.BroadcastOutcome
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelConfig
@@ -72,6 +73,7 @@ import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
 import to.bitkit.utils.Logger
 import to.bitkit.utils.LoggerLdk
+import to.bitkit.utils.PendingOnchainBroadcastError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import java.io.File
@@ -134,6 +136,7 @@ class LightningService internal constructor(
     private val loggerLdk: LoggerLdk,
     private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
     private val ldkQueue: CoroutineContext,
+    private val createFeeRate: (ULong) -> FeeRate = FeeRate::fromSatPerVbUnchecked,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
@@ -943,23 +946,26 @@ class LightningService internal constructor(
     ): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        Logger.info(
-            "Sending $sats sats to $address, satsPerVByte=$satsPerVByte, isMaxAmount = $isMaxAmount",
-            context = TAG,
-        )
-
         return ServiceQueue.LDK.background(ldkQueue) {
+            val onchainPayment = node.onchainPayment()
+            onchainPayment.listPendingBroadcasts().firstOrNull()?.let {
+                throw PendingOnchainBroadcastError(it.txid)
+            }
+            Logger.info(
+                "Sending '$sats' sats to '$address', satsPerVByte='$satsPerVByte', isMaxAmount='$isMaxAmount'",
+                context = TAG,
+            )
             if (isMaxAmount) {
-                node.onchainPayment().sendAllToAddress(
+                onchainPayment.sendAllToAddress(
                     address = address,
                     retainReserve = true,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+                    feeRate = createFeeRate(satsPerVByte),
                 )
             } else {
-                node.onchainPayment().sendToAddress(
+                onchainPayment.sendToAddress(
                     address = address,
                     amountSats = sats,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+                    feeRate = createFeeRate(satsPerVByte),
                     utxosToSpend = utxosToSpend,
                 )
             }
@@ -1120,7 +1126,7 @@ class LightningService internal constructor(
             runCatching {
                 val result = node.onchainPayment().selectUtxosWithAlgorithm(
                     targetAmountSats = targetAmountSats,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+                    feeRate = createFeeRate(satsPerVByte),
                     algorithm = algorithm,
                     utxos = utxos,
                 )
@@ -1142,7 +1148,7 @@ class LightningService internal constructor(
             return@background try {
                 node.onchainPayment().bumpFeeByRbf(
                     txid = txid,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+                    feeRate = createFeeRate(satsPerVByte),
                 )
             } catch (e: NodeException) {
                 throw LdkError(e)
@@ -1163,7 +1169,7 @@ class LightningService internal constructor(
             return@background try {
                 node.onchainPayment().accelerateByCpfp(
                     txid = txid,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+                    feeRate = createFeeRate(satsPerVByte),
                     destinationAddress = toAddress,
                 )
             } catch (e: NodeException) {
@@ -1204,7 +1210,7 @@ class LightningService internal constructor(
                 node.onchainPayment().calculateTotalFee(
                     address = address,
                     amountSats = amountSats,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+                    feeRate = createFeeRate(satsPerVByte),
                     utxosToSpend = utxosToSpend,
                 ).also {
                     Logger.debug(
@@ -1236,7 +1242,7 @@ class LightningService internal constructor(
             node.onchainPayment().calculateSendAllFee(
                 address = address,
                 retainReserves = true,
-                feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+                feeRate = createFeeRate(satsPerVByte),
             )
         }
     }
@@ -1357,6 +1363,20 @@ class LightningService internal constructor(
         val node = this.node ?: return null
         return ServiceQueue.LDK.background(ldkQueue) {
             node.listPayments()
+        }
+    }
+
+    suspend fun getOnchainBroadcastOutcome(txid: Txid): BroadcastOutcome? {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        return ServiceQueue.LDK.background(ldkQueue) {
+            node.onchainPayment().broadcastOutcome(txid)
+        }
+    }
+
+    suspend fun acknowledgeOnchainBroadcastOutcome(txid: Txid) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        ServiceQueue.LDK.background(ldkQueue) {
+            node.onchainPayment().acknowledgeBroadcastOutcome(txid)
         }
     }
     // endregion
