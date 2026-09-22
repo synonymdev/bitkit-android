@@ -32,6 +32,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -165,15 +168,21 @@ private fun ShowMnemonicContent(
                     MnemonicWordsGrid(
                         actualWords = mnemonicWords,
                         showMnemonic = showMnemonic,
+                        modifier = Modifier
+                            .clearAndSetSemantics {
+                                contentDescription = mnemonic
+                                if (!showMnemonic) {
+                                    hideFromAccessibility()
+                                }
+                            }
+                            .testTag("SeedContainer")
                     )
                 }
 
                 if (buttonAlpha > 0f) {
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .matchParentSize()
-                            .testTag("SeedContainer")
+                        modifier = Modifier.matchParentSize()
                     ) {
                         PrimaryButton(
                             text = stringResource(R.string.security__mnemonic_reveal),
