@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -300,6 +301,9 @@ class AppViewModel @Inject constructor(
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
+
+    private val _isCriticalUpdateRequired = MutableStateFlow(false)
+    val isCriticalUpdateRequired = _isCriticalUpdateRequired.asStateFlow()
 
     private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(extraBufferCapacity = 1)
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
@@ -4673,6 +4677,11 @@ class AppViewModel @Inject constructor(
     ) = viewModelScope.launch {
         if (backupRepo.isRestoring.value) return@launch
 
+        if (_isCriticalUpdateRequired.value) {
+            Logger.verbose("Blocked NewTransactionSheet while a critical update is required", context = TAG)
+            return@launch
+        }
+
         if (!_isTransactionSheetEnabled) {
             Logger.verbose("NewTransactionSheet blocked by isNewTransactionSheetEnabled=false", context = TAG)
             return@launch
@@ -5663,27 +5672,19 @@ class AppViewModel @Inject constructor(
 
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
 
-    private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
-        if (Env.isDebug) return@withContext
+    @VisibleForTesting
+    internal suspend fun checkCriticalAppUpdate(isDebug: Boolean = Env.isDebug) = withContext(bgDispatcher) {
+        if (isDebug) return@withContext
 
-        delay(SCREEN_TRANSITION_DELAY)
-
-        runCatching {
-            val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android
-            val currentBuildNumber = BuildConfig.VERSION_CODE
-
-            if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext
-
-            if (androidReleaseInfo.isCritical) {
-                mainScreenEffect(
-                    MainScreenEffect.Navigate(
-                        route = Routes.CriticalUpdate,
-                        clearStack = true,
-                    )
-                )
+        runSuspendCatching {
+            appUpdaterService.getReleaseInfo().platforms.android
+        }.onSuccess {
+            if (it.isCritical && it.buildNumber > BuildConfig.VERSION_CODE) {
+                _isCriticalUpdateRequired.update { true }
+                hideNewTransactionSheet()
             }
-        }.onFailure { e ->
-            Logger.warn("Failure fetching new releases", e, context = TAG)
+        }.onFailure {
+            Logger.warn("Failure fetching new releases", it, context = TAG)
         }
     }
 
