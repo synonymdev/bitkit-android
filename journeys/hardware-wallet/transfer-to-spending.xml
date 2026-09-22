@@ -29,13 +29,13 @@
       Tap the "25%" quick button (testTag "HardwareTransferAmountQuarter") to set a valid amount below the available limit
     </action>
     <action>
-      Tap "Continue" (testTag "HardwareTransferAmountContinue") and wait for the Blocktank order to be created
+      Tap "Continue" (testTag "HardwareTransferAmountContinue") and wait for the fee estimate
     </action>
     <action>
       Verify the sign screen opens (testTag "HardwareTransferSign"), titled "SIGN WITH YOUR DEVICE", showing the NETWORK FEES, SERVICE FEES, TO SPENDING and TOTAL cells, the Learn More and Advanced buttons, and the Trezor illustration
     </action>
     <action>
-      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect")
+      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect") to create the Blocktank order. If its fee is higher than the estimate, verify the fee cells refresh and tap "Open Trezor Connect" again; otherwise signing starts immediately
     </action>
     <action>
       Approve the Recipient, Amount, Locktime, and Summary prompts on the Bridge emulator in order
