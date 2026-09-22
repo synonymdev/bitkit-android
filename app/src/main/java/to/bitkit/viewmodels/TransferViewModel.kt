@@ -278,7 +278,7 @@ class TransferViewModel @Inject constructor(
         confirmFeeJob?.cancel()
         confirmFeeJob = viewModelScope.launch {
             _spendingUiState.update {
-                it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL)
+                it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL, spendableBalance = 0uL)
             }
             val order = _spendingUiState.value.order
             val target = SpendingFundingTarget(
@@ -294,13 +294,19 @@ class TransferViewModel @Inject constructor(
                             isConfirmFeeReady = true,
                             miningFeeSats = plan.miningFeeSats,
                             shouldUseSendAll = plan.shouldUseSendAll,
+                            spendableBalance = plan.spendableBalance,
                         )
                     }
                 }
                 .onFailure {
                     spendingConfirmFundingPlan = null
                     _spendingUiState.update {
-                        it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL, shouldUseSendAll = false)
+                        it.copy(
+                            isConfirmFeeReady = false,
+                            miningFeeSats = 0uL,
+                            shouldUseSendAll = false,
+                            spendableBalance = 0uL,
+                        )
                     }
                     Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
                     if (it is AppError) {
@@ -1915,12 +1921,20 @@ data class TransferToSpendingUiState(
     val isConfirmFeeReady: Boolean = false,
     val isConfirmPaying: Boolean = false,
     val shouldUseSendAll: Boolean = false,
+    val spendableBalance: ULong = 0uL,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
     val fundingBudgetSats: ULong? = null,
     val hwFundingWalletId: String? = null,
 ) {
     val isBusy: Boolean get() = isConfirmPaying || isSigning
+
+    val confirmLeavingAmountSats: ULong
+        get() = if (shouldUseSendAll) {
+            spendableBalance
+        } else {
+            feeSat.safe() + miningFeeSats.safe()
+        }
 }
 
 private data class SpendingFundingTarget(

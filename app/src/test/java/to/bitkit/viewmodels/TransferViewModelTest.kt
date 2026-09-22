@@ -1023,7 +1023,33 @@ class TransferViewModelTest : BaseUnitTest() {
         assertEquals(true, state.isConfirmFeeReady)
         assertEquals(1_000uL, state.miningFeeSats)
         assertEquals(false, state.shouldUseSendAll)
+        assertEquals(100_000uL, state.spendableBalance)
+        assertEquals(99_000uL, state.confirmLeavingAmountSats)
         verify(lightningRepo).calculateTotalFee(eq(98_000uL), eq(WALLET_ADDRESS), any(), anyOrNull(), anyOrNull())
+        verify(blocktankRepo, never()).createOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `prepareSpendingConfirmFunding shows spendable balance as total for send-all`() = test {
+        quoteOrder(spendingOrder(feeSat = 99_000uL))
+        val selected = listOf(stubUtxo(100_000u))
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull())).thenReturn(Result.success(500uL))
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(selected))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(500uL))
+
+        sut.prepareSpendingConfirmFunding()
+        advanceUntilIdle()
+
+        val state = sut.spendingUiState.value
+        assertEquals(true, state.isConfirmFeeReady)
+        assertEquals(500uL, state.miningFeeSats)
+        assertEquals(true, state.shouldUseSendAll)
+        assertEquals(100_000uL, state.spendableBalance)
+        assertEquals(100_000uL, state.confirmLeavingAmountSats)
         verify(blocktankRepo, never()).createOrder(any(), any(), any())
     }
 
