@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -76,6 +77,7 @@ private fun Content(
             ) {
                 Display(
                     text = BITCOIN_SYMBOL,
+                    fontWeight = FontWeight.ExtraBold,
                     color = Colors.White,
                     modifier = Modifier.padding(end = 6.dp),
                 )
@@ -106,6 +108,7 @@ private fun Content(
                 ) {
                     Display(
                         text = fiatSymbol,
+                        fontWeight = FontWeight.ExtraBold,
                         color = Colors.White,
                         modifier = Modifier.padding(end = 6.dp),
                     )

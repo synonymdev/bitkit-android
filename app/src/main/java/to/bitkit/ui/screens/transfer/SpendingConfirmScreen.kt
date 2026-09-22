@@ -19,8 +19,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -66,6 +69,8 @@ import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
+
+private const val SWIPE_ROTATION_DEGREES = 14f
 
 @Composable
 fun SpendingConfirmScreen(
@@ -153,6 +158,8 @@ private fun Content(
     isConfirmPaying: Boolean,
     isAdvanced: Boolean,
 ) {
+    val swipeProgress = remember { mutableFloatStateOf(0f) }
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
@@ -170,6 +177,7 @@ private fun Content(
                         .padding(horizontal = 60.dp)
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 76.dp)
+                        .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
                 )
             }
 
@@ -239,7 +247,7 @@ private fun Content(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                VerticalSpacer(31.dp)
+                VerticalSpacer(16.dp)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     PrimaryButton(
@@ -277,6 +285,7 @@ private fun Content(
                     text = stringResource(R.string.lightning__transfer__swipe),
                     loading = isConfirmPaying || !isConfirmFeeReady,
                     color = Colors.Purple,
+                    progress = swipeProgress,
                     onConfirm = {
                         if (!canConfirm) return@SwipeToConfirm
                         onTransferToSpendingConfirm()

@@ -60,7 +60,7 @@ fun CreateWalletScreen(
                 .padding(top = 48.dp)
         ) {
             Display(text = stringResource(R.string.onboarding__slide4_header).withAccent())
-            VerticalSpacer(14.dp)
+            VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(R.string.onboarding__slide4_text).withAccent(
                     defaultColor = Colors.White64,

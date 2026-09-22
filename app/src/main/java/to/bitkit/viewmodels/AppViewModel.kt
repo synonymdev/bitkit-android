@@ -746,7 +746,11 @@ class AppViewModel @Inject constructor(
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
                 .collect {
-                    if (paykitPaymentRequestPollingJob?.isActive == true) pubkyRepo.republishIdentityIfNeeded()
+                    if (paykitPaymentRequestPollingJob?.isActive == true) {
+                        paykitPaymentRequestPollingJob?.cancel()
+                        paykitPaymentRequestPollingJob = null
+                        startPaykitPaymentRequestPolling()
+                    }
                     refreshPrivatePaykitEndpointsIfEnabled("network restored")
                 }
         }
@@ -814,17 +818,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true): Boolean {
-        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return false
+    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true) {
+        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
-        val previousRequests = paykitPaymentRequestRepo.pendingRequests.value
-        return paykitPaymentRequestRepo.refresh().fold(
-            onSuccess = {
-                presentNextIncomingPaykitPaymentRequest()
-                paykitPaymentRequestRepo.pendingRequests.value != previousRequests
-            },
-            onFailure = { false },
-        )
+        paykitPaymentRequestRepo.refresh().onSuccess {
+            presentNextIncomingPaykitPaymentRequest()
+        }
     }
 
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
@@ -840,28 +839,22 @@ class AppViewModel @Inject constructor(
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
-            var refreshIntervalIndex = 0
             var maintenanceIntervalIndex = 0
             var maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
-                val refreshInterval = PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex]
-                delay(refreshInterval)
-                maintenanceDelay -= refreshInterval
+                delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
+                maintenanceDelay -= PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL
+                if (isOnline.value != ConnectivityState.CONNECTED) continue
                 val refreshMaintenance = maintenanceDelay <= Duration.ZERO
                 if (refreshMaintenance) {
-                    if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
+                    pubkyRepo.republishIdentityIfNeeded()
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
                     maintenanceIntervalIndex =
                         (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
                     maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
                 }
-                val requestsChanged = refreshIncomingPaykitPaymentRequests(refreshMaintenance)
+                refreshIncomingPaykitPaymentRequests(refreshMaintenance)
                 if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
-                refreshIntervalIndex = if (requestsChanged) {
-                    0
-                } else {
-                    (refreshIntervalIndex + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.lastIndex)
-                }
             }
         }
         startInitialPaykitPaymentRequestPolling()
@@ -4073,6 +4066,8 @@ class AppViewModel @Inject constructor(
             }
         }
 
+        val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
+
         sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
@@ -4084,6 +4079,7 @@ class AppViewModel @Inject constructor(
                     sats = displayAmountSats.toLong(),
                 ),
             )
+            lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
             if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
@@ -4093,10 +4089,12 @@ class AppViewModel @Inject constructor(
                 preserveContactPaymentContext(pendingHash)
                 refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
+                lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
             }
             cancelPaymentProofPreparation(proofRequest)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
                 is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
@@ -4104,6 +4102,14 @@ class AppViewModel @Inject constructor(
             }
             setSendEffect(SendEffect.NavigateToError(failure))
         }
+    }
+
+    private suspend fun savePendingLnurlComment(invoice: LightningInvoice, paymentHash: String): String? {
+        val state = _sendUiState.value
+        if (state.lnurl !is LnurlParams.LnurlPay || state.comment.isBlank()) return null
+        if (!invoice.description.isNullOrEmpty()) return null
+        activityRepo.savePendingLightningMessage(paymentHash, state.comment)
+        return state.comment
     }
 
     private suspend fun clearFailedLightningPayment(
@@ -4693,10 +4699,16 @@ class AppViewModel @Inject constructor(
 
     fun showScannerSheet(
         isPubkyScan: Boolean = false,
+        showBackButton: Boolean = true,
         onResult: ((String) -> Unit)? = null,
     ) {
         scanResultHandler = onResult
-        showSheet(Sheet.QrScanner(isPubkyScan = isPubkyScan))
+        showSheet(
+            Sheet.QrScanner(
+                isPubkyScan = isPubkyScan,
+                showBackButton = showBackButton,
+            )
+        )
     }
 
     fun onScannerSheetResult(data: String) {
@@ -5694,7 +5706,7 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
-        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS = listOf(5.seconds, 10.seconds, 15.seconds, 30.seconds)
+        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 10.seconds
         private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
         private val INITIAL_PAYKIT_SYNC_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }

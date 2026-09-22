@@ -10,6 +10,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import to.bitkit.repositories.SeedQrRepo
 import to.bitkit.services.core.Bip39Service
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -21,6 +22,7 @@ import kotlin.test.assertTrue
 class RestoreWalletViewModelTest : BaseUnitTest() {
 
     private val bip39Service = mock<Bip39Service>()
+    private val seedQrRepo = mock<SeedQrRepo>()
 
     private lateinit var viewModel: RestoreWalletViewModel
 
@@ -31,7 +33,7 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
         whenever(bip39Service.isValidMnemonicSize(any())).thenReturn(true)
         whenever(bip39Service.validateMnemonic(any())).thenReturn(Result.success(Unit))
 
-        viewModel = RestoreWalletViewModel(bip39Service)
+        viewModel = RestoreWalletViewModel(bip39Service, seedQrRepo)
     }
 
     // region Initial State
