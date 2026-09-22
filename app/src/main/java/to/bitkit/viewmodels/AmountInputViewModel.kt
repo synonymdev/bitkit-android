@@ -147,7 +147,7 @@ class AmountInputViewModel @Inject constructor(
         // Update raw input text based on the formatted display
         rawInputText = when (primaryDisplay) {
             PrimaryDisplay.FIAT -> _uiState.value.text.replace(",", "")
-            else -> _uiState.value.text
+            else -> _uiState.value.text.stripSatsGrouping()
         }
     }
 
@@ -171,7 +171,7 @@ class AmountInputViewModel @Inject constructor(
                 // Update raw input text based on the new display
                 rawInputText = when (newPrimaryDisplay) {
                     PrimaryDisplay.FIAT -> _uiState.value.text.replace(",", "")
-                    else -> _uiState.value.text
+                    else -> _uiState.value.text.stripSatsGrouping()
                 }
             } else if (currentRawInput.isNotEmpty()) {
                 // Convert the raw input from the old currency to the new currency
@@ -190,8 +190,9 @@ class AmountInputViewModel @Inject constructor(
                         // Converting from fiat to bitcoin
                         val sats = convertFiatToSats(currentRawInput)
                         if (sats != null) {
-                            rawInputText = formatBitcoinFromSats(sats, isModern)
-                            _uiState.update { it.copy(text = rawInputText) }
+                            val formatted = formatBitcoinFromSats(sats, isModern)
+                            rawInputText = formatted.stripSatsGrouping()
+                            _uiState.update { it.copy(text = formatted) }
                         }
                     }
                 }
@@ -335,6 +336,8 @@ class AmountInputViewModel @Inject constructor(
         return if (isModern) sats.formatToModernDisplay() else sats.formatToClassicDisplay()
     }
 
+    private fun String.stripSatsGrouping(): String = replace("$SATS_GROUPING_SEPARATOR", "")
+
     private fun convertToSats(
         text: String,
         primaryDisplay: PrimaryDisplay,
@@ -351,7 +354,7 @@ class AmountInputViewModel @Inject constructor(
         if (text.isEmpty()) return 0
 
         return if (isModern) {
-            text.replace("$SATS_GROUPING_SEPARATOR", "").toLongOrDefault()
+            text.stripSatsGrouping().toLongOrDefault()
         } else {
             runCatching {
                 val btcBigDecimal = BigDecimal(text)
