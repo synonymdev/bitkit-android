@@ -535,19 +535,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `network restoration triggers identity republish while polling`() = test {
+    fun `network restoration republishes identity and resumes ten second polling after backoff`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(true))
         sut.startPaykitPaymentRequestPolling()
         try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
             runCurrent()
             clearInvocations(pubkyRepo)
 
             connectivityState.value = ConnectivityState.DISCONNECTED
+            runCurrent()
+            advanceTimeBy(110.seconds.inWholeMilliseconds)
             runCurrent()
             verify(pubkyRepo, never()).republishIdentityIfNeeded()
 
             connectivityState.value = ConnectivityState.CONNECTED
             runCurrent()
             verify(pubkyRepo).republishIdentityIfNeeded()
+
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            clearInvocations(paykitPaymentRequestRepo)
+            advanceTimeBy(10.seconds.inWholeMilliseconds - 1)
+            runCurrent()
+            verify(paykitPaymentRequestRepo, never()).refresh()
+            advanceTimeBy(1)
+            runCurrent()
+            verify(paykitPaymentRequestRepo).refresh()
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }

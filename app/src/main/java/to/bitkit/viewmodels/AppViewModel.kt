@@ -746,7 +746,11 @@ class AppViewModel @Inject constructor(
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
                 .collect {
-                    if (paykitPaymentRequestPollingJob?.isActive == true) pubkyRepo.republishIdentityIfNeeded()
+                    if (paykitPaymentRequestPollingJob?.isActive == true) {
+                        paykitPaymentRequestPollingJob?.cancel()
+                        paykitPaymentRequestPollingJob = null
+                        startPaykitPaymentRequestPolling()
+                    }
                     refreshPrivatePaykitEndpointsIfEnabled("network restored")
                 }
         }
