@@ -74,12 +74,16 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import to.bitkit.App
+import to.bitkit.BuildConfig
 import to.bitkit.CurrentActivity
 import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.dto.PlatformDetails
+import to.bitkit.data.dto.Platforms
+import to.bitkit.data.dto.ReleaseInfoDTO
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
@@ -513,6 +517,90 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onHomeResumed()
 
         verify(hwWalletRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `critical update is required for a newer critical build`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertTrue(sut.isCriticalUpdateRequired.value)
+    }
+
+    @Test
+    fun `critical update is not required for a newer non-critical build`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, false))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertFalse(sut.isCriticalUpdateRequired.value)
+    }
+
+    @Test
+    fun `critical update is not required for the same critical build`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE, true))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertFalse(sut.isCriticalUpdateRequired.value)
+    }
+
+    @Test
+    fun `critical update is not required when fetching release info fails`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenThrow(RuntimeException("Network error"))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertFalse(sut.isCriticalUpdateRequired.value)
+    }
+
+    @Test
+    fun `critical update clears an already showing transaction sheet`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "payment-hash",
+            sats = 1L,
+        )
+        sut.showTransactionSheet(details)
+        runCurrent()
+        assertEquals(details, sut.transactionSheet.value)
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `transaction sheet is blocked while a critical update is required`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+        sut.checkCriticalAppUpdate(isDebug = false)
+        assertTrue(sut.isCriticalUpdateRequired.value)
+
+        sut.showTransactionSheet(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                paymentHashOrTxId = "txid",
+                sats = 1L,
+            ),
+        )
+        runCurrent()
+
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `critical update check is skipped in debug builds`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+        clearInvocations(appUpdaterService)
+
+        sut.checkCriticalAppUpdate(isDebug = true)
+
+        assertFalse(sut.isCriticalUpdateRequired.value)
+        verify(appUpdaterService, never()).getReleaseInfo()
     }
 
     @Test
@@ -7581,6 +7669,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         acceptedPaymentEndpointIdentifiers = listOf(MethodId.Bolt11.rawValue),
         lifecycleState = PaymentRequestLifecycleState.PROPOSED,
         paidPeriods = emptyList(),
+    )
+
+    private fun releaseInfo(buildNumber: Int, isCritical: Boolean) = ReleaseInfoDTO(
+        platforms = Platforms(
+            android = PlatformDetails(
+                version = "1.0.0",
+                buildNumber = buildNumber,
+                notes = "Test release",
+                pubDate = "2024-01-01",
+                url = "https://example.com",
+                isCritical = isCritical,
+            ),
+            ios = null,
+        ),
     )
 
     private fun paymentRequestCreation(
