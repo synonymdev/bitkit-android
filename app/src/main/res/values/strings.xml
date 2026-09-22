@@ -477,6 +477,7 @@
     <string name="onboarding__restore_passphrase_placeholder">Passphrase*</string>
     <string name="onboarding__restore_phrase">Please type in your recovery phrase from any (paper) backup.</string>
     <string name="onboarding__restore_red_explain">If a word is shown in &lt;accent&gt;red&lt;/accent&gt;, it means that it was not found in the recovery phrase dictionary. Check for spelling errors.</string>
+    <string name="onboarding__restore_seedqr_error">This QR code does not contain a valid 12-word SeedQR.</string>
     <string name="onboarding__restore_success_header">Wallet &lt;accent&gt;restored&lt;/accent&gt;</string>
     <string name="onboarding__restore_success_text">You have successfully restored your wallet from backup. Enjoy Bitkit!</string>
     <string name="onboarding__restore_suggestions">SUGGESTIONS</string>
