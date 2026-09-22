@@ -277,9 +277,7 @@ class TransferViewModel @Inject constructor(
     fun prepareSpendingConfirmFunding() {
         confirmFeeJob?.cancel()
         confirmFeeJob = viewModelScope.launch {
-            _spendingUiState.update {
-                it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL, spendableBalance = 0uL)
-            }
+            _spendingUiState.update { it.copy(isConfirmFeeReady = false) }
             val order = _spendingUiState.value.order
             val target = SpendingFundingTarget(
                 feeSat = _spendingUiState.value.feeSat,

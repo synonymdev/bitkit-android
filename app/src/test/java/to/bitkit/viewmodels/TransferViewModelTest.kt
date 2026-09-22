@@ -17,6 +17,7 @@ import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
@@ -1051,6 +1052,32 @@ class TransferViewModelTest : BaseUnitTest() {
         assertEquals(100_000uL, state.spendableBalance)
         assertEquals(100_000uL, state.confirmLeavingAmountSats)
         verify(blocktankRepo, never()).createOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `repreparing send-all funding keeps the leaving amount until the next plan`() = test {
+        quoteOrder(spendingOrder(feeSat = 99_000uL))
+        val selected = listOf(stubUtxo(100_000u))
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull())).thenReturn(Result.success(500uL))
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(selected))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(500uL))
+
+        sut.prepareSpendingConfirmFunding()
+        advanceUntilIdle()
+        assertEquals(100_000uL, sut.spendingUiState.value.confirmLeavingAmountSats)
+
+        whenever(lightningRepo.getBalancesAsync()).doSuspendableAnswer { suspendCancellableCoroutine { } }
+        sut.prepareSpendingConfirmFunding()
+        runCurrent()
+
+        val refreshing = sut.spendingUiState.value
+        assertEquals(false, refreshing.isConfirmFeeReady)
+        assertEquals(true, refreshing.shouldUseSendAll)
+        assertEquals(100_000uL, refreshing.confirmLeavingAmountSats)
     }
 
     @Test
