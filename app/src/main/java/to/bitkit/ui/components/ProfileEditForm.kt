@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,8 +42,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
@@ -256,16 +255,13 @@ fun ProfileEditForm(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
-                .hazeEffect(state = hazeState) {
-                    backgroundColor = Colors.Black
-                    mask = FooterBlurMask
-                    tints = listOf(HazeTint(Colors.Black50))
-                }
+                .background(FooterGradient)
                 .padding(start = 16.dp, top = 32.dp, end = 16.dp, bottom = 16.dp)
         ) {
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
                 onClick = onCancel,
+                hazeState = hazeState,
                 modifier = Modifier
                     .weight(1f)
                     .testTag("ProfileEditCancel")
@@ -352,7 +348,7 @@ private val UppercaseTransformation = VisualTransformation {
     TransformedText(AnnotatedString(it.text.map(Char::uppercaseChar).joinToString("")), OffsetMapping.Identity)
 }
 
-private val FooterBlurMask = Brush.verticalGradient(0f to Color.Transparent, 0.4f to Color.Black)
+private val FooterGradient = Brush.verticalGradient(listOf(Color.Transparent, Color.Black))
 
 data class ProfileEditLink(val label: String, val url: String)
 
