@@ -208,9 +208,9 @@ Print the path to the release notes file so the user can share it for review.
 
 ### 6b. Create Shared Google Doc for Release Notes
 
-Publish the release notes as a Google Doc that can be shared with Jacobo. The doc must be readable by everyone at Synonym ("Anyone at Synonym with the link can view"), matching earlier release notes docs.
+Publish the release notes as a Google Doc for store-notes review. The doc must be readable by everyone at Synonym ("Anyone at Synonym with the link can view"), matching earlier release notes docs. Do not look up people by display name — domain sharing and Slack `<@UID>` mentions handle distribution.
 
-**Reuse if present.** Before creating, search Drive with `search_files` for an exact title (`mimeType = 'application/vnd.google-apps.document' and title = 'v{newVersionName} Android'`). If one or more match, reuse the oldest match's `id` / `viewUrl` (do not create another doc). If several match, print a warning that duplicates exist and still reuse the oldest. Skip to share/verify below (re-apply domain share only if missing).
+**Reuse if present.** Before creating, search Drive with `search_files` for an exact title (`mimeType = 'application/vnd.google-apps.document' and title = 'v{newVersionName} Android'`). If one or more match, reuse the oldest match's `id` / `viewUrl` (do not create another doc). If several match, print a warning that duplicates exist and still reuse the oldest. **Sync check:** export the reused Doc with `download_file_content` (`fileId` = reused id, `exportMimeType`: `text/plain`) and compare to `.ai/release-notes-{newVersionName}.md` (ignore trivial whitespace). If they differ, print `⚠ Reused Google Doc content differs from regenerated notes — open the Doc and replace its body with .ai/release-notes-{newVersionName}.md (Drive MCP cannot update Doc body in place)` and continue with the existing URL. Then skip to share/verify below (re-apply domain share only if missing).
 
 **Otherwise create the doc** with the Google Drive MCP `create_file` tool. Drive converts Markdown into a native Google Doc, so pass the notes file verbatim:
 - `title`: `v{newVersionName} Android`
@@ -238,7 +238,7 @@ Store the doc URL and sharing status (`shared with Synonym` | `created, domain s
 
 ### 6c. Prepare #bitkit-native Slack Draft (local only)
 
-Prepare a footer-free Slack announcement for Jacobo / the team in `#bitkit-native` (`C07BJ7DNPCG`). **Do not post to Slack in this step** — write the local file only. Posting happens after this platform's build is uploaded (see **Post Slack** after step 8). **Default:** wait until both RCs are ready, then one complete parent+reply. **Rare:** single-platform hotfix — post for this platform only (see 8b). **Never** create a Slack draft or channel message that contains `TODO`.
+Prepare a footer-free Slack announcement for the team in `#bitkit-native` (`C07BJ7DNPCG`). **Do not post to Slack in this step** — write the local file only. Posting happens after this platform's build is uploaded (see **Post Slack** after step 8). **Default:** wait until both RCs are ready, then one complete parent+reply. **Rare:** single-platform hotfix — post for this platform only (see 8b). **Never** create a Slack draft or channel message that contains `TODO`. Mentions in the posted draft must use `<@UID>` from the Mentions roster below — never resolve recipients by display name.
 
 **Write the local draft** to `.ai/slack-release-{newVersionName}.md` (create `.ai/` if needed). Format: Slack MCP markdown (`- ` lists, `[text](url)` links, `<@UID>` mentions). Fill this platform from the current release; fill the sibling from its release branch / PR / tag / Google Doc / TestFlight build when known. Incomplete sibling fields may stay as `TODO` **in this local file only**.
 
