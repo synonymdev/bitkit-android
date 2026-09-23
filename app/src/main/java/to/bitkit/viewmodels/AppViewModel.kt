@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -300,6 +301,9 @@ class AppViewModel @Inject constructor(
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
+
+    private val _isCriticalUpdateRequired = MutableStateFlow(false)
+    val isCriticalUpdateRequired = _isCriticalUpdateRequired.asStateFlow()
 
     private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(extraBufferCapacity = 1)
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
@@ -2083,6 +2087,15 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (invoice.isOwnInvoice()) {
+            showAddressValidationError(
+                titleRes = R.string.other__pay_self_invoice_title,
+                descriptionRes = R.string.other__pay_self_invoice_description,
+                testTag = "SelfPaymentToast",
+            )
+            return
+        }
+
         if (invoice.amountSatoshis > 0uL) {
             lightningRepo.syncState()
             if (!lightningRepo.canSend(invoice.amountSatoshis)) {
@@ -2101,6 +2114,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
+    @Suppress("LongMethod", "ReturnCount")
     private suspend fun validateOnChainAddress(invoice: OnChainInvoice) {
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
@@ -2143,6 +2157,14 @@ class AppViewModel @Inject constructor(
         val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
 
         if (maxSendOnchain == 0uL) {
+            if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
+                showAddressValidationError(
+                    titleRes = R.string.other__pay_self_invoice_title,
+                    descriptionRes = R.string.other__pay_self_invoice_description,
+                    testTag = "SelfPaymentToast",
+                )
+                return
+            }
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
                 descriptionRes = R.string.other__pay_insufficient_savings_description,
@@ -2174,36 +2196,56 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
+        decodeLightningParam(params)
+            ?.takeIf { lnInv ->
+                if (lnInv.isExpired) {
+                    Logger.debug(
+                        "Lightning invoice expired in unified URI, defaulting to onchain-only",
+                        context = TAG
+                    )
+                    return@takeIf false
+                }
+                if (lnInv.isOwnInvoice()) {
+                    Logger.debug(
+                        "Skipped own lightning invoice in unified URI, defaulting to onchain",
+                        context = TAG,
+                    )
+                    return@takeIf false
+                }
+                lightningRepo.waitForUsableChannels()
+                val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
+                if (!canSend) {
+                    val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
+                    if (nodeState is NodeLifecycleState.Stopped) {
+                        Logger.debug(
+                            "Node stopped, optimistically including LN invoice in unified QR",
+                            context = TAG,
+                        )
+                        return@takeIf true
+                    }
+                    Logger.debug(
+                        "Cannot pay unified invoice using LN, defaulting to onchain-only",
+                        context = TAG,
+                    )
+                }
+                return@takeIf canSend
+            }
+
+    private suspend fun LightningInvoice.isOwnInvoice(): Boolean = isPayee(lightningRepo.awaitNodeId())
+
+    private fun LightningInvoice.isPayee(nodeId: String?): Boolean {
+        val payee = payeeNodeId?.toHex() ?: return false
+        return nodeId != null && payee.equals(nodeId, ignoreCase = true)
+    }
+
+    private suspend fun hasOwnLightningInvoice(params: Map<String, String>?): Boolean =
+        decodeLightningParam(params)?.isPayee(lightningRepo.getLastKnownNodeId()) == true
+
+    private suspend fun decodeLightningParam(params: Map<String, String>?): LightningInvoice? =
         params?.get("lightning")?.let { bolt11 ->
             runSuspendCatching { coreService.decode(bolt11) }.getOrNull()
                 ?.let { it as? Scanner.Lightning }
                 ?.invoice
-                ?.takeIf { lnInv ->
-                    if (lnInv.isExpired) {
-                        Logger.debug(
-                            "Lightning invoice expired in unified URI, defaulting to onchain-only",
-                            context = TAG
-                        )
-                        return@takeIf false
-                    }
-                    lightningRepo.waitForUsableChannels()
-                    val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
-                    if (!canSend) {
-                        val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
-                        if (nodeState is NodeLifecycleState.Stopped) {
-                            Logger.debug(
-                                "Node stopped, optimistically including LN invoice in unified QR",
-                                context = TAG,
-                            )
-                            return@takeIf true
-                        }
-                        Logger.debug(
-                            "Cannot pay unified invoice using LN, defaulting to onchain-only",
-                            context = TAG,
-                        )
-                    }
-                    return@takeIf canSend
-                }
         }
 
     private fun showAddressValidationError(
@@ -3297,6 +3339,16 @@ class AppViewModel @Inject constructor(
 
         // Check on-chain balance before proceeding to amount screen
         if (maxSendOnchain == 0uL && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
+            if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__pay_self_invoice_title),
+                    description = context.getString(R.string.other__pay_self_invoice_description),
+                    testTag = "SelfPaymentToast",
+                )
+                clearActiveContactPaymentContext()
+                return
+            }
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_savings),
@@ -3395,7 +3447,7 @@ class AppViewModel @Inject constructor(
         else -> SendFundingSource.Savings
     }
 
-    @Suppress("ReturnCount")
+    @Suppress("LongMethod", "ReturnCount")
     private suspend fun onScanLightning(
         invoice: LightningInvoice,
         scanResult: String,
@@ -3410,6 +3462,11 @@ class AppViewModel @Inject constructor(
                 description = context.getString(R.string.other__scan__error__expired),
                 testTag = "ExpiredLightningToast",
             )
+            return
+        }
+
+        if (invoice.isOwnInvoice()) {
+            rejectOwnInvoiceScan()
             return
         }
 
@@ -3464,6 +3521,17 @@ class AppViewModel @Inject constructor(
         Logger.info("No amount found in invoice, proceeding to enter amount", context = TAG)
 
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+    }
+
+    private fun rejectOwnInvoiceScan() {
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__pay_self_invoice_title),
+            description = context.getString(R.string.other__pay_self_invoice_description),
+            testTag = "SelfPaymentToast",
+        )
+        clearActiveContactPaymentContext(retryIncomingRequest = false)
+        hideSheet()
     }
 
     private suspend fun onScanLnurlPay(data: LnurlPayData, fromMainScanner: Boolean, suppressQuickPay: Boolean) {
@@ -4626,6 +4694,11 @@ class AppViewModel @Inject constructor(
     ) = viewModelScope.launch {
         if (backupRepo.isRestoring.value) return@launch
 
+        if (_isCriticalUpdateRequired.value) {
+            Logger.verbose("Blocked NewTransactionSheet while a critical update is required", context = TAG)
+            return@launch
+        }
+
         if (!_isTransactionSheetEnabled) {
             Logger.verbose("NewTransactionSheet blocked by isNewTransactionSheetEnabled=false", context = TAG)
             return@launch
@@ -5630,27 +5703,19 @@ class AppViewModel @Inject constructor(
 
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
 
-    private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
-        if (Env.isDebug) return@withContext
+    @VisibleForTesting
+    internal suspend fun checkCriticalAppUpdate(isDebug: Boolean = Env.isDebug) = withContext(bgDispatcher) {
+        if (isDebug) return@withContext
 
-        delay(SCREEN_TRANSITION_DELAY)
-
-        runCatching {
-            val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android
-            val currentBuildNumber = BuildConfig.VERSION_CODE
-
-            if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext
-
-            if (androidReleaseInfo.isCritical) {
-                mainScreenEffect(
-                    MainScreenEffect.Navigate(
-                        route = Routes.CriticalUpdate,
-                        clearStack = true,
-                    )
-                )
+        runSuspendCatching {
+            appUpdaterService.getReleaseInfo().platforms.android
+        }.onSuccess {
+            if (it.isCritical && it.buildNumber > BuildConfig.VERSION_CODE) {
+                _isCriticalUpdateRequired.update { true }
+                hideNewTransactionSheet()
             }
-        }.onFailure { e ->
-            Logger.warn("Failure fetching new releases", e, context = TAG)
+        }.onFailure {
+            Logger.warn("Failure fetching new releases", it, context = TAG)
         }
     }
 

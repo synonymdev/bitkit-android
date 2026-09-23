@@ -74,16 +74,21 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import to.bitkit.App
+import to.bitkit.BuildConfig
 import to.bitkit.CurrentActivity
 import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.dto.PlatformDetails
+import to.bitkit.data.dto.Platforms
+import to.bitkit.data.dto.ReleaseInfoDTO
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.ext.fromHex
 import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.models.ConvertedAmount
@@ -93,6 +98,7 @@ import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
@@ -513,6 +519,90 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onHomeResumed()
 
         verify(hwWalletRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `critical update is required for a newer critical build`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertTrue(sut.isCriticalUpdateRequired.value)
+    }
+
+    @Test
+    fun `critical update is not required for a newer non-critical build`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, false))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertFalse(sut.isCriticalUpdateRequired.value)
+    }
+
+    @Test
+    fun `critical update is not required for the same critical build`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE, true))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertFalse(sut.isCriticalUpdateRequired.value)
+    }
+
+    @Test
+    fun `critical update is not required when fetching release info fails`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenThrow(RuntimeException("Network error"))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertFalse(sut.isCriticalUpdateRequired.value)
+    }
+
+    @Test
+    fun `critical update clears an already showing transaction sheet`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "payment-hash",
+            sats = 1L,
+        )
+        sut.showTransactionSheet(details)
+        runCurrent()
+        assertEquals(details, sut.transactionSheet.value)
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `transaction sheet is blocked while a critical update is required`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+        sut.checkCriticalAppUpdate(isDebug = false)
+        assertTrue(sut.isCriticalUpdateRequired.value)
+
+        sut.showTransactionSheet(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                paymentHashOrTxId = "txid",
+                sats = 1L,
+            ),
+        )
+        runCurrent()
+
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `critical update check is skipped in debug builds`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+        clearInvocations(appUpdaterService)
+
+        sut.checkCriticalAppUpdate(isDebug = true)
+
+        assertFalse(sut.isCriticalUpdateRequired.value)
+        verify(appUpdaterService, never()).getReleaseInfo()
     }
 
     @Test
@@ -4649,6 +4739,229 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lightning scan of own invoice shows self payment toast without paying`() = test {
+        val bolt11 = "lnbcrt1ownquickpay"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = OWN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        verify(lightningRepo, never()).canSend(any())
+        verify(quickPayRepo, never()).canApply(any<ULong>())
+        assertNull(sut.quickPayData.value)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan of foreign invoice still uses QuickPay`() = test {
+        val bolt11 = "lnbcrt1foreignquickpay"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan waits for starting node id before QuickPay`() = test {
+        val bolt11 = "lnbcrt1ownstartingquickpay"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = OWN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).doSuspendableAnswer {
+            delay(5.seconds)
+            OWN_NODE_ID
+        }
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.onScanResult(bolt11)
+        runCurrent()
+
+        assertNull(sut.quickPayData.value)
+        assertNull(sut.currentSheet.value)
+
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        verify(quickPayRepo, never()).canApply(any<ULong>())
+        assertNull(sut.quickPayData.value)
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan waits for starting node id before confirm`() = test {
+        val bolt11 = "lnbcrt1ownstartingconfirm"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = OWN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).doSuspendableAnswer {
+            delay(5.seconds)
+            OWN_NODE_ID
+        }
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        verify(lightningRepo, never()).waitForUsableChannels()
+        verify(lightningRepo, never()).canSend(any())
+        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan is not blocked when node id is unavailable`() = test {
+        val bolt11 = "lnbcrt1ownnodestopped"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = OWN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(null)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `unified scan with own lightning invoice falls back to onchain`() = test {
+        val bolt11 = "lnbcrt1ownunified"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = OWN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertFalse(sut.sendUiState.value.isUnified)
+        verify(lightningRepo, never()).canSend(any())
+    }
+
+    @Test
+    fun `unified scan with own lightning invoice and no savings shows self payment toast`() = test {
+        val bolt11 = "lnbcrt1ownunifiednosavings"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = OWN_NODE_ID.fromHex())
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u)
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.getLastKnownNodeId()).thenReturn(OWN_NODE_ID)
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        verify(lightningRepo, never()).canSend(any())
+        assertNull(sut.sendUiState.value.decodedInvoice)
+    }
+
+    @Test
+    fun `unified scan with foreign lightning invoice and no savings keeps insufficient savings toast`() = test {
+        val bolt11 = "lnbcrt1foreignunifiednosavings"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u)
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.getLastKnownNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.canSend(any())).thenReturn(false)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("InsufficientSavingsToast", toastCaptor.lastValue.testTag)
+    }
+
+    @Test
+    fun `manual input of unified own lightning invoice with no savings shows self payment toast`() = test {
+        val bolt11 = "lnbcrt1ownunifiedmanual"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = OWN_NODE_ID.fromHex())
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u)
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.getLastKnownNodeId()).thenReturn(OWN_NODE_ID)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.setSendEvent(SendEvent.AddressChange(uri))
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        assertFalse(sut.sendUiState.value.isAddressInputValid)
+    }
+
+    @Test
+    fun `unified scan with foreign lightning invoice keeps lightning`() = test {
+        val bolt11 = "lnbcrt1foreignunified"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.estimateRoutingFees(bolt11)).thenReturn(Result.success(1uL))
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
+        assertTrue(sut.sendUiState.value.isUnified)
+    }
+
+    @Test
+    fun `manual input of own lightning invoice shows self payment toast`() = test {
+        val bolt11 = "lnbcrt1ownmanual"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = OWN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.setSendEvent(SendEvent.AddressChange(bolt11))
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        assertFalse(sut.sendUiState.value.isAddressInputValid)
+        verify(lightningRepo, never()).canSend(any())
+    }
+
+    @Test
     fun `hiding send sheet clears quickPayData`() = test {
         val bolt11 = "lnbcrt1quickpayhide"
         enableQuickPay()
@@ -7248,10 +7561,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
     }
 
-    private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {
+    private suspend fun stubLightningScan(bolt11: String, amountSats: ULong, payeeNodeId: ByteArray? = null) {
         whenever { coreService.decode(bolt11) }
-            .thenReturn(Scanner.Lightning(lightningInvoice(bolt11, amountSats)))
+            .thenReturn(Scanner.Lightning(lightningInvoice(bolt11, amountSats, payeeNodeId)))
         whenever(lightningRepo.canSend(amountSats)).thenReturn(true)
+    }
+
+    private suspend fun stubUnifiedScan(uri: String, bolt11: String, amountSats: ULong, payeeNodeId: ByteArray?) {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever { coreService.decode(uri) }.thenReturn(
+            Scanner.OnChain(
+                OnChainInvoice(
+                    address = REGTEST_ADDRESS,
+                    amountSatoshis = amountSats,
+                    label = null,
+                    message = null,
+                    params = mapOf("lightning" to bolt11),
+                )
+            )
+        )
+        whenever(coreService.validateBitcoinAddress(REGTEST_ADDRESS)).thenReturn(
+            ValidationResult(
+                address = REGTEST_ADDRESS,
+                network = NetworkType.REGTEST,
+                addressType = AddressType.P2WPKH,
+            )
+        )
+        stubLightningScan(bolt11 = bolt11, amountSats = amountSats, payeeNodeId = payeeNodeId)
     }
 
     private fun nonOnchainPaymentScans() = listOf(
@@ -7287,7 +7623,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         return privateContext
     }
 
-    private fun lightningInvoice(bolt11: String, amountSats: ULong) = LightningInvoice(
+    private fun lightningInvoice(
+        bolt11: String,
+        amountSats: ULong,
+        payeeNodeId: ByteArray? = null,
+    ) = LightningInvoice(
         bolt11 = bolt11,
         paymentHash = byteArrayOf(1, 2, 3),
         amountSatoshis = amountSats,
@@ -7296,7 +7636,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         isExpired = false,
         description = "",
         networkType = NetworkType.REGTEST,
-        payeeNodeId = null,
+        payeeNodeId = payeeNodeId,
     )
 
     private suspend fun enablePublicPaykitSharing() {
@@ -7514,6 +7854,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         paidPeriods = emptyList(),
     )
 
+    private fun releaseInfo(buildNumber: Int, isCritical: Boolean) = ReleaseInfoDTO(
+        platforms = Platforms(
+            android = PlatformDetails(
+                version = "1.0.0",
+                buildNumber = buildNumber,
+                notes = "Test release",
+                pubDate = "2024-01-01",
+                url = "https://example.com",
+                isCritical = isCritical,
+            ),
+            ios = null,
+        ),
+    )
+
     private fun paymentRequestCreation(
         request: PaykitPaymentRequest,
         wasPublishedToActiveState: Boolean = true,
@@ -7528,3 +7882,5 @@ private const val SAMROCK_SETUP_URL =
     "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
+private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"
+private const val FOREIGN_NODE_ID = "03cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
