@@ -4,14 +4,6 @@
 
 This repository contains the **native Android app** for Bitkit.
 
-## Contact deep links
-
-Use `bitkit://contact?pubky=<public-key>` to open the same flow as scanning a Pubky key.
-The key can be the raw 52-character public key or include its `pubky` prefix; URL-encode the value.
-Unknown keys open Add Contact, saved contacts open Contact Detail, and your own key opens Profile.
-This requires an existing wallet with Paykit enabled and respects the wallet's unlock flow.
-Opening the link does not save a contact or initiate a payment.
-
 ## Development
 
 ### Prerequisites
