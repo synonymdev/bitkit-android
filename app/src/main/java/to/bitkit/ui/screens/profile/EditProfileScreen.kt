@@ -224,7 +224,7 @@ private fun AvatarSection(
         modifier = Modifier
             .size(96.dp)
             .clip(CircleShape)
-            .background(Colors.Gray5)
+            .background(Colors.Gray6)
             .testTag("EditProfileAvatar")
             .clickable(onClick = onClick)
     ) {
@@ -237,10 +237,10 @@ private fun AvatarSection(
             )
             imageUrl != null -> PubkyImage(uri = imageUrl, size = 96.dp)
             else -> Icon(
-                painter = painterResource(R.drawable.ic_user_square),
+                painter = painterResource(R.drawable.ic_image_square),
                 contentDescription = null,
                 tint = Colors.White32,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(32.dp)
             )
         }
     }
