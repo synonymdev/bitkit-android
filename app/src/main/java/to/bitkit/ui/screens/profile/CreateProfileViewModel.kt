@@ -50,13 +50,13 @@ class CreateProfileViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             pubkyRepo.publicKey.value?.let { publicKey ->
                 _uiState.update { it.copy(derivedPublicKey = publicKey) }
-                checkForExistingProfile(publicKey)
+                checkForExistingProfile(publicKey, hasSession = true)
                 return@launch
             }
             pubkyRepo.deriveKeys()
                 .onSuccess { (publicKey, _) ->
                     _uiState.update { it.copy(derivedPublicKey = publicKey) }
-                    checkForExistingProfile(publicKey)
+                    checkForExistingProfile(publicKey, hasSession = false)
                 }
                 .onFailure {
                     Logger.error("Failed to derive keys", it, context = TAG)
@@ -70,13 +70,18 @@ class CreateProfileViewModel @Inject constructor(
         }
     }
 
-    private suspend fun checkForExistingProfile(publicKey: String) {
+    /**
+     * With a session the homeserver is known, so a failed lookup is not treated as "no profile":
+     * saving then could replace an existing profile with an empty one.
+     */
+    private suspend fun checkForExistingProfile(publicKey: String, hasSession: Boolean) {
         pubkyRepo.fetchRemoteProfile(publicKey)
             .onSuccess { profile ->
                 if (profile != null) {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
+                            remoteLookupFailed = false,
                             isRestoring = true,
                             name = profile.name,
                             bio = profile.bio,
@@ -87,12 +92,22 @@ class CreateProfileViewModel @Inject constructor(
                         )
                     }
                 } else {
-                    _uiState.update { it.copy(isLoading = false) }
+                    _uiState.update { it.copy(isLoading = false, remoteLookupFailed = false) }
                 }
             }
-            .onFailure {
-                Logger.debug("No existing remote profile found for '$publicKey'", context = TAG)
-                _uiState.update { it.copy(isLoading = false) }
+            .onFailure { error ->
+                if (!hasSession) {
+                    Logger.debug("No existing remote profile found for '$publicKey'", context = TAG)
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@onFailure
+                }
+                Logger.warn("Failed to look up the existing profile for '$publicKey'", error, context = TAG)
+                _uiState.update { it.copy(isLoading = false, remoteLookupFailed = true) }
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.common__error),
+                    description = error.message,
+                )
             }
     }
 
@@ -169,6 +184,10 @@ class CreateProfileViewModel @Inject constructor(
     }
 
     fun save() {
+        if (_uiState.value.remoteLookupFailed) {
+            deriveAndCheckRemote()
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             val state = _uiState.value
@@ -206,6 +225,7 @@ data class CreateProfileUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val isRestoring: Boolean = false,
+    val remoteLookupFailed: Boolean = false,
     val showAddLinkSheet: Boolean = false,
     val showAddTagSheet: Boolean = false,
 )
