@@ -147,7 +147,7 @@ private fun ProfileBody(
             notesTestTag = "ProfileViewNotes",
         )
 
-        VerticalSpacer(24.dp)
+        VerticalSpacer(16.dp)
 
         Box(
             contentAlignment = Alignment.Center,
@@ -175,7 +175,7 @@ private fun ProfileBody(
             }
         }
 
-        VerticalSpacer(24.dp)
+        VerticalSpacer(16.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
@@ -183,7 +183,7 @@ private fun ProfileBody(
         ) {
             ActionButton(
                 onClick = onClickEdit,
-                iconRes = R.drawable.ic_edit,
+                iconRes = R.drawable.ic_pencil_simple,
                 modifier = Modifier.testTag("ProfileEdit")
             )
             ActionButton(

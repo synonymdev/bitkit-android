@@ -19,12 +19,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -91,14 +94,11 @@ fun ProfileEditForm(
     val density = LocalDensity.current
     var footerHeight by remember { mutableStateOf(0.dp) }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .imePadding()
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .hazeSource(hazeState)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
@@ -123,7 +123,7 @@ fun ProfileEditForm(
                         value = bio,
                         onValueChange = { onBioChange(it.take(BIO_MAX_LENGTH)) },
                         placeholder = resolvedBioPlaceholder,
-                        minLines = 2,
+                        minLines = 3,
                         maxLines = 4,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -286,8 +286,15 @@ fun ProfileEditHeader(
     nameTestTag: String,
     modifier: Modifier = Modifier,
     publicKeyLabel: String = stringResource(R.string.profile__your_pubky),
+    autoFocusName: Boolean = false,
     avatarContent: @Composable () -> Unit = {},
 ) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(autoFocusName) {
+        if (autoFocusName) focusRequester.requestFocus()
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -312,6 +319,7 @@ fun ProfileEditHeader(
             placeholderColor = Colors.White32,
             modifier = Modifier
                 .fillMaxWidth()
+                .focusRequester(focusRequester)
                 .testTag(nameTestTag)
         )
         VerticalSpacer(16.dp)

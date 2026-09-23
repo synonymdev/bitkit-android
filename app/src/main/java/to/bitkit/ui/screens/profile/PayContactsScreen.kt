@@ -1,12 +1,15 @@
 package to.bitkit.ui.screens.profile
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -62,36 +65,41 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
 
-        Column(
-            modifier = Modifier.padding(horizontal = 32.dp)
+        Box(
+            contentAlignment = Alignment.BottomCenter,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
         ) {
             Image(
                 painter = painterResource(R.drawable.coin_stack),
                 contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
+                modifier = Modifier.size(279.dp)
             )
-
+        }
+        VerticalSpacer(16.dp)
+        Column(modifier = Modifier.padding(horizontal = 32.dp)) {
             Display(
                 text = stringResource(R.string.profile__pay_contacts_headline)
                     .withAccent(accentColor = Colors.PubkyGreen),
                 color = Colors.White,
             )
-            VerticalSpacer(16.dp)
+            VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(R.string.profile__pay_contacts_description),
                 color = Colors.White64,
             )
-            VerticalSpacer(32.dp)
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                onClick = onContinue,
-                enabled = !uiState.isLoading,
-                modifier = Modifier.testTag("PayContactsContinue")
-            )
-            VerticalSpacer(16.dp)
         }
+        VerticalSpacer(32.dp)
+        PrimaryButton(
+            text = stringResource(R.string.common__continue),
+            onClick = onContinue,
+            enabled = !uiState.isLoading,
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .testTag("PayContactsContinue")
+        )
+        VerticalSpacer(16.dp)
     }
 }
 

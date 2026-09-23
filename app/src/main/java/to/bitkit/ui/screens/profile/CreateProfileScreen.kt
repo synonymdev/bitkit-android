@@ -119,6 +119,7 @@ private fun Content(
                     onNameChange = onNameChange,
                     publicKey = uiState.derivedPublicKey ?: "...",
                     nameTestTag = "CreateProfileUsername",
+                    autoFocusName = true,
                     avatarContent = {
                         AvatarPickerButton(
                             avatarUri = uiState.avatarUri,
