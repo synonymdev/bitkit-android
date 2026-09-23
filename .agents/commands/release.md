@@ -210,7 +210,9 @@ Print the path to the release notes file so the user can share it for review.
 
 Publish the release notes as a Google Doc that can be shared with Jacobo. The doc must be readable by everyone at Synonym ("Anyone at Synonym with the link can view"), matching earlier release notes docs.
 
-**Create the doc** with the Google Drive MCP `create_file` tool. Drive converts Markdown into a native Google Doc, so pass the notes file verbatim:
+**Reuse if present.** Before creating, search Drive with `search_files` for an exact title (`mimeType = 'application/vnd.google-apps.document' and title = 'v{newVersionName} Android'`). If one or more match, reuse the oldest match's `id` / `viewUrl` (do not create another doc). If several match, print a warning that duplicates exist and still reuse the oldest. Skip to share/verify below (re-apply domain share only if missing).
+
+**Otherwise create the doc** with the Google Drive MCP `create_file` tool. Drive converts Markdown into a native Google Doc, so pass the notes file verbatim:
 - `title`: `v{newVersionName} Android`
 - `contentMimeType`: `text/markdown`
 - `textContent`: full contents of `.ai/release-notes-{newVersionName}.md`
@@ -325,17 +327,18 @@ Refresh `.ai/slack-release-{newVersionName}.md` with finalized values.
 2. `Single-platform hotfix` (rare) — rewrite the Reply to **Android-only**: drop iOS RC / doc / PR lines (do not leave `TODO`); open with a clear Android-only/hotfix cue in the first line of the reply (e.g. `Android-only hotfix:`). Then post per the steps below.
 3. `Skip Slack` — print a manual reminder and continue.
 
-**If a complete dual-platform reply for this version already exists** in `#bitkit-native` (parent `Release \`{newVersionName}\` :thread:`; reply has no `TODO` **and** includes finalized Android **and** iOS RC / doc / PR lines): skip Slack; print that the announcement is already posted.
+**If ready to post** (both platforms filled, or user chose single-platform hotfix): post as Slack drafts (one attached draft per channel at a time). **Never call `slack_send_message`** — it always appends `Sent using Cursor`. Use `slack_send_message_draft` only; the user must send each draft **from the Slack app** (Cursor widget also adds the footer).
 
-**If an existing reply is a single-platform hotfix** (starts with `Android-only hotfix:` / `iOS-only hotfix:`, or only one platform's RC line): do **not** treat it as complete for a dual cut. When both RCs are now ready, post a new dual-platform reply in the same thread. When this run is also a single-platform hotfix for the **same** platform and that hotfix reply already exists, skip.
-
-**If ready to post** (both platforms filled, or user chose single-platform hotfix) **and no complete dual-platform reply exists yet:** post as Slack drafts (two-step; one attached draft per channel at a time). **Never call `slack_send_message`** — it always appends `Sent using Cursor`. Use `slack_send_message_draft` only; the user must send each draft **from the Slack app** (Cursor widget also adds the footer).
-
-1. If parent `Release \`{newVersionName}\` :thread:` is already in the channel, reuse its `ts` and skip to step 4. Otherwise create the **parent** draft in `#bitkit-native` (`channel_id`: `C07BJ7DNPCG`) with body exactly: `Release \`{newVersionName}\` :thread:`
+1. Locate the parent with `slack_read_channel` on `C07BJ7DNPCG` (`slack_read_channel` returns **top-level messages only** — not reply bodies). If `Release \`{newVersionName}\` :thread:` is already posted and does **not** include `Sent using`, reuse its `ts` and skip to step 4. Otherwise create the **parent** draft in `#bitkit-native` (`channel_id`: `C07BJ7DNPCG`) with body exactly: `Release \`{newVersionName}\` :thread:`
 2. Tell the user: send that draft **from the Slack app** (not the Cursor widget), then confirm when done — or proceed to poll.
-3. Poll with `slack_read_channel` on `C07BJ7DNPCG` every **5 seconds** until a message appears whose text is `Release \`{newVersionName}\` :thread:` and that does **not** include `Sent using`. Cap at ~2 minutes. If not found after the cap: ask the user whether the parent was posted (`Yes, continue` / `Skip Slack and continue`). On Yes, locate the parent once more; on Skip, print a manual-post reminder and continue the release (do not keep polling).
-4. Create the **reply** draft with `thread_ts` set to that parent's message `ts`, body = the `## Reply` section from `.ai/slack-release-{newVersionName}.md` (markdown body only, no headings). The body must contain **no** `TODO`.
-5. Tell the user: open the thread in `#bitkit-native` and send the reply draft **from Slack**.
+3. Poll with `slack_read_channel` on `C07BJ7DNPCG` every **5 seconds** until that parent appears (no `Sent using`). Cap at ~2 minutes. If not found after the cap: ask the user whether the parent was posted (`Yes, continue` / `Skip Slack and continue`). On Yes, locate the parent once more; on Skip, print a manual-post reminder and continue the release (do not keep polling).
+4. **Dedup before drafting a reply.** Call `slack_read_thread` with `channel_id` `C07BJ7DNPCG` and `message_ts` set to the parent `ts` from steps 1–3. Inspect reply bodies:
+   - Complete dual-platform reply already exists (no `TODO`, finalized Android **and** iOS RC / doc / PR lines) → skip Slack; print that the announcement is already posted.
+   - Existing reply is a single-platform hotfix for the **same** platform as this run (`Android-only hotfix:` here, or only this platform's RC line) → skip.
+   - Existing reply is a single-platform hotfix for the **other** platform (or only one RC line) and this run is dual-ready → do **not** treat it as dual-complete; continue to step 5 with the dual-platform Reply body.
+   - No reply yet → continue to step 5.
+5. Create the **reply** draft with `thread_ts` set to that parent's message `ts`, body = the `## Reply` section from `.ai/slack-release-{newVersionName}.md` (markdown body only, no headings). The body must contain **no** `TODO`.
+6. Tell the user: open the thread in `#bitkit-native` and send the reply draft **from Slack**.
 
 **Fallbacks (never block the release):** Slack MCP unavailable → print `⚠ Slack draft not created — post manually from .ai/slack-release-{newVersionName}.md when ready` and continue.
 
