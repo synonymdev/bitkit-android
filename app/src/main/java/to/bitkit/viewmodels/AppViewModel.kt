@@ -1458,10 +1458,12 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun completePendingRestoreActivitySeen() {
-        if (!settingsStore.data.first().pendingRestoreActivitySeen) return
+        val restoreStartedAt = settingsStore.data.first().pendingRestoreActivitySeenSince
+        if (restoreStartedAt <= 0) return
         Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
-        activityRepo.markAllUnseenActivitiesAsSeen().onSuccess {
-            settingsStore.update { settings -> settings.copy(pendingRestoreActivitySeen = false) }
+        // Bounded by the restore start so a payment arriving mid-restore keeps its unseen state.
+        activityRepo.markAllUnseenActivitiesAsSeen(startedBefore = restoreStartedAt.toULong()).onSuccess {
+            settingsStore.update { settings -> settings.copy(pendingRestoreActivitySeenSince = 0) }
         }
     }
 

@@ -46,6 +46,9 @@ import kotlin.time.Instant
 class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     companion object {
         private val NOW = Instant.fromEpochSeconds(1_700_000_000L)
+
+        /** Stands in for the epoch second a seed restore began. */
+        private const val RESTORE_STARTED_AT = 1_700_000_000L
     }
 
     private val context: Context = mock()
@@ -520,7 +523,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
     @Test
     fun `onchain mempool receive returns Skip while the first sync after restore is pending`() = test {
-        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
         val command = NotifyPaymentReceived.Command.Onchain(txid = "txidRestored", details = details)
@@ -535,7 +538,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
     @Test
     fun `confirmed-only onchain receive returns Skip while the first sync after restore is pending`() = test {
-        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
         val command = confirmedCommand(txid = "txidRestored", details = details, age = Duration.ZERO)
@@ -562,7 +565,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
     @Test
     fun `onchain receive notifies again once the first sync after restore is done`() = test {
-        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
         val historical = confirmedCommand(txid = "txidHistorical", details = details, age = Duration.ZERO)
@@ -570,7 +573,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
         assertEquals(NotifyPaymentReceived.Result.Skip, sut(historical).getOrThrow())
 
-        settingsData.value = SettingsData(pendingRestoreActivitySeen = false)
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = 0)
         val result = sut(fresh).getOrThrow()
 
         assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)

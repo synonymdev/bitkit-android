@@ -212,6 +212,20 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoreWallet should arm the received sheet hold before the node syncs`() = test {
+        // The node starts replaying historical txs as soon as the restore begins, so the hold has to
+        // be armed here rather than when the user taps continue.
+        whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val settingsData = stubSettingsUpdate()
+
+        sut.restoreWallet("test_mnemonic", null)
+        advanceUntilIdle()
+
+        assertTrue(settingsData.value.pendingRestoreActivitySeen)
+        assertTrue(settingsData.value.pendingRestoreActivitySeenSince > 0)
+    }
+
+    @Test
     fun `addTagToSelected should call walletRepo addTagToSelected`() = test {
         sut.addTagToSelected("test_tag")
 
@@ -255,13 +269,12 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onRestoreContinue should defer marking restored activities seen until the first onchain sync`() = test {
+    fun `onRestoreContinue should request address type pruning`() = test {
         val settingsData = stubSettingsUpdate()
 
         sut.onRestoreContinue()
         advanceUntilIdle()
 
-        assertTrue(settingsData.value.pendingRestoreActivitySeen)
         assertTrue(settingsData.value.pendingRestoreAddressTypePrune)
     }
 
@@ -273,8 +286,18 @@ class WalletViewModelTest : BaseUnitTest() {
         sut.onRestoreContinue()
         advanceUntilIdle()
 
-        assertTrue(settingsData.value.pendingRestoreActivitySeen)
         assertFalse(settingsData.value.pendingRestoreAddressTypePrune)
+    }
+
+    @Test
+    fun `onRestoreContinue should not arm the received sheet hold, the restore already did`() = test {
+        // Regression: arming it here left the node replaying historical txs before the hold existed.
+        val settingsData = stubSettingsUpdate()
+
+        sut.onRestoreContinue()
+        advanceUntilIdle()
+
+        assertFalse(settingsData.value.pendingRestoreActivitySeen)
     }
 
     @Test

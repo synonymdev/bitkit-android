@@ -199,12 +199,18 @@ data class SettingsData(
     val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
     val pendingRestoreAddressTypePrune: Boolean = false,
     /**
-     * After a seed restore, suppresses the on-chain received sheet for historical transactions replayed by the
-     * post-restore sync. Set when the user taps Get Started on the restore success screen and cleared by the
-     * first on-chain sync completion after that, which marks the replayed activities as seen.
+     * When a seed restore began, as epoch seconds, or 0 when no restore is being suppressed.
+     *
+     * Suppresses the on-chain received sheet for the historical transactions the post-restore sync replays. Set as
+     * the restore starts, before the node is started, because the node syncs long before the backup is read - setting
+     * it on the Get Started tap left a window where replayed transactions could still raise a sheet. Doubles as the
+     * cutoff for the sweep that marks those transactions seen, so a payment arriving mid-restore is not swept up with
+     * them. Cleared by the first on-chain sync completion whose sweep succeeds.
      */
-    val pendingRestoreActivitySeen: Boolean = false,
-)
+    val pendingRestoreActivitySeenSince: Long = 0,
+) {
+    val pendingRestoreActivitySeen: Boolean get() = pendingRestoreActivitySeenSince > 0
+}
 
 data class BalanceUnitSwitch(
     val previousDisplay: PrimaryDisplay,

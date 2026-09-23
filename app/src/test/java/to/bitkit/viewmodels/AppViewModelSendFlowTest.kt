@@ -4509,14 +4509,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `first onchain sync after restore marks unseen activities seen and clears the pending flag`() = test {
-        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
-        whenever { activityRepo.markAllUnseenActivitiesAsSeen() }.thenReturn(Result.success(Unit))
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        whenever {
+            activityRepo.markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
+        }.thenReturn(Result.success(Unit))
 
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
         advanceUntilIdle()
 
         inOrder(activityRepo, settingsStore) {
-            verify(activityRepo).markAllUnseenActivitiesAsSeen()
+            verify(activityRepo).markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
             verify(settingsStore).update(any())
         }
         assertFalse(settingsData.value.pendingRestoreActivitySeen)
@@ -4524,25 +4526,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `first onchain sync after restore keeps the pending flag when marking activities seen fails`() = test {
-        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
-        whenever { activityRepo.markAllUnseenActivitiesAsSeen() }
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        whenever { activityRepo.markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong())) }
             .thenReturn(Result.failure(AppError("mark seen failed")))
 
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
         advanceUntilIdle()
 
-        verify(activityRepo).markAllUnseenActivitiesAsSeen()
+        verify(activityRepo).markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
         assertTrue(settingsData.value.pendingRestoreActivitySeen)
     }
 
     @Test
     fun `lightning sync after restore keeps the pending flag and activities untouched`() = test {
-        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
 
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.LIGHTNING_WALLET, syncedBlockHeight = 100u))
         advanceUntilIdle()
 
-        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen()
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
         assertTrue(settingsData.value.pendingRestoreActivitySeen)
     }
 
@@ -4551,7 +4553,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
         advanceUntilIdle()
 
-        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen()
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
         verify(settingsStore, never()).update(any())
     }
 
@@ -7801,6 +7803,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
 private const val SAMROCK_SETUP_URL =
     "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+
+/** Stands in for the epoch second a seed restore began. */
+private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"

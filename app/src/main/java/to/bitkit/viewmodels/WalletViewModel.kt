@@ -29,6 +29,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.of
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
@@ -256,10 +257,7 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             val shouldPrune = !settingsStore.restoredMonitoredTypesFromBackup
             settingsStore.update {
-                it.copy(
-                    pendingRestoreAddressTypePrune = it.pendingRestoreAddressTypePrune || shouldPrune,
-                    pendingRestoreActivitySeen = true,
-                )
+                it.copy(pendingRestoreAddressTypePrune = it.pendingRestoreAddressTypePrune || shouldPrune)
             }
         }
         _restoreState.update { RestoreState.Settled }
@@ -568,6 +566,9 @@ class WalletViewModel @Inject constructor(
         // The node starts and syncs long before the backup is read, so ordinary uploads are held from
         // here rather than from the restore itself, which would upload over the backup it has not read.
         backupRepo.setRestorePending(true)
+        // Same reason for the received-sheet hold: by the time the user taps continue the node has
+        // already been replaying historical transactions for a while.
+        settingsStore.update { it.copy(pendingRestoreActivitySeenSince = nowTimestamp().epochSecond) }
 
         walletRepo.restoreWallet(
             mnemonic = mnemonic,

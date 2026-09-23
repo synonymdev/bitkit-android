@@ -1720,7 +1720,14 @@ class ActivityService(
         markActivityAsSeen(activity.id, walletId = activity.walletId, seenAt = seenAt)
     }
 
-    suspend fun markAllUnseenActivitiesAsSeen() = ServiceQueue.CORE.background {
+    /**
+     * Marks every unseen activity as seen.
+     *
+     * [startedBefore] limits the pass to activity that already existed at that epoch second. The restore sweep passes
+     * the moment the restore began, so a payment that genuinely arrives while the restore is still running keeps its
+     * unseen state and still notifies the user.
+     */
+    suspend fun markAllUnseenActivitiesAsSeen(startedBefore: ULong? = null) = ServiceQueue.CORE.background {
         val timestamp = nowTimestamp().epochSecond.toULong()
         val activities = getActivities(
             walletId = null,
@@ -1739,6 +1746,12 @@ class ActivityService(
                 is Activity.Onchain -> activity.v1.seenAt != null
                 is Activity.Lightning -> activity.v1.seenAt != null
             }
+            val createdAt = when (activity) {
+                is Activity.Onchain -> activity.v1.timestamp
+                is Activity.Lightning -> activity.v1.timestamp
+            }
+
+            if (startedBefore != null && createdAt > startedBefore) continue
 
             if (!isSeen) {
                 markActivityAsSeen(activity.rawId(), walletId = activity.walletId(), seenAt = timestamp)
