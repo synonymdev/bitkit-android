@@ -325,9 +325,11 @@ Refresh `.ai/slack-release-{newVersionName}.md` with finalized values.
 2. `Single-platform hotfix` (rare) — rewrite the Reply to **Android-only**: drop iOS RC / doc / PR lines (do not leave `TODO`); open with a clear Android-only/hotfix cue in the first line of the reply (e.g. `Android-only hotfix:`). Then post per the steps below.
 3. `Skip Slack` — print a manual reminder and continue.
 
-**If a complete reply for this version already exists** in `#bitkit-native` (parent `Release \`{newVersionName}\` :thread:` with a reply that has no `TODO`): skip Slack; print that the announcement is already posted.
+**If a complete dual-platform reply for this version already exists** in `#bitkit-native` (parent `Release \`{newVersionName}\` :thread:`; reply has no `TODO` **and** includes finalized Android **and** iOS RC / doc / PR lines): skip Slack; print that the announcement is already posted.
 
-**If ready to post** (both platforms filled, or user chose single-platform hotfix) **and no complete reply exists yet:** post as Slack drafts (two-step; one attached draft per channel at a time). **Never call `slack_send_message`** — it always appends `Sent using Cursor`. Use `slack_send_message_draft` only; the user must send each draft **from the Slack app** (Cursor widget also adds the footer).
+**If an existing reply is a single-platform hotfix** (starts with `Android-only hotfix:` / `iOS-only hotfix:`, or only one platform's RC line): do **not** treat it as complete for a dual cut. When both RCs are now ready, post a new dual-platform reply in the same thread. When this run is also a single-platform hotfix for the **same** platform and that hotfix reply already exists, skip.
+
+**If ready to post** (both platforms filled, or user chose single-platform hotfix) **and no complete dual-platform reply exists yet:** post as Slack drafts (two-step; one attached draft per channel at a time). **Never call `slack_send_message`** — it always appends `Sent using Cursor`. Use `slack_send_message_draft` only; the user must send each draft **from the Slack app** (Cursor widget also adds the footer).
 
 1. If parent `Release \`{newVersionName}\` :thread:` is already in the channel, reuse its `ts` and skip to step 4. Otherwise create the **parent** draft in `#bitkit-native` (`channel_id`: `C07BJ7DNPCG`) with body exactly: `Release \`{newVersionName}\` :thread:`
 2. Tell the user: send that draft **from the Slack app** (not the Cursor widget), then confirm when done — or proceed to poll.
