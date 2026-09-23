@@ -43,6 +43,7 @@ class OfflineReceiveInvoiceParser @Inject constructor() {
             timestampSeconds = invoice.secondsSinceEpoch(),
             expirySeconds = invoice.expiryTimeSeconds(),
             paymentHash = invoice.paymentHash(),
+            payeePubkey = invoice.recoverPayeePubKey(),
         )
     }
 }
@@ -54,6 +55,7 @@ data class OfflineInvoiceDetails(
     val timestampSeconds: ULong,
     val expirySeconds: ULong,
     val paymentHash: String,
+    val payeePubkey: String,
 )
 
 /** The pinned native library has no FFOR receiver implementation. */
@@ -64,4 +66,4 @@ class UnavailableOfflineReceiveService @Inject constructor() : OfflineReceiveSer
         Result.failure(OfflineReceiveUnavailable())
 }
 
-class OfflineReceiveUnavailable : AppError("Offline receive is unavailable")
+class OfflineReceiveUnavailable(cause: Throwable? = null) : AppError("Offline receive is unavailable", cause)

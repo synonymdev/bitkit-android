@@ -164,6 +164,7 @@ class WatchOnlyAccountLifecycleCoordinatorTest : BaseUnitTest() {
         watchOnlyAccountStore = store,
         loggerLdk = mock<LoggerLdk>(),
         watchOnlyAccountLifecycleCoordinator = coordinator,
+        nodeBuilderCustomizers = emptySet(),
     ).apply { this.node = node }
 
     private fun repository(

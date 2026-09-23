@@ -12,8 +12,6 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.QuickPayInvoiceParser
 import to.bitkit.repositories.QuickPayPaymentLookup
 import to.bitkit.repositories.QuickPayReconcileRow
-import to.bitkit.services.OfflineReceiveService
-import to.bitkit.services.UnavailableOfflineReceiveService
 import javax.inject.Named
 
 @Module
@@ -23,9 +21,6 @@ abstract class RepoModule {
     @Suppress("unused")
     @Binds
     abstract fun bindAmountInputHandler(currencyRepo: CurrencyRepo): AmountInputHandler
-
-    @Binds
-    abstract fun bindOfflineReceiveService(service: UnavailableOfflineReceiveService): OfflineReceiveService
 
     companion object {
         @Suppress("FunctionOnlyReturningConstant")

@@ -87,6 +87,7 @@ class WatchOnlyAccountRestoreTest : BaseUnitTest() {
         watchOnlyAccountStore = store,
         loggerLdk = mock<LoggerLdk>(),
         watchOnlyAccountLifecycleCoordinator = coordinator,
+        nodeBuilderCustomizers = emptySet(),
     ).apply { this.node = node }
 
     private fun account(id: String, accountIndex: Int, createdAt: Long) = WatchOnlyAccountRecord(

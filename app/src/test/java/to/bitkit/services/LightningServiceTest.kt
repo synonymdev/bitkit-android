@@ -309,6 +309,7 @@ class LightningServiceTest : BaseUnitTest() {
             watchOnlyAccountStore,
             loggerLdk,
             watchOnlyAccountLifecycleCoordinator,
+            emptySet(),
         )
         gated.node = node
         val destroyGate = CountDownLatch(1)

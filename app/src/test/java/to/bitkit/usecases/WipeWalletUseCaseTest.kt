@@ -34,6 +34,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.offline.OfflineReceiveRequestStore
 import to.bitkit.test.BaseUnitTest
 import javax.inject.Provider
 import kotlin.test.assertFailsWith
@@ -60,6 +61,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
     private val migrationService = mock<MigrationService>()
+    private val offlineReceiveRequestStore = mock<OfflineReceiveRequestStore>()
     private val privatePaykitRepoProvider = Provider { privatePaykitRepo }
 
     private lateinit var sut: WipeWalletUseCase
@@ -97,6 +99,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
             firebaseMessaging = firebaseMessaging,
             migrationService = migrationService,
+            offlineReceiveRequestStore = offlineReceiveRequestStore,
         )
     }
 

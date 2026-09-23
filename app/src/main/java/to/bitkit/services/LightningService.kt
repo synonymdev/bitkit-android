@@ -134,6 +134,7 @@ class LightningService internal constructor(
     private val loggerLdk: LoggerLdk,
     private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
     private val ldkQueue: CoroutineContext,
+    private val nodeBuilderCustomizers: Set<NodeBuilderCustomizer> = emptySet(),
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
@@ -179,6 +180,7 @@ class LightningService internal constructor(
         watchOnlyAccountStore: WatchOnlyAccountStore,
         loggerLdk: LoggerLdk,
         watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
+        nodeBuilderCustomizers: Set<@JvmSuppressWildcards NodeBuilderCustomizer>,
     ) : this(
         bgDispatcher = bgDispatcher,
         ioDispatcher = ioDispatcher,
@@ -189,6 +191,7 @@ class LightningService internal constructor(
         loggerLdk = loggerLdk,
         watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
         ldkQueue = ServiceQueue.LDK.queueContext,
+        nodeBuilderCustomizers = nodeBuilderCustomizers,
     )
 
     @Volatile
@@ -296,6 +299,8 @@ class LightningService internal constructor(
                     context = "Migration"
                 )
             }
+
+            nodeBuilderCustomizers.forEach { it.customize(this) }
 
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                 ?: throw ServiceError.MnemonicNotFound()

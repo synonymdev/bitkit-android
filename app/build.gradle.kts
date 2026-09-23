@@ -85,6 +85,11 @@ val paykitUiDisabledEnv = envFlag("PAYKIT_UI_DISABLED", default = false)
 val trezorBridgeEnv = localProp("TREZOR_BRIDGE").map { it.toBoolean().toString() }.orElse("false")
 val trezorBridgeUrlEnv = localProp("TREZOR_BRIDGE_URL").orElse("http://10.0.2.2:21325")
 val networkPerFlavor = mapOf("dev" to "REGTEST", "mainnet" to "BITCOIN", "tnet" to "TESTNET")
+// Set `ldkNodeLocalVersion` (gradle.properties, ~/.gradle/gradle.properties or -P) to compile against a locally
+// published ldk-node build that carries the offline receive API. Unset, the catalog version is used and the
+// offline receive native adapter under src/offlineReceive is not compiled. See docs/offline-receive.md.
+val ldkNodeLocalVersion = providers.gradleProperty("ldkNodeLocalVersion").orNull?.takeIf { it.isNotBlank() }
+val offlineReceiveNativeEnv = provider { (ldkNodeLocalVersion != null).toString() }
 val requestedNdkVersion = providers.environmentVariable("NDK_VERSION").orNull?.takeIf { it.isNotBlank() }
 val androidTestAnnotationPackage = "to.bitkit.test.annotations"
 val androidTestTaskPrefix = "connectedDevDebug"
@@ -293,6 +298,18 @@ android {
             isUniversalApk = true
         }
     }
+    if (ldkNodeLocalVersion != null) {
+        sourceSets {
+            getByName("main") {
+                java.srcDir("src/offlineReceive/java")
+                kotlin.srcDir("src/offlineReceive/java")
+            }
+            getByName("test") {
+                java.srcDir("src/offlineReceiveTest/java")
+                kotlin.srcDir("src/offlineReceiveTest/java")
+            }
+        }
+    }
     testOptions {
         unitTests {
             isReturnDefaultValues = true // mockito
@@ -329,6 +346,7 @@ androidComponents {
         buildConfigFields.put("TREZOR_BRIDGE_URL", trezorBridgeUrlEnv.stringField())
         buildConfigFields.put("GEO", geoEnv.booleanField())
         buildConfigFields.put("FEATURE_PAYKIT_UI_DISABLED", paykitUiDisabledEnv.booleanField())
+        buildConfigFields.put("FEATURE_OFFLINE_RECEIVE_NATIVE", offlineReceiveNativeEnv.booleanField())
         buildConfigFields.put("LOCALES", provider { bcp47Locales.joinToString(",") }.stringField())
         buildConfigFields.put(
             "NETWORK",
@@ -491,6 +509,17 @@ val syncNativeDebugSymbolArtifacts by tasks.registering(Sync::class) {
 
     from(nativeDebugSymbols)
     into(layout.buildDirectory.dir("intermediates/native-debug-symbol-artifacts"))
+}
+
+if (ldkNodeLocalVersion != null) {
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "com.synonym" && requested.name == "ldk-node-android") {
+                useVersion(ldkNodeLocalVersion)
+                because("ldkNodeLocalVersion overrides the ldk-node-android catalog version")
+            }
+        }
+    }
 }
 
 dependencies {

@@ -60,6 +60,7 @@ class OfflineReceiveRepoTest : BaseUnitTest() {
         timestampSeconds = 2_000_000_000uL,
         expirySeconds = 3_600uL,
         paymentHash = "hash",
+        payeePubkey = "payee",
     )
     private lateinit var sut: OfflineReceiveRepo
 

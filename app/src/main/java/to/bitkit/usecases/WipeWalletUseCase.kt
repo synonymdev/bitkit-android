@@ -19,6 +19,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.offline.OfflineReceiveRequestStore
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -45,6 +46,7 @@ class WipeWalletUseCase @Inject constructor(
     private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
+    private val offlineReceiveRequestStore: OfflineReceiveRequestStore,
 ) {
     private val wipeMutex = Mutex()
 
@@ -98,6 +100,7 @@ class WipeWalletUseCase @Inject constructor(
         step("wipe core data") { coreService.wipeData() }
         step("clear database") { db.clearAllTables() }
         step("reset settings") { settingsStore.reset() }
+        step("clear offline receive request") { offlineReceiveRequestStore.clear() }
         step("reset cache") { cacheStore.reset() }
         step("clear watch-only accounts") { watchOnlyAccountRepo.clear() }
         step("reset widgets") { widgetsStore.reset() }

@@ -102,6 +102,8 @@ fun DevSettingsScreen(
                 )
             }
 
+            OfflineReceiveDevSettingsSection()
+
             SectionHeader("HARDWARE WALLET")
             SettingsButtonRow("Trezor") { navController.navigateTo(Routes.Trezor) }
 

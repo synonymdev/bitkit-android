@@ -6,6 +6,8 @@ import androidx.datastore.dataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -17,6 +19,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
+import to.bitkit.models.OfflineReceiveDevSettings
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.Suggestion
@@ -43,6 +46,19 @@ class SettingsStore @Inject constructor(
     val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
     val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
+    }
+
+    /** Device-local, never backed up, disabled by default. */
+    val offlineReceiveDevSettings: Flow<OfflineReceiveDevSettings> = localStore.data.map { prefs ->
+        OfflineReceiveDevSettings(
+            isEnabled = prefs[OFFLINE_RECEIVE_ENABLED_KEY] ?: false,
+            settlementNodeId = prefs[OFFLINE_RECEIVE_SETTLEMENT_NODE_ID_KEY]?.takeIf { it.isNotBlank() },
+            witnessNodeIds = prefs[OFFLINE_RECEIVE_WITNESS_NODE_IDS_KEY].orEmpty()
+                .split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() },
+            prepareTimeoutMillis = prefs[OFFLINE_RECEIVE_PREPARE_TIMEOUT_MS_KEY],
+        )
     }
 
     @Volatile
@@ -103,6 +119,32 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
     }
 
+    suspend fun setOfflineReceiveEnabled(value: Boolean) {
+        localStore.edit { it[OFFLINE_RECEIVE_ENABLED_KEY] = value }
+    }
+
+    suspend fun setOfflineReceiveSettlementNodeId(value: String?) {
+        localStore.edit {
+            val nodeId = value?.trim().orEmpty()
+            if (nodeId.isEmpty()) {
+                it.remove(OFFLINE_RECEIVE_SETTLEMENT_NODE_ID_KEY)
+            } else {
+                it[OFFLINE_RECEIVE_SETTLEMENT_NODE_ID_KEY] = nodeId
+            }
+        }
+    }
+
+    suspend fun setOfflineReceiveWitnessNodeIds(value: List<String>) {
+        localStore.edit {
+            val nodeIds = value.map { id -> id.trim() }.filter { id -> id.isNotEmpty() }
+            if (nodeIds.isEmpty()) {
+                it.remove(OFFLINE_RECEIVE_WITNESS_NODE_IDS_KEY)
+            } else {
+                it[OFFLINE_RECEIVE_WITNESS_NODE_IDS_KEY] = nodeIds.joinToString(",")
+            }
+        }
+    }
+
     suspend fun addLastUsedTag(newTag: String) {
         store.updateData { currentSettings ->
             val combinedTags = (listOf(newTag) + currentSettings.lastUsedTags).distinct()
@@ -136,6 +178,10 @@ class SettingsStore @Inject constructor(
         private const val MAX_LAST_USED_TAGS = 10
         private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
+        private val OFFLINE_RECEIVE_ENABLED_KEY = booleanPreferencesKey("offline_receive_enabled")
+        private val OFFLINE_RECEIVE_SETTLEMENT_NODE_ID_KEY = stringPreferencesKey("offline_receive_settlement_node_id")
+        private val OFFLINE_RECEIVE_WITNESS_NODE_IDS_KEY = stringPreferencesKey("offline_receive_witness_node_ids")
+        private val OFFLINE_RECEIVE_PREPARE_TIMEOUT_MS_KEY = longPreferencesKey("offline_receive_prepare_timeout_ms")
     }
 }
 
