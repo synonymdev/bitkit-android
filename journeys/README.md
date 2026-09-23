@@ -170,6 +170,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
+| `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
