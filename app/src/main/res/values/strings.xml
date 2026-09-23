@@ -477,6 +477,7 @@
     <string name="onboarding__restore_passphrase_placeholder">Passphrase*</string>
     <string name="onboarding__restore_phrase">Please type in your recovery phrase from any (paper) backup.</string>
     <string name="onboarding__restore_red_explain">If a word is shown in &lt;accent&gt;red&lt;/accent&gt;, it means that it was not found in the recovery phrase dictionary. Check for spelling errors.</string>
+    <string name="onboarding__restore_seedqr_error">This QR code does not contain a valid 12-word SeedQR.</string>
     <string name="onboarding__restore_success_header">Wallet &lt;accent&gt;restored&lt;/accent&gt;</string>
     <string name="onboarding__restore_success_text">You have successfully restored your wallet from backup. Enjoy Bitkit!</string>
     <string name="onboarding__restore_suggestions">SUGGESTIONS</string>
@@ -564,6 +565,8 @@
     <string name="other__pay_insufficient_savings_description">More ₿ needed to pay this Bitcoin invoice.</string>
     <string name="other__pay_insufficient_spending">Insufficient Spending Balance</string>
     <string name="other__pay_insufficient_spending_amount_description">₿ {amount} more needed to pay this Lightning invoice.</string>
+    <string name="other__pay_self_invoice_description">This invoice was created by your own wallet. Share it with someone else to receive a payment.</string>
+    <string name="other__pay_self_invoice_title">Cannot Pay Own Invoice</string>
     <string name="other__qr_error_header">Unable To Read QR</string>
     <string name="other__qr_error_network_header">Incorrect Network</string>
     <string name="other__qr_error_network_text">Bitkit is currently set to {selectedNetwork} but data is for {dataNetwork}.</string>
@@ -927,7 +930,10 @@
     <string name="settings__es__port">Port</string>
     <string name="settings__es__protocol">Protocol</string>
     <string name="settings__es__server_error">Electrum Connection Failed</string>
+    <string name="settings__es__server_error_certificate">This server\'s certificate is not trusted. Use a server with a trusted certificate, or connect to its TCP port.</string>
     <string name="settings__es__server_error_description">Bitkit could not establish a connection to Electrum.</string>
+    <string name="settings__es__server_error_network">This server is on a different Bitcoin network. Choose a server for the network Bitkit is using.</string>
+    <string name="settings__es__server_error_protocol">Secure connection failed. Check that the protocol (TCP or TLS) matches the server port.</string>
     <string name="settings__es__server_updated_message">Successfully connected to {host}:{port}</string>
     <string name="settings__es__server_updated_title">Electrum Server Updated</string>
     <string name="settings__fee__custom__description">Depends on fee</string>

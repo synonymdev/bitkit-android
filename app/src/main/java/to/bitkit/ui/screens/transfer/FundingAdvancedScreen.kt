@@ -57,7 +57,6 @@ fun FundingAdvancedScreen(
                     label = stringResource(R.string.lightning__funding_advanced__button1),
                     icon = R.drawable.ic_scan,
                     iconTint = Colors.Purple,
-                    iconSize = 13.75.dp,
                     onClick = onLnurl,
                 )
                 RectangleButton(

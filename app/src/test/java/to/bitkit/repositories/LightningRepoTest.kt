@@ -1050,6 +1050,98 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `awaitNodeId should return null without waiting when node cannot run`() = test {
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+
+        assertNull(sut.awaitNodeId())
+    }
+
+    @Test
+    fun `awaitNodeId should wait for starting node to run`() = test {
+        sut.setInitNodeLifecycleState()
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+
+        val nodeId = async { sut.awaitNodeId() }
+        runCurrent()
+        assertFalse(nodeId.isCompleted)
+
+        startNodeForTesting()
+
+        assertEquals(testNodeId, nodeId.await())
+    }
+
+    @Test
+    fun `awaitNodeId should return null when node does not start in time`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+
+        assertNull(sut.awaitNodeId())
+    }
+
+    @Test
+    fun `awaitNodeId should return last known id after node stops`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.awaitNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+        whenever(lightningService.nodeId).thenReturn(null)
+
+        assertEquals(testNodeId, sut.awaitNodeId())
+    }
+
+    @Test
+    fun `getLastKnownNodeId should return remembered id while node is not running`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.getNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+
+        assertNull(sut.getNodeId())
+        assertEquals(testNodeId, sut.getLastKnownNodeId())
+    }
+
+    @Test
+    fun `getLastKnownNodeId should return null after storage wipe`() = test {
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+        startNodeForTesting()
+        assertEquals("test_node_id", sut.getNodeId())
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        assertTrue(sut.wipeStorage(0).isSuccess)
+        whenever(lightningService.nodeId).thenReturn(null)
+
+        assertNull(sut.getLastKnownNodeId())
+    }
+
+    @Test
+    fun `awaitNodeId should return last known id when restart after stop fails`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.awaitNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+        whenever(lightningService.nodeId).thenReturn(null)
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenThrow(IllegalStateException("electrum server unreachable"))
+
+        assertTrue(sut.start(shouldRetry = false).isFailure)
+        assertIs<NodeLifecycleState.ErrorStarting>(sut.lightningState.value.nodeLifecycleState)
+
+        assertEquals(testNodeId, sut.awaitNodeId())
+        assertEquals(testNodeId, sut.getLastKnownNodeId())
+    }
+
+    @Test
     fun `getBalances should return null when node is not running`() = test {
         assertNull(sut.getBalances())
     }
@@ -1354,6 +1446,22 @@ class LightningRepoTest : BaseUnitTest() {
             .setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression: the settings write after a successful restart must surface as a failed Result.
+    // Thrown out of the returned Result it escapes the caller's coroutine, which leaves the
+    // Electrum config screen spinning with no toast.
+    @Test
+    fun `restartWithElectrumServer returns failure when persisting the server fails`() = test {
+        startNodeForTesting()
+        val customServerUrl = "ssl://test.example.com:50002"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(settingsStore.update(any())).thenThrow(RuntimeException("write failed"))
+
+        val result = sut.restartWithElectrumServer(customServerUrl)
+
+        assertTrue(result.isFailure)
     }
 
     @Test

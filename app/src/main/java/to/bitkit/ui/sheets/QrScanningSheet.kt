@@ -38,7 +38,7 @@ private fun Content(
     ) {
         QrScanningScreen(
             isPubkyScan = isPubkyScan,
-            onScanSuccess = onScanSuccess,
+            onScanSuccess = { payload -> payload.text?.let(onScanSuccess) },
             onBack = onBack,
         )
     }
