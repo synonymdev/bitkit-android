@@ -53,6 +53,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 private const val PUBKY_RING_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.pubky.ring"
+
 /** Figma "Profile Create" geometry as fractions of the 375pt frame width, anchored to the screen bottom. */
 private const val TAG_WIDTH_FRACTION = 0.736f
 private const val TAG_OFFSET_X = -0.197f
