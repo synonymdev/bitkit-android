@@ -10,13 +10,18 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import to.bitkit.models.QrCodePayload
+import to.bitkit.repositories.SeedQrRepo
 import to.bitkit.services.core.Bip39Service
 import javax.inject.Inject
 
@@ -26,9 +31,13 @@ private const val WORDS_MAX = 24
 @HiltViewModel
 class RestoreWalletViewModel @Inject constructor(
     private val bip39Service: Bip39Service,
+    private val seedQrRepo: SeedQrRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(RestoreWalletUiState())
     val uiState: StateFlow<RestoreWalletUiState> = _uiState.asStateFlow()
+
+    private val _effects = MutableSharedFlow<RestoreWalletEffect>(extraBufferCapacity = 1)
+    val effects: SharedFlow<RestoreWalletEffect> = _effects.asSharedFlow()
 
     /**
      * Word edits validate off the main thread, so they are serialized to keep an older edit from undoing a newer one.
@@ -109,6 +118,19 @@ class RestoreWalletViewModel @Inject constructor(
     fun onKeyboardDismiss() = _uiState.update { it.copy(shouldDismissKeyboard = false) }
 
     fun onScrollComplete() = _uiState.update { it.copy(scrollToFieldIndex = null) }
+
+    fun onSeedQrScan(payload: QrCodePayload) = viewModelScope.launch {
+        val mnemonic = seedQrRepo.decode(payload).getOrElse {
+            _effects.emit(RestoreWalletEffect.InvalidSeedQr)
+            return@launch
+        }
+
+        wordEditMutex.withLock {
+            replaceAllWords(mnemonic.split(" "))
+            recomputeValidationState()
+        }
+        _effects.emit(RestoreWalletEffect.SeedQrDecoded)
+    }
 
     private fun handlePastedWords(index: Int, pastedText: String) = viewModelScope.launch {
         wordEditMutex.withLock {
@@ -270,4 +292,9 @@ data class RestoreWalletUiState(
     val wordsPerColumn: Int get() = if (is24Words) WORDS_MIN else 6
 
     val bip39Mnemonic: String get() = words.subList(0, wordCount).joinToString(" ").trim()
+}
+
+sealed interface RestoreWalletEffect {
+    data object InvalidSeedQr : RestoreWalletEffect
+    data object SeedQrDecoded : RestoreWalletEffect
 }

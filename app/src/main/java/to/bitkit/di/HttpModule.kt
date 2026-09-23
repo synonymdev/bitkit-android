@@ -22,6 +22,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.UrlValidator
 import javax.inject.Singleton
+import javax.net.ssl.SSLSocketFactory
 import io.ktor.client.plugins.logging.Logger as KtorLogger
 
 @Module
@@ -46,6 +47,10 @@ object HttpModule {
             }
         }
     }
+
+    @Provides
+    @Singleton
+    fun provideSslSocketFactory(): SSLSocketFactory = SSLSocketFactory.getDefault() as SSLSocketFactory
 
     @Provides
     @Singleton

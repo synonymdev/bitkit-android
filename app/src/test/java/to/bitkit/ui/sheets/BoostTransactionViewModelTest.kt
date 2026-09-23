@@ -57,7 +57,8 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
     private val totalFee = 1000UL
     private val testValue = 50000UL
 
-    private val onchainActivity = OnchainActivity.create(walletId = "wallet0",
+    private val onchainActivity = OnchainActivity.create(
+        walletId = "wallet0",
         id = "test_id",
         txType = PaymentType.SENT,
         txId = mockTxId,
@@ -70,17 +71,17 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
     private val activitySent = Activity.Onchain(onchainActivity)
 
-    private val fastFeeTime = "±10m"
-    private val normalFeeTime = "±20m"
-    private val flowFeeTime = "±1h"
-    private val minFeeTime = "+2h"
+    private val fastFeeTime = "±10 minutes"
+    private val normalFeeTime = "±20 minutes"
+    private val slowFeeTime = "±1 hour"
+    private val minFeeTime = "+2 hours"
 
     @Before
     fun setUp() = runBlocking {
-        whenever(context.getString(R.string.fee__fast__shortDescription)).thenReturn(fastFeeTime)
-        whenever(context.getString(R.string.fee__normal__shortDescription)).thenReturn(normalFeeTime)
-        whenever(context.getString(R.string.fee__slow__shortDescription)).thenReturn(flowFeeTime)
-        whenever(context.getString(R.string.fee__minimum__shortDescription)).thenReturn(minFeeTime)
+        whenever(context.getString(R.string.fee__fast__duration)).thenReturn(fastFeeTime)
+        whenever(context.getString(R.string.fee__normal__duration)).thenReturn(normalFeeTime)
+        whenever(context.getString(R.string.fee__slow__duration)).thenReturn(slowFeeTime)
+        whenever(context.getString(R.string.fee__minimum__duration)).thenReturn(minFeeTime)
         whenever(onchain.feeRates).thenReturn(feeRates)
         whenever(mockBtInfo.onchain).thenReturn(onchain)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
@@ -282,7 +283,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
             sut.setupActivity(lowFeeActivity)
             awaitItem() // loading state
             val state = awaitItem()
-            assertEquals(flowFeeTime, state.estimateTime)
+            assertEquals(slowFeeTime, state.estimateTime)
         }
     }
 

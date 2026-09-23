@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.transfer.hardware
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +20,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.synonym.bitkitcore.IBtOrder
 import to.bitkit.R
 import to.bitkit.models.safe
 import to.bitkit.ui.components.ButtonSize
@@ -33,10 +33,11 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.transfer.previewBtOrder
+import to.bitkit.ui.screens.transfer.previewSpendingState
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.TransferToSpendingUiState
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
@@ -50,14 +51,16 @@ fun SpendingHwSignScreen(
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
-    val order = state.order ?: run {
+    if (state.feeSat == 0uL) {
         onCloseClick()
         return
     }
 
-    LaunchedEffect(walletId, order.id) {
+    BackHandler(enabled = state.isBusy) {}
+
+    LaunchedEffect(walletId, state.feeSat) {
         viewModel.warmUpHardwareConnection(walletId)
-        viewModel.updateHwFundingFeeEstimate(order, walletId)
+        viewModel.updateHwFundingFeeEstimate(walletId)
     }
 
     DisposableEffect(viewModel) {
@@ -65,22 +68,22 @@ fun SpendingHwSignScreen(
     }
 
     Content(
-        order = order,
+        state = state,
         miningFeeSats = state.hwMiningFeeSats,
         isAdvanced = state.isAdvanced,
-        isSigning = state.isSigning,
+        isSigning = state.isBusy,
         hasPendingBroadcast = state.hasPendingHwBroadcast,
-        onBackClick = onBackClick,
+        onBackClick = { if (!state.isBusy) onBackClick() },
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
         onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
-        onOpenConnect = { viewModel.onTransferToSpendingHwConfirm(order, walletId) },
+        onOpenConnect = { viewModel.onTransferToSpendingHwConfirm(walletId) },
     )
 
     if (state.isHwPassphraseRequired) {
         HwPassphrasePromptSheet(
             isVerifying = state.isVerifyingHwPassphrase,
-            onSubmit = { viewModel.onHwPassphraseSubmit(order, walletId, it) },
+            onSubmit = { viewModel.onHwPassphraseSubmit(walletId, it) },
             onDismiss = viewModel::onHwPassphraseDismiss,
         )
     }
@@ -88,7 +91,7 @@ fun SpendingHwSignScreen(
 
 @Composable
 private fun Content(
-    order: IBtOrder,
+    state: TransferToSpendingUiState,
     miningFeeSats: ULong = 0uL,
     isAdvanced: Boolean = false,
     isSigning: Boolean = false,
@@ -103,7 +106,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
             onBackClick = onBackClick,
-            actions = { DrawerNavIcon() },
+            actions = { if (!isSigning) DrawerNavIcon() },
         )
         Box(modifier = Modifier.fillMaxSize()) {
             HardwareTransferIllustration(
@@ -132,7 +135,7 @@ private fun Content(
                 VerticalSpacer(16.dp)
 
                 SpendingHwFeeGrid(
-                    order = order,
+                    state = state,
                     miningFeeSats = miningFeeSats,
                 )
 
@@ -184,12 +187,12 @@ private fun Content(
 
 @Composable
 internal fun SpendingHwFeeGrid(
-    order: IBtOrder,
+    state: TransferToSpendingUiState,
     modifier: Modifier = Modifier,
     miningFeeSats: ULong = 0uL,
 ) {
-    val lspFee = order.feeSat.safe() - order.clientBalanceSat.safe()
-    val total = order.feeSat.safe() + miningFeeSats.safe()
+    val lspFee = state.feeSat.safe() - state.clientBalanceSat.safe()
+    val total = state.feeSat.safe() + miningFeeSats.safe()
 
     Column(modifier = modifier) {
         Row(
@@ -211,7 +214,7 @@ internal fun SpendingHwFeeGrid(
         ) {
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__amount),
-                amount = order.clientBalanceSat.toLong(),
+                amount = state.clientBalanceSat.toLong(),
             )
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__total),
@@ -226,9 +229,7 @@ internal fun SpendingHwFeeGrid(
 private fun PreviewWithMiningFee() {
     AppThemeSurface {
         Content(
-            order = previewBtOrder(
-                networkFeeSat = 528uL,
-                serviceFeeSat = 132uL,
+            state = previewSpendingState(
                 clientBalanceSat = 7_042uL,
                 feeSat = 7_402uL,
             ),
@@ -242,7 +243,7 @@ private fun PreviewWithMiningFee() {
 private fun Preview() {
     AppThemeSurface {
         Content(
-            order = previewBtOrder(),
+            state = previewSpendingState(),
         )
     }
 }
@@ -252,7 +253,7 @@ private fun Preview() {
 private fun PreviewAdvanced() {
     AppThemeSurface {
         Content(
-            order = previewBtOrder(),
+            state = previewSpendingState(),
             isAdvanced = true,
         )
     }
@@ -263,7 +264,7 @@ private fun PreviewAdvanced() {
 private fun PreviewSigning() {
     AppThemeSurface {
         Content(
-            order = previewBtOrder(),
+            state = previewSpendingState(),
             isSigning = true,
         )
     }
@@ -274,7 +275,7 @@ private fun PreviewSigning() {
 private fun PreviewPendingBroadcast() {
     AppThemeSurface {
         Content(
-            order = previewBtOrder(),
+            state = previewSpendingState(),
             hasPendingBroadcast = true,
         )
     }

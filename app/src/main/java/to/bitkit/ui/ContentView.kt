@@ -80,7 +80,6 @@ import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
-import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.common.ComingSoonScreen
 import to.bitkit.ui.screens.contacts.AddContactScreen
 import to.bitkit.ui.screens.contacts.AddContactViewModel
@@ -636,7 +635,12 @@ fun ContentView(
 
                                 TimedSheetType.QUICK_PAY -> {
                                     QuickPayIntroSheet(
+                                        onLater = {
+                                            settingsViewModel.setQuickPayIntroSeen(true)
+                                            appViewModel.dismissTimedSheet()
+                                        },
                                         onContinue = {
+                                            settingsViewModel.setQuickPayIntroSeen(true)
                                             appViewModel.dismissTimedSheet()
                                             navController.navigateTo(Routes.QuickPaySettings)
                                         },
@@ -729,7 +733,7 @@ fun ContentView(
                             onReceiveClick = {
                                 appViewModel.showSheet(Sheet.Receive(hardwareWalletId = currentHardwareWalletId))
                             },
-                            onScanClick = { appViewModel.showScannerSheet() },
+                            onScanClick = { appViewModel.showScannerSheet(showBackButton = false) },
                         )
                     }
                 }
@@ -802,7 +806,7 @@ private fun RootNavHost(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         transferViewModel.transferEffects.collect { effect ->
-            transferEffectDestination(effect)?.let { navController.navigateTo(it) }
+            navController.navigateForTransferEffect(effect)
         }
     }
 
@@ -901,7 +905,6 @@ private fun RootNavHost(
             appViewModel = appViewModel,
             onNavigateHomeWidgets = onNavigateHomeWidgets,
         )
-        update()
         recoveryMode(navController, appViewModel)
 
         // TODO extract transferNavigation
@@ -953,8 +956,8 @@ private fun RootNavHost(
                     app = appViewModel,
                     wallet = walletViewModel,
                     transfer = transferViewModel,
-                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                    onTransferUnavailable = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onContinueClick = { navController.navigateOnSavingsTransferExit() },
+                    onTransferUnavailable = { navController.navigateOnSavingsTransferExit() },
                 )
             }
             deepLinkableComposable<Routes.SpendingIntro> {
@@ -982,7 +985,7 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingConfirm) },
+                    onQuoteReady = { navController.navigateTo(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
                     toast = { title, description ->
                         appViewModel.toast(
@@ -1001,7 +1004,7 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
+                    onQuoteReady = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
@@ -1037,8 +1040,7 @@ private fun RootNavHost(
                 SpendingAdvancedScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
-                    // Pops back to whoever opened Advanced: SpendingConfirm or SpendingHwSign.
-                    onOrderCreated = { navController.popBackStack() },
+                    onQuoteReady = { navController.popBackStack() },
                 )
             }
             deepLinkableComposable<Routes.TransferLiquidity> {
@@ -1676,7 +1678,6 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
         }
         BackgroundPaymentsIntroScreen(
             onBack = { navController.popBackStack() },
-            onLater = { navController.popBackStack() },
             onEnable = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -1918,12 +1919,6 @@ private fun NavGraphBuilder.suggestions(
     }
 }
 
-private fun NavGraphBuilder.update() {
-    composableWithDefaultTransitions<Routes.CriticalUpdate> {
-        CriticalUpdateScreen()
-    }
-}
-
 private fun NavGraphBuilder.recoveryMode(
     navController: NavHostController,
     appViewModel: AppViewModel,
@@ -2090,6 +2085,17 @@ fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIn
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 
+/**
+ * Exits the savings transfer to home. The coop close retry job holds on to this callback for up to
+ * 30 minutes, so it is ignored unless the savings progress screen that owns it is still on screen.
+ * Matching the whole transfer graph would also pop a transfer to spending the user started since.
+ */
+fun NavController.navigateOnSavingsTransferExit() {
+    val isOnSavingsProgress = currentDestination?.hasRoute<Routes.SavingsProgress>() == true
+    if (!isOnSavingsProgress) return
+    navigateToHome()
+}
+
 fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
     navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))
 
@@ -2107,6 +2113,15 @@ internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (
     TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned
     TransferEffect.OnSpendingFundingPaid -> Routes.SettingUp
     else -> null
+}
+
+internal fun NavController.navigateForTransferEffect(effect: TransferEffect) {
+    val destination = transferEffectDestination(effect) ?: return
+    navigateTo(destination) {
+        if (effect is TransferEffect.OnSpendingFundingPaid) {
+            popUpTo<Routes.SpendingConfirm> { inclusive = true }
+        }
+    }
 }
 
 internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes = when {
@@ -2468,9 +2483,6 @@ sealed interface Routes {
 
     @Serializable
     data object AppStatus : Routes.DeepLinkable
-
-    @Serializable
-    data object CriticalUpdate : Routes.InternalOnly
 
     @Serializable
     data object RecoveryMode : Routes.InternalOnly

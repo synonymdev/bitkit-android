@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -300,6 +301,9 @@ class AppViewModel @Inject constructor(
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
+
+    private val _isCriticalUpdateRequired = MutableStateFlow(false)
+    val isCriticalUpdateRequired = _isCriticalUpdateRequired.asStateFlow()
 
     private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(extraBufferCapacity = 1)
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
@@ -746,7 +750,11 @@ class AppViewModel @Inject constructor(
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
                 .collect {
-                    if (paykitPaymentRequestPollingJob?.isActive == true) pubkyRepo.republishIdentityIfNeeded()
+                    if (paykitPaymentRequestPollingJob?.isActive == true) {
+                        paykitPaymentRequestPollingJob?.cancel()
+                        paykitPaymentRequestPollingJob = null
+                        startPaykitPaymentRequestPolling()
+                    }
                     refreshPrivatePaykitEndpointsIfEnabled("network restored")
                 }
         }
@@ -814,17 +822,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true): Boolean {
-        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return false
+    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true) {
+        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
-        val previousRequests = paykitPaymentRequestRepo.pendingRequests.value
-        return paykitPaymentRequestRepo.refresh().fold(
-            onSuccess = {
-                presentNextIncomingPaykitPaymentRequest()
-                paykitPaymentRequestRepo.pendingRequests.value != previousRequests
-            },
-            onFailure = { false },
-        )
+        paykitPaymentRequestRepo.refresh().onSuccess {
+            presentNextIncomingPaykitPaymentRequest()
+        }
     }
 
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
@@ -840,28 +843,22 @@ class AppViewModel @Inject constructor(
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
-            var refreshIntervalIndex = 0
             var maintenanceIntervalIndex = 0
             var maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
-                val refreshInterval = PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex]
-                delay(refreshInterval)
-                maintenanceDelay -= refreshInterval
+                delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
+                maintenanceDelay -= PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL
+                if (isOnline.value != ConnectivityState.CONNECTED) continue
                 val refreshMaintenance = maintenanceDelay <= Duration.ZERO
                 if (refreshMaintenance) {
-                    if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
+                    pubkyRepo.republishIdentityIfNeeded()
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
                     maintenanceIntervalIndex =
                         (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
                     maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
                 }
-                val requestsChanged = refreshIncomingPaykitPaymentRequests(refreshMaintenance)
+                refreshIncomingPaykitPaymentRequests(refreshMaintenance)
                 if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
-                refreshIntervalIndex = if (requestsChanged) {
-                    0
-                } else {
-                    (refreshIntervalIndex + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.lastIndex)
-                }
             }
         }
         startInitialPaykitPaymentRequestPolling()
@@ -2064,6 +2061,15 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (invoice.isOwnInvoice()) {
+            showAddressValidationError(
+                titleRes = R.string.other__pay_self_invoice_title,
+                descriptionRes = R.string.other__pay_self_invoice_description,
+                testTag = "SelfPaymentToast",
+            )
+            return
+        }
+
         if (invoice.amountSatoshis > 0uL) {
             lightningRepo.syncState()
             if (!lightningRepo.canSend(invoice.amountSatoshis)) {
@@ -2082,6 +2088,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
+    @Suppress("LongMethod", "ReturnCount")
     private suspend fun validateOnChainAddress(invoice: OnChainInvoice) {
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
@@ -2124,6 +2131,14 @@ class AppViewModel @Inject constructor(
         val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
 
         if (maxSendOnchain == 0uL) {
+            if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
+                showAddressValidationError(
+                    titleRes = R.string.other__pay_self_invoice_title,
+                    descriptionRes = R.string.other__pay_self_invoice_description,
+                    testTag = "SelfPaymentToast",
+                )
+                return
+            }
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
                 descriptionRes = R.string.other__pay_insufficient_savings_description,
@@ -2155,36 +2170,56 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
+        decodeLightningParam(params)
+            ?.takeIf { lnInv ->
+                if (lnInv.isExpired) {
+                    Logger.debug(
+                        "Lightning invoice expired in unified URI, defaulting to onchain-only",
+                        context = TAG
+                    )
+                    return@takeIf false
+                }
+                if (lnInv.isOwnInvoice()) {
+                    Logger.debug(
+                        "Skipped own lightning invoice in unified URI, defaulting to onchain",
+                        context = TAG,
+                    )
+                    return@takeIf false
+                }
+                lightningRepo.waitForUsableChannels()
+                val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
+                if (!canSend) {
+                    val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
+                    if (nodeState is NodeLifecycleState.Stopped) {
+                        Logger.debug(
+                            "Node stopped, optimistically including LN invoice in unified QR",
+                            context = TAG,
+                        )
+                        return@takeIf true
+                    }
+                    Logger.debug(
+                        "Cannot pay unified invoice using LN, defaulting to onchain-only",
+                        context = TAG,
+                    )
+                }
+                return@takeIf canSend
+            }
+
+    private suspend fun LightningInvoice.isOwnInvoice(): Boolean = isPayee(lightningRepo.awaitNodeId())
+
+    private fun LightningInvoice.isPayee(nodeId: String?): Boolean {
+        val payee = payeeNodeId?.toHex() ?: return false
+        return nodeId != null && payee.equals(nodeId, ignoreCase = true)
+    }
+
+    private suspend fun hasOwnLightningInvoice(params: Map<String, String>?): Boolean =
+        decodeLightningParam(params)?.isPayee(lightningRepo.getLastKnownNodeId()) == true
+
+    private suspend fun decodeLightningParam(params: Map<String, String>?): LightningInvoice? =
         params?.get("lightning")?.let { bolt11 ->
             runSuspendCatching { coreService.decode(bolt11) }.getOrNull()
                 ?.let { it as? Scanner.Lightning }
                 ?.invoice
-                ?.takeIf { lnInv ->
-                    if (lnInv.isExpired) {
-                        Logger.debug(
-                            "Lightning invoice expired in unified URI, defaulting to onchain-only",
-                            context = TAG
-                        )
-                        return@takeIf false
-                    }
-                    lightningRepo.waitForUsableChannels()
-                    val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
-                    if (!canSend) {
-                        val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
-                        if (nodeState is NodeLifecycleState.Stopped) {
-                            Logger.debug(
-                                "Node stopped, optimistically including LN invoice in unified QR",
-                                context = TAG,
-                            )
-                            return@takeIf true
-                        }
-                        Logger.debug(
-                            "Cannot pay unified invoice using LN, defaulting to onchain-only",
-                            context = TAG,
-                        )
-                    }
-                    return@takeIf canSend
-                }
         }
 
     private fun showAddressValidationError(
@@ -3295,6 +3330,16 @@ class AppViewModel @Inject constructor(
 
         // Check on-chain balance before proceeding to amount screen
         if (maxSendOnchain == 0uL && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
+            if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__pay_self_invoice_title),
+                    description = context.getString(R.string.other__pay_self_invoice_description),
+                    testTag = "SelfPaymentToast",
+                )
+                clearActiveContactPaymentContext()
+                return
+            }
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_savings),
@@ -3393,7 +3438,7 @@ class AppViewModel @Inject constructor(
         else -> SendFundingSource.Savings
     }
 
-    @Suppress("ReturnCount")
+    @Suppress("LongMethod", "ReturnCount")
     private suspend fun onScanLightning(
         invoice: LightningInvoice,
         scanResult: String,
@@ -3407,6 +3452,11 @@ class AppViewModel @Inject constructor(
                 description = context.getString(R.string.other__scan__error__expired),
                 testTag = "ExpiredLightningToast",
             )
+            return
+        }
+
+        if (invoice.isOwnInvoice()) {
+            rejectOwnInvoiceScan()
             return
         }
 
@@ -3460,6 +3510,17 @@ class AppViewModel @Inject constructor(
         Logger.info("No amount found in invoice, proceeding to enter amount", context = TAG)
 
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+    }
+
+    private fun rejectOwnInvoiceScan() {
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__pay_self_invoice_title),
+            description = context.getString(R.string.other__pay_self_invoice_description),
+            testTag = "SelfPaymentToast",
+        )
+        clearActiveContactPaymentContext(retryIncomingRequest = false)
+        hideSheet()
     }
 
     private suspend fun onScanLnurlPay(data: LnurlPayData, fromMainScanner: Boolean) {
@@ -4009,6 +4070,8 @@ class AppViewModel @Inject constructor(
             }
         }
 
+        val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
+
         sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
@@ -4020,6 +4083,7 @@ class AppViewModel @Inject constructor(
                     sats = displayAmountSats.toLong(),
                 ),
             )
+            lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
             if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
@@ -4029,10 +4093,12 @@ class AppViewModel @Inject constructor(
                 preserveContactPaymentContext(pendingHash)
                 refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
+                lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
             }
             cancelPaymentProofPreparation(proofRequest)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
                 is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
@@ -4040,6 +4106,14 @@ class AppViewModel @Inject constructor(
             }
             setSendEffect(SendEffect.NavigateToError(failure))
         }
+    }
+
+    private suspend fun savePendingLnurlComment(invoice: LightningInvoice, paymentHash: String): String? {
+        val state = _sendUiState.value
+        if (state.lnurl !is LnurlParams.LnurlPay || state.comment.isBlank()) return null
+        if (!invoice.description.isNullOrEmpty()) return null
+        activityRepo.savePendingLightningMessage(paymentHash, state.comment)
+        return state.comment
     }
 
     private suspend fun clearFailedLightningPayment(
@@ -4603,6 +4677,11 @@ class AppViewModel @Inject constructor(
     ) = viewModelScope.launch {
         if (backupRepo.isRestoring.value) return@launch
 
+        if (_isCriticalUpdateRequired.value) {
+            Logger.verbose("Blocked NewTransactionSheet while a critical update is required", context = TAG)
+            return@launch
+        }
+
         if (!_isTransactionSheetEnabled) {
             Logger.verbose("NewTransactionSheet blocked by isNewTransactionSheetEnabled=false", context = TAG)
             return@launch
@@ -4629,10 +4708,16 @@ class AppViewModel @Inject constructor(
 
     fun showScannerSheet(
         isPubkyScan: Boolean = false,
+        showBackButton: Boolean = true,
         onResult: ((String) -> Unit)? = null,
     ) {
         scanResultHandler = onResult
-        showSheet(Sheet.QrScanner(isPubkyScan = isPubkyScan))
+        showSheet(
+            Sheet.QrScanner(
+                isPubkyScan = isPubkyScan,
+                showBackButton = showBackButton,
+            )
+        )
     }
 
     fun onScannerSheetResult(data: String) {
@@ -5587,27 +5672,19 @@ class AppViewModel @Inject constructor(
 
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
 
-    private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
-        if (Env.isDebug) return@withContext
+    @VisibleForTesting
+    internal suspend fun checkCriticalAppUpdate(isDebug: Boolean = Env.isDebug) = withContext(bgDispatcher) {
+        if (isDebug) return@withContext
 
-        delay(SCREEN_TRANSITION_DELAY)
-
-        runCatching {
-            val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android
-            val currentBuildNumber = BuildConfig.VERSION_CODE
-
-            if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext
-
-            if (androidReleaseInfo.isCritical) {
-                mainScreenEffect(
-                    MainScreenEffect.Navigate(
-                        route = Routes.CriticalUpdate,
-                        clearStack = true,
-                    )
-                )
+        runSuspendCatching {
+            appUpdaterService.getReleaseInfo().platforms.android
+        }.onSuccess {
+            if (it.isCritical && it.buildNumber > BuildConfig.VERSION_CODE) {
+                _isCriticalUpdateRequired.update { true }
+                hideNewTransactionSheet()
             }
-        }.onFailure { e ->
-            Logger.warn("Failure fetching new releases", e, context = TAG)
+        }.onFailure {
+            Logger.warn("Failure fetching new releases", it, context = TAG)
         }
     }
 
@@ -5630,7 +5707,7 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
-        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS = listOf(5.seconds, 10.seconds, 15.seconds, 30.seconds)
+        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 10.seconds
         private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
         private val INITIAL_PAYKIT_SYNC_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }
