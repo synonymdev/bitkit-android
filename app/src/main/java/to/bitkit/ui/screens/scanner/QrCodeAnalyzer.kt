@@ -9,12 +9,15 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import to.bitkit.ext.nowMillis
+import to.bitkit.models.QrCodePayload
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 
 @OptIn(ExperimentalGetImage::class)
 class QrCodeAnalyzer(
-    private val onScanResult: (Result<String>) -> Unit,
+    private val acceptsBinaryPayload: Boolean = false,
+    private val onScanResult: (Result<QrCodePayload>) -> Unit,
 ) : ImageAnalysis.Analyzer {
     private var lastScannedCode: String? = null
     private var lastScanTime: Long = 0
@@ -36,26 +39,31 @@ class QrCodeAnalyzer(
             scanner.process(inputImage)
                 .addOnCompleteListener {
                     if (it.isSuccessful) {
-                        it.result.let { barcodes ->
-                            barcodes.forEach { barcode ->
-                                barcode.rawValue?.let { qrCode ->
-                                    val currentTime = System.currentTimeMillis()
-                                    val isDifferentCode = qrCode != lastScannedCode
-                                    val isCooldownExpired = currentTime - lastScanTime > scanCooldownMs
+                        selectQrCodePayload(
+                            payloads = it.result.map { barcode ->
+                                QrCodePayload(
+                                    text = barcode.rawValue,
+                                    rawBytes = barcode.rawBytes,
+                                )
+                            },
+                            acceptsBinaryPayload = acceptsBinaryPayload,
+                        )?.let { payload ->
+                            val scanKey = payload.text ?: payload.rawBytes?.contentHashCode()?.toString()
+                            val currentTime = nowMillis()
+                            val isDifferentCode = scanKey != lastScannedCode
+                            val isCooldownExpired = currentTime - lastScanTime > scanCooldownMs
 
-                                    if (isDifferentCode || isCooldownExpired) {
-                                        lastScannedCode = qrCode
-                                        lastScanTime = currentTime
-                                        onScanResult(Result.success(qrCode))
-                                    }
-                                    image.close()
-                                    return@addOnCompleteListener
-                                }
+                            if (isDifferentCode || isCooldownExpired) {
+                                lastScannedCode = scanKey
+                                lastScanTime = currentTime
+                                onScanResult(
+                                    Result.success(payload)
+                                )
                             }
                         }
                     } else {
                         val error = it.exception ?: AppError("Scan failed")
-                        Logger.error(error.message.orEmpty(), error)
+                        Logger.error("Failed to analyze QR code", error, context = "QrCodeAnalyzer")
                         onScanResult(Result.failure(error))
                     }
                     image.close()
@@ -65,3 +73,9 @@ class QrCodeAnalyzer(
         }
     }
 }
+
+internal fun selectQrCodePayload(
+    payloads: List<QrCodePayload>,
+    acceptsBinaryPayload: Boolean,
+): QrCodePayload? = payloads.firstOrNull { it.text != null }
+    ?: payloads.firstOrNull { acceptsBinaryPayload && it.rawBytes != null }

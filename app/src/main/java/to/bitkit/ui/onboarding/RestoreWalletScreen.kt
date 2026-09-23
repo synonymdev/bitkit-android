@@ -1,5 +1,6 @@
 package to.bitkit.ui.onboarding
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -30,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,10 +45,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -58,6 +62,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
+import to.bitkit.models.Toast
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.ButtonSize
@@ -67,14 +73,20 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.ScanNavIcon
+import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.RestoreWalletEffect
 import to.bitkit.viewmodels.RestoreWalletUiState
 import to.bitkit.viewmodels.RestoreWalletViewModel
+
+/** Input containing whitespace is a pasted phrase, which the view model spreads across the word fields. */
+private val WHITESPACE = Regex("\\s")
 
 @Composable
 fun RestoreWalletScreen(
@@ -86,23 +98,55 @@ fun RestoreWalletScreen(
     BlockScreenshots()
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val app = appViewModel
+    var isScanningSeedQr by rememberSaveable { mutableStateOf(false) }
 
-    Content(
-        uiState = uiState,
-        checksumErrorVisible = uiState.checksumErrorVisible,
-        areButtonsEnabled = uiState.areButtonsEnabled,
-        onChangeWord = viewModel::onChangeWord,
-        onChangeWordFocus = viewModel::onChangeWordFocus,
-        onChangePassphrase = viewModel::onChangePassphrase,
-        onBackspaceInEmpty = viewModel::onBackspaceInEmpty,
-        onSelectSuggestion = viewModel::onSelectSuggestion,
-        onKeyboardDismiss = viewModel::onKeyboardDismiss,
-        onScrollComplete = viewModel::onScrollComplete,
-        onAdvancedClick = viewModel::onAdvancedClick,
-        onBack = onBackClick,
-        onRestore = onRestoreClick,
-        modifier = modifier,
-    )
+    BackHandler(enabled = isScanningSeedQr) {
+        isScanningSeedQr = false
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                RestoreWalletEffect.InvalidSeedQr -> app?.toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__qr_error_header),
+                    description = context.getString(R.string.onboarding__restore_seedqr_error),
+                )
+
+                RestoreWalletEffect.SeedQrDecoded -> isScanningSeedQr = false
+            }
+        }
+    }
+
+    if (isScanningSeedQr) {
+        QrScanningScreen(
+            onScanSuccess = viewModel::onSeedQrScan,
+            onBack = { isScanningSeedQr = false },
+            isFullScreen = true,
+            acceptsBinaryPayload = true,
+            showsGradientBackground = false,
+        )
+    } else {
+        Content(
+            uiState = uiState,
+            checksumErrorVisible = uiState.checksumErrorVisible,
+            areButtonsEnabled = uiState.areButtonsEnabled,
+            onChangeWord = viewModel::onChangeWord,
+            onChangeWordFocus = viewModel::onChangeWordFocus,
+            onChangePassphrase = viewModel::onChangePassphrase,
+            onBackspaceInEmpty = viewModel::onBackspaceInEmpty,
+            onSelectSuggestion = viewModel::onSelectSuggestion,
+            onKeyboardDismiss = viewModel::onKeyboardDismiss,
+            onScrollComplete = viewModel::onScrollComplete,
+            onAdvancedClick = viewModel::onAdvancedClick,
+            onScanClick = { isScanningSeedQr = true },
+            onBack = onBackClick,
+            onRestore = onRestoreClick,
+            modifier = modifier,
+        )
+    }
 }
 
 @Composable
@@ -119,6 +163,7 @@ private fun Content(
     onKeyboardDismiss: () -> Unit = {},
     onScrollComplete: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
+    onScanClick: () -> Unit = {},
     onRestore: (mnemonic: String, passphrase: String?) -> Unit = { _, _ -> },
     onBack: () -> Unit = {},
 ) {
@@ -148,7 +193,7 @@ private fun Content(
         }
     }
 
-    LaunchedEffect(uiState.focusedIndex) {
+    LaunchedEffect(uiState.focusedIndex, uiState.wordCount) {
         uiState.focusedIndex?.let { index ->
             focusRequesters[index].requestFocus()
         }
@@ -159,6 +204,7 @@ private fun Content(
             AppTopBar(
                 titleText = null,
                 onBackClick = onBack,
+                actions = { ScanNavIcon(onScanClick) },
             )
         },
         modifier = modifier,
@@ -194,6 +240,7 @@ private fun Content(
                             MnemonicInputField(
                                 label = "${index + 1}.",
                                 value = uiState.words[index],
+                                isFocused = uiState.focusedIndex == index,
                                 isError = index in uiState.invalidWordIndices && uiState.focusedIndex != index,
                                 onValueChange = { onChangeWord(index, it) },
                                 onFocusChange = { focused -> onChangeWordFocus(index, focused) },
@@ -213,6 +260,7 @@ private fun Content(
                             MnemonicInputField(
                                 label = "${index + 1}.",
                                 value = uiState.words[index],
+                                isFocused = uiState.focusedIndex == index,
                                 isError = index in uiState.invalidWordIndices && uiState.focusedIndex != index,
                                 onValueChange = { onChangeWord(index, it) },
                                 onFocusChange = { focused -> onChangeWordFocus(index, focused) },
@@ -359,6 +407,7 @@ fun MnemonicInputField(
     label: String,
     isError: Boolean = false,
     value: String,
+    isFocused: Boolean,
     onValueChange: (String) -> Unit,
     onFocusChange: (Boolean) -> Unit,
     onPositionChange: (Int) -> Unit,
@@ -368,21 +417,29 @@ fun MnemonicInputField(
 ) {
     var textFieldValue by remember { mutableStateOf(TextFieldValue()) }
 
-    // Sync text from parent while preserving selection
+    // Sync text from parent with the cursor at the end, so Backspace edits a pasted or suggested word
     LaunchedEffect(value) {
         if (textFieldValue.text != value) {
-            val selection = textFieldValue.selection
-            textFieldValue = TextFieldValue(value, selection)
+            textFieldValue = TextFieldValue(value, TextRange(value.length))
         }
     }
 
     OutlinedTextField(
         value = textFieldValue,
-        onValueChange = {
-            textFieldValue = it
-            onValueChange(it.text)
+        onValueChange = { newValue ->
+            when {
+                !newValue.text.contains(WHITESPACE) -> {
+                    textFieldValue = newValue
+                    onValueChange(newValue.text)
+                }
+
+                isPastedInput(previous = textFieldValue, new = newValue) ->
+                    onValueChange(insertedText(previous = textFieldValue, new = newValue))
+            }
         },
-        textStyle = AppTextStyles.BodySSB,
+        textStyle = AppTextStyles.BodySSB.copy(
+            fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal,
+        ),
         prefix = {
             Text(
                 text = label,
@@ -405,7 +462,7 @@ fun MnemonicInputField(
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.key == Key.Backspace &&
                     keyEvent.type == KeyEventType.KeyDown &&
-                    value.isEmpty()
+                    textFieldValue.text.isEmpty()
                 ) {
                     onBackspaceInEmpty()
                     true
@@ -420,6 +477,27 @@ fun MnemonicInputField(
                 onPositionChange(position)
             }
     )
+}
+
+/**
+ * Whitespace reaches a word field from a paste or from a typed space. Typing commits one character at a time,
+ * so only a longer insertion is forwarded as a paste and spread across the fields; a typed space is dropped.
+ */
+internal fun isPastedInput(previous: TextFieldValue, new: TextFieldValue): Boolean {
+    val keptLength = previous.text.length - previous.selection.length
+    return new.text.length - keptLength > 1
+}
+
+/**
+ * The text a paste actually inserted, without the field content it was dropped next to. A paste into a field that
+ * already holds a word arrives glued to it (`about` + `about ...` reads as `aboutabout ...`), and that merged first
+ * word would then be spread into the fields as if it were pasted.
+ */
+internal fun insertedText(previous: TextFieldValue, new: TextFieldValue): String {
+    val prefixLength = previous.selection.min
+    val suffixLength = previous.text.length - previous.selection.max
+    val end = (new.text.length - suffixLength).coerceAtLeast(prefixLength)
+    return new.text.substring(prefixLength.coerceAtMost(new.text.length), end.coerceAtMost(new.text.length))
 }
 
 @Preview(showSystemUi = true)

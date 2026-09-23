@@ -371,8 +371,6 @@ class PrivatePaykitRepo @Inject constructor(
                 val publicKey = normalizedPublicKey(request.counterparty) ?: throw PrivatePaykitError.InvalidPublicKey
                 beginContactPayment(publicKey, request).getOrThrow()
             }
-        }.onFailure {
-            Logger.warn("Failed to present incoming Paykit payment request", it, context = TAG)
         }
 
     suspend fun beginPaymentRequestWaitingForUpdatedList(
@@ -553,7 +551,9 @@ class PrivatePaykitRepo @Inject constructor(
                 val consumedVersion = ensureState().contacts[publicKey]
                     ?.consumedPrivatePaymentListVersionsByReceiverPath
                     ?.get(receiverPath)
-                val amount = paymentRequest?.let { PaymentAmountContext(it.amountValue, "btc") }
+                val amount = paymentRequest?.let {
+                    PaymentAmountContext(it.amountValue, PaykitIssuerInterop.BITCOIN_ASSET)
+                }
                 val prepared = preparePrivateContactPayment(
                     publicKey = publicKey,
                     receiverPath = receiverPath,

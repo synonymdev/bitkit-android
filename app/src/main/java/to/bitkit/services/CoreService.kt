@@ -324,6 +324,43 @@ private fun OnchainActivity.withRecoveredTransfer(recoveredChannelId: String?): 
         else -> copy(isTransfer = true, channelId = channelId ?: recoveredChannelId)
     }
 
+/**
+ * Applies the latest LDK payment details to a stored Lightning activity.
+ *
+ * A retry of the same invoice reuses the payment hash, so the stored row must take the final
+ * attempt's amount, fee and preimage. Missing values keep the stored ones. The stored message is
+ * never replaced, because LDK reports a description-hash invoice's hash as its description.
+ */
+internal fun LightningActivity.withPaymentUpdate(
+    payment: PaymentDetails,
+    kind: PaymentKind.Bolt11,
+    state: PaymentState,
+    contact: String?,
+): LightningActivity = copy(
+    value = payment.amountSats ?: value,
+    fee = payment.feePaidMsat?.let { msatFloorOf(it) } ?: fee,
+    preimage = kind.preimage ?: preimage,
+    updatedAt = payment.latestUpdateTimestamp,
+    status = state,
+    contact = contact,
+)
+
+/**
+ * Applies a pending LNURL-pay comment as the stored Lightning activity message.
+ *
+ * The comment replaces only an empty message or the [description] LDK reported, which for a
+ * description-hash invoice is the hash itself. A comment is stored only for invoices without a
+ * direct description, so an invoice's own description is never replaced.
+ */
+internal fun LightningActivity.withPendingMessage(
+    pendingMessage: String?,
+    description: String?,
+): LightningActivity {
+    if (pendingMessage.isNullOrBlank()) return this
+    if (message.isNotEmpty() && message != description) return this
+    return copy(message = pendingMessage)
+}
+
 @Suppress("LargeClass", "TooManyFunctions")
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
@@ -727,6 +764,9 @@ class ActivityService(
             return
         }
 
+        val pendingMessage = payment.id.takeIf { payment.direction == PaymentDirection.OUTBOUND }
+            ?.let { cacheStore.data.first().pendingLightningMessages[it] }
+
         val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
         if (existingActivity is Activity.Lightning) {
             val statusChanging = existingActivity.v1.status != state
@@ -746,9 +786,10 @@ class ActivityService(
             ?: privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(payment.id, payment.direction)
 
         val ln = if (existingActivity is Activity.Lightning) {
-            existingActivity.v1.copy(
-                updatedAt = payment.latestUpdateTimestamp,
-                status = state,
+            existingActivity.v1.withPaymentUpdate(
+                payment = payment,
+                kind = kind,
+                state = state,
                 contact = contact,
             )
         } else {
@@ -765,13 +806,35 @@ class ActivityService(
                 contact = contact,
                 seenAt = null,
             )
-        }
+        }.withPendingMessage(pendingMessage = pendingMessage, description = kind.description)
 
         if (getActivityById(walletId = defaultWalletId, activityId = payment.id) != null) {
             updateActivity(activityId = payment.id, activity = Activity.Lightning(ln))
         } else {
             upsertActivity(Activity.Lightning(ln))
         }
+
+        if (pendingMessage != null) cacheStore.removePendingLightningMessage(payment.id)
+    }
+
+    /**
+     * Applies a pending LNURL-pay comment to the Lightning activity for [paymentHash] if the row exists.
+     *
+     * The row is read and written with no suspension point in between, so on the single-threaded Core
+     * queue no payment sync can write the same row from a stale snapshot. The pending comment is kept
+     * when the row does not exist yet, so the payment sync applies it later.
+     */
+    suspend fun setLightningMessageIfEmpty(paymentHash: String, message: String) = ServiceQueue.CORE.background {
+        val description = lightningService.listPayments()
+            ?.firstOrNull { it.id == paymentHash }
+            ?.let { (it.kind as? PaymentKind.Bolt11)?.description }
+        val existing = getActivityById(walletId = defaultWalletId, activityId = paymentHash)
+            as? Activity.Lightning ?: return@background
+        val updated = existing.v1.withPendingMessage(pendingMessage = message, description = description)
+        if (updated != existing.v1) {
+            updateActivity(activityId = paymentHash, activity = Activity.Lightning(updated))
+        }
+        cacheStore.removePendingLightningMessage(paymentHash)
     }
 
     /**
@@ -1948,9 +2011,10 @@ class BlocktankService(
         orderIds: List<String>? = null,
         filter: BtOrderState2? = null,
         refresh: Boolean = true,
+        refreshActive: Boolean = refresh,
     ): List<IBtOrder> {
         return ServiceQueue.CORE.background {
-            if (refresh) {
+            if (refreshActive) {
                 refreshActiveOrders()
             }
             getOrders(orderIds = orderIds, filter = filter, refresh = refresh)

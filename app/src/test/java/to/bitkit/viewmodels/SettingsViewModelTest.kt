@@ -61,6 +61,7 @@ class SettingsViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
+        whenever(settingsStore.isPubkyProfileSetupPending).thenReturn(MutableStateFlow(false))
         whenever(contactPaymentSettingsRepo.isEnabled).thenReturn(contactPaymentsEnabled)
         whenever { contactPaymentSettingsRepo.setEnabled(any()) }.thenReturn(Result.success(Unit))
         whenever { settingsStore.update(any()) }.thenAnswer {

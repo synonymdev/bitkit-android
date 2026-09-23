@@ -7,20 +7,27 @@ on:
         description: "Branch of synonymdev/bitkit-e2e-tests to use (main | default-feature-branch | custom branch name)"
         required: false
         default: "default-feature-branch"
+      post_to_slack:
+        description: "Post E2E migration summary to Slack (#bitkit-staging-nightly)"
+        type: boolean
+        required: false
+        default: false
   schedule:
     - cron: "0 2 * * *"
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 env:
   TERM: xterm-256color
   FORCE_COLOR: 1
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
   build:
-    if: github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && (startsWith(github.head_ref, 'release-') || startsWith(github.base_ref, 'release-')))
     runs-on: ubuntu-latest
 
     steps:
@@ -70,14 +77,14 @@ jobs:
           path: app/build/outputs/bitkit/devDebug/bitkit_e2e.apk
 
   e2e-branch:
-    if: github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && (startsWith(github.head_ref, 'release-') || startsWith(github.base_ref, 'release-')))
     uses: synonymdev/bitkit-e2e-tests/.github/workflows/determine-e2e-branch.yml@main
     with:
       app_branch: ${{ github.head_ref || github.ref_name }}
       e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
 
   e2e-tests:
-    if: github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && (startsWith(github.head_ref, 'release-') || startsWith(github.base_ref, 'release-')))
     runs-on: ubuntu-latest
     needs: [build, e2e-branch]
 
@@ -97,17 +104,19 @@ jobs:
     name: e2e-tests - ${{ matrix.rn_version }} - ${{ matrix.scenario.name }}
 
     steps:
-      - name: Show selected E2E branch
-        env:
-          E2E_BRANCH: ${{ needs.e2e-branch.outputs.branch }}
-        run: echo $E2E_BRANCH
+      - name: Resolve E2E tests ref
+        id: e2e-ref
+        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main
+        with:
+          selected: ${{ needs.e2e-branch.outputs.branch }}
+          e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
 
       - name: Clone E2E tests
         uses: actions/checkout@v7
         with:
           repository: synonymdev/bitkit-e2e-tests
           path: bitkit-e2e-tests
-          ref: ${{ needs.e2e-branch.outputs.branch }}
+          ref: ${{ steps.e2e-ref.outputs.ref }}
 
       - name: Enable KVM
         run: |
@@ -226,3 +235,38 @@ jobs:
         with:
           name: e2e-artifacts_${{ matrix.scenario.name }}_${{ matrix.rn_version }}_${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
+
+  slack-report:
+    if: >-
+      always() &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.post_to_slack == true))
+    needs: [build, e2e-branch, e2e-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve E2E tests ref
+        id: e2e-ref
+        continue-on-error: true
+        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main
+        with:
+          selected: ${{ needs.e2e-branch.outputs.branch }}
+          e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
+
+      - name: Checkout E2E tests
+        uses: actions/checkout@v7
+        with:
+          repository: synonymdev/bitkit-e2e-tests
+          ref: ${{ steps.e2e-ref.outputs.ref || 'main' }}
+
+      - name: Post Slack summary
+        run: python3 scripts/slack_summary.py e2e-migration
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_STAGING }}
+          PLATFORM: android
+          MIGRATION_RESULT: ${{ needs.build.result == 'success' && needs.e2e-branch.result == 'success' && needs.e2e-tests.result == 'success' && 'success' || 'failure' }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          E2E_BRANCH_RESULT: ${{ needs.e2e-branch.result }}
+          E2E_TESTS_RESULT: ${{ needs.e2e-tests.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          E2E_TESTS_REF: ${{ steps.e2e-ref.outputs.ref }}

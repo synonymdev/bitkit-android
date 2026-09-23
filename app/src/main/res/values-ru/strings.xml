@@ -76,19 +76,25 @@
     <string name="common__yes">Да</string>
     <string name="common__yes_proceed">Да,\nПродолжить</string>
     <string name="fee__custom__description">Зависит от комиссии</string>
+    <string name="fee__custom__duration">Зависит от комиссии</string>
     <string name="fee__custom__shortDescription">Зависит от комиссии</string>
     <string name="fee__custom__title">Другое</string>
     <string name="fee__fast__description">±10-20 минут</string>
+    <string name="fee__fast__duration">±10 минут</string>
     <string name="fee__fast__shortDescription">±10м</string>
     <string name="fee__fast__title">Быстро</string>
+    <string name="fee__instant__duration">±2 секунды</string>
     <string name="fee__instant__title">Мгновенно</string>
     <string name="fee__minimum__description">+2 часа</string>
+    <string name="fee__minimum__duration">+2 часа</string>
     <string name="fee__minimum__shortDescription">+2ч</string>
     <string name="fee__minimum__title">Минимум</string>
     <string name="fee__normal__description">±20-60 минут</string>
+    <string name="fee__normal__duration">±20 минут</string>
     <string name="fee__normal__shortDescription">±20м</string>
     <string name="fee__normal__title">Нормально</string>
     <string name="fee__slow__description">±1-2 часа</string>
+    <string name="fee__slow__duration">±1 час</string>
     <string name="fee__slow__shortDescription">±1ч</string>
     <string name="fee__slow__title">Медленно</string>
     <string name="lightning__availability__text">Перевод средств в сбережения обычно мгновенный, но расчёт может занять до &lt;accent&gt;14 дней&lt;/accent&gt; в определённых сетевых условиях.</string>
@@ -325,12 +331,12 @@
     <string name="onboarding__skip">Пропустить</string>
     <string name="onboarding__skip_intro">Пропустить</string>
     <string name="onboarding__slide0_header">Свобода в\n&lt;accent&gt;вашем кармане&lt;/accent&gt;</string>
-    <string name="onboarding__slide0_text">Bitkit предоставляет вам ключи для управления вашими деньгами. Тратьте сейчас или копите на потом. Выбор за вами.</string>
+    <string name="onboarding__slide0_text">Bitkit даёт вам ключи для управления вашими деньгами, профилем и контактами. Возьмите контроль и станьте безграничными.</string>
     <string name="onboarding__slide1_header">Мгновенные\n&lt;accent&gt;платежи&lt;/accent&gt;</string>
     <string name="onboarding__slide1_note">*Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам.</string>
     <string name="onboarding__slide1_text">Тратьте биткойны быстрее, чем когда-либо. Наслаждайтесь мгновенными и недорогими платежами с друзьями, семьёй и продавцами.</string>
     <string name="onboarding__slide3_header">Конфиденциальность — это\n&lt;accent&gt;не преступление&lt;/accent&gt;</string>
-    <string name="onboarding__slide3_text">Проведите пальцем, чтобы скрыть свой баланс, наслаждайтесь более конфиденциальными платежами и защитите свой кошелёк, включив функции безопасности.</string>
+    <string name="onboarding__slide3_text">Ваши деньги, ваша конфиденциальность. Проведите пальцем, чтобы скрыть баланс и тратить более конфиденциально, без отслеживания данных и KYC.</string>
     <string name="onboarding__slide4_header">Ваши ключи,\n&lt;accent&gt;ваши монеты&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Давайте создадим ваш кошелёк. Пожалуйста, имейте в виду, что Bitkit — это мобильное ПО. &lt;accent&gt;Не храните все свои деньги в Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Условия использования</string>
@@ -674,7 +680,7 @@
     <string name="settings__general_title">Основные</string>
     <string name="settings__language_system_default">Системные настройки</string>
     <string name="settings__language_title">Язык</string>
-    <string name="settings__quickpay__intro__description">Bitkit QuickPay ускоряет оплату, автоматически оплачивая QR-коды при сканировании.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay ускоряет оплату, автоматически оплачивая небольшие счета.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Платежи&lt;/accent&gt;
 без трения</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -682,6 +688,7 @@
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay поддерживает только платежи с вашего баланса расходов.</string>
     <string name="settings__quickpay__settings__text">Если включено, отсканированные счета ниже \${amount} будут оплачиваться автоматически без подтверждения или PIN-кода*.</string>
     <string name="settings__quickpay__settings__toggle">Включить QuickPay</string>
+    <string name="settings__quickpay__sheet__description">QuickPay ускоряет оплату, автоматически оплачивая отсканированные QR-коды.</string>
     <string name="settings__rgs__button_connect">Подключиться</string>
     <string name="settings__rgs__server_url">URL Сервера Rapid-Gossip-Sync</string>
     <string name="settings__rgs__update_success_description">Возможно, вам потребуется перезапустить приложение один или два раза, чтобы изменения вступили в силу.</string>
@@ -846,6 +853,10 @@
     <string name="wallet__activity_transfer_to_savings">В сбережения</string>
     <string name="wallet__activity_transfer_to_spending">В Расходы</string>
     <string name="wallet__activity_tx_id">ID Транзакции</string>
+    <string name="wallet__balance_hidden_message">Смахните ваш баланс кошелька, чтобы снова его показать.</string>
+    <string name="wallet__balance_hidden_title">Баланс Кошелька Скрыт</string>
+    <string name="wallet__balance_unit_switched_message">Нажмите на баланс кошелька, чтобы переключить обратно на %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Переключено на %1$s</string>
     <string name="wallet__boost">Ускорить</string>
     <string name="wallet__boost_decrease_fee">Уменьшить комиссию</string>
     <string name="wallet__boost_error_msg">Bitkit не удалось ускорить транзакцию.</string>
@@ -936,7 +947,6 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__recipient_scan">Сканировать QR</string>
     <string name="wallet__savings__onboarding">&lt;accent&gt;Отправьте\nбиткоин&lt;/accent&gt;\nна ваш\nбаланс сбережений</string>
     <string name="wallet__savings__title">Сбережения</string>
-    <string name="wallet__selection_auto">Авто</string>
     <string name="wallet__selection_title">Управление монетами</string>
     <string name="wallet__selection_total_required">Всего требуется</string>
     <string name="wallet__selection_total_selected">Всего выбрано</string>
@@ -989,6 +999,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__tags_filter_title">Выберите тег</string>
     <string name="wallet__tags_new">Новый тег</string>
     <string name="wallet__tags_new_enter">Введите тег</string>
+    <string name="wallet__tags_no">Тегов пока нет</string>
     <string name="wallet__tags_previously">Ранее использовавшиеся теги</string>
     <string name="wallet__payment_abandoned">Платеж Lightning был остановлен до завершения.</string>
     <string name="wallet__payment_expired">Срок действия этого платежа Lightning истек. Запросите новый счет.</string>

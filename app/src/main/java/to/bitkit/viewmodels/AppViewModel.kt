@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -64,6 +65,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ClosureReason
@@ -116,6 +118,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkyRingAuthCallback
@@ -132,6 +135,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.sanitizedDeeplinkLogValue
+import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
@@ -143,6 +147,7 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
@@ -152,12 +157,14 @@ import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestCreation
+import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitSubscription
+import to.bitkit.repositories.PaykitSubscriptionDraft
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
@@ -175,10 +182,12 @@ import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.repositories.incomingPaymentRequestFailureReason
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
+import to.bitkit.services.PubkyService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
@@ -188,6 +197,7 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.ScreenDeepLinks
+import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
@@ -248,6 +258,7 @@ class AppViewModel @Inject constructor(
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
     private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
+    private val paykitPaymentRequestDiagnostics: PaykitPaymentRequestDiagnostics,
     private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
     private val samRockRepo: SamRockRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
@@ -290,6 +301,9 @@ class AppViewModel @Inject constructor(
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
+
+    private val _isCriticalUpdateRequired = MutableStateFlow(false)
+    val isCriticalUpdateRequired = _isCriticalUpdateRequired.asStateFlow()
 
     private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(extraBufferCapacity = 1)
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
@@ -357,6 +371,8 @@ class AppViewModel @Inject constructor(
     private var activeContactPaymentContext: ContactPaymentContext? = null
     private val pendingContactPaymentContexts = mutableMapOf<String, ContactPaymentContext>()
     private var requestedPaymentRequestId: PaykitPaymentRequestId? = null
+    private var requestedPaymentRequest: PaykitPaymentRequest? = null
+    private var shouldRestorePaymentRequestSheet = false
     private var preparedContactPaymentContext: ContactPaymentContext? = null
     private var requestedPaymentRequestIdentity: String? = null
     private var requestedPaymentRequestTags: ImmutableList<String> = persistentListOf()
@@ -416,6 +432,8 @@ class AppViewModel @Inject constructor(
             )
         }
     }
+
+    private val toastManager = toastManagerProvider(viewModelScope)
 
     init {
         viewModelScope.launch {
@@ -731,7 +749,14 @@ class AppViewModel @Inject constructor(
             isOnline
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
-                .collect { refreshPrivatePaykitEndpointsIfEnabled("network restored") }
+                .collect {
+                    if (paykitPaymentRequestPollingJob?.isActive == true) {
+                        paykitPaymentRequestPollingJob?.cancel()
+                        paykitPaymentRequestPollingJob = null
+                        startPaykitPaymentRequestPolling()
+                    }
+                    refreshPrivatePaykitEndpointsIfEnabled("network restored")
+                }
         }
     }
 
@@ -797,17 +822,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshIncomingPaykitPaymentRequests(): Boolean {
-        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return false
-        paykitPaymentProofRepo.reconcile()
-        val previousRequests = paykitPaymentRequestRepo.pendingRequests.value
-        return paykitPaymentRequestRepo.refresh().fold(
-            onSuccess = {
-                presentNextIncomingPaykitPaymentRequest()
-                paykitPaymentRequestRepo.pendingRequests.value != previousRequests
-            },
-            onFailure = { false },
-        )
+    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true) {
+        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
+        if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
+        paykitPaymentRequestRepo.refresh().onSuccess {
+            presentNextIncomingPaykitPaymentRequest()
+        }
     }
 
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
@@ -822,17 +842,23 @@ class AppViewModel @Inject constructor(
         if (paykitPaymentRequestPollingJob?.isActive == true) return
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
-            var refreshIntervalIndex = 0
+            if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
+            var maintenanceIntervalIndex = 0
+            var maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
-                delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex])
-                privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
-                val requestsChanged = refreshIncomingPaykitPaymentRequests()
-                refreshPaymentRequestTargets(force = true)
-                refreshIntervalIndex = if (requestsChanged) {
-                    0
-                } else {
-                    (refreshIntervalIndex + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.lastIndex)
+                delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
+                maintenanceDelay -= PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL
+                if (isOnline.value != ConnectivityState.CONNECTED) continue
+                val refreshMaintenance = maintenanceDelay <= Duration.ZERO
+                if (refreshMaintenance) {
+                    pubkyRepo.republishIdentityIfNeeded()
+                    privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
+                    maintenanceIntervalIndex =
+                        (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
+                    maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
                 }
+                refreshIncomingPaykitPaymentRequests(refreshMaintenance)
+                if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
             }
         }
         startInitialPaykitPaymentRequestPolling()
@@ -851,6 +877,8 @@ class AppViewModel @Inject constructor(
             if (currentIdentity != null && !PubkyPublicKeyFormat.matches(currentIdentity, payerIdentity)) return
             invalidatePaymentRequestPresentation()
             requestedPaymentRequestId = requestId
+            requestedPaymentRequest = null
+            shouldRestorePaymentRequestSheet = false
             requestedPaymentRequestIdentity = payerIdentity
             requestedPaymentRequestTags = persistentListOf()
         }
@@ -974,10 +1002,24 @@ class AppViewModel @Inject constructor(
                     null
                 }
                 paymentRequestPresentationRetryJobs[requestedId]?.isActive == true -> null
-                else -> paykitPaymentRequestRepo.pendingRequest(requestedId)?.let(::listOf) ?: run {
-                    invalidatePaymentRequestPresentation()
-                    clearRequestedPaymentRequest()
-                    null
+                else -> {
+                    val request = paykitPaymentRequestRepo.pendingRequest(requestedId)
+                    if (request != null) {
+                        requestedPaymentRequest = request
+                        listOf(request)
+                    } else {
+                        requestedPaymentRequest?.takeIf { it.id == requestedId }?.let {
+                            if (paykitPaymentRequestRepo.isExpired(it)) {
+                                finishExpiredPaymentRequestPresentation(it)
+                            } else {
+                                finishUnavailablePaymentRequestPresentation(it)
+                            }
+                        } ?: run {
+                            invalidatePaymentRequestPresentation()
+                            clearRequestedPaymentRequest()
+                        }
+                        null
+                    }
                 }
             }
         }
@@ -993,10 +1035,17 @@ class AppViewModel @Inject constructor(
         request: PaykitPaymentRequest,
         generation: Long,
     ): Boolean {
-        val result = privatePaykitRepo.beginPaymentRequest(request).getOrNull()
+        val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
+        val result = presentationResult.getOrNull()
         if (!isCurrentPaymentRequestPresentation(request, generation) || isPaymentRequestPresentationBlocked()) {
             return true
         }
+        val error = presentationResult.exceptionOrNull()
+        if (error is PaykitPaymentRequestError.RequestExpired) {
+            finishExpiredPaymentRequestPresentation(request)
+            return false
+        }
+        if (error != null) paykitPaymentRequestDiagnostics.logPresentationFailure(request.counterparty, error)
         if (!paykitPaymentRequestRepo.isPending(request)) {
             if (requestedPaymentRequestId == request.id) {
                 invalidatePaymentRequestPresentation()
@@ -1005,7 +1054,11 @@ class AppViewModel @Inject constructor(
             return false
         }
         if (result !is PublicPaykitPaymentResult.Opened) {
-            deferPaymentRequestPresentation(request)
+            deferPaymentRequestPresentation(
+                request = request,
+                reason = result?.incomingPaymentRequestFailureReason
+                    ?: IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+            )
             return false
         }
 
@@ -1026,23 +1079,35 @@ class AppViewModel @Inject constructor(
             !paykitPaymentRequestRepo.isProcessing(request) &&
             (requestedPaymentRequestId?.let { it == request.id } ?: true)
 
-    private fun deferPaymentRequestPresentation(request: PaykitPaymentRequest) {
+    private fun deferPaymentRequestPresentation(
+        request: PaykitPaymentRequest,
+        reason: IncomingPaykitPaymentRequestFailureReason,
+    ) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(request.counterparty, reason)
         val attempt = paymentRequestPresentationRetryAttempts[request.id] ?: 0
         val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.getOrNull(attempt)
             ?: if (requestedPaymentRequestId == request.id) {
                 Logger.warn(
-                    "Giving up requested payment request presentation after '${attempt + 1}' attempts",
+                    "Stopped retrying requested incoming Paykit payment request after " +
+                        "'${attempt + 1}' presentation attempts",
                     context = TAG,
                 )
+                val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
                 paymentRequestPresentationGeneration++
                 clearRequestedPaymentRequest()
-                showSheet(Sheet.PaymentRequests)
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__payment_request),
+                    description = context.getString(R.string.wallet__payment_request_unavailable),
+                    testTag = "PaymentRequestUnavailableToast",
+                )
+                if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
                 viewModelScope.launch {
                     paykitPaymentRequestRepo.markPresented(request)
                 }
                 return
             } else {
-                PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.last()
+                PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL
             }
         paymentRequestPresentationRetryAttempts[request.id] =
             (attempt + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.size)
@@ -1061,13 +1126,67 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun finishExpiredPaymentRequestPresentation(request: PaykitPaymentRequest) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.RequestExpired,
+        )
+        val restorePaymentRequestSheet =
+            requestedPaymentRequestId == request.id && shouldRestorePaymentRequestSheet
+        val showExpiredToast = requestedPaymentRequestId == request.id
+        if (requestedPaymentRequestId == request.id) {
+            val hideExpiredRequestSendSheet = invalidatePaymentRequestPresentation(requestId = request.id)
+            clearRequestedPaymentRequest()
+            if (hideExpiredRequestSendSheet) hideSheet()
+        }
+        clearPaymentRequestPresentationRetry(request.id)
+        if (!showExpiredToast) return
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.wallet__payment_request_expired),
+            testTag = "PaymentRequestExpiredToast",
+        )
+        if (restorePaymentRequestSheet && currentSheet.value == null) showSheet(Sheet.PaymentRequests)
+    }
+
+    private fun finishUnavailablePaymentRequestPresentation(request: PaykitPaymentRequest) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+        )
+        val restorePaymentRequestSheet =
+            requestedPaymentRequestId == request.id && shouldRestorePaymentRequestSheet
+        val showUnavailableToast = requestedPaymentRequestId == request.id
+        if (requestedPaymentRequestId == request.id) {
+            invalidatePaymentRequestPresentation()
+            clearRequestedPaymentRequest()
+        }
+        clearPaymentRequestPresentationRetry(request.id)
+        if (!showUnavailableToast) return
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.wallet__payment_request_unavailable),
+            testTag = "PaymentRequestUnavailableToast",
+        )
+        if (restorePaymentRequestSheet && currentSheet.value == null) showSheet(Sheet.PaymentRequests)
+    }
+
     private fun retainPaymentRequestPresentationState(requests: List<PaykitPaymentRequest>) {
         val requestIds = requests.mapTo(mutableSetOf()) { it.id }
         paymentRequestPresentationRetryAttempts.keys.retainAll(requestIds)
         paymentRequestPresentationRetryJobs.keys.filter { it !in requestIds }.forEach {
             paymentRequestPresentationRetryJobs.remove(it)?.cancel()
         }
-        if (requestedPaymentRequestId?.let { it !in requestIds } == true) {
+        val requestedRequest = requestedPaymentRequest
+        if (requestedRequest != null && requestedRequest.id !in requestIds) {
+            if (paykitPaymentRequestRepo.isExpired(requestedRequest)) {
+                finishExpiredPaymentRequestPresentation(requestedRequest)
+                return
+            }
+            finishUnavailablePaymentRequestPresentation(requestedRequest)
+        } else if (requestedPaymentRequestId?.let { it !in requestIds } == true) {
             invalidatePaymentRequestPresentation()
             clearRequestedPaymentRequest()
         }
@@ -1097,20 +1216,44 @@ class AppViewModel @Inject constructor(
 
     private fun clearRequestedPaymentRequest() {
         requestedPaymentRequestId = null
+        requestedPaymentRequest = null
+        shouldRestorePaymentRequestSheet = false
         requestedPaymentRequestIdentity = null
         requestedPaymentRequestTags = persistentListOf()
     }
 
-    private fun invalidatePaymentRequestPresentation(dismissActiveRequest: Boolean = false) {
+    private fun invalidatePaymentRequestPresentation(
+        dismissActiveRequest: Boolean = false,
+        requestId: PaykitPaymentRequestId? = null,
+    ): Boolean {
+        fun targetsRequest(context: ContactPaymentContext?): Boolean {
+            val scanRequestId = context?.incomingPaymentRequest?.id ?: return false
+            return requestId == null || scanRequestId == requestId
+        }
+
         paymentRequestPresentationGeneration++
         scheduledScan
-            ?.takeIf { it.contactPaymentContext?.incomingPaymentRequest != null }
+            ?.takeIf { targetsRequest(it.contactPaymentContext) }
             ?.job
             ?.cancel()
         synchronized(deferredScanLock) {
-            if (deferredScan?.contactPaymentContext?.incomingPaymentRequest != null) {
+            if (targetsRequest(deferredScan?.contactPaymentContext)) {
                 deferredScan = null
             }
+        }
+        val shouldHideRequestSendSheet = if (requestId != null) {
+            synchronized(contactPaymentContextLock) {
+                val ownsActiveContext = activeContactPaymentContext?.incomingPaymentRequest?.id == requestId
+                if (ownsActiveContext) {
+                    activeContactPaymentContext = null
+                }
+                if (preparedContactPaymentContext?.incomingPaymentRequest?.id == requestId) {
+                    preparedContactPaymentContext = null
+                }
+                ownsActiveContext && currentSheet.value is Sheet.Send
+            }
+        } else {
+            false
         }
         if (dismissActiveRequest && activeIncomingPaymentRequest() != null) {
             if (currentSheet.value is Sheet.Send) {
@@ -1119,6 +1262,7 @@ class AppViewModel @Inject constructor(
                 clearActiveContactPaymentContext()
             }
         }
+        return shouldHideRequestSendSheet
     }
 
     private suspend fun refreshPrivateOnlyPaykitReceiverMarker(reason: String) {
@@ -1854,7 +1998,7 @@ class AppViewModel @Inject constructor(
         // Skip validation for empty input
         if (valueWithoutSpaces.isEmpty()) return
 
-        if (valueWithoutSpaces.startsWith("$PUBKYAUTH_SCHEME://", ignoreCase = true)) return
+        if (PubkyAuthRequest.isProtocolUrl(valueWithoutSpaces)) return
 
         if (PubkyPublicKeyFormat.normalized(valueWithoutSpaces) != null) {
             if (isPaykitEnabled.value) {
@@ -1917,6 +2061,15 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (invoice.isOwnInvoice()) {
+            showAddressValidationError(
+                titleRes = R.string.other__pay_self_invoice_title,
+                descriptionRes = R.string.other__pay_self_invoice_description,
+                testTag = "SelfPaymentToast",
+            )
+            return
+        }
+
         if (invoice.amountSatoshis > 0uL) {
             lightningRepo.syncState()
             if (!lightningRepo.canSend(invoice.amountSatoshis)) {
@@ -1935,6 +2088,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
+    @Suppress("LongMethod", "ReturnCount")
     private suspend fun validateOnChainAddress(invoice: OnChainInvoice) {
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
@@ -1977,6 +2131,14 @@ class AppViewModel @Inject constructor(
         val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
 
         if (maxSendOnchain == 0uL) {
+            if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
+                showAddressValidationError(
+                    titleRes = R.string.other__pay_self_invoice_title,
+                    descriptionRes = R.string.other__pay_self_invoice_description,
+                    testTag = "SelfPaymentToast",
+                )
+                return
+            }
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
                 descriptionRes = R.string.other__pay_insufficient_savings_description,
@@ -2008,36 +2170,56 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
+        decodeLightningParam(params)
+            ?.takeIf { lnInv ->
+                if (lnInv.isExpired) {
+                    Logger.debug(
+                        "Lightning invoice expired in unified URI, defaulting to onchain-only",
+                        context = TAG
+                    )
+                    return@takeIf false
+                }
+                if (lnInv.isOwnInvoice()) {
+                    Logger.debug(
+                        "Skipped own lightning invoice in unified URI, defaulting to onchain",
+                        context = TAG,
+                    )
+                    return@takeIf false
+                }
+                lightningRepo.waitForUsableChannels()
+                val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
+                if (!canSend) {
+                    val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
+                    if (nodeState is NodeLifecycleState.Stopped) {
+                        Logger.debug(
+                            "Node stopped, optimistically including LN invoice in unified QR",
+                            context = TAG,
+                        )
+                        return@takeIf true
+                    }
+                    Logger.debug(
+                        "Cannot pay unified invoice using LN, defaulting to onchain-only",
+                        context = TAG,
+                    )
+                }
+                return@takeIf canSend
+            }
+
+    private suspend fun LightningInvoice.isOwnInvoice(): Boolean = isPayee(lightningRepo.awaitNodeId())
+
+    private fun LightningInvoice.isPayee(nodeId: String?): Boolean {
+        val payee = payeeNodeId?.toHex() ?: return false
+        return nodeId != null && payee.equals(nodeId, ignoreCase = true)
+    }
+
+    private suspend fun hasOwnLightningInvoice(params: Map<String, String>?): Boolean =
+        decodeLightningParam(params)?.isPayee(lightningRepo.getLastKnownNodeId()) == true
+
+    private suspend fun decodeLightningParam(params: Map<String, String>?): LightningInvoice? =
         params?.get("lightning")?.let { bolt11 ->
             runSuspendCatching { coreService.decode(bolt11) }.getOrNull()
                 ?.let { it as? Scanner.Lightning }
                 ?.invoice
-                ?.takeIf { lnInv ->
-                    if (lnInv.isExpired) {
-                        Logger.debug(
-                            "Lightning invoice expired in unified URI, defaulting to onchain-only",
-                            context = TAG
-                        )
-                        return@takeIf false
-                    }
-                    lightningRepo.waitForUsableChannels()
-                    val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
-                    if (!canSend) {
-                        val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
-                        if (nodeState is NodeLifecycleState.Stopped) {
-                            Logger.debug(
-                                "Node stopped, optimistically including LN invoice in unified QR",
-                                context = TAG,
-                            )
-                            return@takeIf true
-                        }
-                        Logger.debug(
-                            "Cannot pay unified invoice using LN, defaulting to onchain-only",
-                            context = TAG,
-                        )
-                    }
-                    return@takeIf canSend
-                }
         }
 
     private fun showAddressValidationError(
@@ -2066,6 +2248,7 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean = false,
         contactPaymentContext: ContactPaymentContext? = null,
         preserveUntilComplete: Boolean = false,
+        allowPubkyAuth: Boolean = isMainScanner,
     ): Job? {
         if (!_isAuthenticated.value) {
             enqueueDeferredScan(
@@ -2074,14 +2257,14 @@ class AppViewModel @Inject constructor(
                 startDelay = startDelay,
                 routePubkyKeys = routePubkyKeys,
                 contactPaymentContext = contactPaymentContext,
+                allowPubkyAuth = allowPubkyAuth,
             )
             return null
         }
 
         val normalized = data.removeLightningSchemes()
-        val scanId = scanLogId(data)
-
         val scheduled = scheduledScan
+        val scanId = scanLogId(data, contactPaymentContext ?: scheduled?.contactPaymentContext)
         val isSameActiveScan = normalized == scheduled?.normalizedInput &&
             scheduled.job.isActive &&
             (scheduled.contactPaymentContext == contactPaymentContext || contactPaymentContext == null)
@@ -2091,16 +2274,20 @@ class AppViewModel @Inject constructor(
         }
 
         if (scheduled?.job?.isActive == true && scheduled.mustComplete) {
-            enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext)
+            enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
             return null
         }
 
         val previousJob = scheduled?.job
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             scanMutex.withLock {
-                setActiveContactPaymentContext(contactPaymentContext)
+                if (!awaitPubkyDeeplinkInitialization(source, data, allowPubkyAuth)) return@withLock
+                if (deferLockedScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)) {
+                    return@withLock
+                }
+                prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
                 if (startDelay > Duration.ZERO) delay(startDelay)
-                handleScan(data, routePubkyKeys)
+                handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
             }
         }
         val nextScheduledScan = ScheduledScan(
@@ -2126,8 +2313,61 @@ class AppViewModel @Inject constructor(
         return nextJob
     }
 
-    private fun scanLogId(data: String): String {
-        val scanLogInput = SamRockSetupRequest.sanitizedDescription(data.removeLightningSchemes()) ?: data
+    private suspend fun awaitPubkyDeeplinkInitialization(
+        source: ScanSource,
+        data: String,
+        allowPubkyAuth: Boolean,
+    ): Boolean {
+        if (source != ScanSource.DEEPLINK || !allowPubkyAuth) return true
+        if (!PubkyAuthRequest.isProtocolUrl(data)) return true
+
+        if (!PubkyAuthRequest.isSignupUrl(data)) {
+            val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
+                pubkyRepo.awaitInitialization()
+                true
+            } ?: false
+            if (!isInitializationReady) {
+                Logger.warn("Timed out waiting for Pubky initialization", context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__auth_error_title),
+                    description = context.getString(R.string.profile__auth_error_timeout),
+                )
+                return false
+            }
+        }
+        return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
+    }
+
+    private suspend fun isPaykitUiEnabledFromSettings() =
+        PaykitFeatureFlags.isUiEnabled(settingsStore.isPaykitEnabled.first())
+
+    private fun deferLockedScan(
+        source: ScanSource,
+        data: String,
+        startDelay: Duration,
+        routePubkyKeys: Boolean,
+        contactPaymentContext: ContactPaymentContext?,
+        allowPubkyAuth: Boolean,
+    ): Boolean {
+        if (_isAuthenticated.value) return false
+
+        synchronized(deferredScanLock) {
+            if (deferredScan == null) {
+                enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
+            } else {
+                Logger.info(
+                    "Skipping '${source.label}' scan because another deferred scan is queued: '${scanLogId(data)}'",
+                    context = TAG,
+                )
+            }
+        }
+        return true
+    }
+
+    private fun scanLogId(data: String, contactPaymentContext: ContactPaymentContext? = null): String {
+        if (contactPaymentContext?.incomingPaymentRequest != null) return "incoming payment request target"
+        val scanLogInput = data.removeLightningSchemes().sanitizedQrLogValue()
         return if (scanLogInput.length > SCAN_LOG_ID_MAX_LENGTH) {
             "${scanLogInput.take(SCAN_LOG_ID_AFFIX_LENGTH)}…${scanLogInput.takeLast(SCAN_LOG_ID_AFFIX_LENGTH)}"
         } else {
@@ -2141,8 +2381,9 @@ class AppViewModel @Inject constructor(
         startDelay: Duration,
         routePubkyKeys: Boolean,
         contactPaymentContext: ContactPaymentContext?,
+        allowPubkyAuth: Boolean,
     ) {
-        val scanId = scanLogId(data)
+        val scanId = scanLogId(data, contactPaymentContext)
         val normalized = data.removeLightningSchemes()
         synchronized(deferredScanLock) {
             val queued = deferredScan
@@ -2154,6 +2395,7 @@ class AppViewModel @Inject constructor(
                         startDelay = startDelay,
                         routePubkyKeys = routePubkyKeys,
                         contactPaymentContext = contactPaymentContext,
+                        allowPubkyAuth = allowPubkyAuth,
                     )
                     return
                 }
@@ -2162,7 +2404,8 @@ class AppViewModel @Inject constructor(
             }
             if (queued != null) {
                 Logger.warn(
-                    "Replacing deferred scan from '${queued.source.label}': '${scanLogId(queued.data)}'",
+                    "Replacing deferred scan from '${queued.source.label}': " +
+                        "'${scanLogId(queued.data, queued.contactPaymentContext)}'",
                     context = TAG,
                 )
             }
@@ -2172,6 +2415,7 @@ class AppViewModel @Inject constructor(
                 startDelay = startDelay,
                 routePubkyKeys = routePubkyKeys,
                 contactPaymentContext = contactPaymentContext,
+                allowPubkyAuth = allowPubkyAuth,
             )
         }
         Logger.info("Queuing '${source.label}' scan for deferred handling: '$scanId'", context = TAG)
@@ -2210,6 +2454,7 @@ class AppViewModel @Inject constructor(
             routePubkyKeys = pending.routePubkyKeys,
             contactPaymentContext = pending.contactPaymentContext,
             preserveUntilComplete = true,
+            allowPubkyAuth = pending.allowPubkyAuth,
         )
     }
 
@@ -2561,6 +2806,7 @@ class AppViewModel @Inject constructor(
         startDelay: Duration = Duration.ZERO,
         routePubkyKeys: Boolean = false,
         contactPaymentContext: ContactPaymentContext? = null,
+        allowPubkyAuth: Boolean = isMainScanner,
     ) {
         launchScan(
             source = ScanSource.SCAN_RESULT,
@@ -2568,6 +2814,7 @@ class AppViewModel @Inject constructor(
             startDelay = startDelay,
             routePubkyKeys = routePubkyKeys,
             contactPaymentContext = contactPaymentContext,
+            allowPubkyAuth = allowPubkyAuth,
         )
     }
 
@@ -2590,6 +2837,7 @@ class AppViewModel @Inject constructor(
             source = ScanSource.SCAN_RESULT,
             data = paymentRequest,
             contactPaymentContext = context,
+            allowPubkyAuth = false,
         )
     }
 
@@ -2607,7 +2855,13 @@ class AppViewModel @Inject constructor(
     private suspend fun handleScan(
         result: String,
         routePubkyKeys: Boolean,
+        contactPaymentContext: ContactPaymentContext?,
+        allowPubkyAuth: Boolean,
     ) = withContext(bgDispatcher) {
+        if (rejectPubkyAuthScan(result, allowPubkyAuth, contactPaymentContext)) return@withContext
+
+        val input = result.removeLightningSchemes()
+
         val contactPaymentProfile = activeContactPaymentProfile()
         val incomingPaymentRequest = activeIncomingPaymentRequest()
         val isPaymentRequest = incomingPaymentRequest != null
@@ -2627,18 +2881,16 @@ class AppViewModel @Inject constructor(
         resetQuickPay()
 
         val fromMainScanner = isMainScanner
-        val input = result.removeLightningSchemes()
 
         // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
         if (Bip21Utils.isDuplicatedBip21(input)) {
-            hideSheet()
+            if (clearIncomingPaymentRequestTarget()) return@withContext
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
                 description = context.getString(R.string.other__scan__error__generic),
                 testTag = "DuplicatedBip21Toast",
             )
-            clearActiveContactPaymentContext()
             return@withContext
         }
 
@@ -2652,16 +2904,11 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        if (input.startsWith("$PUBKYAUTH_SCHEME://", ignoreCase = true)) {
-            clearActiveContactPaymentContext()
-            if (!fromMainScanner) {
-                hideSheet()
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__qr_error_text),
-                )
-            } else if (isPaykitEnabled.value) {
+        if (PubkyAuthRequest.isProtocolUrl(input)) {
+            clearActiveContactPaymentContext(
+                failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+            )
+            if (isPaykitUiEnabledFromSettings()) {
                 handlePubkyAuth(input)
             } else {
                 hideSheet()
@@ -2683,7 +2930,9 @@ class AppViewModel @Inject constructor(
             )
 
             if (route != null) {
-                clearActiveContactPaymentContext()
+                clearActiveContactPaymentContext(
+                    failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+                )
                 if (currentSheet.value is Sheet.Send) hideSheet()
                 mainScreenEffect(MainScreenEffect.Navigate(route))
                 if (route is Routes.ContactDetail) {
@@ -2693,13 +2942,27 @@ class AppViewModel @Inject constructor(
             }
         }
 
-        val safeLogInput = SamRockSetupRequest.sanitizedDescription(input) ?: input
         val scan = runSuspendCatching { coreService.decode(input) }
-            .onFailure { Logger.error("Failed to decode scan data: '$safeLogInput'", it, context = TAG) }
-            .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
+            .onFailure {
+                if (isPaymentRequest) {
+                    Logger.error("Failed to decode incoming Paykit payment request target", context = TAG)
+                } else {
+                    val safeLogInput = SamRockSetupRequest.sanitizedDescription(input) ?: input
+                    Logger.error("Failed to decode scan data: '$safeLogInput'", it, context = TAG)
+                }
+            }
+            .onSuccess { logDecodedScan(it, isPaymentRequest) }
             .getOrNull()
 
         handleDecodedScan(scan, input, fromMainScanner)
+    }
+
+    private fun logDecodedScan(scan: Scanner, isPaymentRequest: Boolean) {
+        if (isPaymentRequest) {
+            Logger.info("Decoded incoming Paykit payment request target", context = TAG)
+        } else {
+            Logger.info("Handling decoded scan data: $scan", context = TAG)
+        }
     }
 
     @Suppress("CyclomaticComplexMethod")
@@ -2709,12 +2972,20 @@ class AppViewModel @Inject constructor(
         fromMainScanner: Boolean,
     ) {
         if (activeHardwareWalletId != null && scan != null && scan !is Scanner.OnChain) {
+            if (activeIncomingPaymentRequest() != null) {
+                clearActiveContactPaymentContext(
+                    failureReason = IncomingPaykitPaymentRequestFailureReason.PaymentTargetNotRoutable,
+                )
+                return
+            }
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.hardware__send_onchain_only_title),
                 description = context.getString(R.string.hardware__send_onchain_only_text),
             )
-            clearActiveContactPaymentContext()
+            clearActiveContactPaymentContext(
+                failureReason = IncomingPaykitPaymentRequestFailureReason.PaymentTargetNotRoutable,
+            )
             return
         }
 
@@ -2728,23 +2999,32 @@ class AppViewModel @Inject constructor(
             is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
             is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
             else -> {
-                hideSheet()
+                val hasIncomingPaymentRequest = clearIncomingPaymentRequestTarget()
+                val logMessage = if (hasIncomingPaymentRequest) {
+                    "Received unhandled incoming Paykit payment request target"
+                } else if (scan == null) {
+                    "Failed to decode scan data"
+                } else {
+                    "Received unhandled scan data '$scan'"
+                }
                 Logger.warn(
-                    if (scan == null) "Failed to decode scan data" else "Received unhandled scan data '$scan'",
+                    logMessage,
                     context = TAG,
                 )
+                if (hasIncomingPaymentRequest) return
                 toast(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.other__qr_error_header),
                     description = context.getString(R.string.other__qr_error_text),
                 )
-                clearActiveContactPaymentContext()
             }
         }
     }
 
     private suspend fun handleSamRockSetup(setup: SamRockSetupRequest) {
-        clearActiveContactPaymentContext()
+        clearActiveContactPaymentContext(
+            failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+        )
 
         if (!setup.requestsBitcoinOnchain) {
             hideSheet()
@@ -2761,7 +3041,9 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleInvalidSamRockSetup(input: String) {
-        clearActiveContactPaymentContext()
+        clearActiveContactPaymentContext(
+            failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+        )
         hideSheet()
         val descriptionRes = when {
             SamRockSetupRequest.isPublicHttpProtocolUrl(input) -> R.string.btcpay__unsupported_http_text
@@ -2776,11 +3058,33 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleNonPaymentScan(action: suspend () -> Unit) {
-        clearActiveContactPaymentContext()
+        clearActiveContactPaymentContext(
+            failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+        )
         action()
     }
 
-    fun clearActiveContactPaymentContext(retryIncomingRequest: Boolean = true) {
+    fun clearActiveContactPaymentContext(retryIncomingRequest: Boolean = true) =
+        clearActiveContactPaymentContext(
+            failureReason = IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+            retryIncomingRequest = retryIncomingRequest,
+        )
+
+    private fun clearIncomingPaymentRequestTarget(
+        failureReason: IncomingPaykitPaymentRequestFailureReason =
+            IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+    ): Boolean {
+        val hasIncomingPaymentRequest = activeIncomingPaymentRequest() != null
+        val shouldHideSheet = !hasIncomingPaymentRequest || currentSheet.value is Sheet.Send
+        clearActiveContactPaymentContext(failureReason = failureReason)
+        if (shouldHideSheet) hideSheet()
+        return hasIncomingPaymentRequest
+    }
+
+    private fun clearActiveContactPaymentContext(
+        failureReason: IncomingPaykitPaymentRequestFailureReason,
+        retryIncomingRequest: Boolean = true,
+    ) {
         uncertainOnchainPaymentRequestId = null
         val interruptedRequest = synchronized(contactPaymentContextLock) {
             val request = activeContactPaymentContext?.incomingPaymentRequest
@@ -2793,7 +3097,7 @@ class AppViewModel @Inject constructor(
         if (!retryIncomingRequest) {
             paymentRequestPresentationGeneration++
             if (requestedPaymentRequestId == interruptedRequest.id) {
-                requestedPaymentRequestId = null
+                clearRequestedPaymentRequest()
             }
             clearPaymentRequestPresentationRetry(interruptedRequest.id)
             viewModelScope.launch { paykitPaymentRequestRepo.markPresented(interruptedRequest) }
@@ -2804,9 +3108,45 @@ class AppViewModel @Inject constructor(
             requestedPaymentRequestId == interruptedRequest.id ||
             paykitPaymentRequestRepo.automaticPendingRequests().any { it.id == interruptedRequest.id }
         ) {
-            deferPaymentRequestPresentation(interruptedRequest)
+            deferPaymentRequestPresentation(interruptedRequest, failureReason)
         }
         isSubmittingPaymentRequest = false
+    }
+
+    private suspend fun rejectPubkyAuthScan(
+        input: String,
+        allowPubkyAuth: Boolean,
+        contactPaymentContext: ContactPaymentContext?,
+    ): Boolean {
+        val unwrappedInput = input.removeLightningSchemes()
+        if (!PubkyAuthRequest.isProtocolUrl(unwrappedInput)) return false
+        if (allowPubkyAuth && input == unwrappedInput) return false
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__qr_error_header),
+            description = context.getString(R.string.other__qr_error_text),
+        )
+        clearRejectedContactPaymentContext(contactPaymentContext)
+        return true
+    }
+
+    private suspend fun clearRejectedContactPaymentContext(context: ContactPaymentContext?) {
+        if (context == null) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext != context) return
+            activeContactPaymentContext = null
+            preparedContactPaymentContext = null
+        }
+        context.incomingPaymentRequest?.let { markIncomingPaymentRequestPresented(it) }
+    }
+
+    private suspend fun markIncomingPaymentRequestPresented(request: PaykitPaymentRequest) {
+        paymentRequestPresentationGeneration++
+        if (requestedPaymentRequestId == request.id) {
+            clearRequestedPaymentRequest()
+        }
+        clearPaymentRequestPresentationRetry(request.id)
+        paykitPaymentRequestRepo.markPresented(request)
     }
 
     private fun setActiveContactPaymentContext(context: ContactPaymentContext?) {
@@ -2814,6 +3154,15 @@ class AppViewModel @Inject constructor(
             if (activeContactPaymentContext != context) preparedContactPaymentContext = null
             activeContactPaymentContext = context
         }
+    }
+
+    private fun prepareContactPaymentContextForScan(
+        input: String,
+        allowPubkyAuth: Boolean,
+        context: ContactPaymentContext?,
+    ) {
+        val preservesExistingContext = PubkyAuthRequest.isProtocolUrl(input) && !allowPubkyAuth && context == null
+        if (!preservesExistingContext) setActiveContactPaymentContext(context)
     }
 
     private fun clearPendingContactPaymentContext(paymentHash: String) {
@@ -2849,26 +3198,24 @@ class AppViewModel @Inject constructor(
     ) {
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
-                hideSheet()
+                if (clearIncomingPaymentRequestTarget()) return
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__scan_err_decoding),
                     description = context.getString(R.string.wallet__error_invalid_bitcoin_address),
                     testTag = "InvalidAddressToast",
                 )
-                clearActiveContactPaymentContext()
                 return
             }
 
         if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
-            hideSheet()
+            if (clearIncomingPaymentRequestTarget()) return
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
                 description = context.getString(R.string.other__scan__error__generic),
                 testTag = "InvalidAddressToast",
             )
-            clearActiveContactPaymentContext()
             return
         }
         val hardwareWalletId = activeHardwareWalletId
@@ -2983,6 +3330,16 @@ class AppViewModel @Inject constructor(
 
         // Check on-chain balance before proceeding to amount screen
         if (maxSendOnchain == 0uL && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
+            if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__pay_self_invoice_title),
+                    description = context.getString(R.string.other__pay_self_invoice_description),
+                    testTag = "SelfPaymentToast",
+                )
+                clearActiveContactPaymentContext()
+                return
+            }
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_savings),
@@ -3081,20 +3438,25 @@ class AppViewModel @Inject constructor(
         else -> SendFundingSource.Savings
     }
 
+    @Suppress("LongMethod", "ReturnCount")
     private suspend fun onScanLightning(
         invoice: LightningInvoice,
         scanResult: String,
         fromMainScanner: Boolean,
     ) {
         if (invoice.isExpired) {
-            hideSheet()
+            if (clearIncomingPaymentRequestTarget()) return
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
                 description = context.getString(R.string.other__scan__error__expired),
                 testTag = "ExpiredLightningToast",
             )
-            clearActiveContactPaymentContext()
+            return
+        }
+
+        if (invoice.isOwnInvoice()) {
+            rejectOwnInvoiceScan()
             return
         }
 
@@ -3150,6 +3512,17 @@ class AppViewModel @Inject constructor(
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
 
+    private fun rejectOwnInvoiceScan() {
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__pay_self_invoice_title),
+            description = context.getString(R.string.other__pay_self_invoice_description),
+            testTag = "SelfPaymentToast",
+        )
+        clearActiveContactPaymentContext(retryIncomingRequest = false)
+        hideSheet()
+    }
+
     private suspend fun onScanLnurlPay(data: LnurlPayData, fromMainScanner: Boolean) {
         Logger.debug("LNURL: $data", context = TAG)
 
@@ -3157,12 +3530,15 @@ class AppViewModel @Inject constructor(
         val displaySats = data.minSendableSat()
         val incomingAmount = activeIncomingPaymentRequest()?.amountSats
         if (incomingAmount != null && incomingAmount !in displaySats..data.maxSendableSat()) {
+            if (clearIncomingPaymentRequestTarget()) return
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__lnurl_pay_error),
                 description = context.getString(R.string.other__scan__error__generic),
             )
-            clearActiveContactPaymentContext()
+            clearActiveContactPaymentContext(
+                failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+            )
             return
         }
         val paymentAmount = incomingAmount ?: displaySats
@@ -3694,6 +4070,8 @@ class AppViewModel @Inject constructor(
             }
         }
 
+        val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
+
         sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
@@ -3705,6 +4083,7 @@ class AppViewModel @Inject constructor(
                     sats = displayAmountSats.toLong(),
                 ),
             )
+            lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
             if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
@@ -3714,10 +4093,12 @@ class AppViewModel @Inject constructor(
                 preserveContactPaymentContext(pendingHash)
                 refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
+                lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
             }
             cancelPaymentProofPreparation(proofRequest)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
                 is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
@@ -3725,6 +4106,14 @@ class AppViewModel @Inject constructor(
             }
             setSendEffect(SendEffect.NavigateToError(failure))
         }
+    }
+
+    private suspend fun savePendingLnurlComment(invoice: LightningInvoice, paymentHash: String): String? {
+        val state = _sendUiState.value
+        if (state.lnurl !is LnurlParams.LnurlPay || state.comment.isBlank()) return null
+        if (!invoice.description.isNullOrEmpty()) return null
+        activityRepo.savePendingLightningMessage(paymentHash, state.comment)
+        return state.comment
     }
 
     private suspend fun clearFailedLightningPayment(
@@ -3871,7 +4260,7 @@ class AppViewModel @Inject constructor(
             description = context.getString(R.string.wallet__payment_request_mismatch),
             testTag = "PaymentFailedToast",
         )
-        hideSheet()
+        clearIncomingPaymentRequestTarget()
     }
 
     private fun getLnurlInvoiceFetchErrorMessage(error: Throwable): String = when (error) {
@@ -4288,6 +4677,11 @@ class AppViewModel @Inject constructor(
     ) = viewModelScope.launch {
         if (backupRepo.isRestoring.value) return@launch
 
+        if (_isCriticalUpdateRequired.value) {
+            Logger.verbose("Blocked NewTransactionSheet while a critical update is required", context = TAG)
+            return@launch
+        }
+
         if (!_isTransactionSheetEnabled) {
             Logger.verbose("NewTransactionSheet blocked by isNewTransactionSheetEnabled=false", context = TAG)
             return@launch
@@ -4314,10 +4708,16 @@ class AppViewModel @Inject constructor(
 
     fun showScannerSheet(
         isPubkyScan: Boolean = false,
+        showBackButton: Boolean = true,
         onResult: ((String) -> Unit)? = null,
     ) {
         scanResultHandler = onResult
-        showSheet(Sheet.QrScanner(isPubkyScan = isPubkyScan))
+        showSheet(
+            Sheet.QrScanner(
+                isPubkyScan = isPubkyScan,
+                showBackButton = showBackButton,
+            )
+        )
     }
 
     fun onScannerSheetResult(data: String) {
@@ -4408,6 +4808,8 @@ class AppViewModel @Inject constructor(
                     onchainAddress = walletRepo.getOnchainAddress(),
                 )
             }
+            // A stale amount above inbound liquidity would hide the Auto tab until the receive state refreshes
+            if (sheetType is Sheet.Receive) walletRepo.setBip21AmountSats(null)
             _currentSheet.update { sheetType }
         }
         sheetTransitionJob = nextJob
@@ -4458,7 +4860,6 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    private val toastManager = toastManagerProvider(viewModelScope)
     val currentToast: StateFlow<Toast?> = toastManager.currentToast
 
     fun toast(
@@ -4756,6 +5157,11 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
     }
 
+    fun showSubscriptionCreator() {
+        showSheet(Sheet.CreateSubscription)
+        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+    }
+
     fun subscription(id: PaykitSubscriptionId): PaykitSubscription? =
         paykitPaymentRequestRepo.subscriptions.value.firstOrNull { it.id == id }
 
@@ -4852,6 +5258,47 @@ class AppViewModel @Inject constructor(
             .onFailure(::toast)
     }.await()
 
+    fun createSubscription(
+        draft: PaykitSubscriptionDraft,
+        target: PaykitPaymentRequestTarget,
+        onCreated: (PaykitSubscription) -> Unit,
+    ) {
+        val sourceSheet = currentSheet.value.takeIf { it is Sheet.CreateSubscription }
+        viewModelScope.launch {
+            paykitPaymentRequestRepo.proposeSubscription(
+                draft = draft,
+                target = target,
+                savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey },
+            ).onSuccess { creation ->
+                val creatorIsCurrent = PubkyPublicKeyFormat.matches(
+                    creation.creatorIdentity,
+                    pubkyRepo.publicKey.value,
+                )
+                if (creation.wasPublishedToActiveState && creatorIsCurrent) {
+                    onCreated(creation.subscription)
+                } else {
+                    if (sourceSheet != null && currentSheet.value === sourceSheet) hideSheet()
+                    toast(
+                        type = Toast.ToastType.INFO,
+                        title = context.getString(R.string.subscriptions__title),
+                        description = context.getString(R.string.subscriptions__proposal_queued_description),
+                        testTag = "SubscriptionProposalQueuedToast",
+                    )
+                }
+            }.onFailure {
+                if (it is PaykitPaymentRequestError.SubscriptionTooLong) {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = context.getString(R.string.subscriptions__content_too_long),
+                    )
+                } else {
+                    toast(it)
+                }
+            }
+        }
+    }
+
     fun openIncomingPaymentRequest(id: PaykitPaymentRequestId) {
         openIncomingPaymentRequestWithTags(id, emptyList())
     }
@@ -4865,6 +5312,8 @@ class AppViewModel @Inject constructor(
         invalidatePaymentRequestPresentation()
         clearPaymentRequestPresentationRetry(id)
         requestedPaymentRequestId = id
+        requestedPaymentRequest = request
+        shouldRestorePaymentRequestSheet = _currentSheet.value is Sheet.PaymentRequests
         requestedPaymentRequestTags = tags.filter(String::isNotBlank).distinct().toImmutableList()
 
         if (
@@ -5120,9 +5569,13 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        if (uri.scheme == PUBKYAUTH_SCHEME) {
-            if (!isPaykitEnabled.value) return@launch
-            handlePubkyAuth(uri.toString())
+        if (PubkyAuthRequest.isProtocolUrl(value)) {
+            launchScan(
+                source = ScanSource.DEEPLINK,
+                data = value,
+                startDelay = SCREEN_TRANSITION_DELAY,
+                allowPubkyAuth = true,
+            )
             return@launch
         }
 
@@ -5144,7 +5597,10 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePubkyAuth(authUrl: String) {
-        if (pubkyRepo.publicKey.value == null) {
+        val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
+        if (isSignup && rejectPubkySignupForExistingIdentity()) return
+
+        if (!isSignup && pubkyRepo.publicKey.value == null) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.pubky_auth__no_identity),
@@ -5153,7 +5609,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (!pubkyRepo.hasSecretKey()) {
+        if (!isSignup && !pubkyRepo.hasSecretKey()) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.profile__auth_approval_ring_only),
@@ -5161,6 +5617,24 @@ class AppViewModel @Inject constructor(
             return
         }
         showSheet(Sheet.PubkyAuth(authUrl))
+    }
+
+    private suspend fun rejectPubkySignupForExistingIdentity(): Boolean {
+        val hasIdentity = runSuspendCatching { pubkyRepo.hasIdentity() }.getOrElse {
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.profile__auth_error_title),
+                description = it.localizedPubkyAuthMessage(context),
+            )
+            return true
+        }
+        if (!hasIdentity) return false
+
+        ToastEventBus.send(
+            type = Toast.ToastType.INFO,
+            title = context.getString(R.string.pubky_auth__already_signed_in),
+        )
+        return true
     }
 
     private suspend fun handlePubkyRingAuthCallback(callback: PubkyRingAuthCallback) {
@@ -5198,27 +5672,19 @@ class AppViewModel @Inject constructor(
 
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
 
-    private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
-        if (Env.isDebug) return@withContext
+    @VisibleForTesting
+    internal suspend fun checkCriticalAppUpdate(isDebug: Boolean = Env.isDebug) = withContext(bgDispatcher) {
+        if (isDebug) return@withContext
 
-        delay(SCREEN_TRANSITION_DELAY)
-
-        runCatching {
-            val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android
-            val currentBuildNumber = BuildConfig.VERSION_CODE
-
-            if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext
-
-            if (androidReleaseInfo.isCritical) {
-                mainScreenEffect(
-                    MainScreenEffect.Navigate(
-                        route = Routes.CriticalUpdate,
-                        clearStack = true,
-                    )
-                )
+        runSuspendCatching {
+            appUpdaterService.getReleaseInfo().platforms.android
+        }.onSuccess {
+            if (it.isCritical && it.buildNumber > BuildConfig.VERSION_CODE) {
+                _isCriticalUpdateRequired.update { true }
+                hideNewTransactionSheet()
             }
-        }.onFailure { e ->
-            Logger.warn("Failure fetching new releases", e, context = TAG)
+        }.onFailure {
+            Logger.warn("Failure fetching new releases", it, context = TAG)
         }
     }
 
@@ -5241,13 +5707,14 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
-        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
+        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 10.seconds
+        private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
         private val INITIAL_PAYKIT_SYNC_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }
+        private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val BITKIT_SCHEME = "bitkit"
-        private const val PUBKYAUTH_SCHEME = "pubkyauth"
         private const val RECOVERY_MODE_DEEPLINK = "recovery-mode"
 
         /** Max characters kept in a scan log id before truncating. */
@@ -5284,6 +5751,7 @@ private data class DeferredScan(
     val startDelay: Duration,
     val routePubkyKeys: Boolean,
     val contactPaymentContext: ContactPaymentContext?,
+    val allowPubkyAuth: Boolean,
 )
 
 // region send contract

@@ -56,16 +56,16 @@ fun PubkyContactRow(
     ) {
         PubkyContactAvatar(profile = profile)
         Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
             modifier = Modifier.weight(1f)
         ) {
-            BodyS(
+            Caption13Up(
                 text = profile.truncatedPublicKey,
                 color = Colors.White64,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            BodySSB(
+            BodyMSB(
                 text = profile.name,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

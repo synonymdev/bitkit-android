@@ -494,6 +494,39 @@ class BlocktankRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `fetchOrders caches an order missing from the local cache and replaces a stale one`() = test {
+        val staleOrder = mock<IBtOrder> { on { id } doReturn "order1" }
+        val freshOrder = mock<IBtOrder> { on { id } doReturn "order1" }
+        val uncachedOrder = mock<IBtOrder> { on { id } doReturn "order2" }
+        val orderIds = listOf("order1", "order2")
+        whenever(blocktankService.orders(refresh = true)).thenReturn(listOf(staleOrder))
+        whenever(blocktankService.orders(orderIds = orderIds, refresh = true))
+            .thenReturn(listOf(freshOrder, uncachedOrder))
+        sut = createSut()
+        sut.refreshOrders()
+
+        val result = sut.fetchOrders(orderIds)
+
+        assertEquals(listOf(freshOrder, uncachedOrder), result.getOrThrow())
+        assertEquals(listOf(freshOrder, uncachedOrder), sut.blocktankState.value.orders)
+        assertEquals(uncachedOrder, sut.getOrder("order2").getOrThrow())
+    }
+
+    @Test
+    fun `fetchOrders returns failure and keeps cached orders when server throws`() = test {
+        whenever(blocktankService.orders(refresh = true)).thenReturn(listOf(testOrder1))
+        whenever(blocktankService.orders(orderIds = listOf("order2"), refresh = true))
+            .thenThrow(RuntimeException("Network error"))
+        sut = createSut()
+        sut.refreshOrders()
+
+        val result = sut.fetchOrders(listOf("order2"))
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf(testOrder1), sut.blocktankState.value.orders)
+    }
+
+    @Test
     fun `getOrder returns null for non-existent order`() = test {
         sut = createSut()
         val result = sut.getOrder("nonexistent")
@@ -547,12 +580,12 @@ class BlocktankRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `toCjitError maps node capacity limit to max channel size error`() {
+    fun `toCjitError maps node capacity limit to node capacity error`() {
         val error = RuntimeException("Node capacity is above our capacity limit.")
 
         val result = error.toCjitError()
 
-        assertIs<ServiceError.ChannelSizeExceedsMaximum>(result)
+        assertIs<ServiceError.NodeCapacityUnavailable>(result)
     }
 
     @Test

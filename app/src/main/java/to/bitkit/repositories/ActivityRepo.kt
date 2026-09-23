@@ -457,16 +457,20 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun contactActivities(publicKey: String): Result<List<Activity>> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
-            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
-            getActivities(
+            val matches = getActivities(
                 walletId = null,
                 filter = ActivityFilter.ALL,
                 sortDirection = SortDirection.DESC,
             ).getOrThrow()
-                .filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
                 .filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
+            val boostTxIdsByWallet = matches.map { it.walletId() }.distinct().associateWith {
+                getTxIdsInBoostTxIds(it)
+            }
+            matches.filterNot {
+                it.isReplacedSentTransaction(boostTxIdsByWallet[it.walletId()].orEmpty())
+            }
         }.onFailure {
             Logger.error("Failed to load contact activities for '$publicKey'", it, context = TAG)
         }
@@ -578,6 +582,42 @@ class ActivityRepo @Inject constructor(
     private fun Activity.withContact(normalizedKey: String?, updatedAt: ULong): Activity = when (this) {
         is Activity.Lightning -> Activity.Lightning(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
         is Activity.Onchain -> Activity.Onchain(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
+    }
+
+    suspend fun savePendingLightningMessage(
+        paymentHash: String,
+        message: String,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            cacheStore.setPendingLightningMessage(paymentHash, message)
+        }.onFailure {
+            Logger.error("Failed to save pending message for payment '$paymentHash'", it, context = TAG)
+        }
+    }
+
+    suspend fun clearPendingLightningMessage(paymentHash: String): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            cacheStore.removePendingLightningMessage(paymentHash)
+        }.onFailure {
+            Logger.error("Failed to clear pending message for payment '$paymentHash'", it, context = TAG)
+        }
+    }
+
+    /**
+     * Stores [message] on the Lightning activity for [paymentHash] unless it already holds a note.
+     *
+     * The pending message is kept for the payment sync when the activity does not exist yet.
+     */
+    suspend fun setLightningMessageIfEmpty(
+        paymentHash: String,
+        message: String,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            coreService.activity.setLightningMessageIfEmpty(paymentHash, message)
+            notifyActivitiesChanged()
+        }.onFailure {
+            Logger.error("Failed to set message for payment '$paymentHash'", it, context = TAG)
+        }
     }
 
     suspend fun getClosedChannels(
@@ -982,19 +1022,41 @@ class ActivityRepo @Inject constructor(
         }
     }
 
+    /**
+     * Applies each slice of the backup envelope on its own so one rejected record cannot discard the others.
+     * Core fails a bulk write as a whole, so applying all three slices together would let a single unusable tag cost
+     * the activities and the closed channels too. The overall result still fails when any slice failed, keeping
+     * [BackupRepo] from treating a partial restore as authoritative and rewriting a good backup with it.
+     * Observers are notified whenever at least one slice was applied, and the tag signal only fires when the
+     * tags slice itself was applied, so a rejected tags slice cannot mark the metadata backup as changed.
+     */
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
-            coreService.activity.upsertList(payload.activities)
-            coreService.activity.upsertTags(payload.activityTags)
+        val activities = runSuspendCatching { coreService.activity.upsertList(payload.activities) }
+        val activityTags = runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) }
+        val closedChannels = runSuspendCatching {
             coreService.activity.upsertClosedChannelList(payload.closedChannels)
-        }.onSuccess {
-            Logger.debug(
-                "Restored ${payload.activities.size} activities, ${payload.activityTags.size} activity tags, " +
-                    "${payload.closedChannels.size} closed channels",
-                context = TAG,
-            )
-            notifyActivitiesChanged(tagsChanged = true)
         }
+        val results = listOf(
+            "activities" to activities,
+            "activityTags" to activityTags,
+            "closedChannels" to closedChannels,
+        )
+        val failures = results.mapNotNull { (slice, result) ->
+            result.exceptionOrNull()?.also {
+                Logger.error("Failed to restore '$slice' activity backup slice", it, context = TAG)
+            }
+        }
+
+        if (failures.size < results.size) notifyActivitiesChanged(tagsChanged = activityTags.isSuccess)
+
+        failures.firstOrNull()?.let { return@withContext Result.failure(it) }
+
+        Logger.debug(
+            "Restored ${payload.activities.size} activities, ${payload.activityTags.size} activity tags, " +
+                "${payload.closedChannels.size} closed channels",
+            context = TAG,
+        )
+        return@withContext Result.success(Unit)
     }
 
     suspend fun markAllUnseenActivitiesAsSeen(): Result<Unit> = withContext(bgDispatcher) {

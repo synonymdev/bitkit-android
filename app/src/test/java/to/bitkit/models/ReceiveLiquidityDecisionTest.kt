@@ -17,10 +17,10 @@ class ReceiveLiquidityDecisionTest {
     )
 
     @Test
-    fun `lightning invoice requires usable channel`() {
+    fun `lightning invoice requires ready channel`() {
         assertFalse(
             ReceiveLiquidityDecision.canCreateLightningInvoice(
-                hasUsableChannels = false,
+                hasReadyChannels = false,
                 inboundCapacitySats = 1_000u,
                 invoiceAmountSats = null,
             )
@@ -31,7 +31,7 @@ class ReceiveLiquidityDecisionTest {
     fun `variable lightning invoice requires non-zero inbound liquidity`() {
         assertFalse(
             ReceiveLiquidityDecision.canCreateLightningInvoice(
-                hasUsableChannels = true,
+                hasReadyChannels = true,
                 inboundCapacitySats = 0u,
                 invoiceAmountSats = null,
             )
@@ -39,7 +39,7 @@ class ReceiveLiquidityDecisionTest {
 
         assertTrue(
             ReceiveLiquidityDecision.canCreateLightningInvoice(
-                hasUsableChannels = true,
+                hasReadyChannels = true,
                 inboundCapacitySats = 1u,
                 invoiceAmountSats = null,
             )
@@ -50,7 +50,7 @@ class ReceiveLiquidityDecisionTest {
     fun `fixed lightning invoice requires inbound liquidity covering amount`() {
         assertTrue(
             ReceiveLiquidityDecision.canCreateLightningInvoice(
-                hasUsableChannels = true,
+                hasReadyChannels = true,
                 inboundCapacitySats = 5_000u,
                 invoiceAmountSats = 5_000u,
             )
@@ -58,7 +58,7 @@ class ReceiveLiquidityDecisionTest {
 
         assertFalse(
             ReceiveLiquidityDecision.canCreateLightningInvoice(
-                hasUsableChannels = true,
+                hasReadyChannels = true,
                 inboundCapacitySats = 4_999u,
                 invoiceAmountSats = 5_000u,
             )

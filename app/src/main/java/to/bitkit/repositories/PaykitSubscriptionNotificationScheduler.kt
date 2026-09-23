@@ -67,7 +67,8 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
         val now = clock.now()
         val scheduledWork = subscriptions
             .filter {
-                it.isActive(now) &&
+                it.isPayer &&
+                    it.isActive(now) &&
                     it.recurrence.unit.isSupported &&
                     acceptedAt(it) != null
             }
