@@ -165,18 +165,21 @@ private fun ShowMnemonicContent(
                         .padding(32.dp)
                         .testTag("backup_mnemonic_words_box")
                 ) {
-                    MnemonicWordsGrid(
-                        actualWords = mnemonicWords,
-                        showMnemonic = showMnemonic,
+                    Box(
                         modifier = Modifier
+                            .testTag("SeedContainer")
                             .clearAndSetSemantics {
                                 contentDescription = mnemonic
                                 if (!showMnemonic) {
                                     hideFromAccessibility()
                                 }
                             }
-                            .testTag("SeedContainer")
-                    )
+                    ) {
+                        MnemonicWordsGrid(
+                            actualWords = mnemonicWords,
+                            showMnemonic = showMnemonic,
+                        )
+                    }
                 }
 
                 if (buttonAlpha > 0f) {
