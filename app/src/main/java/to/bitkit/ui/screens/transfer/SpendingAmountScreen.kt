@@ -62,7 +62,7 @@ fun SpendingAmountScreen(
     viewModel: TransferViewModel,
     isOffline: Boolean,
     onBackClick: () -> Unit = {},
-    onOrderCreated: () -> Unit = {},
+    onQuoteReady: () -> Unit = {},
     toastException: (Throwable) -> Unit,
     toast: (title: String, description: String) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
@@ -82,7 +82,7 @@ fun SpendingAmountScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                is TransferEffect.OnOrderCreated -> onOrderCreated()
+                TransferEffect.OnQuoteReady -> onQuoteReady()
                 is TransferEffect.ToastError -> toast(effect.title, effect.description)
                 is TransferEffect.ToastException -> toastException(effect.e)
                 else -> Unit
@@ -193,7 +193,7 @@ private fun SpendingAmountNodeRunning(
     ) {
         val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
 
-        VerticalSpacer(minHeight = 16.dp, maxHeight = 32.dp)
+        VerticalSpacer(32.dp)
 
         Display(
             text = stringResource(R.string.lightning__spending_amount__title)
@@ -201,7 +201,7 @@ private fun SpendingAmountNodeRunning(
             modifier = Modifier.fillMaxWidth()
         )
 
-        FillHeight()
+        VerticalSpacer(32.dp)
 
         NumberPadTextField(
             viewModel = amountInputViewModel,
@@ -217,9 +217,7 @@ private fun SpendingAmountNodeRunning(
         Row(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .padding(vertical = 8.dp)
-                .testTag("SendAmountNumberPad")
+            modifier = Modifier.testTag("SendAmountNumberPad")
         ) {
             Column {
                 Text13Up(
@@ -228,7 +226,11 @@ private fun SpendingAmountNodeRunning(
                     modifier = Modifier.testTag("SpendingAmountAvailable")
                 )
                 VerticalSpacer(8.dp)
-                MoneySSB(sats = uiState.balanceAfterFee, modifier = Modifier.testTag("SpendingAmountUnit"))
+                MoneySSB(
+                    sats = uiState.balanceAfterFee,
+                    showSymbol = true,
+                    modifier = Modifier.testTag("SpendingAmountUnit")
+                )
             }
             FillWidth()
             UnitButton(
@@ -250,8 +252,7 @@ private fun SpendingAmountNodeRunning(
             )
         }
 
-        HorizontalDivider()
-        VerticalSpacer(16.dp)
+        HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
         NumberPad(
             viewModel = amountInputViewModel,

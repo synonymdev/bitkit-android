@@ -28,7 +28,10 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
+import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
+import to.bitkit.data.HwWalletData
+import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WatchOnlyAccountAllocationState
@@ -45,7 +48,9 @@ import to.bitkit.di.json
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.MetadataBackupV1
+import to.bitkit.models.TransportType
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.WatchOnlyAccountRecord
@@ -57,12 +62,14 @@ import to.bitkit.utils.AppError
 import javax.inject.Provider
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
+@Suppress("LargeClass")
 class BackupRepoTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val cacheStore = mock<CacheStore>()
@@ -72,6 +79,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val widgetsStore = mock<WidgetsStore>()
     private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
     private val watchOnlyAccountRepo = mock<WatchOnlyAccountRepo>()
+    private val hwWalletStore = mock<HwWalletStore>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
@@ -86,6 +94,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val cacheData = MutableStateFlow(AppCacheData())
     private val settingsData = MutableStateFlow(SettingsData())
     private val widgetsData = MutableStateFlow(WidgetsData())
+    private val hwWalletData = MutableStateFlow(HwWalletData())
 
     private lateinit var sut: BackupRepo
 
@@ -105,6 +114,9 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { watchOnlyAccountStore.backupSnapshot() }.thenReturn(
             WatchOnlyAccountBackupSnapshot(emptyList(), WatchOnlyAccountAllocationState())
         )
+        whenever(hwWalletStore.data).thenReturn(hwWalletData)
+        whenever { hwWalletStore.backupSnapshot() }.thenReturn(emptyMap())
+        whenever { hwWalletStore.restoreNames(any()) }.thenReturn(Unit)
         whenever { vssBackupClient.getObject(any()) }.thenReturn(Result.success(null))
         whenever { vssBackupClient.putObject(any(), any()) }
             .thenReturn(Result.success(VssItem(key = BackupCategory.SETTINGS.name, value = byteArrayOf(), version = 1)))
@@ -120,6 +132,16 @@ class BackupRepoTest : BaseUnitTest() {
         }.thenReturn(Result.success(Unit))
 
         sut = createSut()
+    }
+
+    @Test
+    fun `start observing is skipped while wiping`() = test {
+        sut.setWiping(true)
+
+        sut.startObservingBackups()
+        runCurrent()
+
+        verify(vssBackupClient, never()).setupWithRetry(any(), any(), any())
     }
 
     @Test
@@ -460,6 +482,150 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `metadata backup carries the Blocktank refund address pointer`() = test {
+        val refundAddress = BlocktankRefundAddress(address = "bcrt1qrefund", index = 7)
+        cacheData.value = AppCacheData(blocktankRefundAddress = refundAddress)
+        stubMetadataBackupReads()
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) {
+            putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture())
+        }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(refundAddress, payload.cache.blocktankRefundAddress)
+    }
+
+    @Test
+    fun `metadata restore preserves the Blocktank refund address pointer`() = test {
+        val refundAddress = BlocktankRefundAddress(address = "bcrt1qrefund", index = 7)
+        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(blocktankRefundAddress = refundAddress)))
+        val cacheTransform = argumentCaptor<(AppCacheData) -> AppCacheData>()
+
+        sut.performFullRestoreFromLatestBackup()
+
+        verifyBlocking(cacheStore) { update(cacheTransform.capture()) }
+        assertEquals(refundAddress, cacheTransform.firstValue(AppCacheData()).blocktankRefundAddress)
+    }
+
+    @Test
+    fun `metadata backup carries the hardware wallet names`() = test {
+        stubMetadataBackupReads()
+        whenever { hwWalletStore.backupSnapshot() }.thenReturn(mapOf(HARDWARE_WALLET_ID to "Cold Storage"))
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) {
+            putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture())
+        }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(mapOf(HARDWARE_WALLET_ID to "Cold Storage"), payload.hwWalletNames)
+    }
+
+    @Test
+    fun `metadata backup omits the hardware wallet names when none are set`() = test {
+        stubMetadataBackupReads()
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) {
+            putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture())
+        }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertNull(payload.hwWalletNames)
+    }
+
+    @Test
+    fun `metadata backup fails when the hardware wallet names cannot be read`() = test {
+        stubMetadataBackupReads()
+        whenever { hwWalletStore.backupSnapshot() }
+            .doSuspendableAnswer { throw BackupRepoTestError("store unavailable") }
+
+        val result = sut.triggerBackup(BackupCategory.METADATA)
+
+        assertTrue(result.isFailure)
+        // This envelope is the only copy of the names, so uploading without them would drop them.
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `metadata restore applies the backed up hardware wallet names`() = test {
+        val names = mapOf(HARDWARE_WALLET_ID to "Cold Storage")
+        stubMetadataRestore(
+            envelope = metadataEnvelope(metadata = listOf(preActivityMetadata()), hwWalletNames = names),
+        )
+
+        sut.performFullRestoreFromLatestBackup()
+
+        verifyBlocking(hwWalletStore) { restoreNames(names) }
+    }
+
+    @Test
+    fun `metadata restore keeps the stored names when the envelope carries none`() = test {
+        stubMetadataRestore(envelope = metadataEnvelope(metadata = listOf(preActivityMetadata())))
+
+        sut.performFullRestoreFromLatestBackup()
+
+        // An envelope written before this field must not clear what this wallet already holds.
+        verifyBlocking(hwWalletStore) { restoreNames(emptyMap()) }
+    }
+
+    @Test
+    fun `metadata restore records the category when the hardware wallet names cannot be stored`() = test {
+        stubWalletBackup()
+        stubMetadataRestore(
+            envelope = metadataEnvelope(
+                metadata = listOf(preActivityMetadata()),
+                hwWalletNames = mapOf(HARDWARE_WALLET_ID to "Cold Storage"),
+            ),
+        )
+        whenever { hwWalletStore.restoreNames(any()) }
+            .doSuspendableAnswer { throw BackupRepoTestError("store unavailable") }
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        // The names are the last and the least of this envelope: the caches and tags above them were
+        // already applied, so losing the whole category's synced marker over a name would be wrong.
+        verifyBlocking(cacheStore) { updateBackupStatus(eq(BackupCategory.METADATA), any()) }
+    }
+
+    @Test
+    fun `renaming a hardware wallet triggers a metadata backup`() = test {
+        stubMetadataBackupReads()
+        stubBackupObservers()
+        stubBackupStatuses(
+            MutableStateFlow(emptyMap()),
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+        ) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+
+            // Reconnecting rewrites the entry without touching its name.
+            hwWalletData.update { HwWalletData(knownDevices = listOf(knownDevice())) }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+
+            hwWalletData.update { HwWalletData(knownDevices = listOf(knownDevice(customLabel = "Cold Storage"))) }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), any()) }
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
     fun `activity traffic alone does not trigger a metadata backup`() = test {
         val activitiesChanged = MutableStateFlow(0L)
         val activityTagsChanged = MutableStateFlow(0L)
@@ -494,6 +660,117 @@ class BackupRepoTest : BaseUnitTest() {
         } finally {
             sut.stopObservingBackups()
         }
+    }
+
+    @Test
+    fun `ordinary activity upload is skipped while a restore is pending`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(
+            MutableStateFlow(emptyMap()),
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+        ) {}
+
+        try {
+            // The restore flow announces itself long before it reads the backup.
+            sut.setRestorePending(true)
+            sut.startObservingBackups()
+            runCurrent()
+
+            // Meanwhile the node started and synced the fresh wallet's activities.
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            // Uploading here replaces the stored envelope with the fresh wallet's state before the
+            // restore reads it, which loses the tags and the closed channels it still holds.
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `ordinary activity upload resumes once the restore is no longer pending`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(
+            MutableStateFlow(emptyMap()),
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+        ) {}
+
+        try {
+            sut.setRestorePending(true)
+            sut.startObservingBackups()
+            runCurrent()
+
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+
+            sut.setRestorePending(false)
+            whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(2_000))
+
+            activitiesChanged.update { 2L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.ACTIVITY.name), any()) }
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `pending restore stops gating uploads once it expires`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(
+            MutableStateFlow(emptyMap()),
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+        ) {}
+
+        try {
+            sut.setRestorePending(true)
+            sut.startObservingBackups()
+            runCurrent()
+
+            // The restore never returns, so nothing ever clears the gate.
+            whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(RESTORE_GATE_EXPIRED_AT))
+
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.ACTIVITY.name), any()) }
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `migration rewrite still uploads while a restore is pending`() = test {
+        stubWalletBackup()
+        stubActivityRestore()
+        sut.setRestorePending(true)
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        // The rewrite is the restore's own upload, so the gate must never hold it.
+        assertTrue(result.isSuccess)
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.ACTIVITY.name), any()) }
     }
 
     @Test
@@ -570,6 +847,12 @@ class BackupRepoTest : BaseUnitTest() {
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
     }
 
+    private fun stubActivityBackupReads() {
+        whenever { activityRepo.getActivities() }.thenReturn(Result.success(emptyList()))
+        whenever { activityRepo.getClosedChannels() }.thenReturn(Result.success(emptyList()))
+        whenever { activityRepo.getAllActivitiesTags() }.thenReturn(Result.success(emptyList()))
+    }
+
     private fun stubMetadataBackupReads() {
         whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
             .thenReturn(Result.success(listOf(preActivityMetadata())))
@@ -643,8 +926,17 @@ class BackupRepoTest : BaseUnitTest() {
         )
     )
 
-    private fun metadataEnvelope(metadata: List<PreActivityMetadata> = emptyList()) = json.encodeToString(
-        MetadataBackupV1(createdAt = 123, tagMetadata = metadata, cache = AppCacheData())
+    private fun metadataEnvelope(
+        metadata: List<PreActivityMetadata> = emptyList(),
+        cache: AppCacheData = AppCacheData(),
+        hwWalletNames: Map<String, String>? = null,
+    ) = json.encodeToString(
+        MetadataBackupV1(
+            createdAt = 123,
+            tagMetadata = metadata,
+            cache = cache,
+            hwWalletNames = hwWalletNames,
+        )
     )
 
     private fun envelopeWithRawField(base: String, field: String, rawJson: String): String {
@@ -657,6 +949,19 @@ class BackupRepoTest : BaseUnitTest() {
         walletId = WalletScope.default,
         activityId = "a1",
         tags = listOf("coffee"),
+    )
+
+    private fun knownDevice(customLabel: String? = null) = KnownDevice(
+        id = "dev1",
+        name = "Trezor",
+        path = "usb-1",
+        transportType = TransportType.USB,
+        label = null,
+        model = "Safe 3",
+        lastConnectedAt = 1,
+        xpubs = mapOf("nativeSegwit" to "zpubNS"),
+        customLabel = customLabel,
+        walletId = HARDWARE_WALLET_ID,
     )
 
     private fun preActivityMetadata() = PreActivityMetadata(
@@ -741,6 +1046,7 @@ class BackupRepoTest : BaseUnitTest() {
         widgetsStore = widgetsStore,
         watchOnlyAccountStore = watchOnlyAccountStore,
         watchOnlyAccountRepo = watchOnlyAccountRepo,
+        hwWalletStore = hwWalletStore,
         blocktankRepo = blocktankRepo,
         activityRepo = activityRepo,
         pubkyRepo = pubkyRepo,
@@ -757,6 +1063,9 @@ class BackupRepoTest : BaseUnitTest() {
 
     private companion object {
         const val HARDWARE_WALLET_ID = "trezor:abc123"
+
+        /** Past the 10 minute restore gate, counted from the 1 000 ms the clock starts at. */
+        const val RESTORE_GATE_EXPIRED_AT = 700_000L
 
         /** Core-owned slices as written before `walletId` existed. */
         const val LEGACY_ACTIVITIES_JSON = "[]"

@@ -61,7 +61,6 @@ import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.viewmodels.LanguageViewModel
 
@@ -241,7 +240,6 @@ private fun SettingsContent(
                 CustomTabRowWithSpacing(
                     tabs = tabs,
                     currentTabIndex = pagerState.currentPage,
-                    selectedColor = Colors.White,
                     onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
@@ -343,7 +341,7 @@ private fun GeneralTabContent(
                 icon = { SettingsIcon(R.drawable.ic_coins) },
                 onClick = { onEvent(SettingsEvent.ContactPaymentsClick) },
                 enabled = !state.isUpdatingContactPayments,
-                switchTestTag = "ContactPaymentsSwitch",
+                switchTestTag = "ContactPaymentsToggle",
                 modifier = Modifier.testTag("ContactPaymentsSettings")
             )
         }

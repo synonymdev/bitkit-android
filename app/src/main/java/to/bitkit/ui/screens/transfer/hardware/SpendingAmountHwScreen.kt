@@ -65,7 +65,7 @@ fun SpendingAmountHwScreen(
     viewModel: TransferViewModel,
     isOffline: Boolean,
     onBackClick: () -> Unit = {},
-    onOrderCreated: (String) -> Unit = {},
+    onQuoteReady: () -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
@@ -83,7 +83,7 @@ fun SpendingAmountHwScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                is TransferEffect.OnOrderCreated -> onOrderCreated(effect.orderId)
+                TransferEffect.OnQuoteReady -> onQuoteReady()
                 is TransferEffect.ToastError -> ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = effect.title,
@@ -199,7 +199,7 @@ private fun NodeRunning(
     ) {
         val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
 
-        VerticalSpacer(minHeight = 16.dp, maxHeight = 32.dp)
+        VerticalSpacer(32.dp)
 
         Display(
             text = stringResource(R.string.lightning__spending_amount__title)
@@ -207,7 +207,7 @@ private fun NodeRunning(
             modifier = Modifier.fillMaxWidth()
         )
 
-        FillHeight()
+        VerticalSpacer(32.dp)
 
         NumberPadTextField(
             viewModel = amountInputViewModel,
@@ -223,9 +223,7 @@ private fun NodeRunning(
         Row(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .padding(vertical = 8.dp)
-                .testTag("HardwareTransferAmountNumberPad")
+            modifier = Modifier.testTag("HardwareTransferAmountNumberPad")
         ) {
             Column {
                 Text13Up(
@@ -234,7 +232,11 @@ private fun NodeRunning(
                     modifier = Modifier.testTag("HardwareTransferAmountAvailable")
                 )
                 VerticalSpacer(8.dp)
-                MoneySSB(sats = uiState.balanceAfterFee, modifier = Modifier.testTag("HardwareTransferAmountUnit"))
+                MoneySSB(
+                    sats = uiState.balanceAfterFee,
+                    showSymbol = true,
+                    modifier = Modifier.testTag("HardwareTransferAmountUnit")
+                )
             }
             FillWidth()
             UnitButton(
@@ -256,8 +258,7 @@ private fun NodeRunning(
             )
         }
 
-        HorizontalDivider()
-        VerticalSpacer(16.dp)
+        HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
         NumberPad(
             viewModel = amountInputViewModel,

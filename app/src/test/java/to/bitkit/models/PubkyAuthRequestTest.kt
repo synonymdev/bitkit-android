@@ -1,7 +1,9 @@
 package to.bitkit.models
 
+import java.net.URLEncoder
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -9,10 +11,56 @@ import kotlin.test.assertTrue
 class PubkyAuthRequestTest {
 
     @Test
+    fun `parse authorized signup preserves registration and authorization details`() {
+        listOf("pubkyring", "pubkyauth").forEach { scheme ->
+            val request = PubkyAuthRequest.parseSignup(ringSignupUrl("invite code", scheme)).getOrThrow()
+
+            assertTrue(request.isSignup)
+            assertEquals("homeserver", request.homeserverPublicKey)
+            assertEquals("invite code", request.signupToken)
+            assertEquals("https://relay.example/inbox/", request.relay)
+            assertEquals("/pub/example.app/:rw", request.capabilities)
+            assertEquals(
+                "pubkyauth:///?relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
+                    "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw",
+                request.authorizationUrl,
+            )
+        }
+    }
+
+    @Test
+    fun `parse direct signup accepts canonical and legacy formats`() {
+        listOf("direct_signup", "signup").forEach { action ->
+            val request = PubkyAuthRequest.parseSignup(directSignupUrl(action, "invite code")).getOrThrow()
+
+            assertTrue(request.isSignup)
+            assertEquals("homeserver", request.homeserverPublicKey)
+            assertEquals("invite code", request.signupToken)
+            assertEquals("", request.relay)
+            assertEquals("", request.capabilities)
+            assertNull(request.authorizationUrl)
+        }
+    }
+
+    @Test
+    fun `parse Ring signup rejects missing and duplicate required values`() {
+        val invalidUrls = listOf(
+            ringSignupUrl().replace("&secret=secret", ""),
+            "${ringSignupUrl()}&hs=other",
+            directSignupUrl("signup") + "&relay=https%3A%2F%2Frelay.example",
+        )
+
+        invalidUrls.forEach { url ->
+            assertIs<PubkyAuthRequestError.InvalidUrl>(PubkyAuthRequest.parseSignup(url).exceptionOrNull())
+        }
+    }
+
+    @Test
     fun `parse recognizes watch-only account claim`() {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
@@ -25,6 +73,7 @@ class PubkyAuthRequestTest {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES.split(",").reversed().joinToString(",")
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
@@ -43,10 +92,13 @@ class PubkyAuthRequestTest {
     fun `parse preserves normal auth without Bitkit claim`() {
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl("/pub/bitkit.to/:rw"),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = "/pub/bitkit.to/:rw",
         ).getOrThrow()
 
+        assertFalse(request.isSignup)
+        assertEquals("paykit.test", request.clientId)
         assertNull(request.bitkitClaim)
     }
 
@@ -56,6 +108,7 @@ class PubkyAuthRequestTest {
 
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
@@ -71,6 +124,7 @@ class PubkyAuthRequestTest {
 
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
@@ -84,6 +138,7 @@ class PubkyAuthRequestTest {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -100,6 +155,7 @@ class PubkyAuthRequestTest {
                 PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
                 PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
             ),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -112,6 +168,7 @@ class PubkyAuthRequestTest {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, "unknown-v1"),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -125,6 +182,7 @@ class PubkyAuthRequestTest {
         val capabilities = "/pub/paykit/v0/:rw"
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -137,6 +195,7 @@ class PubkyAuthRequestTest {
         val capabilities = "/pub/paykit/v0/bitkit/server/:rw"
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -149,6 +208,7 @@ class PubkyAuthRequestTest {
         val capabilities = "${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES},"
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -249,4 +309,14 @@ class PubkyAuthRequestTest {
         }
         return "pubkyauth://signin?caps=$capabilities&relay=https%3A%2F%2Fhttprelay.pubky.app%2Finbox%2F$claims"
     }
+
+    private fun ringSignupUrl(signupToken: String? = null, scheme: String = "pubkyring"): String =
+        "$scheme://signup?hs=homeserver" +
+            "&relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
+            "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw" +
+            signupToken?.let { "&st=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
+
+    private fun directSignupUrl(action: String, signupToken: String? = null): String =
+        "pubkyauth://$action?hs=homeserver" +
+            signupToken?.let { "&st=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
 }

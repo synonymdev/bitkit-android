@@ -2,15 +2,29 @@ package to.bitkit.services
 
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
+import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PubkyClientConfig
+import com.synonym.paykit.PubkyLocalSecretKey
+import com.synonym.paykit.PubkySessionAccess
+import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicContactSharingPolicy
+import com.synonym.paykit.ReceiverNoiseSecretKey
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.utils.AppError
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -18,13 +32,75 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PaykitSdkServiceTest {
+    @Test
+    fun `registered identity activation persists credentials or clears partial activation`() = runTest {
+        for (failure in listOf(null, "session", "secret", "initialize", "cancel")) {
+            val keychain = mock<Keychain>()
+            val blocking = mock<Keychain.BlockingAccess>()
+            whenever(keychain.accessBlocking<Any?>(any())).doAnswer {
+                it.getArgument<Keychain.BlockingAccess.() -> Any?>(0).invoke(blocking)
+            }
+            val bytes = ByteArray(32) { 1 }
+            whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name)).thenReturn(bytes)
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.contactRecords()).thenReturn(emptyList())
+            val access = mock<PubkySessionAccess>()
+            val secret = mock<PubkyLocalSecretKey>()
+            val noise = mock<ReceiverNoiseSecretKey>()
+            whenever(secret.exportBytes()).thenReturn(bytes)
+            whenever(noise.exportBytes()).thenReturn(bytes)
+            whenever(access.exportSessionSecret()).thenReturn("new-session")
+            whenever(access.exportLocalSecretKey()).thenReturn(secret)
+            whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+            val error = if (failure == "cancel") {
+                CancellationException("cancelled")
+            } else {
+                IllegalStateException("activation failed")
+            }
+            when (failure) {
+                "session" -> whenever(keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session"))
+                    .thenThrow(error)
+                "secret" -> whenever(keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, bytes.toHex()))
+                    .thenThrow(error)
+                "initialize", "cancel" -> whenever(sdk.initialize()).thenThrow(error)
+            }
+            var handlesCreated = 0
+            val service = PaykitSdkService(mock(), keychain) {
+                handlesCreated++
+                sdk
+            }
+            val result = PubkySessionBootstrapResult(access, "pubky_test")
+
+            if (failure == null) {
+                service.activateRegisteredIdentity(result)
+                inOrder(keychain, sdk) {
+                    verify(keychain).upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session")
+                    verify(keychain).upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, bytes.toHex())
+                    verify(sdk).initialize()
+                }
+                verify(blocking, never()).delete(any())
+            } else {
+                val thrown = assertFailsWith(error::class) { service.activateRegisteredIdentity(result) }
+                assertEquals(error, thrown)
+                verify(blocking).delete(Keychain.Key.PAYKIT_SESSION.name)
+                verify(blocking).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+                verify(keychain, atLeastOnce()).delete(Keychain.Key.PAYKIT_SDK_STATE.name)
+                val handlesBeforeReload = handlesCreated
+                service.contactRecords()
+                assertEquals(handlesBeforeReload + 1, handlesCreated)
+            }
+        }
+    }
+
     private val basePubkyClientConfig = PubkyClientConfig(
         requestTimeoutSecs = 30uL,
         localTestnetHost = null,
+        authRelayUrl = null,
     )
 
     @Test
     fun `config scopes public endpoint sync to Bitkit managed endpoints`() {
+        assertEquals(BitkitPaykitSdkConfig.profileNamespace, BitkitPaykitSdkConfig.clientId)
         assertEquals(EndpointManagementScope.MANAGED_ONLY, BitkitPaykitSdkConfig.endpointManagementScope)
         assertEquals(PublicContactSharingPolicy.LOCAL_ONLY, BitkitPaykitSdkConfig.publicContactSharing)
         assertEquals(EncryptedLinkRecoveryMarkerPolicy.ENABLED, BitkitPaykitSdkConfig.encryptedLinkRecoveryMarkers)
@@ -50,6 +126,18 @@ class PaykitSdkServiceTest {
 
         assertEquals("192.0.2.1", config.localTestnetHost)
         assertEquals(basePubkyClientConfig.requestTimeoutSecs, config.requestTimeoutSecs)
+    }
+
+    @Test
+    fun `approval uses external requester client id`() {
+        assertEquals("paykit.test", validatedApprovalClientId("paykit.test", "paykit.test"))
+    }
+
+    @Test
+    fun `approval rejects a mismatched client id`() {
+        assertFailsWith<PubkyAuthRequestError.RequesterChanged> {
+            validatedApprovalClientId("paykit.test", "different.test")
+        }
     }
 
     @Test
@@ -142,6 +230,45 @@ class PaykitSdkServiceTest {
 
         assertTrue(provider.hasSessionAccess())
         assertNull(provider.loadLocalSecretKey())
+    }
+
+    @Test
+    fun `stale session can be deferred until sdk initialization completes`() {
+        val keychain = mock<Keychain>()
+        val provider = PaykitSdkSessionProvider(keychain)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
+
+        assertTrue(provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
+        assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
+        provider.suspendStoredSessionAccess()
+        assertNull(provider.loadSessionAccess())
+    }
+
+    @Test
+    fun `missing session or unrelated identity failures are not deferred`() {
+        val keychain = mock<Keychain>()
+        val provider = PaykitSdkSessionProvider(keychain)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+
+        assertTrue(!provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
+        assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
+    }
+
+    @Test
+    fun `session teardown attempts both credentials with session first`() {
+        val attemptedKeys = mutableListOf<String>()
+
+        assertFailsWith<AppError> {
+            clearPubkySessionCredentials {
+                attemptedKeys += it
+                if (it == Keychain.Key.PAYKIT_SESSION.name) throw AppError("Delete failed")
+            }
+        }
+
+        assertEquals(
+            listOf(Keychain.Key.PAYKIT_SESSION.name, Keychain.Key.PUBKY_SECRET_KEY.name),
+            attemptedKeys,
+        )
     }
 
     private fun keyStore(

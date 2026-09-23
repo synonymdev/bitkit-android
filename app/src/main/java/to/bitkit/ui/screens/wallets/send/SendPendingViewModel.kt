@@ -37,6 +37,9 @@ class SendPendingViewModel @Inject constructor(
         isInitialized = true
         pendingPaymentRepo.setActiveHash(paymentHash)
         _uiState.update { it.copy(amount = amount) }
+        pendingPaymentRepo.consumeResolution(paymentHash)?.let { resolution ->
+            _uiState.update { it.copy(resolution = resolution) }
+        }
         findActivity(paymentHash)
         observeResolution(paymentHash)
     }
@@ -65,6 +68,7 @@ class SendPendingViewModel @Inject constructor(
             pendingPaymentRepo.resolution
                 .filter { it.paymentHash == paymentHash }
                 .collect { resolution ->
+                    pendingPaymentRepo.consumeResolution(paymentHash)
                     Logger.info(
                         "Received payment resolution '${resolution::class.simpleName}' for '$paymentHash'",
                         context = TAG,

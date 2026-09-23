@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.TrezorScriptType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentSetOf
@@ -39,6 +40,14 @@ data class HwWalletReceivedTx(
     val txid: String,
     val sats: ULong,
     val walletId: String,
+)
+
+/** The next unused external address for a paired hardware-wallet account. */
+@Immutable
+data class HwReceiveAddress(
+    val address: String,
+    val path: String,
+    val addressType: HwFundingAddressType,
 )
 
 sealed interface HwFundingAccount {
@@ -98,6 +107,14 @@ enum class HwFundingAddressType(
 
     val accountType: AccountType
         get() = addressType.toAccountType()
+
+    val trezorScriptType: TrezorScriptType
+        get() = when (this) {
+            LEGACY -> TrezorScriptType.SPEND_ADDRESS
+            NESTED_SEGWIT -> TrezorScriptType.SPEND_P2SH_WITNESS
+            NATIVE_SEGWIT -> TrezorScriptType.SPEND_WITNESS
+            TAPROOT -> TrezorScriptType.SPEND_TAPROOT
+        }
 
     companion object {
         val DEFAULT: HwFundingAddressType = entries.first { it.addressType == DEFAULT_ADDRESS_TYPE }

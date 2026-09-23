@@ -53,6 +53,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.async.appScope
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -506,24 +507,70 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             ensureConnected()
             val fingerprint = trezorService.getDeviceFingerprint()
-            val params = ComposeParams(
-                wallet = WalletParams(
-                    extendedKey = extendedKey,
-                    electrumUrl = currentElectrumUrl(),
-                    fingerprint = fingerprint,
-                    network = network,
-                    accountType = accountType,
-                ),
+            composeTransaction(
+                extendedKey = extendedKey,
                 outputs = outputs,
                 feeRates = feeRates,
+                network = network,
+                accountType = accountType,
                 coinSelection = coinSelection,
+                fingerprint = fingerprint,
             )
-            trezorService.composeTransaction(params)
         }.onFailure {
             Logger.error("Trezor composeTransaction failed", it, context = TAG)
             _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
+
+    /** Composes from a public account key without opening a hardware-device session. */
+    @Suppress("LongParameterList")
+    suspend fun composeTransactionOffline(
+        extendedKey: String,
+        outputs: List<ComposeOutput>,
+        feeRates: List<Float>,
+        network: BitkitCoreNetwork,
+        accountType: AccountType?,
+        coinSelection: CoinSelection,
+    ): Result<List<ComposeResult>> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            awaitSetup()
+            composeTransaction(
+                extendedKey = extendedKey,
+                outputs = outputs,
+                feeRates = feeRates,
+                network = network,
+                accountType = accountType,
+                coinSelection = coinSelection,
+                fingerprint = null,
+            )
+        }.onFailure {
+            Logger.error("Trezor offline composeTransaction failed", it, context = TAG)
+        }
+    }
+
+    @Suppress("LongParameterList")
+    private suspend fun composeTransaction(
+        extendedKey: String,
+        outputs: List<ComposeOutput>,
+        feeRates: List<Float>,
+        network: BitkitCoreNetwork,
+        accountType: AccountType?,
+        coinSelection: CoinSelection,
+        fingerprint: String?,
+    ): List<ComposeResult> = trezorService.composeTransaction(
+        ComposeParams(
+            wallet = WalletParams(
+                extendedKey = extendedKey,
+                electrumUrl = currentElectrumUrl(),
+                fingerprint = fingerprint,
+                network = network,
+                accountType = accountType,
+            ),
+            outputs = outputs,
+            feeRates = feeRates,
+            coinSelection = coinSelection,
+        )
+    )
 
     suspend fun signTxFromPsbt(
         psbtBase64: String,
@@ -889,7 +936,11 @@ class TrezorRepo @Inject constructor(
      * credentials are only cleared once no identity of the device remains, so removing one hidden
      * wallet does not unpair the device for the others.
      */
-    suspend fun forgetDevice(deviceId: String, walletKey: String? = null): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun forgetDevice(
+        deviceId: String,
+        walletKey: String? = null,
+        pendingName: PendingNameUpdate? = null,
+    ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             // The store is the source of truth here: labels are written straight to it, so a
@@ -938,7 +989,7 @@ class TrezorRepo @Inject constructor(
                 TrezorDebugLog.log("FORGET", "Keeping credentials, another wallet still uses $deviceId")
                 Result.success(Unit)
             }
-            saveKnownDevices(updated)
+            saveKnownDevices(updated, pendingName)
             _state.update { it.copy(knownDevices = updated.toImmutableList()) }
             clearCredentialsResult.getOrThrow()
             disconnectResult.onFailure {
@@ -1141,6 +1192,10 @@ class TrezorRepo @Inject constructor(
         // must keep the name the user gave it instead of falling back to the device's own.
         val identityKey = walletKey(xpubs, deviceInfo.id)
         val named = previous ?: knownDevices.firstOrNull { it.walletKey == identityKey }
+        val resolvedWalletId = previous?.walletId?.takeIf { it.isNotBlank() }
+            ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id)
+        val pendingName = pendingNameFor(resolvedWalletId)
+        val customLabel = named?.customLabel ?: pendingName
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
@@ -1150,25 +1205,44 @@ class TrezorRepo @Inject constructor(
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = clock.nowMs(),
             xpubs = xpubs,
-            customLabel = named?.customLabel,
-            walletId = previous?.walletId?.takeIf { it.isNotBlank() }
-                ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id),
-            // The selection that derived these keys is authoritative, so a wallet wrongly marked
-            // hidden is corrected the next time it is opened rather than staying gated behind a
-            // passphrase forever. On-device entry cannot say which wallet was opened, so it keeps
-            // what the entry already knew and assumes hidden only for one it has never seen.
-            passphraseProtected = when (selection) {
-                WalletSelection.Standard -> false
-                is WalletSelection.Hidden -> true
-                WalletSelection.OnDevice -> previous?.passphraseProtected ?: true
-            },
+            customLabel = customLabel,
+            walletId = resolvedWalletId,
+            passphraseProtected = selection.isPassphraseProtected(previous),
             trezorDeviceId = features.deviceId ?: previous?.trezorDeviceId,
         )
         val updated = knownDevices.filterNot { it.isReplacedBy(known, refreshed = previous) } + known
-        saveKnownDevices(updated)
+        // The pending name is consumed in the same write as the entry that adopted it, so the name
+        // lives in exactly one place: leaving it pending would resurrect it once the user clears the
+        // entry's own label, and dropping it separately would lose it if saving the entry failed.
+        saveKnownDevices(
+            updated,
+            pendingName = pendingName?.let { PendingNameUpdate(resolvedWalletId, name = null) },
+        )
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
         return known
     }
+
+    /**
+     * The selection that derived a device's keys is authoritative, so a wallet wrongly marked hidden is
+     * corrected the next time it is opened rather than staying gated behind a passphrase forever.
+     * On-device entry cannot say which wallet was opened, so it keeps what the entry already knew and
+     * assumes hidden only for one it has never seen.
+     */
+    private fun WalletSelection.isPassphraseProtected(previous: KnownDevice?): Boolean = when (this) {
+        WalletSelection.Standard -> false
+        is WalletSelection.Hidden -> true
+        WalletSelection.OnDevice -> previous?.passphraseProtected ?: true
+    }
+
+    /**
+     * The name a wallet identity carries while it has no device entry: restored from a backup, or kept
+     * when the wallet was removed. Adopted the first time the identity is paired again.
+     */
+    private suspend fun pendingNameFor(walletId: String): String? = walletId
+        .takeIf { it.isNotBlank() }
+        // Only a name: failing to read one must not stop the device being paired.
+        ?.let { runSuspendCatching { hwWalletStore.loadPendingNames()[it] }.getOrNull() }
+        ?.takeIf { it.isNotBlank() }
 
     /**
      * Reads account-level extended public keys for every supported address type so a
@@ -1232,9 +1306,9 @@ class TrezorRepo @Inject constructor(
         Logger.error("Failed to load known devices", it, context = TAG)
     }.getOrDefault(emptyList())
 
-    private suspend fun saveKnownDevices(devices: List<KnownDevice>) {
-        runCatching {
-            hwWalletStore.saveKnownDevices(devices)
+    private suspend fun saveKnownDevices(devices: List<KnownDevice>, pendingName: PendingNameUpdate? = null) {
+        runSuspendCatching {
+            hwWalletStore.saveKnownDevices(devices, pendingName)
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
@@ -1306,8 +1380,9 @@ class TrezorRepo @Inject constructor(
                 TrezorDebugLog.log("THPRetry", "Error not retryable, throwing")
                 throw e
             }
-            TrezorDebugLog.log("THPRetry", "Error is retryable, attempting second connect...")
+            TrezorDebugLog.log("THPRetry", "Error is retryable, resetting the session before reconnecting...")
             Logger.warn("Failed to connect to '$deviceId', retrying", e, context = TAG)
+            disconnectStaleSession(deviceId)
             logCredentialFileState(deviceId, "BEFORE 2nd attempt")
             val result = runSuspendCatching {
                 connectDevice(deviceId, selection, requestUsbPermission)
@@ -1327,8 +1402,11 @@ class TrezorRepo @Inject constructor(
                 return@withContext Result.success(Unit)
             }
             val result = runSuspendCatching {
-                trezorService.disconnect()
-                disconnectTransportDevice(deviceId)
+                try {
+                    trezorService.disconnect()
+                } finally {
+                    disconnectTransportDevice(deviceId)
+                }
             }
                 .onFailure {
                     Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)

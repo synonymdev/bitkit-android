@@ -18,7 +18,7 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.ext.BoostType
 import to.bitkit.ext.boostType
 import to.bitkit.ext.nowTimestamp
-import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
+import to.bitkit.models.FeeRate
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -140,7 +140,10 @@ class BoostTransactionViewModel @Inject constructor(
         val isIncreaseEnabled = totalFee < maxTotalFee && feeRate < MAX_FEE_RATE
         val isDecreaseEnabled = totalFee > currentFee && feeRate > minFeeRate
         val feeRates = blocktankRepo.blocktankState.value.info?.onchain?.feeRates
-        val estimateTime = context.getFeeShortDescription(feeRate, feeRates)
+        val estimateTime = feeRates
+            ?.let { FeeRate.fromSatsPerVByte(feeRate, it) }
+            ?.let { context.getString(it.duration) }
+            ?: context.getString(FeeRate.NORMAL.duration)
 
         _uiState.update {
             it.copy(

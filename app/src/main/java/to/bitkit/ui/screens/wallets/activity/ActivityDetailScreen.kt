@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets.activity
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -76,11 +74,12 @@ import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.MoneySSB
+import to.bitkit.ui.components.MoneyCaptionM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.components.ZigzagDivider
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityAddTagSheet
@@ -247,7 +246,8 @@ fun ActivityDetailScreen(
                         detailViewModel = detailViewModel,
                         isCpfpChild = isCpfpChild,
                         isHardware = uiState.isHardwareActivity,
-                        showContactActions = isPaykitEnabled && !uiState.isHardwareActivity,
+                        showContactActions = isPaykitEnabled &&
+                            (!uiState.isHardwareActivity || assignedContact != null),
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
                             app.toast(
@@ -499,7 +499,7 @@ private fun ActivityDetailContent(
                             if (isHidden) {
                                 BodySSB(text = UiConstants.HIDE_BALANCE_SHORT)
                             } else {
-                                MoneySSB(sats = displayAmount.toLong())
+                                MoneyCaptionM(sats = displayAmount.toLong())
                             }
                         }
                     }
@@ -536,7 +536,7 @@ private fun ActivityDetailContent(
                                 if (isHidden) {
                                     BodySSB(text = UiConstants.HIDE_BALANCE_SHORT)
                                 } else {
-                                    MoneySSB(sats = fee.toLong())
+                                    MoneyCaptionM(sats = fee.toLong())
                                 }
                             }
                         }
@@ -548,7 +548,7 @@ private fun ActivityDetailContent(
         }
 
         ContactTagsSection(
-            contact = assignedContact.takeIf { showContactActions },
+            contact = assignedContact,
             tags = tags,
             onRemoveTag = onRemoveTag,
         )
@@ -681,7 +681,7 @@ private fun ActivityDetailContent(
                     enabled = shouldEnable,
                     icon = {
                         Icon(
-                            painter = painterResource(R.drawable.ic_timer_alt),
+                            painter = painterResource(R.drawable.ic_timer_alt_yellow),
                             contentDescription = null,
                             tint = accentColor,
                             modifier = Modifier.size(16.dp)
@@ -936,36 +936,6 @@ private fun StatusRow(
             modifier = Modifier
                 .padding(start = 4.dp)
                 .then(testTag?.let { Modifier.testTag(it) } ?: Modifier)
-        )
-    }
-}
-
-@Composable
-private fun ZigzagDivider() {
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(12.dp)
-    ) {
-        val zigzagWidth = 24.dp.toPx()
-        val amplitude = size.height
-        val width = size.width
-        val path = Path()
-
-        path.moveTo(0f, 0f)
-        var x = 0f
-        while (x < width) {
-            path.lineTo(x + zigzagWidth / 2, amplitude)
-            path.lineTo((x + zigzagWidth).coerceAtMost(width), 0f)
-            x += zigzagWidth
-        }
-        path.lineTo(width, amplitude)
-        path.lineTo(0f, amplitude)
-        path.close()
-
-        drawPath(
-            path = path,
-            color = Colors.White10,
         )
     }
 }

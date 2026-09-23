@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.ext.mockOrder
 import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
@@ -61,15 +60,15 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 fun SpendingAdvancedScreen(
     viewModel: TransferViewModel,
     onBackClick: () -> Unit = {},
-    onOrderCreated: () -> Unit = {},
+    onQuoteReady: () -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
-    val currentOnOrderCreated by rememberUpdatedState(onOrderCreated)
+    val currentOnQuoteReady by rememberUpdatedState(onQuoteReady)
     val app = appViewModel ?: return
     val context = LocalContext.current
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
-    val order = state.order ?: return
+    if (state.feeSat == 0uL) return
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     var isLoading by remember { mutableStateOf(false) }
 
@@ -77,8 +76,8 @@ fun SpendingAdvancedScreen(
     val currentMaxLspBalance by rememberUpdatedState(transferValues.maxLspBalance)
     val currentCurrencies by rememberUpdatedState(currencies)
 
-    LaunchedEffect(order.clientBalanceSat) {
-        viewModel.updateTransferValues(order.clientBalanceSat)
+    LaunchedEffect(state.clientBalanceSat) {
+        viewModel.updateAdvancedTransferValues(state.clientBalanceSat)
     }
 
     LaunchedEffect(amountUiState.sats) {
@@ -86,13 +85,17 @@ fun SpendingAdvancedScreen(
     }
 
     LaunchedEffect(transferValues.maxLspBalance) {
-        amountInputViewModel.setMaxAmount(transferValues.maxLspBalance.toLong())
+        amountInputViewModel.applyMaxLspBalance(
+            maxLspBalance = transferValues.maxLspBalance.toLong(),
+            enteredSats = amountUiState.sats,
+            currencies = currentCurrencies,
+        )
     }
 
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                is TransferEffect.OnOrderCreated -> currentOnOrderCreated()
+                TransferEffect.OnQuoteReady -> currentOnQuoteReady()
                 is TransferEffect.ToastException -> {
                     isLoading = false
                     app.toast(effect.e)
@@ -129,16 +132,17 @@ fun SpendingAdvancedScreen(
         }
     }
 
-    val isValid = transferValues.let {
+    val isInRange = transferValues.let {
         val amount = amountUiState.sats.toULong()
         amount > 0u && it.maxLspBalance > 0u && amount in it.minLspBalance..it.maxLspBalance
     }
+    val isValid = isInRange && state.canAfford(state.clientBalanceSat)
 
     Content(
         uiState = state,
         transferValues = transferValues,
         isValid = isValid,
-        isLoading = isLoading,
+        isLoading = isLoading || state.isLoading,
         amountInputViewModel = amountInputViewModel,
         currencies = currencies,
         onBack = onBackClick,
@@ -147,6 +151,27 @@ fun SpendingAdvancedScreen(
             viewModel.onSpendingAdvancedContinue(amountUiState.sats)
         },
     )
+}
+
+/**
+ * Settling the max can land it below what is already entered, so the amount comes down with it
+ * rather than leaving a capacity that no longer exists selected.
+ */
+private fun AmountInputViewModel.applyMaxLspBalance(
+    maxLspBalance: Long,
+    enteredSats: Long,
+    currencies: CurrencyState,
+) {
+    setMaxAmount(maxLspBalance)
+    if (maxLspBalance in 1..<enteredSats) {
+        setSats(maxLspBalance, currencies)
+    }
+}
+
+private fun TransferToSpendingUiState.canAfford(clientBalanceSat: ULong): Boolean {
+    val budget = fundingBudgetSats ?: return true
+    val fee = feeEstimate ?: return true
+    return clientBalanceSat.toLong() + fee <= budget.toLong()
 }
 
 @Suppress("ViewModelForwarding")
@@ -173,7 +198,7 @@ private fun Content(
                 .fillMaxSize()
                 .testTag("SpendingAdvanced")
         ) {
-            VerticalSpacer(minHeight = 16.dp, maxHeight = 32.dp)
+            VerticalSpacer(32.dp)
 
             Display(
                 text = stringResource(R.string.lightning__spending_advanced__title)
@@ -181,7 +206,7 @@ private fun Content(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            FillHeight()
+            VerticalSpacer(32.dp)
 
             NumberPadTextField(
                 viewModel = amountInputViewModel,
@@ -244,6 +269,7 @@ private fun Content(
 
             NumberPad(
                 viewModel = amountInputViewModel,
+                enabled = !isLoading,
                 currencies = currencies,
             )
 
@@ -268,7 +294,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             uiState = TransferToSpendingUiState(
-                order = mockOrder().copy(clientBalanceSat = 100_000u),
+                clientBalanceSat = 100_000uL,
                 receivingAmount = 55_000L,
                 feeEstimate = 2_500L,
             ),
@@ -292,7 +318,7 @@ private fun PreviewLoading() {
     AppThemeSurface {
         Content(
             uiState = TransferToSpendingUiState(
-                order = mockOrder().copy(clientBalanceSat = 50_000u),
+                clientBalanceSat = 50_000uL,
                 receivingAmount = 20_000L,
                 feeEstimate = null,
                 isLoading = true,

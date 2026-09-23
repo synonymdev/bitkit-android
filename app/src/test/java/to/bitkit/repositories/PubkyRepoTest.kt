@@ -7,10 +7,23 @@ import coil3.memory.MemoryCache
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactProfileSource
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicationStatus
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -19,6 +32,7 @@ import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -30,12 +44,15 @@ import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
+import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyRingAuthCallback
 import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.services.PubkyRingAuthTimeoutError
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -64,12 +81,18 @@ class PubkyRepoTest : BaseUnitTest() {
     private val pubkyStore = mock<PubkyStore>()
     private val settingsStore = mock<SettingsStore>()
     private val settingsFlow = MutableStateFlow(SettingsData())
+    private val profileSetupPending = MutableStateFlow(false)
 
     @Before
     fun setUp() = runBlocking {
         settingsFlow.value = SettingsData()
         whenever(pubkyStore.data).thenReturn(flowOf(PubkyStoreData()))
         whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever(settingsStore.isPubkyProfileSetupPending).thenReturn(profileSetupPending)
+        whenever { settingsStore.setPubkyProfileSetupPending(any()) }.thenAnswer {
+            profileSetupPending.value = it.getArgument(0)
+            Unit
+        }
         whenever(pubkyService.contactRecords()).thenReturn(emptyList())
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
@@ -79,20 +102,151 @@ class PubkyRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut() = PubkyRepo(
+    private fun createSut(httpClient: HttpClient = mock()) = PubkyRepo(
         ioDispatcher = testDispatcher,
         pubkyService = pubkyService,
         keychain = keychain,
         imageLoader = imageLoader,
         pubkyStore = pubkyStore,
         settingsStore = settingsStore,
-        httpClient = mock(),
+        httpClient = httpClient,
     )
 
     @Test
     fun `initial state should have no public key`() = test {
         assertNull(sut.publicKey.value)
         assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `Ring signup registers and authorizes before activating the local session`() = test {
+        val events = mutableListOf<String>()
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        val request = ringSignupRequest()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenAnswer {
+            events += "register"
+            registeredSession
+        }
+        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret")).thenAnswer {
+            events += "authorize"
+        }
+        whenever(pubkyService.activateRegisteredIdentity(registeredSession)).thenAnswer { events += "activate" }
+
+        val result = sut.approveSignupAuth(request)
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf("register", "authorize", "activate"), events)
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        assertTrue(profileSetupPending.value)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `Ring signup does not activate the registered session when authorization fails`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        val request = ringSignupRequest()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret"))
+            .thenThrow(IllegalStateException("authorization failed"))
+
+        assertTrue(sut.approveSignupAuth(request).isFailure)
+        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
+        assertFalse(profileSetupPending.value)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `Ring signup can retry after relay timeout without activating the timed out session`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        val request = ringSignupRequest()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret"))
+            .thenAnswer { throw AppError(PubkyRingAuthTimeoutError()) }
+            .thenReturn(Unit)
+
+        assertTrue(sut.approveSignupAuth(request).isFailure)
+        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
+        assertNull(sut.publicKey.value)
+        assertFalse(profileSetupPending.value)
+
+        assertTrue(sut.approveSignupAuth(request).isSuccess)
+        verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(profileSetupPending.value)
+    }
+
+    @Test
+    fun `Ring signup clears profile setup state when local activation fails`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        val request = ringSignupRequest()
+        profileSetupPending.value = true
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        whenever(pubkyService.activateRegisteredIdentity(registeredSession)).thenAnswer {
+            throw TestAppError("activation failed")
+        }
+
+        assertTrue(sut.approveSignupAuth(request).isFailure)
+        assertFalse(profileSetupPending.value)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `direct signup skips app authorization and activates the registered session`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        val request = directSignupRequest()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+
+        assertTrue(sut.approveSignupAuth(request).isSuccess)
+        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
+        verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
+        assertTrue(profileSetupPending.value)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `Ring signup stops when registration fails`() = test {
+        val request = ringSignupRequest()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite"))
+            .thenThrow(IllegalStateException("registration failed"))
+
+        assertTrue(sut.approveSignupAuth(request).isFailure)
+        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
+        assertFalse(profileSetupPending.value)
+    }
+
+    @Test
+    fun `Ring signup clears credentials when pending setup persistence and rollback fail`() = test {
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite"))
+            .thenReturn(mock<PubkySessionBootstrapResult>())
+        whenever(settingsStore.setPubkyProfileSetupPending(true)).thenAnswer {
+            throw TestAppError("persistence failed")
+        }
+        whenever(pubkyService.forgetSessionAccess()).thenAnswer {
+            throw TestAppError("cleanup failed")
+        }
+
+        assertTrue(sut.approveSignupAuth(ringSignupRequest()).isFailure)
+
+        verify(keychain).delete(Keychain.Key.PAYKIT_SESSION.name)
+        verify(keychain).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+        assertFalse(profileSetupPending.value)
+    }
+
+    @Test
+    fun `identity check fails closed when secure storage cannot be read`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenThrow(IllegalStateException("unavailable"))
+
+        assertTrue(runSuspendCatching { sut.hasIdentity() }.isFailure)
     }
 
     @Test
@@ -173,6 +327,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertFalse(sut.isAuthenticated.value)
         assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService) { signOut() }
     }
 
     @Test
@@ -199,29 +354,32 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `approveAuth should forward requested capabilities`() = test {
         val authUrl = "pubkyauth://signin?caps=/pub/bitkit.to/:rw"
         val capabilities = "/pub/bitkit.to/:rw"
+        val clientId = "paykit.test"
         val secretKey = "local_secret"
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
 
-        val result = sut.approveAuth(authUrl, capabilities)
+        val result = sut.approveAuth(authUrl, capabilities, clientId)
 
         assertTrue(result.isSuccess)
-        verifyBlocking(pubkyService) { approveAuth(authUrl, capabilities, secretKey) }
+        verifyBlocking(pubkyService) { approveAuth(authUrl, capabilities, clientId, secretKey) }
     }
 
     @Test
     fun `approveAuthWithCompanionClaim forwards exact claim identifiers and capability`() = test {
         val authUrl = "pubkyauth://signin?x-bitkit-claim=watch-only-account-v1"
+        val clientId = "paykit.test"
         val secretKey = "local_secret"
         val payload = ByteArray(84) { it.toByte() }
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
 
-        val result = sut.approveAuthWithCompanionClaim(authUrl, payload)
+        val result = sut.approveAuthWithCompanionClaim(authUrl, clientId, payload)
 
         assertTrue(result.isSuccess)
         verifyBlocking(pubkyService) {
             approveAuthWithCompanionClaim(
                 authUrl = authUrl,
                 expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
+                approvedClientId = clientId,
                 secretKeyHex = secretKey,
                 claim = PubkyAuthCompanionClaim(
                     queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
@@ -233,19 +391,92 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `completeAuthentication should clear session when auth is canceled after completion`() = test {
+    fun `completeAuthentication should forget session when canceled session revocation fails`() = test {
         whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         whenever(pubkyService.completeAuth()).thenAnswer {
             runBlocking { sut.cancelAuthentication() }
             Unit
         }
+        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
 
         val authRequest = startAuthForTesting()
         approveAuthForTesting(authRequest)
         val result = sut.completeAuthentication()
 
         assertTrue(result.isFailure)
-        verifyBlocking(pubkyService) { clearSessionAccess() }
+        verifyBlocking(pubkyService) { signOut() }
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
+    }
+
+    @Test
+    fun `completeAuthentication clears credentials when abandoned session cleanup fails`() = test {
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenAnswer {
+            runBlocking { sut.cancelAuthentication() }
+            Unit
+        }
+        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
+        whenever(pubkyService.forgetSessionAccess()).thenAnswer { throw TestAppError("Cleanup error") }
+
+        val authRequest = startAuthForTesting()
+        approveAuthForTesting(authRequest)
+        val result = sut.completeAuthentication()
+
+        assertTrue(result.isFailure)
+        assertFalse(sut.isAuthenticated.value)
+        verify(keychain).delete(Keychain.Key.PAYKIT_SESSION.name)
+        verify(keychain).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `completeAuthentication should revoke session when canceled during completion`() = test {
+        val completionStarted = CompletableDeferred<Unit>()
+        val finishCompletion = CompletableDeferred<Unit>()
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).doSuspendableAnswer {
+            completionStarted.complete(Unit)
+            finishCompletion.await()
+        }
+
+        val authRequest = startAuthForTesting()
+        approveAuthForTesting(authRequest)
+        val result = async { sut.completeAuthentication() }
+        completionStarted.await()
+
+        result.cancel()
+        verifyBlocking(pubkyService, never()) { signOut() }
+        finishCompletion.complete(Unit)
+        result.join()
+
+        verifyBlocking(pubkyService) { signOut() }
+    }
+
+    @Test
+    fun `completeAuthentication should keep session when canceled during profile load`() = test {
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        val finishProfileLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenReturn(Unit)
+        whenever(pubkyService.currentPublicKey()).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            finishProfileLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+
+        val authRequest = startAuthForTesting()
+        approveAuthForTesting(authRequest)
+        val result = async { sut.completeAuthentication() }
+        profileLoadStarted.await()
+
+        assertTrue(sut.isAuthenticated.value)
+        result.cancel()
+        finishProfileLoad.complete(Unit)
+        result.join()
+
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(pubkyService, never()) { signOut() }
     }
 
     @Test
@@ -421,6 +652,253 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals(PubkyRingAuthCallbackHandlingResult.TrustedError("Ring failed"), result)
         verifyBlocking(pubkyService) { cancelAuth() }
+    }
+
+    @Test
+    fun `createIdentity should forget session when incomplete session revocation fails`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(pubkyService.deriveSecretKey("test mnemonic")).thenReturn("test-secret")
+        whenever(pubkyService.publicKeyFromSecret("test-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever(pubkyService.signUp("test-secret", "test-homeserver", "test-code")).thenReturn(Unit)
+        whenever(pubkyService.publishPaykitProfile(any())).thenAnswer { throw TestAppError("Publish failed") }
+        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
+
+        val result = sut.createIdentity(
+            name = "Test",
+            bio = "",
+            links = emptyList(),
+            tags = emptyList(),
+            avatarBytes = null,
+        )
+        httpClient.close()
+
+        assertTrue(result.isFailure)
+        assertEquals("Publish failed", result.exceptionOrNull()?.message)
+        verifyBlocking(pubkyService) { signUp("test-secret", "test-homeserver", "test-code") }
+        verifyBlocking(pubkyService) { signOut() }
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
+    }
+
+    @Test
+    fun `createIdentity clears stale pending signup without a session`() = test {
+        profileSetupPending.value = true
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isFailure)
+        assertFalse(profileSetupPending.value)
+        verify(keychain).loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+    }
+
+    @Test
+    fun `createIdentity restores a stored local key without Homegate signup`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        profileSetupPending.value = true
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
+        whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+
+        val result = sut.createIdentity("Restored", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals("Restored", sut.profile.value?.name)
+        assertFalse(profileSetupPending.value)
+        assertTrue((httpClient.engine as MockEngine).requestHistory.isEmpty())
+        verifyBlocking(pubkyService) { signIn("local-secret") }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verify(keychain, never()).loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        httpClient.close()
+    }
+
+    @Test
+    fun `createIdentity stops when the local key cannot be read`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenAnswer {
+            throw TestAppError("unavailable")
+        }
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertEquals("unavailable", result.exceptionOrNull()?.message)
+        verify(keychain, never()).loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+    }
+
+    @Test
+    fun `createIdentity retries local sign in without deleting the existing identity`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
+        whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.signIn("local-secret")).thenAnswer { throw TestAppError("offline") }.thenReturn(Unit)
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+
+        val firstResult = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertEquals("offline", firstResult.exceptionOrNull()?.message)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+
+        assertTrue(sut.createIdentity("Test", "", emptyList(), emptyList(), null).isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(pubkyService, times(2)) { signIn("local-secret") }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verify(keychain, never()).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
+    @Test
+    fun `createIdentity preserves the existing identity when profile publication fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val existingProfile = sut.profile.value
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
+        whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.publishPaykitProfile(any()))
+            .thenAnswer { throw TestAppError("offline") }
+            .thenReturn(mock())
+
+        val firstResult = sut.createIdentity("Updated", "", emptyList(), emptyList(), null)
+
+        assertEquals("offline", firstResult.exceptionOrNull()?.message)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals(existingProfile, sut.profile.value)
+        assertTrue(sut.isAuthenticated.value)
+
+        assertTrue(sut.createIdentity("Updated", "", emptyList(), emptyList(), null).isSuccess)
+        verifyBlocking(pubkyService, times(2)) { signIn("local-secret") }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verify(keychain, never()).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
+    @Test
+    fun `createIdentity preserves local recovery after cancellation`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
+        whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY)
+        var cancelDuringSignIn: Boolean? = true
+        var operationStarted = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("local-secret")).doSuspendableAnswer {
+            if (cancelDuringSignIn == true) {
+                operationStarted.complete(Unit)
+                awaitCancellation()
+            }
+            Unit
+        }
+        whenever(pubkyService.publishPaykitProfile(any())).doSuspendableAnswer {
+            if (cancelDuringSignIn == false) {
+                operationStarted.complete(Unit)
+                awaitCancellation()
+            }
+            mock()
+        }
+        for (duringSignIn in listOf(true, false)) {
+            cancelDuringSignIn = duringSignIn
+            operationStarted = CompletableDeferred()
+
+            val result = async { sut.createIdentity("Test", "", emptyList(), emptyList(), null) }
+            operationStarted.await()
+            result.cancelAndJoin()
+
+            assertTrue(result.isCancelled)
+            assertNull(sut.publicKey.value)
+        }
+
+        cancelDuringSignIn = null
+        assertTrue(sut.createIdentity("Test", "", emptyList(), emptyList(), null).isSuccess)
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verify(keychain, never()).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
+    @Test
+    fun `createIdentity signs up when a Ring session has no local key`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        stubSignupKeys()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("ring-session")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("")
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(pubkyService) { signUp("secret", "test-homeserver", "test-code") }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        httpClient.close()
+    }
+
+    @Test
+    fun `createIdentity should preserve signup session when pending profile publication fails`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        assertTrue(sut.approveSignupAuth(ringSignupRequest()).isSuccess)
+        clearInvocations(pubkyService)
+        whenever(pubkyService.publishPaykitProfile(any())).thenAnswer { throw TestAppError("Publish failed") }
+
+        val result = sut.createIdentity(
+            name = "Test",
+            bio = "",
+            links = emptyList(),
+            tags = emptyList(),
+            avatarBytes = null,
+        )
+
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService) { publishPaykitProfile(any()) }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        assertTrue(profileSetupPending.value)
+    }
+
+    @Test
+    fun `createIdentity should keep session when canceled during contact load`() = test {
+        val contactsLoadStarted = CompletableDeferred<Unit>()
+        val finishContactsLoad = CompletableDeferred<Unit>()
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(pubkyService.deriveSecretKey("test mnemonic")).thenReturn("test-secret")
+        whenever(pubkyService.publicKeyFromSecret("test-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever(pubkyService.signUp("test-secret", "test-homeserver", "test-code")).thenReturn(Unit)
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile()))
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            contactsLoadStarted.complete(Unit)
+            finishContactsLoad.await()
+            emptyList()
+        }
+
+        val result = async {
+            sut.createIdentity(
+                name = "Test",
+                bio = "",
+                links = emptyList(),
+                tags = emptyList(),
+                avatarBytes = null,
+            )
+        }
+        contactsLoadStarted.await()
+
+        assertTrue(sut.isAuthenticated.value)
+        result.cancel()
+        finishContactsLoad.complete(Unit)
+        result.join()
+        httpClient.close()
+
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(pubkyService, never()) { signOut() }
     }
 
     @Test
@@ -633,13 +1111,19 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `deleteProfile should fail when signOut fails`() = test {
         authenticateForTesting()
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
         whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Sign out failed") }
-        whenever(pubkyService.forceSignOut()).thenAnswer { throw TestAppError("Force sign out failed") }
 
         val result = sut.deleteProfile()
 
         assertTrue(result.isFailure)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
     }
 
     @Test
@@ -676,15 +1160,44 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signOut should force sign out when server sign out fails`() = test {
+    fun `signOut should preserve local state when grant revocation fails`() = test {
         authenticateForTesting()
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
         whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
 
         val result = sut.signOut()
 
-        assertTrue(result.isSuccess)
-        verifyBlocking(pubkyService) { forceSignOut() }
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        assertTrue(sut.isAuthenticated.value)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `signOut should finish clearing state after caller cancellation`() = test {
+        val revocationStarted = CompletableDeferred<Unit>()
+        val finishRevocation = CompletableDeferred<Unit>()
+        authenticateForTesting()
+        whenever(pubkyService.signOut()).doSuspendableAnswer {
+            revocationStarted.complete(Unit)
+            finishRevocation.await()
+        }
+
+        val result = async { sut.signOut() }
+        revocationStarted.await()
+        result.cancel()
+        finishRevocation.complete(Unit)
+        result.join()
+
         assertFalse(sut.isAuthenticated.value)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
 
     @Test
@@ -781,6 +1294,105 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.snapshotSessionBackupState()
 
         assertNull(result.getOrNull())
+    }
+
+    @Test
+    fun `awaitInitialization shares startup and preserves it when a waiter is cancelled`() = test {
+        val imported = CompletableDeferred<String>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer { imported.await() }
+        val repo = createSut()
+        val cancelledWaiter = async { repo.awaitInitialization() }
+        val waiter = async { repo.awaitInitialization() }
+
+        assertFalse(waiter.isCompleted)
+        assertNull(repo.publicKey.value)
+        cancelledWaiter.cancelAndJoin()
+        imported.complete(VALID_SELF_KEY)
+        waiter.await()
+
+        assertEquals(VALID_SELF_KEY, repo.publicKey.value)
+        verify(pubkyService).importSession("saved_session")
+    }
+
+    @Test
+    fun `awaitInitialization completes before startup profile loading`() = test {
+        val profileLoad = CompletableDeferred<Unit>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+        val repo = createSut()
+        val waiter = async { repo.awaitInitialization() }
+
+        try {
+            assertTrue(waiter.isCompleted)
+            assertEquals(VALID_SELF_KEY, repo.publicKey.value)
+        } finally {
+            profileLoad.complete(Unit)
+        }
+        waiter.await()
+    }
+
+    @Test
+    fun `awaitInitialization completes without identity after startup failure`() = test {
+        whenever(pubkyService.initialize()).thenAnswer { throw TestAppError("Startup failed") }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertNull(repo.publicKey.value)
+        assertFalse(repo.sessionRestorationFailed.value)
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
+    fun `initialize should flag session restoration failure when service startup fails with identity error`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.initialize()).thenAnswer {
+            throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+        }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertTrue(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(pubkyService, never()).importSession(any())
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
+    fun `initialize should not flag session restoration failure when service startup fails with non-identity error`() =
+        test {
+            whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+            whenever(pubkyService.initialize()).thenAnswer {
+                throw AppError(PaykitException.Storage("storage_error", "Corrupted state"))
+            }
+            val repo = createSut()
+
+            repo.awaitInitialization()
+
+            assertFalse(repo.sessionRestorationFailed.value)
+            verify(pubkyService, never()).importSession(any())
+        }
+
+    @Test
+    fun `initialize should not flag session restoration failure on identity error without saved session`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+        whenever(pubkyService.initialize()).thenAnswer {
+            throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+        }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertFalse(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(pubkyService, never()).importSession(any())
     }
 
     @Test
@@ -909,7 +1521,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restoreSessionBackupState should clear current session when backup has no pubky state`() = test {
+    fun `restoreSessionBackupState should forget current session when backup has no pubky state`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         clearInvocations(pubkyService, keychain)
 
@@ -918,7 +1530,39 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertFalse(sut.isAuthenticated.value)
         assertNull(sut.publicKey.value)
-        verifyBlocking(pubkyService) { clearSessionAccess() }
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
+        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
+    fun `restoreSessionBackupState should import external session when forgetting current session fails`() = test {
+        whenever(pubkyService.forgetSessionAccess()).thenAnswer { throw TestAppError("Forget failed") }
+        whenever(pubkyService.importExternalSession("external_session")).thenReturn(VALID_SELF_KEY)
+
+        val result = sut.restoreSessionBackupState(
+            PubkySessionBackupV1(
+                kind = PubkySessionBackupKind.ExternalSession,
+                sessionSecret = "external_session",
+            ),
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
+    fun `restore without backup clears credentials when forgetting current session fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.forgetSessionAccess()).thenAnswer { throw TestAppError("Forget failed") }
+
+        val result = sut.restoreSessionBackupState(null)
+
+        assertTrue(result.isSuccess)
+        assertFalse(sut.isAuthenticated.value)
+        assertNull(sut.publicKey.value)
         verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
     }
@@ -1247,6 +1891,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.contacts.value.isEmpty())
         assertFalse(sut.isAuthenticated.value)
         verify(pubkyService, never()).signOut()
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
         verifyBlocking(pubkyStore) { reset() }
     }
 
@@ -1316,6 +1961,18 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.handleAuthCallback(PubkyRingAuthCallback.Success(nonce = authRequest.callbackNonce))
     }
 
+    private fun identityHttpClient() = HttpClient(
+        MockEngine {
+            respond(
+                content = """{"signupCode":"test-code","homeserverPubky":"test-homeserver"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        },
+    ) {
+        install(ContentNegotiation) { json() }
+    }
+
     private fun createPubkyProfile(
         name: String = "Test",
         bio: String = "",
@@ -1328,6 +1985,21 @@ class PubkyRepoTest : BaseUnitTest() {
         links = emptyList(),
         status = status,
     )
+
+    private suspend fun stubSignupKeys() {
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("seed words")
+        whenever(pubkyService.deriveSecretKey("seed words")).thenReturn("secret")
+        whenever(pubkyService.publicKeyFromSecret("secret")).thenReturn(VALID_SELF_KEY)
+    }
+
+    private fun ringSignupRequest() = PubkyAuthRequest.parseSignup(
+        "pubkyring://signup?hs=homeserver&relay=https%3A%2F%2Frelay.example" +
+            "&secret=request&caps=%2Fpub%2Fexample%2F%3Arw&st=invite",
+    ).getOrThrow()
+
+    private fun directSignupRequest() = PubkyAuthRequest.parseSignup(
+        "pubkyauth://direct_signup?hs=homeserver&st=invite",
+    ).getOrThrow()
 
     private fun createPaykitProfile(
         name: String,

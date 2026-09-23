@@ -24,6 +24,7 @@ internal object Env {
     val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
     const val e2eLocalHost = BuildConfig.E2E_LOCAL_HOST
     const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
+    val e2eHomeserverPubky = BuildConfig.E2E_HOMESERVER_PUBKY.takeIf { isLocalE2eBackend && it.isNotBlank() }
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
@@ -255,6 +256,9 @@ object Defaults {
      * required to include them in a block would be greater than the value of the transaction itself.
      * */
     const val dustLimit = 546u
+
+    /** Max characters in a user-entered tag. */
+    const val TAG_MAX_LENGTH = 20
 }
 
 object Peers {

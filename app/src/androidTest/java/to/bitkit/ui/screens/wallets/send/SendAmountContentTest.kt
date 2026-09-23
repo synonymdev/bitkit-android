@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -11,6 +12,7 @@ import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.previewAmountInputViewModel
+import kotlin.test.assertFalse
 
 @ComposeUi
 class SendAmountContentTest {
@@ -104,5 +106,44 @@ class SendAmountContentTest {
         }
 
         composeTestRule.onNodeWithTag("ContinueAmount").assertIsNotEnabled()
+    }
+
+    @Test
+    fun whenFundingSourceLoading_sourceAndContinueButtonsShouldBeDisabled() {
+        composeTestRule.setContent {
+            SendAmountContent(
+                nodeLifecycleState = nodeLifecycleState,
+                uiState = uiState.copy(
+                    isAmountInputValid = true,
+                    canSwitchFundingSource = true,
+                    isFundingSourceLoading = true,
+                ),
+                amountInputViewModel = previewAmountInputViewModel(),
+            )
+        }
+
+        composeTestRule.onNodeWithTag("AssetButton-switch").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("ContinueAmount").assertIsNotEnabled()
+    }
+
+    @Test
+    fun whenContinueLoading_sourceButtonKeepsStyleAndIgnoresClicks() {
+        var eventTriggered = false
+        composeTestRule.setContent {
+            SendAmountContent(
+                nodeLifecycleState = nodeLifecycleState,
+                uiState = uiState.copy(
+                    isAmountInputValid = true,
+                    canSwitchFundingSource = true,
+                    isLoading = true,
+                ),
+                amountInputViewModel = previewAmountInputViewModel(),
+                onClickPayMethod = { eventTriggered = true },
+            )
+        }
+
+        composeTestRule.onNodeWithTag("AssetButton-switch").assertHasNoClickAction()
+        composeTestRule.onNodeWithTag("ContinueAmount").assertIsNotEnabled()
+        assertFalse(eventTriggered)
     }
 }

@@ -24,6 +24,7 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.WatchOnlyAccountAuthorizationStartError
 import to.bitkit.repositories.WatchOnlyAccountRepo
@@ -89,6 +90,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                     } else {
                         ApprovalState.Authorize
                     },
+                    clientId = request.clientId,
+                    homeserverPublicKey = request.homeserverPublicKey,
                     serviceName = serviceName,
                     permissions = request.permissions.toImmutableList(),
                     bitkitClaim = request.bitkitClaim,
@@ -165,16 +168,36 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             handleApprovalFailure(it, authUrl)
             return
         }
-        if (_uiState.value.authUrl != authUrl) return
+        val approvalState = _uiState.value
+        if (approvalState.authUrl != authUrl) return
         if (!approveRequest(request, authUrl)) return
 
         Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
+        if (request.isSignup) {
+            _effects.emit(PubkyAuthApprovalEffect.Dismiss)
+            return
+        }
         _uiState.update { state ->
             if (state.authUrl == authUrl) state.copy(state = ApprovalState.Success) else state
         }
     }
 
     private suspend fun approveRequest(
+        request: PubkyAuthRequest,
+        authUrl: String,
+    ): Boolean = if (request.isSignup) {
+        pubkyRepo.approveSignupAuth(request).fold(
+            onSuccess = { true },
+            onFailure = {
+                handleApprovalFailure(it, authUrl)
+                false
+            },
+        )
+    } else {
+        approveSignInRequest(request, authUrl)
+    }
+
+    private suspend fun approveSignInRequest(
         request: PubkyAuthRequest,
         authUrl: String,
     ): Boolean {
@@ -204,8 +227,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         }
 
         val approvalResult = preparedClaim?.let {
-            pubkyRepo.approveAuthWithCompanionClaim(authUrl, it.payload)
-        } ?: pubkyRepo.approveAuth(authUrl, request.capabilities)
+            pubkyRepo.approveAuthWithCompanionClaim(authUrl, request.clientId, it.payload)
+        } ?: pubkyRepo.approveAuth(authUrl, request.capabilities, request.clientId)
         if (approvalResult.isFailure) {
             val approvalError = checkNotNull(approvalResult.exceptionOrNull()) { "Authorization failed" }
             preparedClaim?.let { claim ->
@@ -244,9 +267,11 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private fun resetForLoad(authUrl: String): Boolean {
         while (true) {
             val currentState = _uiState.value
+            val isAuthorizing = currentState.state == ApprovalState.Authorizing &&
+                inFlightAuthorization.get()?.authUrl == authUrl
             if (
                 currentState.authUrl == authUrl &&
-                currentState.state in setOf(ApprovalState.Authenticating, ApprovalState.Authorizing)
+                (currentState.state == ApprovalState.Authenticating || isAuthorizing)
             ) {
                 return false
             }
@@ -271,8 +296,16 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     }
 
     private suspend fun handleApprovalFailure(error: Throwable, authUrl: String) {
-        Logger.error("Auth approval failed", error, context = TAG)
+        if (error !is PubkyAlreadySignedInError) Logger.error("Auth approval failed", error, context = TAG)
         if (_uiState.value.authUrl != authUrl) return
+        if (error is PubkyAlreadySignedInError) {
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.pubky_auth__already_signed_in),
+            )
+            _effects.emit(PubkyAuthApprovalEffect.Dismiss)
+            return
+        }
         _uiState.update { it.copy(state = ApprovalState.Authorize) }
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
@@ -296,6 +329,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 data class PubkyAuthApprovalUiState(
     val authUrl: String = "",
     val state: ApprovalState = ApprovalState.Loading,
+    val clientId: String = "",
+    val homeserverPublicKey: String? = null,
     val serviceName: String = "",
     val permissions: ImmutableList<PubkyAuthPermission> = persistentListOf(),
     val bitkitClaim: PubkyAuthClaim? = null,

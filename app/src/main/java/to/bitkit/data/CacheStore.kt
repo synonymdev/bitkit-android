@@ -16,6 +16,7 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BalanceState
 import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -28,10 +29,11 @@ private val Context.appCacheDataStore: DataStore<AppCacheData> by dataStore(
 
 @Suppress("TooManyFunctions")
 @Singleton
-class CacheStore @Inject constructor(
-    @ApplicationContext private val context: Context,
+class CacheStore internal constructor(
+    private val store: DataStore<AppCacheData>,
 ) {
-    private val store = context.appCacheDataStore
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.appCacheDataStore)
 
     val data: Flow<AppCacheData> = store.data
     val backupStatuses: Flow<Map<BackupCategory, BackupItemStatus>> = data.map { it.backupStatuses }
@@ -131,6 +133,15 @@ class CacheStore @Inject constructor(
         }
     }
 
+    suspend fun setPendingLightningMessage(paymentHash: String, message: String) {
+        store.updateData { it.copy(pendingLightningMessages = it.pendingLightningMessages + (paymentHash to message)) }
+    }
+
+    suspend fun removePendingLightningMessage(paymentHash: String) {
+        if (paymentHash !in store.data.first().pendingLightningMessages) return
+        store.updateData { it.copy(pendingLightningMessages = it.pendingLightningMessages - paymentHash) }
+    }
+
     suspend fun setBackgroundReceive(details: NewTransactionSheetDetails) = store.updateData {
         it.copy(backgroundReceive = details)
     }
@@ -164,6 +175,10 @@ data class AppCacheData(
     val backgroundReceive: NewTransactionSheetDetails? = null,
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
+    val quickPayLedger: QuickPayLedger? = null,
+    val blocktankRefundAddress: BlocktankRefundAddress? = null,
+    /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
+    val pendingLightningMessages: Map<String, String> = mapOf(),
 ) {
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||
@@ -175,3 +190,9 @@ data class AppCacheData(
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
 }
+
+@Serializable
+data class BlocktankRefundAddress(
+    val address: String,
+    val index: Long,
+)
