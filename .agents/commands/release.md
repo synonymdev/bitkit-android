@@ -225,13 +225,14 @@ Store the returned `id` and `viewUrl`.
 
 Do not share with individual emails and never use `type: anyone` (public).
 
-**Verify** with the Google Drive MCP `get_file_permissions`: the result must contain a permission with `type: domain`, `emailAddress: synonym.to`, `role: reader`.
+**Verify** with the Google Drive MCP `get_file_permissions`: the result must contain a permission with `type: domain`, `domain: synonym.to`, `role: reader` (domain permissions use `domain`, not `emailAddress`).
 
 **Fallbacks (never block the release on this step):**
-- Google Drive MCP unavailable: print `⚠ Google Drive MCP unavailable — create the doc manually from .ai/release-notes-{newVersionName}.md` and continue.
-- Composio has no active `googledrive` connection: keep the doc and print `⚠ Domain sharing not applied — open the doc, Share → General access → "Synonym" → Viewer`, then continue.
+- Google Drive MCP unavailable: print `⚠ Google Drive MCP unavailable — create the doc manually from .ai/release-notes-{newVersionName}.md` and continue with sharing status `not created`.
+- Composio has no active `googledrive` connection: keep the doc and print `⚠ Domain sharing not applied — open the doc, Share → General access → "Synonym" → Viewer`, then continue with sharing status `created, domain share pending`.
+- Share succeeded but verification does not show the domain permission: print the same manual-share warning and continue with sharing status `created, domain share pending`.
 
-Store the doc URL for the summary.
+Store the doc URL and sharing status (`shared with Synonym` | `created, domain share pending` | `not created`) for the summary.
 
 ### 6c. Draft #bitkit-native Slack Announcement
 
@@ -292,11 +293,14 @@ Print the path to the local draft.
 
 1. Create the **parent** draft in `#bitkit-native` (`channel_id`: `C07BJ7DNPCG`) with body exactly: `Release \`{newVersionName}\` :thread:`
 2. Tell the user: send that draft **from the Slack app** (not the Cursor widget), then confirm when done — or just proceed to poll.
-3. Poll with `slack_read_channel` on `C07BJ7DNPCG` every **5 seconds** until a message appears whose text is `Release \`{newVersionName}\` :thread:` and that does **not** include `Sent using`. Cap at ~2 minutes; if not found, ask the user to send and keep polling.
+3. Poll with `slack_read_channel` on `C07BJ7DNPCG` every **5 seconds** until a message appears whose text is `Release \`{newVersionName}\` :thread:` and that does **not** include `Sent using`. Cap at ~2 minutes. If not found after the cap: print `⚠ Parent not posted in time — send the parent+reply manually from .ai/slack-release-{newVersionName}.md` and continue the release (do not keep polling).
 4. Create the **reply** draft with `thread_ts` set to that parent's message `ts`, body = the `## Reply` section from `.ai/slack-release-{newVersionName}.md` (markdown body only, no headings).
 5. Tell the user: open the new thread in `#bitkit-native` and send the reply draft **from Slack**.
 
-If the parent draft already exists in the channel from the sibling platform's `/release` run (same `Release \`{newVersionName}\` :thread:` already posted), skip steps 1–3 and attach the reply draft to that existing parent instead (or skip the whole Slack post if the sibling already created the reply).
+**When the sibling already started the thread:** if the parent `Release \`{newVersionName}\` :thread:` is already in the channel, skip steps 1–3 and use that parent's `ts`. Then inspect the thread with `slack_read_thread`:
+- No reply yet → create the reply draft as in steps 4–5 from this run's filled `## Reply` section.
+- Reply exists and already has this platform's finalized build, Google Doc URL, and version-bump PR (no `TODO` for Android) → skip Slack posting; print that the sibling reply is complete.
+- Reply exists but still has `TODO` (or missing) values for this platform → do **not** skip. Draft a **follow-up** in the same thread via `slack_send_message_draft` (`thread_ts` = parent) with this platform's now-known build, store-notes doc, and version-bump PR only. Update `.ai/slack-release-{newVersionName}.md` to match. Tell the user to send that follow-up from the Slack app.
 
 **Fallbacks (never block the release):** Slack MCP unavailable → print `⚠ Slack draft not created — post manually from .ai/slack-release-{newVersionName}.md` and continue.
 
@@ -342,12 +346,12 @@ Draft release: {release URL}
 APK uploaded: bitkit-mainnet-release-{newVersionCode}-universal.apk
 Native debug symbols uploaded: native-debug-symbols-{newVersionCode}.zip
 Store release notes: .ai/release-notes-{newVersionName}.md
-Release notes doc: {Google Doc URL} (shared with Synonym)
+Release notes doc: {Google Doc URL or "(not created)"} ({sharing status from 6b})
 Slack draft: .ai/slack-release-{newVersionName}.md (#bitkit-native parent+reply drafts)
 
 Next steps:
-- Send the #bitkit-native Slack drafts from the Slack app (if not already)
-- Share the release notes doc with Jacobo for review
+- Send the #bitkit-native Slack drafts from the Slack app (if not already; include any follow-up that filled sibling TODOs)
+- Share the release notes doc with Jacobo for review (if domain share is still pending, apply it first)
 - QA the APK
 - If patching the release branch: increment only versionCode, re-tag, rebuild, and re-upload
 - Submit to Play Store when QA passes
