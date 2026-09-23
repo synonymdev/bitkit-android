@@ -247,6 +247,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val needsPairingCode = MutableStateFlow(false)
     private val pairingCodeRequestId = MutableStateFlow<Long?>(null)
     private val settingsData = MutableStateFlow(SettingsData())
+    private val isRecoveryMode = MutableStateFlow(false)
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
@@ -319,6 +320,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(connectivityRepo.isOnline).thenReturn(connectivityState)
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(lightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
         whenever(lightningRepo.nodeEventUpdates).thenReturn(nodeEventUpdates)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEventUpdates.map { it.event })
         whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
@@ -3446,6 +3448,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             maxSendOnchainSats = 100_000u,
             maxSendLightningSats = 100_000u,
         )
+        sut.setIsAuthenticated(true)
         setUnifiedState(amount = 1000u, payMethod = SendMethod.LIGHTNING)
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
         advanceUntilIdle()
@@ -5178,7 +5181,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `QuickPay eligible scan remains deferred until authenticated`() = test {
+    fun `QuickPay eligible scan remains deferred and confirms after authenticating`() = test {
         val bolt11 = "lnbcrt1lockedscan"
         enableQuickPay()
         settingsData.value = settingsData.value.copy(
@@ -5197,8 +5200,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
-        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         verify(coreService).decode(bolt11)
     }
 
@@ -5216,6 +5219,185 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         advanceUntilIdle()
 
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lockOnBackground requires auth when PIN is enabled`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lockOnBackground requires auth without waiting for a suspension`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.lockOnBackground()
+
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lockOnBackground keeps auth when PIN is disabled`() = test {
+        settingsData.value = SettingsData(isPinEnabled = false)
+        advanceUntilIdle()
+        assertTrue(sut.isAuthenticated.value)
+
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lockOnBackground keeps auth when no wallet exists`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        whenever(walletRepo.walletExists()).thenReturn(false)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lockOnBackground keeps auth in recovery mode`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        isRecoveryMode.value = true
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `payment deeplink received after background lock flushes after unlock`() = test {
+        val bolt11 = "lnbcrt1backgroundlockdeeplink"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(bolt11)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        verify(coreService).decode(bolt11)
+    }
+
+    @Test
+    fun `amount warning confirmation is ignored after background lock`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        setUnifiedState(amount = 1000u)
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.confirmedWarnings.isEmpty())
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+
+        sut.setIsAuthenticated(true)
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
+        advanceUntilIdle()
+
+        assertEquals(listOf(SanityWarning.VALUE_OVER_100_USD), sut.sendUiState.value.confirmedWarnings)
+    }
+
+    @Test
+    fun `payment deeplink received with a sheet open closes it on unlock`() = test {
+        val bolt11 = "lnbcrt1backgroundlocksheet"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        assertTrue(sut.currentSheet.value is Sheet.Receive)
+
+        sut.lockOnBackground()
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value is Sheet.Receive)
+        verify(coreService, never()).decode(bolt11)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        verify(coreService).decode(bolt11)
+    }
+
+    @Test
+    fun `payment deeplink received with a high priority sheet open keeps it on unlock`() = test {
+        val bolt11 = "lnbcrt1backgroundlockpriority"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Pin())
+        advanceUntilIdle()
+
+        sut.lockOnBackground()
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Pin(), sut.currentSheet.value)
+        verify(coreService, never()).decode(bolt11)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        verify(coreService).decode(bolt11)
+    }
+
+    @Test
+    fun `payment deeplink deferred by the lock skips QuickPay on unlock`() = test {
+        val bolt11 = "lnbcrt1backgroundlockquickpay"
+        enableQuickPay()
+        settingsData.value = settingsData.value.copy(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
     }
 
@@ -7139,6 +7321,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `amount change clears confirmedWarnings`() = test {
+        sut.setIsAuthenticated(true)
         setUnifiedState(amount = 1000u)
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
         advanceUntilIdle()
