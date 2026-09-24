@@ -62,7 +62,9 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import javax.inject.Provider
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -197,17 +199,48 @@ class BackupRepoTest : BaseUnitTest() {
         assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
         assertEquals(
             "saved-sdk-state",
-            json.decodeFromString<WalletBackupV1>(requireNotNull(retained)).paykitSdkBackupState
+            json.decodeFromString<WalletBackupV1>(requireNotNull(retained)).paykitSdkBackupState,
         )
         assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
         verify(settingsStore, never()).update(any())
         verify(paykitPaymentRequestRepo, never()).activate(any())
 
+        whenever(vssBackupClient.getObject(BackupCategory.WALLET.name))
+            .thenReturn(Result.failure(BackupRepoTestError("download unavailable")))
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        assertEquals(
+            "saved-sdk-state",
+            json.decodeFromString<WalletBackupV1>(requireNotNull(retained)).paykitSdkBackupState,
+        )
+
         whenever(privatePaykitRepo.restoreBackup("saved-sdk-state")).thenReturn(Result.success(Unit))
         assertTrue(sut.performFullRestoreFromLatestBackup().isSuccess)
         assertNull(retained)
+        verify(vssBackupClient, times(2)).getObject(BackupCategory.WALLET.name)
         verify(paykitPaymentRequestRepo).activate("pubky-test-identity")
+    }
+
+    @Test
+    fun `cancelled wallet restore clears transient state and retains its backup guard`() = test {
+        val key = Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name
+        var retained: String? = null
+        whenever(keychain.exists(key)).thenAnswer { retained != null }
+        whenever(keychain.loadString(key)).thenAnswer { retained }
+        whenever(keychain.upsertString(eq(key), any())).thenAnswer {
+            retained = it.getArgument(1)
+            Unit
+        }
+        whenever(vssBackupClient.getObject(BackupCategory.WALLET.name))
+            .thenReturn(Result.failure(CancellationException("cancelled")))
+
+        assertFailsWith<CancellationException> {
+            sut.performFullRestoreFromLatestBackup()
+        }
+
+        assertFalse(sut.isRestoring.value)
+        assertEquals("", retained)
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
     }
 
     @Test

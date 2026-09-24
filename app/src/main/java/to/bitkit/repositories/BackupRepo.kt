@@ -157,6 +157,10 @@ class BackupRepo @Inject constructor(
         Logger.debug("Set restore pending to '$isPending'", context = TAG)
     }
 
+    suspend fun hasPendingWalletRestore(): Boolean = withContext(ioDispatcher) {
+        keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
+    }
+
     private fun currentTimeMillis(): Long = nowMillis(clock)
     private fun isRestorePending(): Boolean = currentTimeMillis() < restorePendingUntil.value
     private fun shouldSkipBackup(): Boolean = _isRestoring.value || _isWiping.value || isRestorePending()
@@ -653,56 +657,64 @@ class BackupRepo @Inject constructor(
         // Mutated only by the sequential restore steps below, inside this single coroutine.
         val categoriesNeedingRewrite = mutableSetOf<BackupCategory>()
 
-        val result = runCatching {
-            // Block replacement backups even if downloading the wallet backup fails.
-            if (!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
-                keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
-            }
-            performRestore(BackupCategory.METADATA) { dataBytes ->
-                val restored = restoreMetadataBackup(dataBytes, onCacheRestored)
-                if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.METADATA
-                restored.createdAt
-            }
-            performRestore(BackupCategory.SETTINGS) { dataBytes ->
-                val parsed = json.decodeFromString<SettingsBackupV1>(String(dataBytes))
-                settingsStore.restoreFromBackup(parsed)
-                parsed.createdAt
-            }
-            performRestore(BackupCategory.WIDGETS) { dataBytes ->
-                val parsed = json.decodeFromString<WidgetsBackupV1>(String(dataBytes))
-                widgetsStore.restoreFromBackup(parsed)
-                parsed.createdAt
-            }
-            var didRestoreWalletBackup = false
-            performRestore(BackupCategory.WALLET) { dataBytes ->
-                didRestoreWalletBackup = true
-                restoreWalletBackup(dataBytes)
-            }.getOrThrow()
-            if (!didRestoreWalletBackup) {
-                check(keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name).isNullOrEmpty()) {
-                    "Wallet backup restore is incomplete"
+        val result = try {
+            runSuspendCatching {
+                // Block replacement backups even if downloading the wallet backup fails.
+                if (!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
+                    keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
                 }
-                keychain.delete(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
-            }
-            performRestore(BackupCategory.BLOCKTANK) { dataBytes ->
-                val parsed = json.decodeFromString<BlocktankBackupV1>(String(dataBytes))
-                blocktankRepo.restoreFromBackup(parsed)
-                parsed.createdAt
-            }
-            performRestore(BackupCategory.ACTIVITY) { dataBytes ->
-                val restored = restoreActivityBackup(dataBytes)
-                if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.ACTIVITY
-                restored.createdAt
-            }
+                performRestore(BackupCategory.METADATA) { dataBytes ->
+                    val restored = restoreMetadataBackup(dataBytes, onCacheRestored)
+                    if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.METADATA
+                    restored.createdAt
+                }
+                performRestore(BackupCategory.SETTINGS) { dataBytes ->
+                    val parsed = json.decodeFromString<SettingsBackupV1>(String(dataBytes))
+                    settingsStore.restoreFromBackup(parsed)
+                    parsed.createdAt
+                }
+                performRestore(BackupCategory.WIDGETS) { dataBytes ->
+                    val parsed = json.decodeFromString<WidgetsBackupV1>(String(dataBytes))
+                    widgetsStore.restoreFromBackup(parsed)
+                    parsed.createdAt
+                }
+                val retainedWalletBackup = keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
+                if (retainedWalletBackup.isNullOrEmpty()) {
+                    var didRestoreWalletBackup = false
+                    performRestore(BackupCategory.WALLET) { dataBytes ->
+                        didRestoreWalletBackup = true
+                        restoreWalletBackup(dataBytes)
+                    }.getOrThrow()
+                    if (!didRestoreWalletBackup) {
+                        keychain.delete(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
+                    }
+                } else {
+                    val createdAt = restoreWalletBackup(retainedWalletBackup.toByteArray())
+                    cacheStore.updateBackupStatus(BackupCategory.WALLET) {
+                        it.copy(running = false, synced = createdAt, required = createdAt)
+                    }
+                    Logger.info("Restore success for: '${BackupCategory.WALLET}'", context = TAG)
+                }
+                performRestore(BackupCategory.BLOCKTANK) { dataBytes ->
+                    val parsed = json.decodeFromString<BlocktankBackupV1>(String(dataBytes))
+                    blocktankRepo.restoreFromBackup(parsed)
+                    parsed.createdAt
+                }
+                performRestore(BackupCategory.ACTIVITY) { dataBytes ->
+                    val restored = restoreActivityBackup(dataBytes)
+                    if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.ACTIVITY
+                    restored.createdAt
+                }
 
-            Logger.info("Full restore success", context = TAG)
-        }.onSuccess {
-            settingsStore.update { it.copy(backupVerified = true) }
-        }.onFailure { e ->
-            Logger.warn("Full restore error", e, context = TAG)
+                Logger.info("Full restore success", context = TAG)
+            }.onSuccess {
+                settingsStore.update { it.copy(backupVerified = true) }
+            }.onFailure { e ->
+                Logger.warn("Full restore error", e, context = TAG)
+            }
+        } finally {
+            _isRestoring.update { false }
         }
-
-        _isRestoring.update { false }
 
         if (result.isSuccess) {
             rewriteMigratedBackups(categoriesNeedingRewrite)
@@ -886,7 +898,7 @@ class BackupRepo @Inject constructor(
     private suspend fun performRestore(
         category: BackupCategory,
         restoreAction: suspend (dataBytes: ByteArray) -> Long,
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runSuspendCatching {
         var createdAtTimestamp = currentTimeMillis()
 
         vssBackupClient.getObject(category.name).map { it?.value }

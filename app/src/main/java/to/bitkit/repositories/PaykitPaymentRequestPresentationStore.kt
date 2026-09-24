@@ -66,7 +66,6 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
                 ?: State()
             val state = current.copy(idsByIdentity = current.idsByIdentity + (normalizedIdentity to ids.toList()))
             keychain.upsertString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name, Json.encodeToString(state))
-            _backupStateVersion.update { it + 1 }
         }
     }
 
@@ -94,6 +93,7 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
             val current = keychain.loadString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name)
                 ?.let(::decode)
                 ?: State()
+            val currentBackup = current.subscriptionStatesByIdentity[normalizedIdentity]?.backupOrNull()
             val storedState = SubscriptionState(
                 acceptances = subscriptionState.acceptedAt.map { SubscriptionAcceptance(it.key, it.value.toString()) },
                 presentedProposalIds = subscriptionState.presentedProposalIds.toList(),
@@ -104,18 +104,17 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
                     (normalizedIdentity to storedState),
             )
             keychain.upsertString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name, Json.encodeToString(state))
-            _backupStateVersion.update { it + 1 }
+            if (currentBackup != storedState.backupOrNull()) {
+                _backupStateVersion.update { it + 1 }
+            }
         }
     }
 
     fun backupSnapshot(): Map<String, PaykitPaymentStateBackup.Subscription> {
         val value = keychain.loadString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name) ?: return emptyMap()
-        return decode(value).subscriptionStatesByIdentity.mapValues { (_, state) ->
-            PaykitPaymentStateBackup.Subscription(
-                acceptances = state.acceptances.map { PaykitPaymentStateBackup.Acceptance(it.id, it.acceptedAt) },
-                presentedProposalIds = state.presentedProposalIds.toSet(),
-            )
-        }
+        return decode(value).subscriptionStatesByIdentity.mapNotNull { (identity, state) ->
+            state.backupOrNull()?.let { identity to it }
+        }.toMap()
     }
 
     suspend fun restoreBackup(subscriptions: Map<String, PaykitPaymentStateBackup.Subscription>) {
@@ -131,6 +130,15 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
             keychain.upsertString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name, Json.encodeToString(state))
             _backupStateVersion.update { it + 1 }
         }
+    }
+
+    private fun SubscriptionState.backupOrNull(): PaykitPaymentStateBackup.Subscription? {
+        if (acceptances.isEmpty() && presentedProposalIds.isEmpty()) return null
+
+        return PaykitPaymentStateBackup.Subscription(
+            acceptances = acceptances.map { PaykitPaymentStateBackup.Acceptance(it.id, it.acceptedAt) },
+            presentedProposalIds = presentedProposalIds.toSet(),
+        )
     }
 
     private fun decode(value: String): State = Json.decodeFromString<State>(value).also { state ->
