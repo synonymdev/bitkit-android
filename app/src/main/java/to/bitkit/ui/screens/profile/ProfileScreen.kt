@@ -153,11 +153,12 @@ private fun ProfileBody(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 32.dp)
                 .clickableAlpha(onClick = onClickCopy)
         ) {
             QrCodeImage(
                 content = profile.publicKey,
-                modifier = Modifier.size(279.dp),
+                modifier = Modifier.fillMaxWidth(),
                 testTag = "ProfileQRCode",
             )
             if (profile.imageUrl != null) {
