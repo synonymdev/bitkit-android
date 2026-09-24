@@ -40,6 +40,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Instant
 
+/** New proof kinds must be readable on both platforms before either platform writes them to a wallet backup. */
 @Serializable
 enum class PaykitPaymentProofKind(val type: String) {
     Lightning("bitcoin-bolt11-preimage"),
@@ -415,7 +416,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                             )
                         }
                 }
-            }.onFailure { Logger.warn("Failed to reconcile pending Paykit payment proofs", it, context = TAG) }
+            }.onFailure { Logger.error("Failed to reconcile pending Paykit payment proofs", it, context = TAG) }
         }
     }
 

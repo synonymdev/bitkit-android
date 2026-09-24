@@ -306,10 +306,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
             clearStateLocked()
             activeIdentity = null
             presentedRequestIds = runSuspendCatching { presentationStore.load(normalizedIdentity) }
-                .onFailure { Logger.warn("Failed to restore surfaced Paykit payment requests", it, context = TAG) }
+                .onFailure { Logger.error("Failed to restore surfaced Paykit payment requests", it, context = TAG) }
                 .getOrDefault(emptySet())
             val subscriptionState = runSuspendCatching { presentationStore.loadSubscriptionState(normalizedIdentity) }
-                .onFailure { Logger.warn("Failed to restore Paykit subscription state", it, context = TAG) }
+                .onFailure { Logger.error("Failed to restore Paykit subscription state", it, context = TAG) }
                 .getOrElse { return@withLock }
             subscriptionAcceptedAt = subscriptionState.acceptedAt
             presentedSubscriptionProposalIds = subscriptionState.presentedProposalIds

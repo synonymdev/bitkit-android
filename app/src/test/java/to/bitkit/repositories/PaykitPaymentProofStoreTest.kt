@@ -10,7 +10,9 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertContains
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 
 class PaykitPaymentProofStoreTest : BaseUnitTest() {
     companion object {
@@ -22,7 +24,11 @@ class PaykitPaymentProofStoreTest : BaseUnitTest() {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(KEY)).thenReturn("not-json")
 
-        assertFailsWith<SerializationException> { PaykitPaymentProofStore(keychain).load() }
+        val error = assertFailsWith<PaykitPaymentStateUnreadableError> {
+            PaykitPaymentProofStore(keychain).load()
+        }
+        assertContains(error.message.orEmpty(), KEY)
+        assertIs<SerializationException>(error.cause)
         verify(keychain, never()).delete(KEY)
     }
 

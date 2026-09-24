@@ -9,6 +9,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,7 +31,8 @@ class PaykitPaymentProofStore @Inject constructor(
 
     fun load(): List<PendingPaykitPaymentProof> {
         val value = keychain.loadString(KEY) ?: return emptyList()
-        return Json.decodeFromString<State>(value).proofs
+        return runCatching { Json.decodeFromString<State>(value).proofs }
+            .getOrElse { throw PaykitPaymentStateUnreadableError(KEY, it) }
     }
 
     fun completedRequestProofKindsAwaitingSubmission(
@@ -54,3 +56,8 @@ class PaykitPaymentProofStore @Inject constructor(
 
     fun hasPendingProofs(): Boolean = keychain.exists(KEY)
 }
+
+class PaykitPaymentStateUnreadableError(
+    key: String,
+    cause: Throwable,
+) : AppError("Failed to read Paykit payment state from '$key'", cause)
