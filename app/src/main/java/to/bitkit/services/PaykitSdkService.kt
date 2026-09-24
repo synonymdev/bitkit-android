@@ -247,6 +247,7 @@ class PaykitSdkService @Inject constructor(
                 PaykitAndroid.initializeOrThrow(context)
                 launch { republishIdentityIfNeeded() }
                 operationMutex.withLock {
+                    stateStore.resolveLegacyLayoutIfNeeded(::paykitProbeSdk)
                     var handle = handle()
                     try {
                         handle.initialize()
@@ -1381,40 +1382,150 @@ internal fun validatedApprovalClientId(requestClientId: String, approvedClientId
     return requestClientId
 }
 
-private class PaykitSdkStateBlobStore(
+/**
+ * Paykit #161 added `allowance_accounting` as the first field of the SDK state without bumping the state blob version,
+ * so the two layouts differ by one Option tag right after the version byte. Bitkit keeps the rc55 layout on disk while
+ * accounting is empty, so an rc55 build can still read the wallet, and records the stored layout in the revision.
+ */
+internal enum class PaykitSdkStateLayout(private val suffix: String) {
+    RC55("rc55"),
+    ALLOWANCES("alw"),
+    ;
+
+    companion object {
+        /** Postcard encoding of state blob version 1, the first byte of every SDK state blob. */
+        private const val VERSION_BYTE: Byte = 0x01
+
+        /** Postcard tag of an empty `allowance_accounting` Option in the #161 layout. */
+        private const val NONE_TAG: Byte = 0x00
+
+        fun stored(sdkBytes: ByteArray): Pair<PaykitSdkStateLayout, ByteArray> {
+            val isEmptyAccounting = sdkBytes.size >= 2 && sdkBytes[0] == VERSION_BYTE && sdkBytes[1] == NONE_TAG
+            if (!isEmptyAccounting) return ALLOWANCES to sdkBytes
+            return RC55 to byteArrayOf(VERSION_BYTE) + sdkBytes.copyOfRange(2, sdkBytes.size)
+        }
+
+        fun fromRevision(revision: String): PaykitSdkStateLayout? =
+            entries.firstOrNull { revision.endsWith(".${it.suffix}") }
+    }
+
+    fun sdkBytes(storedBytes: ByteArray): ByteArray {
+        if (this != RC55 || storedBytes.firstOrNull() != VERSION_BYTE) return storedBytes
+        return byteArrayOf(VERSION_BYTE, NONE_TAG) + storedBytes.copyOfRange(1, storedBytes.size)
+    }
+
+    fun revision(base: String) = "$base.$suffix"
+}
+
+internal class PaykitSdkStateBlobStore(
     private val keychain: Keychain,
+    private val decodeSnapshot: (ByteArray) -> SdkStateBlobSnapshot = ::decodeSdkStateBlobSnapshot,
+    private val encodeSnapshot: (SdkStateBlobSnapshot) -> ByteArray = ::encodeSdkStateBlobSnapshot,
+    private val newBlob: (ByteArray) -> SdkStateBlob = ::SdkStateBlob,
 ) : SdkStateBlobStore {
+    companion object {
+        private const val TAG = "PaykitSdkStateBlobStore"
+    }
+
     private val lock = Any()
 
     override fun loadStateBlob(): SdkStateBlobSnapshot? = synchronized(lock) {
-        val data = keychain.accessBlocking {
-            load(Keychain.Key.PAYKIT_SDK_STATE.name)
-        } ?: return@synchronized null
-        decodeSdkStateBlobSnapshot(data)
+        val snapshot = loadSnapshot() ?: return@synchronized null
+        val layout = PaykitSdkStateLayout.fromRevision(snapshot.revision) ?: return@synchronized snapshot
+        snapshot.copy(blob = newBlob(layout.sdkBytes(snapshot.blob.exportBytes())))
     }
 
     override fun saveStateBlobAtomically(
         blob: SdkStateBlob,
         expectedRevision: String?,
     ): String = synchronized(lock) {
-        val currentRevision = keychain.accessBlocking {
-            load(Keychain.Key.PAYKIT_SDK_STATE.name)
-        }
-            ?.let { decodeSdkStateBlobSnapshot(it).revision }
-        if (currentRevision != expectedRevision) {
-            throw PaykitException.Storage(
-                code = "revision_conflict",
-                context = "SDK state revision changed",
-            )
-        }
+        if (loadSnapshot()?.revision != expectedRevision) throw revisionConflict()
 
-        val nextRevision = UUID.randomUUID().toString()
-        val snapshot = SdkStateBlobSnapshot(blob = blob, revision = nextRevision)
-        keychain.accessBlocking {
-            upsert(Keychain.Key.PAYKIT_SDK_STATE.name, encodeSdkStateBlobSnapshot(snapshot))
-        }
+        val (layout, bytes) = PaykitSdkStateLayout.stored(blob.exportBytes())
+        val nextRevision = layout.revision(UUID.randomUUID().toString())
+        saveSnapshot(SdkStateBlobSnapshot(blob = newBlob(bytes), revision = nextRevision))
         nextRevision
     }
+
+    /**
+     * Records the layout of a state blob saved before Bitkit marked layouts, which may come from an rc55 build. The SDK
+     * itself tells which layout decodes: a throwaway instance reads each candidate from memory.
+     */
+    suspend fun resolveLegacyLayoutIfNeeded(probeSdk: (ByteArray) -> PaykitSdk) {
+        val legacy = unmarkedSnapshot() ?: return
+        val bytes = legacy.blob.exportBytes()
+        val decoded = listOf(PaykitSdkStateLayout.ALLOWANCES, PaykitSdkStateLayout.RC55).mapNotNull { layout ->
+            runSuspendCatching {
+                probeSdk(layout.sdkBytes(bytes)).use {
+                    it.allowanceAccountingState()
+                    layout to (runSuspendCatching { it.identityStatus()?.publicKey }.getOrNull() != null)
+                }
+            }.getOrNull()
+        }
+        // Postcard ignores trailing bytes, so a wrong layout can occasionally parse; the one holding the identity wins.
+        val chosen = decoded.firstOrNull { it.second }?.first ?: decoded.firstOrNull()?.first
+        if (chosen == null) {
+            Logger.error("Found no known layout for the stored Paykit state", context = TAG)
+            return
+        }
+        runCatching { markLayout(chosen, legacy.revision) }
+            .onSuccess {
+                Logger.info(
+                    "Resolved the stored Paykit state layout as '$chosen' ('${decoded.size}' candidates decoded)",
+                    context = TAG,
+                )
+            }
+            .onFailure { Logger.warn("Failed to record the Paykit state layout", it, context = TAG) }
+    }
+
+    private fun unmarkedSnapshot(): SdkStateBlobSnapshot? = synchronized(lock) {
+        runCatching { loadSnapshot() }
+            .onFailure { Logger.warn("Failed to read the stored Paykit state layout", it, context = TAG) }
+            .getOrNull()
+            ?.takeIf { PaykitSdkStateLayout.fromRevision(it.revision) == null }
+    }
+
+    private fun markLayout(layout: PaykitSdkStateLayout, expectedRevision: String) = synchronized(lock) {
+        val snapshot = loadSnapshot() ?: return@synchronized
+        if (snapshot.revision != expectedRevision) throw revisionConflict()
+        saveSnapshot(snapshot.copy(revision = layout.revision(snapshot.revision)))
+    }
+
+    private fun loadSnapshot(): SdkStateBlobSnapshot? =
+        keychain.accessBlocking { load(Keychain.Key.PAYKIT_SDK_STATE.name) }?.let(decodeSnapshot)
+
+    private fun saveSnapshot(snapshot: SdkStateBlobSnapshot) {
+        val data = encodeSnapshot(snapshot)
+        keychain.accessBlocking { upsert(Keychain.Key.PAYKIT_SDK_STATE.name, data) }
+    }
+
+    private fun revisionConflict() = PaykitException.Storage(
+        code = "revision_conflict",
+        context = "SDK state revision changed",
+    )
+}
+
+private fun paykitProbeSdk(sdkBytes: ByteArray) = PaykitSdk(
+    stateStore = PaykitSdkProbeStateStore(sdkBytes),
+    sessionProvider = PaykitSdkProbeSessionProvider,
+    config = paykitSdkConfig(),
+)
+
+private class PaykitSdkProbeStateStore(
+    private val sdkBytes: ByteArray,
+) : SdkStateBlobStore {
+    override fun loadStateBlob() = SdkStateBlobSnapshot(blob = SdkStateBlob(sdkBytes), revision = "probe")
+
+    override fun saveStateBlobAtomically(blob: SdkStateBlob, expectedRevision: String?): String =
+        throw PaykitException.Storage(code = "read_only", context = "Paykit state layout probe is read-only")
+}
+
+private object PaykitSdkProbeSessionProvider : SdkPubkySessionProvider {
+    override fun loadSessionAccess(): PubkySessionAccess? = null
+
+    override fun publicStorageAvailable() = false
+
+    override fun clearSessionAccess() = Unit
 }
 
 internal class PaykitSdkSessionProvider(
