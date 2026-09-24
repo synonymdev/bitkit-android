@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -18,11 +17,8 @@ import to.bitkit.data.sharedpubky.SharedPubkyContract.RING_PACKAGE
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private const val TAG = "SharedPubkyClient"
 
 @Singleton
 class SharedPubkyClient @Inject constructor(
@@ -31,7 +27,7 @@ class SharedPubkyClient @Inject constructor(
 ) {
     suspend fun listRingIdentities(): Result<ImmutableList<String>> = withContext(ioDispatcher) {
         runSuspendCatching {
-            if (!isRingProviderTrusted()) return@runSuspendCatching persistentListOf()
+            check(isRingProviderTrusted()) { "Ring provider unavailable" }
 
             val uri = Uri.parse("content://$RING_AUTHORITY/$PATH_IDENTITIES")
             val cursor = requireNotNull(context.contentResolver.query(uri, null, null, null, null)) {
@@ -73,10 +69,7 @@ class SharedPubkyClient @Inject constructor(
 
     private fun isRingProviderTrusted(): Boolean {
         val packageManager = context.packageManager
-        val isTrusted = packageManager.resolveContentProvider(RING_AUTHORITY, 0)?.packageName == RING_PACKAGE &&
+        return packageManager.resolveContentProvider(RING_AUTHORITY, 0)?.packageName == RING_PACKAGE &&
             packageManager.checkSignatures(context.packageName, RING_PACKAGE) == PackageManager.SIGNATURE_MATCH
-
-        if (!isTrusted) Logger.warn("Skipped shared pubky query, ring provider unavailable", context = TAG)
-        return isTrusted
     }
 }
