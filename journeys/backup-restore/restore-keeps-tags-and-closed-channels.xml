@@ -17,7 +17,7 @@
   <actions>
     <action>Launch the Bitkit app and go to the wallet home screen</action>
     <action>Open the menu, navigate to Settings, then the "Security" tab (testTag "Tab-security"), then tap "Back Up Your Money" (testTag "BackupWallet")</action>
-    <action>Continue past the intro (testTag "BackupIntroViewContinue"), tap to reveal the phrase (testTag "TapToReveal") and record every word of the seed container (testTag "SeedContainer") — the rest of the journey depends on them</action>
+    <action>Continue past the intro (testTag "BackupIntroViewContinue"), tap to reveal the phrase (testTag "TapToReveal") and record the phrase from the word grid (testTag "SeedContainer") — the rest of the journey depends on them</action>
     <action>Leave the backup flow and return to the wallet home screen</action>
     <action>Tap the Receive button (testTag "Receive"), tap "Show Details" (testTag "ShowDetails") and copy the on-chain savings address (testTag "ReceiveCopyQR")</action>
     <action>Run `./lsp POST /regtest/chain/deposit '{"address":"&lt;savings address&gt;","amountSat":500000}'` then `./lsp POST /regtest/chain/mine '{"count":3}'`, and wait for the 500 000 sat receive to appear on Home</action>

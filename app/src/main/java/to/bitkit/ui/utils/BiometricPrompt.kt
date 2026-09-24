@@ -11,6 +11,9 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.flow.first
 import to.bitkit.R
 import to.bitkit.utils.BiometricCrypto
 import to.bitkit.utils.Logger
@@ -24,6 +27,7 @@ fun BiometricPrompt(
     cancelButtonText: String = stringResource(R.string.security__use_pin),
 ) {
     val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val isPreview = LocalInspectionMode.current
     if (isPreview) return // no UI to preview here, it's all system UI
 
@@ -33,6 +37,8 @@ fun BiometricPrompt(
     }
 
     LaunchedEffect(Unit) {
+        // authenticate() is dropped silently after onSaveInstanceState, e.g. when composed while stopped
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
         verifyBiometric(
             activity = context,
             title = title,
