@@ -870,6 +870,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `opened request passes its note to the confirm sheet`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest().copy(note = "Lunch last week")
+        val bolt11 = "lnbcrt1requestwithnote"
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(
+                PublicPaykitPaymentResult.Opened(
+                    paymentRequest = bolt11,
+                    privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 8uL),
+                ),
+            ),
+        )
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        surfacedPaykitPaymentRequestIds += request.id
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+        assertEquals("Lunch last week", sut.sendUiState.value.paymentRequestNote)
+    }
+
+    @Test
     fun `manually reopened request preserves tags while waiting for a newer private list`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()

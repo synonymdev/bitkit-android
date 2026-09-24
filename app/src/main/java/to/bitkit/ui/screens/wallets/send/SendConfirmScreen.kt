@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -35,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -69,6 +71,7 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
@@ -364,6 +367,10 @@ private fun ContentRunning(
                 }
             }
         } else {
+            if (uiState.isPaymentRequest && !uiState.isSubscriptionPayment) {
+                PaymentRequestSummary(uiState = uiState, iconColor = accentColor)
+                VerticalSpacer(32.dp)
+            }
             Image(
                 painter = painterResource(R.drawable.coin_stack_4),
                 contentDescription = null,
@@ -797,6 +804,76 @@ private fun ContactRecipient(
 }
 
 @Composable
+private fun PaymentRequestSummary(
+    uiState: SendUiState,
+    iconColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val profile = uiState.contactPaymentProfile ?: return
+    val note = uiState.paymentRequestNote?.takeIf { it.isNotBlank() }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.height(IntrinsicSize.Min)
+    ) {
+        SendCell(
+            caption = stringResource(R.string.wallet__send_from),
+            modifier = Modifier.weight(1f)
+        ) {
+            PaymentRequestSummaryValue(
+                text = profile.name,
+                icon = R.drawable.ic_user,
+                iconColor = iconColor,
+                testTag = "PaymentRequestFrom",
+            )
+        }
+        if (note != null) {
+            SendCell(
+                caption = stringResource(R.string.wallet__payment_request_for),
+                modifier = Modifier.weight(1f)
+            ) {
+                PaymentRequestSummaryValue(
+                    text = note,
+                    icon = R.drawable.ic_note,
+                    iconColor = iconColor,
+                    testTag = "PaymentRequestFor",
+                )
+            }
+        } else {
+            FillWidth()
+        }
+    }
+}
+
+@Composable
+private fun PaymentRequestSummaryValue(
+    text: String,
+    @DrawableRes icon: Int,
+    iconColor: Color,
+    testTag: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = iconColor,
+            modifier = Modifier.size(16.dp)
+        )
+        BodySSB(
+            text = text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag(testTag)
+        )
+    }
+}
+
+@Composable
 private fun LnurlPayDetails(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
@@ -997,6 +1074,52 @@ private fun PreviewLightning() {
                     payMethod = SendMethod.LIGHTNING,
                     selectedTags = persistentListOf(),
                     lightningFeeSats = 43,
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "payment request")
+@Composable
+private fun PreviewPaymentRequest() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendConfirmContent(
+                uiState = sendUiState().copy(
+                    amount = 21_000u,
+                    payMethod = SendMethod.LIGHTNING,
+                    isPaymentRequest = true,
+                    contactPaymentProfile = PubkyProfile.placeholder("pk8e3xqyn5ha6swnhwp4bcw4dkj").copy(
+                        name = "Anna Pleb",
+                    ),
+                    paymentRequestNote = "Lunch last week",
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "payment request")
+@Composable
+private fun PreviewPaymentRequestWithoutNote() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendConfirmContent(
+                uiState = sendUiState().copy(
+                    amount = 21_000u,
+                    isPaymentRequest = true,
+                    contactPaymentProfile = PubkyProfile.placeholder("pk8e3xqyn5ha6swnhwp4bcw4dkj"),
                 ),
                 isNodeRunning = true,
                 isLoading = false,

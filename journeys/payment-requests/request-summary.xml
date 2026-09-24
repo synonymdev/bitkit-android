@@ -1,0 +1,15 @@
+<journey name="Payment Request Summary">
+  <description>
+    Verifies that the collapsed Payment Request confirmation shows who the request is from and what it is for, without opening the details. Requires two Bitkit instances saved as each other's contacts and linked on receiver path "bitkit/wallet", with the payer funded to cover 21,000 sats; see README.md.
+  </description>
+  <actions>
+    <action>On the requester, open Payment Requests and tap Create (testTag "PaymentRequestCreate")</action>
+    <action>Enter 21,000 sats and continue (testTag "PaymentRequestAmountContinue")</action>
+    <action>Enter the note "Lunch last week" (testTag "PaymentRequestNote"), choose the payer contact and send the request (testTag "PaymentRequestSend")</action>
+    <action>On the payer, verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") appears with 21,000 sats</action>
+    <action>Verify From (testTag "PaymentRequestFrom") shows the requester's contact name</action>
+    <action>Verify For (testTag "PaymentRequestFor") shows "Lunch last week"</action>
+    <action>Tap Show details (testTag "SendConfirmToggleDetails")</action>
+    <action>Verify From (testTag "PaymentRequestFrom") and For (testTag "PaymentRequestFor") are no longer shown, and the recipient (testTag "ReviewContactRecipient") is the requester's contact</action>
+  </actions>
+</journey>
