@@ -54,6 +54,12 @@ enum class SheetHandlePlacement {
     ContentOverlay,
 }
 
+sealed interface AllowanceRoute {
+    data object Set : AllowanceRoute
+    data class Review(val entryId: String) : AllowanceRoute
+    data class Details(val entryId: String) : AllowanceRoute
+}
+
 sealed interface SubscriptionRoute {
     data class Review(val id: PaykitSubscriptionId) : SubscriptionRoute
     data class Success(val id: PaykitSubscriptionId) : SubscriptionRoute
@@ -75,6 +81,7 @@ sealed interface Sheet {
     data object PaymentRequests : Sheet
     data object CreateSubscription : Sheet
     data class Subscription(val route: SubscriptionRoute) : Sheet
+    data class Allowance(val route: AllowanceRoute) : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet
     data object ChangePin : Sheet
     data object DisablePin : Sheet
