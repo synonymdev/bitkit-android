@@ -3,6 +3,9 @@
 package to.bitkit.repositories
 
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -11,6 +14,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -86,6 +90,49 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
             accepted.copy(presentedProposalIds = setOf(subscriptionId)),
         )
         assertEquals(2L, sut.backupStateVersion.value)
+    }
+
+    @Test
+    fun `backup restore preserves precise acceptance billing boundaries`() = test {
+        val keychain = mock<Keychain>()
+        var storedValue: String? = null
+        whenever(keychain.loadString(KEY)).thenAnswer { storedValue }
+        whenever { keychain.upsertString(eq(KEY), any()) }.thenAnswer {
+            storedValue = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val millisecondId = PaykitSubscriptionId("millisecond", COUNTERPARTY, "bitkit/server")
+        val nanosecondId = PaykitSubscriptionId("nanosecond", COUNTERPARTY, "bitkit/server")
+        val acceptedAt = mapOf(
+            millisecondId to Instant.parse("2026-09-24T10:00:00.123Z"),
+            nanosecondId to Instant.parse("2026-09-24T10:00:00.123456789Z"),
+        )
+
+        sut.saveSubscriptionState(IDENTITY, PaykitSubscriptionPresentationState(acceptedAt = acceptedAt))
+        val backup = Json.decodeFromString<Map<String, PaykitPaymentStateBackup.Subscription>>(
+            Json.encodeToString(sut.backupSnapshot()),
+        )
+        storedValue = null
+        sut.restoreBackup(backup)
+
+        val restoredAcceptedAt = sut.loadSubscriptionState(IDENTITY).acceptedAt
+        assertEquals(acceptedAt, restoredAcceptedAt)
+
+        fun eligiblePeriods(boundaryFraction: String) = PaykitSubscriptionRecurrence(
+            every = 1,
+            unit = PaykitRecurrenceUnit.Day,
+            startsAt = Instant.parse("2026-09-23T10:00:00.$boundaryFraction"),
+            anchor = Instant.parse("2026-09-23T10:00:00.$boundaryFraction"),
+            endsAt = null,
+        ).periodsThrough(
+            date = Instant.parse("2026-09-24T10:00:01Z"),
+            acceptedAt = restoredAcceptedAt.getValue(millisecondId),
+        )
+
+        assertEquals(1, eligiblePeriods("122999950Z").size)
+        assertEquals(1, eligiblePeriods("123Z").size)
+        assertEquals(2, eligiblePeriods("123000050Z").size)
     }
 
     @Test
