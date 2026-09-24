@@ -26,7 +26,9 @@
     <action>Open Contacts in the seller wallet and save the buyer public key</action>
     <action>Verify the buyer contact (testTag "Contact_&lt;buyer-public-key&gt;") is visible</action>
     <action>Verify the fixture reports the seller and buyer as linked peers</action>
-    <action>Return the buyer wallet to Home</action>
+    <action>Return the seller wallet to Home on its own device and wait for any startup or foreground-triggered full-wallet sync to finish</action>
+    <action>Record the seller balance, then keep Bitkit active and the seller device awake without backgrounding, restarting, or manually refreshing it until the payout appears</action>
+    <action>Return the buyer wallet to Home on the separate buyer device</action>
     <action>Have the fixture create one marketplace purchase for the buyer and record its Payment Request id</action>
     <action>Verify the request uses lowercase "btc", a regtest endpoint identifier, and a JSON endpoint value</action>
     <action>Verify the fresh request opens payment review automatically (testTag "ReviewAmount")</action>
@@ -42,8 +44,11 @@
     <action>Mine one block with the fixture and wait for both Bitkit and the marketplace status to refresh</action>
     <action>Open the latest sent on-chain activity and verify its amount (testTag "ActivityAmount") and transaction details (testTag "ActivityTxDetails")</action>
     <action>Verify the fixture reports the transaction confirmed and the marketplace purchase completed</action>
-    <action>Switch to the seller wallet and return to Home</action>
-    <action>Verify the seller balance and received activity include the payout after background synchronization, without manually refreshing the wallet</action>
+    <action>Wait for periodic synchronization to detect the payout while the seller app remains active</action>
+    <action>If the seller's received-transaction sheet appears, capture it and tap its button (testTag "ReceivedTransactionButton") to dismiss it</action>
+    <action>Verify the seller savings balance (testTag "ActivitySavings") increased by the fixture payout amount and the latest received activity is visible</action>
+    <action>Tap the seller's latest received activity (testTag "ActivityShort-0"), then tap transaction details (testTag "ActivityTxDetails")</action>
+    <action>Verify the transaction id (testTag "TXID") matches the fixture transaction</action>
     <action>Capture the final activity, transaction id, confirmation height, and completed purchase evidence</action>
   </actions>
 </journey>
