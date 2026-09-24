@@ -36,6 +36,11 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // Allowances demo: Paykit built locally from pubky/paykit-rs #161, only for this branch.
+        exclusiveContent {
+            forRepository { maven { url = uri(rootDir.resolve("../maven")) } }
+            filter { includeModule("com.synonym", "paykit-android") }
+        }
         mavenLocal()
         google()
         mavenCentral()

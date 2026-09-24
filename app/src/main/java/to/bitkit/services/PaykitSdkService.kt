@@ -807,6 +807,7 @@ class PaykitSdkService @Inject constructor(
         paymentEndpointIdentifier: String,
         proofJson: String,
         billingPeriod: PaykitBillingPeriod? = null,
+        allowanceId: String? = null,
     ): PaymentRequestRecord {
         isSetup.await()
         return operationMutex.withLock {
@@ -818,6 +819,7 @@ class PaykitSdkService @Inject constructor(
                     PaymentProofSubmission(
                         billingPeriod = billingPeriod?.sdkValue,
                         paymentEndpointIdentifier = paymentEndpointIdentifier,
+                        allowanceId = allowanceId,
                         proof = PrivateJsonObject(proofJson),
                     ),
                 )
