@@ -122,6 +122,7 @@ import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
+import to.bitkit.ui.screens.subscriptions.AllowanceSheet
 import to.bitkit.ui.screens.subscriptions.CreateSubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionDetailScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
@@ -569,7 +570,7 @@ fun ContentView(
 
                         is Sheet.Subscription -> SubscriptionSheet(appViewModel, sheet.route)
 
-                        is Sheet.Allowance -> Unit // CONTRACT: UI worker renders AllowanceSheet(sheet.route) here
+                        is Sheet.Allowance -> AllowanceSheet(appViewModel, sheet.route)
 
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()

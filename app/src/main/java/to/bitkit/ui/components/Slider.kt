@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
@@ -32,12 +32,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -51,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import kotlin.math.abs
@@ -73,6 +76,9 @@ fun Slider(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     formatLabel: (Int) -> String = { "$$it" },
+    activeColor: Color = Colors.Green,
+    trackColor: Color = Colors.Green32,
+    stopTestTag: ((index: Int) -> String)? = null,
 ) {
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
@@ -173,7 +179,7 @@ fun Slider(
                     val cornerRadius = density.run { 3.dp.toPx() }
 
                     drawRoundRect(
-                        color = Colors.Green32,
+                        color = trackColor,
                         topLeft = Offset(0f, trackY - trackHeight / 2),
                         size = Size(size.width, trackHeight),
                         cornerRadius = CornerRadius(cornerRadius),
@@ -181,7 +187,7 @@ fun Slider(
 
                     if (knobX > 0f) {
                         drawRoundRect(
-                            color = Colors.Green,
+                            color = activeColor,
                             topLeft = Offset(0f, trackY - trackHeight / 2),
                             size = Size(knobX, trackHeight),
                             cornerRadius = CornerRadius(cornerRadius),
@@ -249,7 +255,7 @@ fun Slider(
                         modifier = Modifier
                             .size(KNOB_SIZE_DP.dp)
                             .clip(CircleShape)
-                            .background(Colors.Green)
+                            .background(activeColor)
                     ) {
                         Box(
                             modifier = Modifier
@@ -267,6 +273,8 @@ fun Slider(
             StepSliderLabels(
                 steps = steps,
                 formatLabel = formatLabel,
+                stopTestTag = stopTestTag,
+                onStepClick = { onValueChange(steps[it]) },
             )
         }.first().measure(Constraints.fixedWidth(width))
 
@@ -303,17 +311,28 @@ private fun Modifier.stepSliderSemantics(
 private fun StepSliderLabels(
     steps: ImmutableList<Int>,
     formatLabel: (Int) -> String,
+    stopTestTag: ((index: Int) -> String)?,
+    onStepClick: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Layout(
         modifier = modifier,
         content = {
-            steps.forEach { step ->
+            steps.forEachIndexed { index, step ->
                 Caption13Up(
                     text = formatLabel(step),
                     color = Colors.White64,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.width(KNOB_SIZE_DP.dp)
+                    maxLines = 1,
+                    modifier = Modifier
+                        .widthIn(min = KNOB_SIZE_DP.dp)
+                        .then(
+                            stopTestTag?.let { tag ->
+                                Modifier
+                                    .clickableAlpha { onStepClick(index) }
+                                    .testTag(tag(index))
+                            } ?: Modifier
+                        )
                 )
             }
         },
