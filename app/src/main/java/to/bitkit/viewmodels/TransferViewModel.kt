@@ -65,6 +65,7 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
+import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -1293,6 +1294,16 @@ class TransferViewModel @Inject constructor(
             // The device is open on another identity and only the passphrase reopens this one.
             Logger.info("Asking for the passphrase to reopen hardware wallet '$walletId'", context = TAG)
             _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
+            return
+        }
+        if (generateSequence(e) { it.cause }.any { it is HwWalletMismatchError }) {
+            // The device is connected but holds another wallet, so reconnecting it would not help.
+            Logger.warn("Rejected hardware device holding another wallet for '$walletId'", e, context = TAG)
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = context.getString(R.string.hardware__wallet_mismatch),
+            )
             return
         }
         if (e.isHwDeviceBusy()) {

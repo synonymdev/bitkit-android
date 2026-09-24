@@ -242,6 +242,7 @@
     <string name="hardware__send_sign_title">Sign With Device</string>
     <string name="hardware__verify_address">Verify on Device</string>
     <string name="hardware__verify_address_error">Address verification failed. Check the address on your device and try again.</string>
+    <string name="hardware__wallet_mismatch">This device holds a different wallet than the one you paired. Connect the paired wallet, or add this one as a new hardware wallet.</string>
     <string name="lightning__availability__text">Funds transfer to savings is usually instant, but settlement may take up to &lt;accent&gt;14 days&lt;/accent&gt; under certain network conditions.</string>
     <string name="lightning__availability__title">Funds\n&lt;accent&gt;availability&lt;/accent&gt;</string>
     <string name="lightning__balance">Balance</string>

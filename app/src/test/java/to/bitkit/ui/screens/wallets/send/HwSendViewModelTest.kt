@@ -28,6 +28,7 @@ import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.ActivityService
@@ -177,6 +178,24 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertEquals(1, preparationCalls)
         verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
         assertFalse(sut.uiState.value.isPassphraseRequired)
+    }
+
+    @Test
+    fun `a device holding another wallet shows the wallet mismatch`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.failure(HwWalletMismatchError()))
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(context.getString(R.string.hardware__wallet_mismatch)).thenReturn("Different wallet")
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        assertEquals("Different wallet", toasts.single().description)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
     }
 
     @Test

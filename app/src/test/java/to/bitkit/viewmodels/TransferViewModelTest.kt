@@ -76,6 +76,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
+import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
@@ -2006,6 +2007,27 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingHwConfirm shows wallet mismatch when the device holds another wallet`() = test {
+        val order = previewBtOrder()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.ensureConnected(HARDWARE_WALLET_ID))
+            .thenReturn(Result.failure(HwWalletMismatchError()))
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(context.getString(R.string.hardware__wallet_mismatch)).thenReturn(WALLET_MISMATCH)
+
+        quoteOrder(order)
+
+        sut.onTransferToSpendingHwConfirm(HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        assertEquals(WALLET_MISMATCH, toasts.single().description)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm disconnects stale session when signing fails with timeout`() = test {
         val order = previewBtOrder()
         val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
@@ -3005,6 +3027,7 @@ class TransferViewModelTest : BaseUnitTest() {
         const val CONNECTION_ISSUE_DESCRIPTION = "Please check your connection."
         const val CONNECT_TITLE = "Connect Device"
         const val CONNECT_DESCRIPTION = "Check the hardware device and try again."
+        const val WALLET_MISMATCH = "This device holds a different wallet."
         const val HARDWARE_WALLET_ID = "hardware-wallet"
         const val WALLET_ADDRESS = "bcrt1qwalletaddress"
         const val PASSPHRASE_MISMATCH = "That passphrase opens a different wallet."
