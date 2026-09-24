@@ -8,10 +8,6 @@
     deposits to a Savings address and mine a block. Start on the wallet home screen. The send uses
     your own Savings address (Settings > Advanced > Address Viewer); nothing is broadcast.
 
-    The screen reloads UTXOs and reselects all of them whenever the on-chain activity list emits,
-    which on regtest happens about every 10s after a wallet sync. A deselection that springs back on
-    within that window is that reload, not a failed tap; do the toggle steps back to back.
-
     Tapping the amount on the amount screen swaps the primary display unit. Do not tap it.
   </description>
   <actions>
