@@ -20,10 +20,14 @@
 
 ### QA Notes
 
+#### Journeys
+
+<!-- One line per journey this PR adds or updates: `new` or `updated`, the bare journey file name in backticks, then what it proves — `- [ ] new `send-amount-over-balance.xml` — error shows before the 15 s timeout`; prefix the shortest disambiguating folder only when two journeys share a name. Two empty values: `N/A — no user-visible behaviour change.`, or `N/A — not drivable; see Manual Tests.` when every flow touched needs a capability the Capabilities table in `journeys/README.md` does not list. Leave the boxes unchecked; the reviewer ticks a line after driving it. -->
+
 #### Manual Tests
 
-<!-- Unchecked, numbered steps for the reviewer: action → expectation. `N/A` when there is nothing to verify by hand. -->
+<!-- Only for a step needing a capability the Capabilities table in `journeys/README.md` does not list: action → expectation — the missing capability, as in `- [ ] Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities`. `N/A` when there is none. -->
 
 #### Automated Checks
 
-<!-- Coverage added, changed, or removed, by test file name; non-standard commands you ran. `N/A` when nothing changed. -->
+<!-- Flat list in the keyword order `added`, `updated`, `removed`, `ran`: keyword, bare test file name, dash, the behaviour proven — `- added `TransferViewModelTest.kt` — rejects amounts over the spending balance`; `ran` only for what CI does not run. `N/A` when nothing changed. -->
