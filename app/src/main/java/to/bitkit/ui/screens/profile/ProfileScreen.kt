@@ -183,12 +183,12 @@ private fun ProfileBody(
         ) {
             ActionButton(
                 onClick = onClickEdit,
-                iconRes = R.drawable.ic_pencil_simple,
+                iconRes = R.drawable.ic_pencil,
                 modifier = Modifier.testTag("ProfileEdit")
             )
             ActionButton(
                 onClick = onClickCopy,
-                iconRes = R.drawable.ic_copy,
+                iconRes = R.drawable.ic_copy_simple,
                 modifier = Modifier.testTag("ProfileCopy")
             )
             ActionButton(
