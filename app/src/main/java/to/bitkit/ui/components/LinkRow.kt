@@ -56,7 +56,7 @@ fun LinkRow(
     }
 }
 
-private val PHONE_REGEX = Regex("""^\+?[0-9 ()-]{7,}$""")
+private val PHONE_REGEX = Regex("""^\+?[0-9 ().-]{7,}$""")
 private const val MIN_PHONE_DIGITS = 7
 
 private fun String.toLinkUri(): Uri? {
@@ -65,15 +65,18 @@ private fun String.toLinkUri(): Uri? {
     return when {
         trimmed.isEmpty() -> null
         trimmed.isValidEmail() -> "mailto:$trimmed".toUri()
-        trimmed.isPhoneNumber() -> "tel:${trimmed.filter { it.isDigit() || it == '+' }}".toUri()
+        trimmed.isPhoneNumber() -> trimmed.toTelUri()
+        scheme == "tel" -> trimmed.substringAfter(':').trim().takeIf { it.isPhoneNumber() }?.toTelUri()
         trimmed.contains(' ') -> null
-        scheme == "mailto" || scheme == "tel" -> trimmed.toUri()
+        scheme == "mailto" -> trimmed.toUri()
         Patterns.WEB_URL.matcher(trimmed).matches() -> trimmed.toWebUri()
         else -> null
     }
 }
 
 private fun String.isPhoneNumber() = matches(PHONE_REGEX) && count(Char::isDigit) >= MIN_PHONE_DIGITS
+
+private fun String.toTelUri() = "tel:${filter { it.isDigit() || it == '+' }}".toUri()
 
 private fun String.toWebUri(): Uri? {
     val withScheme = if (contains("://")) this else "https://$this"
