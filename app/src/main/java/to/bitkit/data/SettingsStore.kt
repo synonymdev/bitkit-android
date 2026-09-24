@@ -55,7 +55,11 @@ class SettingsStore @Inject constructor(
                 .copy(ignoresSwitchUnitToast = false, ignoresHideBalanceToast = false)
                 .withDefaultPaykitPaymentMethods()
                 .withRequiredNativeSegwitMonitoring()
-            store.updateData { data }
+            store.updateData { current ->
+                // The received-sheet hold is armed before the backup is read, so it has to survive the
+                // settings the backup brings with it - otherwise the replayed history raises sheets.
+                data.copy(pendingRestoreActivitySeenSince = current.pendingRestoreActivitySeenSince)
+            }
 
             val monitored = data.addressTypesToMonitor
             val selected = data.selectedAddressType
