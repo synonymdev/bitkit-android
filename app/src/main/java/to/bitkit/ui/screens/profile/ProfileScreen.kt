@@ -33,7 +33,6 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.GradientCircularProgressIndicator
-import to.bitkit.ui.components.LinkRow
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SecondaryButton
@@ -197,14 +196,6 @@ private fun ProfileBody(
                 iconRes = R.drawable.ic_share,
                 modifier = Modifier.testTag("ProfileShare")
             )
-        }
-
-        VerticalSpacer(32.dp)
-
-        if (profile.links.isNotEmpty()) {
-            profile.links.forEachIndexed { index, link ->
-                LinkRow(label = link.label, value = link.url, linkIndex = index)
-            }
         }
 
         VerticalSpacer(16.dp)
