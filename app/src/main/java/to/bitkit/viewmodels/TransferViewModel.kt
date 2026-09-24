@@ -125,6 +125,7 @@ class TransferViewModel @Inject constructor(
     val transferEffects = MutableSharedFlow<TransferEffect>()
     fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
     private var hwTransferSignJob: Job? = null
+    private var hwTransferAttempt = 0
     private var hwFeeEstimateJob: Job? = null
     private var confirmFeeJob: Job? = null
     private var confirmPayJob: Job? = null
@@ -967,9 +968,10 @@ class TransferViewModel @Inject constructor(
         val walletId = activeHwTransferWalletId
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
+        hwTransferAttempt++
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = null
-        _spendingUiState.update { it.copy(isSigning = false) }
+        _spendingUiState.update { it.copy(isSigning = false, isConnectingDevice = false) }
         if (walletId != null) {
             viewModelScope.launch {
                 hwWalletRepo.disconnectStaleSession(walletId)
@@ -1055,6 +1057,7 @@ class TransferViewModel @Inject constructor(
 
         activeHwTransferWalletId = walletId
         _spendingUiState.update { it.copy(isSigning = true) }
+        val attempt = ++hwTransferAttempt
         hwTransferSignJob = viewModelScope.launch {
             try {
                 val signedOrder = _spendingUiState.value.order
@@ -1093,8 +1096,12 @@ class TransferViewModel @Inject constructor(
                     }
                     .onFailure { handleHardwareTransferFailure(it, walletId) }
             } finally {
-                _spendingUiState.update { it.copy(isSigning = false) }
-                hwTransferSignJob = null
+                // A cancelled job can outlive cancelHardwareTransfer() while a device call returns, and
+                // must not reset the state of a transfer attempt started after it.
+                if (hwTransferAttempt == attempt) {
+                    _spendingUiState.update { it.copy(isSigning = false, isConnectingDevice = false) }
+                    hwTransferSignJob = null
+                }
             }
         }
     }
@@ -1189,15 +1196,23 @@ class TransferViewModel @Inject constructor(
 
     @Suppress("ThrowsCount")
     private suspend fun ensureHardwareConnected(walletId: String) {
-        runCatching {
-            // A Jade reconnect may include entering the PIN on the device, so the budget is per vendor.
-            withTimeout(hwWalletRepo.reconnectTimeout(walletId)) {
-                hwWalletRepo.ensureConnected(walletId).getOrThrow()
+        // Nothing has been sent to the device for signing yet, so the screen may be left while this
+        // waits; a Jade may sit here for minutes waiting for its PIN.
+        val attempt = hwTransferAttempt
+        _spendingUiState.update { it.copy(isConnectingDevice = true) }
+        try {
+            runCatching {
+                // A Jade reconnect may include entering the PIN on the device, so the budget is per vendor.
+                withTimeout(hwWalletRepo.reconnectTimeout(walletId)) {
+                    hwWalletRepo.ensureConnected(walletId).getOrThrow()
+                }
+            }.getOrElse {
+                it.rethrowIfCancellation()
+                if (it.isHwUserCancellation()) throw it
+                throw HardwareReconnectError(it)
             }
-        }.getOrElse {
-            it.rethrowIfCancellation()
-            if (it.isHwUserCancellation()) throw it
-            throw HardwareReconnectError(it)
+        } finally {
+            if (hwTransferAttempt == attempt) _spendingUiState.update { it.copy(isConnectingDevice = false) }
         }
     }
 
@@ -1912,6 +1927,7 @@ data class TransferToSpendingUiState(
     val quarterAmount: Long = 0,
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
+    val isConnectingDevice: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
     val isHwPassphraseRequired: Boolean = false,
     val isVerifyingHwPassphrase: Boolean = false,
@@ -1926,6 +1942,12 @@ data class TransferToSpendingUiState(
     val hwFundingWalletId: String? = null,
 ) {
     val isBusy: Boolean get() = isConfirmPaying || isSigning
+
+    /**
+     * Whether the hardware sign screen may be left. Connecting or unlocking can be abandoned, and leaving
+     * cancels it; once the device is asked to sign, or a broadcast is on its way, it cannot.
+     */
+    val canLeave: Boolean get() = !isBusy || isConnectingDevice
 }
 
 private data class SpendingFundingTarget(

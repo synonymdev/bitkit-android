@@ -63,7 +63,7 @@ fun SpendingHwSignScreen(
         return
     }
 
-    BackHandler(enabled = state.isBusy) {}
+    BackHandler(enabled = !state.canLeave) {}
 
     LaunchedEffect(walletId, state.feeSat) {
         viewModel.warmUpHardwareConnection(walletId)
@@ -79,9 +79,10 @@ fun SpendingHwSignScreen(
         miningFeeSats = state.hwMiningFeeSats,
         isAdvanced = state.isAdvanced,
         isSigning = state.isBusy,
+        canLeave = state.canLeave,
         hasPendingBroadcast = state.hasPendingHwBroadcast,
         vendor = vendor,
-        onBackClick = { if (!state.isBusy) onBackClick() },
+        onBackClick = { if (state.canLeave) onBackClick() },
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
         onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
@@ -103,6 +104,7 @@ private fun Content(
     miningFeeSats: ULong = 0uL,
     isAdvanced: Boolean = false,
     isSigning: Boolean = false,
+    canLeave: Boolean = true,
     hasPendingBroadcast: Boolean = false,
     vendor: HwWalletVendor = HwWalletVendor.TREZOR,
     onBackClick: () -> Unit = {},
@@ -115,7 +117,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
             onBackClick = onBackClick,
-            actions = { if (!isSigning) DrawerNavIcon() },
+            actions = { if (canLeave) DrawerNavIcon() },
         )
         Box(modifier = Modifier.fillMaxSize()) {
             HardwareTransferIllustration(
@@ -275,6 +277,7 @@ private fun PreviewSigning() {
         Content(
             state = previewSpendingState(),
             isSigning = true,
+            canLeave = false,
         )
     }
 }

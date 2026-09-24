@@ -1875,6 +1875,59 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hardware sign screen can be left while the device connects`() = test {
+        val order = previewBtOrder()
+        val connectResult = CompletableDeferred<Result<HwConnectedDevice>>()
+        whenever(hwWalletRepo.ensureConnected(HARDWARE_WALLET_ID)).doSuspendableAnswer { connectResult.await() }
+        whenever(hwWalletRepo.disconnectStaleSession(HARDWARE_WALLET_ID)).thenReturn(Result.success(Unit))
+
+        quoteOrder(order)
+
+        sut.onTransferToSpendingHwConfirm(HARDWARE_WALLET_ID)
+        runCurrent()
+
+        assertTrue(sut.spendingUiState.value.isBusy)
+        assertTrue(sut.spendingUiState.value.isConnectingDevice)
+        assertTrue(sut.spendingUiState.value.canLeave)
+
+        sut.cancelHardwareTransfer()
+        advanceUntilIdle()
+
+        assertFalse(sut.spendingUiState.value.isConnectingDevice)
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+    }
+
+    @Test
+    fun `hardware sign screen cannot be left while the device signs`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        val signResult = CompletableDeferred<Result<HwFundingSignedTx>>()
+        whenever(hwWalletRepo.ensureConnected(HARDWARE_WALLET_ID))
+            .thenReturn(Result.success(connectedHardwareDevice()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signFunding(any(), any())).doSuspendableAnswer { signResult.await() }
+
+        quoteOrder(order)
+
+        sut.onTransferToSpendingHwConfirm(HARDWARE_WALLET_ID)
+        runCurrent()
+
+        assertTrue(sut.spendingUiState.value.isBusy)
+        assertFalse(sut.spendingUiState.value.isConnectingDevice)
+        assertFalse(sut.spendingUiState.value.canLeave)
+
+        signResult.complete(Result.failure(AppError("cancelled")))
+        advanceUntilIdle()
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm shows connection guidance for bluetooth reconnect failure`() = test {
         val order = previewBtOrder()
         val toasts = mutableListOf<Toast>()
