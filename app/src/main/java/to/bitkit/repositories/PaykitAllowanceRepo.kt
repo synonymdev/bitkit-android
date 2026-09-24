@@ -370,7 +370,8 @@ class PaykitAllowanceRepo @Inject constructor(
         val covered = requests.filter {
             it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature
         }
-        if (covered.isEmpty() || !isProcessingRequests.compareAndSet(false, true)) return@withContext false
+        if (covered.isEmpty() || !canPayNow()) return@withContext false
+        if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
 
         try {
             payCovered(covered, identity, signature)
@@ -388,6 +389,15 @@ class PaykitAllowanceRepo @Inject constructor(
         return request.requiresAcceptance &&
             coversRequest(request) &&
             manualRequestSignatures[request.id] != allowancesSignature()
+    }
+
+    /**
+     * A node that just started lists its channels before they reconnect, and a payment sent then fails with no route.
+     * Covered requests wait for the next refresh instead of falling back to the manual flow.
+     */
+    private fun canPayNow(): Boolean {
+        val state = lightningRepo.lightningState.value
+        return state.nodeLifecycleState.isRunning() && (state.channels.isEmpty() || state.channels.any { it.isUsable })
     }
 
     /** Request ids paid automatically, for the "Auto-paid" tag in payment history. */
