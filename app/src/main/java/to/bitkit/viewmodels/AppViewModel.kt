@@ -545,7 +545,7 @@ class AppViewModel @Inject constructor(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__source_lost),
                     )
-                    mainScreenEffect(MainScreenEffect.Navigate(route = Routes.PubkyChoice))
+                    mainScreenEffect(MainScreenEffect.NavigateToPubkyChoice)
                     pubkyRepo.clearAdoptedSourceLost()
                 }
             }
@@ -5888,6 +5888,7 @@ sealed class MainScreenEffect {
         val clearStack: Boolean = false,
     ) : MainScreenEffect()
 
+    data object NavigateToPubkyChoice : MainScreenEffect()
     data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }

@@ -363,6 +363,9 @@ fun ContentView(
                     navController.navigateTo(it.route)
                 }
 
+                MainScreenEffect.NavigateToPubkyChoice ->
+                    navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
                     if (!isOnHome) {
