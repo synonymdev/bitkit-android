@@ -408,7 +408,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
             1u,
             WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
         )
-        verify(node).syncWallets()
+        verify(node, never()).syncWallets()
     }
 
     @Test
@@ -447,11 +447,46 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `new account is removed when initial sync fails and original error is preserved`() = test {
+    fun `new account can begin authorization while wallet sync is unavailable`() = test {
+        val account = account().copy(isTrackingEnabled = false, setupState = WatchOnlyAccountSetupState.PendingDelivery)
+        var storedAccounts = listOf(account)
+        val store = mock<WatchOnlyAccountStore>()
+        val lightningService = mock<LightningService>()
+        val node = mock<Node>()
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(store.data).thenReturn(flowOf(WatchOnlyAccountData(accounts = storedAccounts)))
+        whenever(store.load()).thenAnswer { storedAccounts }
+        whenever(store.update(any())).thenAnswer {
+            val transform = it.getArgument<(List<WatchOnlyAccountRecord>) -> List<WatchOnlyAccountRecord>>(0)
+            storedAccounts = transform(storedAccounts)
+            Unit
+        }
+        whenever(lightningService.node).thenReturn(node)
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(node.syncWallets()).thenThrow(IllegalStateException("wallet sync timed out"))
+        val sut = repository(store, lightningService)
+
+        sut.beginAuthorization(account.id)
+
+        assertTrue(storedAccounts.single().isTrackingEnabled)
+        assertEquals(WatchOnlyAccountSetupState.Authorizing, storedAccounts.single().setupState)
+        verify(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+        verify(onchainPayment).revealReceiveAddressesToAccount(
+            AddressType.NATIVE_SEGWIT,
+            1u,
+            WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
+        )
+        verify(node, never()).syncWallets()
+        verify(node, never()).removeOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u)
+    }
+
+    @Test
+    fun `new account is removed when address revelation fails and original error is preserved`() = test {
         val account = account().copy(isTrackingEnabled = false, setupState = WatchOnlyAccountSetupState.PendingDelivery)
         var storedAccounts = listOf(account)
         var isTracked = false
-        val syncError = IllegalStateException("initial sync failed")
+        val trackingError = IllegalStateException("address revelation failed")
         val store = mock<WatchOnlyAccountStore>()
         val lightningService = mock<LightningService>()
         val node = mock<Node>()
@@ -467,7 +502,11 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
             .addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
         doAnswer { isTracked = false }.whenever(node)
             .removeOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u)
-        whenever(node.syncWallets()).thenThrow(syncError)
+        doThrow(trackingError).whenever(onchainPayment).revealReceiveAddressesToAccount(
+            AddressType.NATIVE_SEGWIT,
+            1u,
+            WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
+        )
         val sut = repository(store, lightningService)
 
         val error = runCatching { sut.beginAuthorization(account.id) }.exceptionOrNull()
@@ -475,7 +514,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
         assertFalse(isTracked)
         assertFalse(storedAccounts.single().isTrackingEnabled)
         assertEquals(WatchOnlyAccountSetupState.PendingDelivery, storedAccounts.single().setupState)
-        assertSame(syncError, error?.cause)
+        assertSame(trackingError, error?.cause)
         verify(onchainPayment).revealReceiveAddressesToAccount(
             AddressType.NATIVE_SEGWIT,
             1u,
@@ -524,7 +563,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
             1u,
             WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
         )
-        verify(node, times(1)).syncWallets()
+        verify(node, never()).syncWallets()
     }
 
     private fun repository(
