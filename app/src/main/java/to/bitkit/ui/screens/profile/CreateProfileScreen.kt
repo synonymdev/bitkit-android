@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -108,6 +109,7 @@ private fun Content(
         if (uiState.isLoading) {
             LoadingState(text = stringResource(R.string.profile__deriving_keys))
         } else {
+            val isNameInitiallyEmpty = remember { uiState.name.isEmpty() }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -119,7 +121,7 @@ private fun Content(
                     onNameChange = onNameChange,
                     publicKey = uiState.derivedPublicKey ?: "...",
                     nameTestTag = "CreateProfileUsername",
-                    autoFocusName = true,
+                    autoFocusName = isNameInitiallyEmpty,
                     avatarContent = {
                         AvatarPickerButton(
                             avatarUri = uiState.avatarUri,
