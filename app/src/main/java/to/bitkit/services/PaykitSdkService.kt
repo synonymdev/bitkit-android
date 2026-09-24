@@ -185,6 +185,7 @@ class PaykitSdkService @Inject constructor(
     private val identityRepublishMutex = Mutex()
     private var republishPublicKey: String? = null
     private var nextIdentityRepublishAt = 0L
+    private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationMutex = Mutex()
     private val setupMutex = Mutex()
@@ -270,9 +271,16 @@ class PaykitSdkService @Inject constructor(
                         if (!isSetup.isCompleted) PaykitAndroid.initializeOrThrow(context)
                         val key = publicKey ?: sessionProvider.loadLocalSecretKey()?.let(::pubkyPublicKeyFromSecret)
                         val identity = key?.let(PubkyPublicKeyFormat::normalized) ?: return@runSuspendCatching
-                        if (identity == republishPublicKey && now < nextIdentityRepublishAt) return@runSuspendCatching
+                        if (
+                            identity == republishPublicKey &&
+                            now >= lastIdentityRepublishAt &&
+                            now < nextIdentityRepublishAt
+                        ) {
+                            return@runSuspendCatching
+                        }
 
                         republishPublicKey = identity
+                        lastIdentityRepublishAt = now
                         nextIdentityRepublishAt = now + IDENTITY_REPUBLISH_RETRY_INTERVAL.inWholeMilliseconds
                         if (bootstrap().republishIdentity(identity)) {
                             nextIdentityRepublishAt = now + IDENTITY_REPUBLISH_INTERVAL.inWholeMilliseconds
@@ -980,12 +988,13 @@ class PaykitSdkService @Inject constructor(
     }
 
     private suspend fun currentSdkStatePublicKeyLocked(): String? {
-        return runSuspendCatching { handle().identityStatus()?.publicKey }
-            .getOrElse {
-                keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
-                resetRuntime()
-                null
-            }
+        // Read the persisted owner without restoring the grant we are about to replace.
+        sessionProvider.suspendStoredSessionAccess()
+        return try {
+            handle().identityStatus()?.publicKey
+        } finally {
+            sessionProvider.resumeStoredSessionAccess()
+        }
     }
 
     private suspend fun persistSessionAccess(

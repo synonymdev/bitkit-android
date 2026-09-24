@@ -221,3 +221,5 @@ One asymmetry worth knowing when comparing: Android builds `Tab-*` from the enum
 (`CustomTabRowWithSpacing`), so `Tab-all` is stable in any locale, while iOS derives it from the
 tab's display name and becomes `Tab-todas` in Spanish. Journeys naming a `Tab-*` identifier assume an
 English device for iOS's sake.
+
+Device-clock fault injection requires a separate manual run: [Paykit clock changes](paykit-clock-changes.md).

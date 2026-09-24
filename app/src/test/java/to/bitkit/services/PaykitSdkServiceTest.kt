@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyLocalSecretKey
@@ -89,6 +90,27 @@ class PaykitSdkServiceTest {
                 service.contactRecords()
                 assertEquals(handlesBeforeReload + 1, handlesCreated)
             }
+        }
+    }
+
+    @Test
+    fun `identity lookup failure preserves stored state and stops activation`() = runTest {
+        for (error in listOf(
+            PaykitException.Identity("identity_error", "restore Pubky grant session from platform provider"),
+            PaykitException.Storage("storage_error", "unavailable"),
+        )) {
+            val keychain = mock<Keychain>()
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.identityStatus()).thenThrow(error)
+            val service = PaykitSdkService(mock(), keychain) { sdk }
+
+            val thrown = assertFailsWith<PaykitException> {
+                service.activateRegisteredIdentity(PubkySessionBootstrapResult(mock(), "pubky_test"))
+            }
+
+            assertEquals(error, thrown)
+            verify(keychain, never()).delete(any())
+            verify(keychain, never()).upsertString(any(), any())
         }
     }
 

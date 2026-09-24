@@ -152,8 +152,13 @@ class PaykitSubscriptionWorkClient @Inject constructor(
 class PaykitSubscriptionNotificationWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
+    private val clock: Clock,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
+        val startsAt = inputData.getString(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT)
+            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            ?: return Result.failure()
+        if (startsAt > clock.now()) return Result.retry()
         if (App.currentActivity?.value != null) return Result.success()
         applicationContext.pushNotification(
             title = applicationContext.getString(R.string.subscriptions__payment_due_title),

@@ -32,6 +32,7 @@ import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -316,18 +317,31 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `completeAuthentication should reset state on failure`() = test {
-        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
-        whenever(pubkyService.completeAuth()).thenAnswer { throw TestAppError("Failed") }
+    fun `failed authentication only revokes a session installed by that attempt`() = test {
+        for (sessionState in listOf("unchanged", "replaced", "unreadable")) {
+            var session = "existing-session"
+            var completionFailed = false
+            whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer {
+                check(!completionFailed || sessionState != "unreadable") { "unavailable" }
+                session
+            }
+            whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+            doAnswer {
+                if (sessionState != "unchanged") session = "new-session"
+                completionFailed = true
+                throw TestAppError("Clock skew")
+            }.whenever(pubkyService).completeAuth()
+            clearInvocations(pubkyService)
 
-        val authRequest = startAuthForTesting()
-        approveAuthForTesting(authRequest)
-        val result = sut.completeAuthentication()
+            val authRequest = startAuthForTesting()
+            approveAuthForTesting(authRequest)
+            val result = sut.completeAuthentication()
 
-        assertTrue(result.isFailure)
-        assertFalse(sut.isAuthenticated.value)
-        assertNull(sut.publicKey.value)
-        verifyBlocking(pubkyService) { signOut() }
+            assertTrue(result.isFailure)
+            assertFalse(sut.isAuthenticated.value)
+            assertNull(sut.publicKey.value)
+            verifyBlocking(pubkyService, times(if (sessionState == "replaced") 1 else 0)) { signOut() }
+        }
     }
 
     @Test
@@ -1442,6 +1456,33 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.sessionRestorationFailed.value)
         assertFalse(sut.isAuthenticated.value)
         verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+    }
+
+    @Test
+    fun `failed restoration preserves profile data and credentials for retry`() = test {
+        val session = "saved_session"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        var canRestore = false
+        whenever(pubkyService.importSession(session)).thenAnswer {
+            if (canRestore) VALID_SELF_KEY else throw TestAppError("Clock skew")
+        }
+        whenever(pubkyService.signIn("local_secret")).thenAnswer { throw TestAppError("Clock skew") }
+        clearInvocations(pubkyStore, keychain)
+
+        sut.initialize()
+
+        assertTrue(sut.sessionRestorationFailed.value)
+        assertFalse(sut.isAuthenticated.value)
+        verify(pubkyStore, never()).reset()
+        verifyBlocking(keychain, never()) { delete(any()) }
+
+        canRestore = true
+        sut.initialize()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        assertFalse(sut.sessionRestorationFailed.value)
     }
 
     @Test

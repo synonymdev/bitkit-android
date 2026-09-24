@@ -5,8 +5,12 @@ package to.bitkit.repositories
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ListenableWorker
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.synonym.paykit.PaymentRequestLifecycleState
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -16,6 +20,7 @@ import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
@@ -86,6 +91,17 @@ class PaykitSubscriptionNotificationSchedulerTest {
             NEXT_PERIOD_START.toString(),
             request.workSpec.input.getString(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT),
         )
+    }
+
+    @Test
+    fun `worker defers a reminder when clock is before the billing period`() = runTest {
+        val params = mock<WorkerParameters>()
+        whenever(params.inputData).thenReturn(
+            workDataOf(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT to NEXT_PERIOD_START.toString()),
+        )
+        val worker = PaykitSubscriptionNotificationWorker(context, params, clock)
+
+        assertEquals(ListenableWorker.Result.retry(), worker.doWork())
     }
 
     @Test

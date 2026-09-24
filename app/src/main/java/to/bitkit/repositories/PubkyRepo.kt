@@ -215,7 +215,7 @@ class PubkyRepo @Inject constructor(
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
                 }
                 is InitResult.RestorationFailed -> {
-                    clearAuthenticatedState()
+                    clearAuthenticatedState(clearCachedProfile = false)
                     _sessionRestorationFailed.update { true }
                 }
             }
@@ -319,8 +319,8 @@ class PubkyRepo @Inject constructor(
                 waitForAuthApproval(attemptId)
                 withContext(ioDispatcher) {
                     withContext(NonCancellable) {
+                        completeAuthPreservingExistingSession()
                         shouldRevokeSessionOnFailure = true
-                        pubkyService.completeAuth()
                     }
                     ensureAuthAttemptActive(attemptId)
                     val pk = requireNotNull(pubkyService.currentPublicKey()?.ensurePubkyPrefix()) {
@@ -370,6 +370,25 @@ class PubkyRepo @Inject constructor(
             }
             restoreAuthStateAfterAuthFlow()
             throw e
+        }
+    }
+
+    private suspend fun completeAuthPreservingExistingSession() {
+        val previousSession = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+        var completed = false
+        try {
+            pubkyService.completeAuth()
+            completed = true
+        } finally {
+            if (!completed) {
+                val installedSession = runSuspendCatching {
+                    val currentSession = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+                    currentSession != null && currentSession != previousSession
+                }.onFailure {
+                    Logger.warn("Failed to identify incomplete Pubky auth session", it, context = TAG)
+                }.getOrDefault(false)
+                revokeCompletedAuthSessionIfNeeded(installedSession)
+            }
         }
     }
 
@@ -1401,9 +1420,11 @@ class PubkyRepo @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
-    private suspend fun clearAuthenticatedState() = withContext(ioDispatcher) {
-        evictPubkyImages()
-        runSuspendCatching { pubkyStore.reset() }
+    private suspend fun clearAuthenticatedState(clearCachedProfile: Boolean = true) = withContext(ioDispatcher) {
+        if (clearCachedProfile) {
+            evictPubkyImages()
+            runSuspendCatching { pubkyStore.reset() }
+        }
         _publicKey.update { null }
         _profile.update { null }
         _contacts.update { emptyList() }

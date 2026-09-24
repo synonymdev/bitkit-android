@@ -33,6 +33,26 @@ class PubkyIdentityRepublishTest {
     private val publicKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
     @Test
+    fun `clock rollback retries publication and then resumes throttling`() = runTest {
+        for (published in listOf(true, false)) {
+            val bootstrap = mock<PubkySessionBootstrap>()
+            whenever(bootstrap.republishIdentity(any())).thenReturn(published)
+            val service = PaykitSdkService(
+                mock(),
+                mock(),
+                { bootstrap },
+                StandardTestDispatcher(testScheduler),
+            ) { mock() }
+
+            service.republishIdentityIfNeeded(publicKey, now = 2_592_000_000)
+            service.republishIdentityIfNeeded(publicKey, now = 0)
+            service.republishIdentityIfNeeded(publicKey, now = 1_000)
+
+            verify(bootstrap, times(2)).republishIdentity("pubky$publicKey")
+        }
+    }
+
+    @Test
     fun `slow publication survives caller deadline and establishes success throttle`() = runTest {
         val bootstrap = mock<PubkySessionBootstrap>()
         var published = false
