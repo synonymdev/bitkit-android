@@ -36,6 +36,7 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Dismiss action: `PaymentRequestDismiss-<paymentRequestId>`
 - Payment confirmation: `PaymentRequestConfirm`
 - Confirmation summary: `PaymentRequestFrom`, `PaymentRequestFor`
+- Confirmation invoice note: `PaymentRequestInvoiceNote`
 - Confirmation details: `SendConfirmToggleDetails`
 - Saved-contact recipient: `ReviewContactRecipient`
 
