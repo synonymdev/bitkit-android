@@ -783,7 +783,7 @@ private fun LightningDetails(
             }
         }
 
-        if (!isLnurlPay && !description.isNullOrEmpty() && uiState.oneOffPaymentRequestNote == null) {
+        if (!isLnurlPay && !description.isNullOrEmpty() && description.trim() != uiState.oneOffPaymentRequestNote) {
             SendCell(caption = stringResource(R.string.wallet__note)) {
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     BodySSB(text = description, maxLines = 1)
