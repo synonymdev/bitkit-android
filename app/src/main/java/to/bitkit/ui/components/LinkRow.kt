@@ -74,7 +74,8 @@ private fun String.toLinkUri(): Uri? {
     }
 }
 
-private fun String.isPhoneNumber() = matches(PHONE_REGEX) && count(Char::isDigit) >= MIN_PHONE_DIGITS
+private fun String.isPhoneNumber() =
+    matches(PHONE_REGEX) && count(Char::isDigit) >= MIN_PHONE_DIGITS && !Patterns.IP_ADDRESS.matcher(this).matches()
 
 private fun String.toTelUri() = "tel:${filter { it.isDigit() || it == '+' }}".toUri()
 
