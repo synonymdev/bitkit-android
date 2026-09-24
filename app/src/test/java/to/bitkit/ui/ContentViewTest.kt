@@ -63,7 +63,19 @@ class ContentViewTest {
     fun `transfer effect destinations cover funding paid and hw signed`() {
         assertEquals(Routes.SettingUp, transferEffectDestination(TransferEffect.OnSpendingFundingPaid))
         assertEquals(Routes.SpendingHwSigned, transferEffectDestination(TransferEffect.OnHwTxSigned))
-        assertNull(transferEffectDestination(TransferEffect.OnOrderCreated))
+        assertNull(transferEffectDestination(TransferEffect.OnQuoteReady))
+    }
+
+    @Test
+    fun `funding paid removes spending confirmation from the back stack`() {
+        val navController = transferNavController()
+        navController.navigateTo(Routes.SpendingConfirm)
+
+        navController.navigateForTransferEffect(TransferEffect.OnSpendingFundingPaid)
+        assertTrue(navController.currentDestination?.hasRoute<Routes.SettingUp>() == true)
+
+        navController.popBackStack()
+        assertFalse(navController.currentDestination?.hasRoute<Routes.SpendingConfirm>() == true)
     }
 
     @Test
@@ -161,6 +173,7 @@ class ContentViewTest {
                     composable<Routes.SavingsAvailability> {}
                     composable<Routes.SavingsProgress> {}
                     composable<Routes.SpendingConfirm> {}
+                    composable<Routes.SettingUp> {}
                 }
             }
         }

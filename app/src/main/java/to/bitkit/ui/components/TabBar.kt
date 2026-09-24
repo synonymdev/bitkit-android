@@ -194,7 +194,7 @@ fun BoxScope.TabBar(
                         painter = painterResource(R.drawable.ic_scan),
                         contentDescription = stringResource(R.string.wallet__recipient_scan),
                         tint = Colors.Gray1,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }

@@ -136,7 +136,7 @@ fun SendRecipientScreen(
     val analyzer = remember(onEvent) {
         QrCodeAnalyzer { result ->
             if (result.isSuccess) {
-                val qrCode = result.getOrThrow()
+                val qrCode = result.getOrThrow().text ?: return@QrCodeAnalyzer
                 Logger.debug("Scanned QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                 onEvent(SendEvent.AddressContinue(qrCode))
             } else {
