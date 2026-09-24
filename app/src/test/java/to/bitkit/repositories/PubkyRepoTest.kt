@@ -1246,6 +1246,43 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initialize should re-sign in an adopted identity with the ring credential`() = test {
+        val session = "stale_session"
+        stubAdoptedRingSource()
+        val ringPubky = stubRingCredential()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(pubkyService.importSession(session)).thenAnswer { throw TestAppError("Expired") }
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.success(persistentListOf(ringPubky)))
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Ring User")))
+
+        sut.initialize()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertFalse(sut.sessionRestorationFailed.value)
+        verifyBlocking(pubkyService) { signIn("ring_secret") }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+    }
+
+    @Test
+    fun `initialize should keep an adopted session when the ring credential is unavailable`() = test {
+        val session = "stale_session"
+        stubAdoptedRingSource()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(pubkyService.importSession(session)).thenAnswer { throw TestAppError("Expired") }
+        whenever(sharedPubkyClient.ringCredential(VALID_SELF_KEY.removePrefix("pubky")))
+            .thenReturn(Result.failure(TestAppError("Unavailable")))
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.failure(TestAppError("Unavailable")))
+
+        sut.initialize()
+
+        assertTrue(sut.sessionRestorationFailed.value)
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+    }
+
+    @Test
     fun `refreshSessionIfPossible should refresh session when local secret key exists`() = test {
         val secretKey = "local_secret"
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)

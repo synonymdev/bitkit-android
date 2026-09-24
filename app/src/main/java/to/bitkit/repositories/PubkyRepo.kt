@@ -239,7 +239,7 @@ class PubkyRepo @Inject constructor(
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
-                resolveSignedInSession(savedSessionSecret, storedSecretKeyHex)
+                resolveSignedInSession(savedSessionSecret, storedSecretKeyHex ?: adoptedSecretKeyHex())
             }
         } else {
             resolveSignedInSession(savedSessionSecret, storedSecretKeyHex)
@@ -1251,6 +1251,16 @@ class PubkyRepo @Inject constructor(
         runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
             .onSuccess { notifyBackupStateChanged() }
         null
+    }
+
+    private suspend fun adoptedSecretKeyHex(): String? {
+        val pubky = runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
+            ?.substringAfter(SharedPubkyContract.RING_SOURCE_PREFIX, "")
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        return sharedPubkyClient.ringCredential(pubky)
+            .onFailure { Logger.warn("Failed to read adopted ring credential", it, context = TAG) }
+            .getOrNull()
     }
 
     private suspend fun activeSecretKeyHex(): String? {
