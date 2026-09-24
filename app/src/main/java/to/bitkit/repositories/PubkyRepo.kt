@@ -353,6 +353,7 @@ class PubkyRepo @Inject constructor(
                 if (_approvedAuthAttemptId.value == attemptId) {
                     _approvedAuthAttemptId.update { null }
                 }
+                clearProfileIfIdentityChanged(pk)
                 _publicKey.update { pk }
                 _authState.update { PubkyAuthState.Authenticated }
                 shouldRevokeSessionOnFailure = false
@@ -371,6 +372,14 @@ class PubkyRepo @Inject constructor(
             restoreAuthStateAfterAuthFlow()
             throw e
         }
+    }
+
+    private suspend fun clearProfileIfIdentityChanged(publicKey: String) {
+        if (_publicKey.value == publicKey) return
+        _contactsLoadVersion.update { 0L }
+        _profile.update { null }
+        _contacts.update { emptyList() }
+        clearPendingImport()
     }
 
     private suspend fun completeAuthPreservingExistingSession() {

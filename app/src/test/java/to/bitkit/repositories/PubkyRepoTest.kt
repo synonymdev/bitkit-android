@@ -1704,7 +1704,7 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.loadProfile()
 
         assertEquals(newPublicKey.ensurePubkyPrefixForTest(), sut.publicKey.value)
-        assertEquals("Initial Old", sut.profile.value?.name)
+        assertNull(sut.profile.value)
     }
 
     @Test
@@ -1749,9 +1749,8 @@ class PubkyRepoTest : BaseUnitTest() {
 
         val contacts = sut.contacts.value
         assertEquals(newPublicKey.ensurePubkyPrefixForTest(), sut.publicKey.value)
-        assertEquals(1, contacts.size)
-        assertEquals(existingContact.publicKey, contacts.first().publicKey)
-        assertEquals(existingContact.name, contacts.first().name)
+        assertTrue(contacts.isEmpty())
+        assertEquals(0L, sut.contactsLoadVersion.value)
     }
 
     @Test

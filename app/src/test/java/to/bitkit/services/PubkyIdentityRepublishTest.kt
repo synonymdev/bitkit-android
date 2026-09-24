@@ -40,6 +40,7 @@ class PubkyIdentityRepublishTest {
             val service = PaykitSdkService(
                 mock(),
                 mock(),
+                mock(),
                 { bootstrap },
                 StandardTestDispatcher(testScheduler),
             ) { mock() }
@@ -66,7 +67,13 @@ class PubkyIdentityRepublishTest {
                 cancelled = !currentCoroutineContext().isActive
             }
         }
-        val service = PaykitSdkService(mock(), mock(), { bootstrap }, StandardTestDispatcher(testScheduler)) { mock() }
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            { bootstrap },
+            StandardTestDispatcher(testScheduler),
+        ) { mock() }
 
         service.republishIdentityIfNeeded(publicKey, now = 0)
 
@@ -92,6 +99,7 @@ class PubkyIdentityRepublishTest {
         val service = PaykitSdkService(
             context = mock(),
             keychain = mock(),
+            pubkyStore = mock(),
             bootstrapFactory = {
                 factories++
                 bootstrap
@@ -120,6 +128,7 @@ class PubkyIdentityRepublishTest {
             val service = PaykitSdkService(
                 context = mock(),
                 keychain = mock(),
+                pubkyStore = mock(),
                 bootstrapFactory = { bootstrap },
                 ioDispatcher = StandardTestDispatcher(testScheduler),
                 sdkFactory = { mock() },
@@ -138,7 +147,13 @@ class PubkyIdentityRepublishTest {
         val bootstrap = mock<PubkySessionBootstrap>()
         whenever(bootstrap.republishIdentity(any())).thenReturn(true)
         val sdk = mock<PaykitSdk>()
-        val service = PaykitSdkService(mock(), mock(), { bootstrap }, StandardTestDispatcher(testScheduler)) { sdk }
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            { bootstrap },
+            StandardTestDispatcher(testScheduler),
+        ) { sdk }
         val otherKey = publicKey.dropLast(1) + "y"
 
         service.republishIdentityIfNeeded(publicKey, now = 0)
@@ -155,7 +170,13 @@ class PubkyIdentityRepublishTest {
         val gate = CompletableDeferred<Boolean>()
         val bootstrap = mock<PubkySessionBootstrap>()
         whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer { gate.await() }
-        val service = PaykitSdkService(mock(), mock(), { bootstrap }, StandardTestDispatcher(testScheduler)) { mock() }
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            { bootstrap },
+            StandardTestDispatcher(testScheduler),
+        ) { mock() }
         val first = async { service.republishIdentityIfNeeded(publicKey, now = 0) }
         runCurrent()
 
@@ -177,7 +198,13 @@ class PubkyIdentityRepublishTest {
                 cancelled = true
             }
         }
-        val service = PaykitSdkService(mock(), mock(), { bootstrap }, StandardTestDispatcher(testScheduler)) { mock() }
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            { bootstrap },
+            StandardTestDispatcher(testScheduler),
+        ) { mock() }
 
         service.republishIdentityIfNeeded(publicKey, now = 0)
         assertEquals(5_000L, currentTime)
@@ -204,7 +231,13 @@ class PubkyIdentityRepublishTest {
         val gate = CompletableDeferred<Boolean>()
         val bootstrap = mock<PubkySessionBootstrap>()
         whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer { gate.await() }
-        val service = PaykitSdkService(mock(), mock(), { bootstrap }, StandardTestDispatcher(testScheduler)) { mock() }
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            { bootstrap },
+            StandardTestDispatcher(testScheduler),
+        ) { mock() }
         var continued = false
         val cancelledCaller = async {
             cancel()

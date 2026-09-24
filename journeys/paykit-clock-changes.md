@@ -12,7 +12,8 @@ Create a fresh wallet and a matching Pubky identity, save a contact, and link a 
 2. Attempt to restore the session while the clock is wrong. Restore the correct clock and retry, then relaunch. If a grant has expired or been revoked, authorize the same identity again in Ring. Do not sign out or reset the wallet as part of recovery.
 3. Verify that the original contact, profile, receiving address, and balance are still present, and that private payment requests can be exchanged again. A new payment must still require normal approval.
 4. Repeat with a backward clock change. After correcting the clock, verify that identity publication and payment-request presentation retry normally instead of waiting for the old future timestamp.
-5. Separately verify that explicitly signing out and switching identities retains the normal isolation between identities.
+5. After a failed restoration, open the profile from the home header and authorize the same identity through Ring without signing out. The recovery flow must remain reachable and preserve the profile and contact labels.
+6. Repeat failed restoration, then authorize a different identity through Ring. Even if its profile cannot load, the previous identity's name, avatar, and contact labels must not appear. Also verify normal explicit sign-out and identity switching.
 
 ## Travel, daylight saving, and reminders
 
