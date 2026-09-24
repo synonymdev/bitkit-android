@@ -3180,12 +3180,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pubky auth deeplink shows identity required toast without a usable secret key`() = test {
+    fun `pubky auth deeplink shows Pubky Ring toast without a usable secret key`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
-        whenever(context.getString(R.string.pubky_auth__no_identity)).thenReturn("Pubky Identity Required")
-        whenever(context.getString(R.string.pubky_auth__no_identity_desc)).thenReturn("Create a Pubky identity")
+        whenever(context.getString(R.string.pubky_auth__use_ring)).thenReturn("Use Pubky Ring")
+        whenever(context.getString(R.string.pubky_auth__use_ring_desc)).thenReturn("Open Pubky Ring")
         advanceUntilIdle()
 
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
@@ -3193,10 +3193,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertNull(sut.currentSheet.value)
+        verify(context, never()).getString(R.string.pubky_auth__no_identity)
         verify(toastManager).enqueue(
             check {
-                assertEquals("Pubky Identity Required", it.title)
-                assertEquals("Create a Pubky identity", it.description)
+                assertEquals("Use Pubky Ring", it.title)
+                assertEquals("Open Pubky Ring", it.description)
             }
         )
     }

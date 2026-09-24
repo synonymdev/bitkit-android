@@ -5639,11 +5639,20 @@ class AppViewModel @Inject constructor(
         val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
         if (isSignup && rejectPubkySignupForExistingIdentity()) return
 
-        if (!isSignup && (pubkyRepo.publicKey.value == null || !pubkyRepo.hasSecretKey())) {
+        if (!isSignup && pubkyRepo.publicKey.value == null) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.pubky_auth__no_identity),
                 description = context.getString(R.string.pubky_auth__no_identity_desc),
+            )
+            return
+        }
+
+        if (!isSignup && !pubkyRepo.hasSecretKey()) {
+            ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.pubky_auth__use_ring),
+                description = context.getString(R.string.pubky_auth__use_ring_desc),
             )
             return
         }

@@ -713,6 +713,8 @@
     <string name="pubky_auth__no_identity">Pubky Identity Required</string>
     <string name="pubky_auth__no_identity_desc">Create a Pubky identity in your profile to approve auth requests.</string>
     <string name="pubky_auth__signup_description">Create a new Pubky identity on this homeserver. Only continue if you trust it.</string>
+    <string name="pubky_auth__use_ring">Use Pubky Ring</string>
+    <string name="pubky_auth__use_ring_desc">Bitkit can\'t read the key for this pubky from Pubky Ring. Open Pubky Ring to approve this request.</string>
     <string name="security__backup_button">Back Up</string>
     <string name="security__backup_funds">Now that you have some funds in your wallet, it is time to back up your money!</string>
     <string name="security__backup_funds_no">There are no funds in your wallet yet, but you can create a backup if you wish.</string>
