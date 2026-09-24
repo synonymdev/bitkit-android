@@ -42,6 +42,7 @@ import to.bitkit.services.JadeTransport
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -286,6 +287,22 @@ class JadeRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         verify(jadeService, atLeastOnce()).disconnect()
         verify(jadeService, never()).getAccountExport(any(), any(), any())
+        assertNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `reconnecting a jade restored with another seed adds no wallet`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport(xpub = "zpubOther"))
+        val sut = createRepo()
+
+        val result = sut.autoReconnect(preferredTransport = TransportType.USB)
+
+        assertIs<HwWalletMismatchError>(result.exceptionOrNull())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull(), any())
+        verify(jadeService, atLeastOnce()).disconnect()
         assertNull(sut.state.value.connected)
     }
 

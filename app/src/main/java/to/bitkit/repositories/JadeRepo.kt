@@ -623,7 +623,7 @@ class JadeRepo @Inject constructor(
             }
             if (result.isSuccess) return result.getOrThrow()
             val error = result.exceptionOrNull() ?: error("Jade connection failed without an error")
-            if (error !is JadeIdentityMismatchError) throw error
+            if (error !is JadeIdentityMismatchError && error !is HwWalletMismatchError) throw error
             lastError = error
         }
         throw checkNotNull(lastError) { "No Jade connection was attempted" }
@@ -654,6 +654,7 @@ class JadeRepo @Inject constructor(
             }
             val known = if (version.jadeState.isUnlocked()) {
                 val xpubs = exportAccounts()
+                rejectOtherWallet(xpubs, expected)
                 addOrUpdateKnownDevice(device, version, xpubs)
             } else {
                 // Still locked, so its keys cannot be read: only an entry already holding them is usable.
@@ -683,6 +684,13 @@ class JadeRepo @Inject constructor(
         if (expectedHardwareId != null && expectedHardwareId != version.efuseMac) {
             rejectDevice(JadeIdentityMismatchError())
         }
+    }
+
+    private fun rejectOtherWallet(fetchedXpubs: Map<String, String>, expected: KnownDevice?) {
+        // The efuse MAC survives a wipe, so a re-seeded Jade passes the hardware check. A reconnect must
+        // not quietly add its new seed as another wallet: pairing that stays an explicit Add.
+        val expectedXpubs = expected?.xpubs?.values?.toSet()?.takeIf { it.isNotEmpty() } ?: return
+        if (fetchedXpubs.values.none { it in expectedXpubs }) rejectDevice(HwWalletMismatchError())
     }
 
     private fun rejectDevice(error: Throwable): Nothing = throw error
