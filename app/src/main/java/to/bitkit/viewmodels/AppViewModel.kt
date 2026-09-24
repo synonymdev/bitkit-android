@@ -191,10 +191,12 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PubkyService
+import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
+import to.bitkit.ui.pushNotification
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
@@ -876,7 +878,7 @@ class AppViewModel @Inject constructor(
 
     private fun handlePaykitAllowanceEvent(event: PaykitAllowanceEvent) {
         when (event) {
-            is PaykitAllowanceEvent.PaidAutomatically -> toast(
+            is PaykitAllowanceEvent.PaidAutomatically -> notifyAllowanceEvent(
                 type = Toast.ToastType.LIGHTNING,
                 title = context.getString(R.string.subscriptions__allowance_executed_title),
                 description = context.getString(R.string.subscriptions__allowance_executed_description)
@@ -885,7 +887,7 @@ class AppViewModel @Inject constructor(
                 testTag = "AllowancePaidToast",
             )
 
-            is PaykitAllowanceEvent.LimitReached -> toast(
+            is PaykitAllowanceEvent.LimitReached -> notifyAllowanceEvent(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.subscriptions__allowance_limit_title),
                 description = context.getString(R.string.subscriptions__allowance_limit_description)
@@ -896,6 +898,15 @@ class AppViewModel @Inject constructor(
 
             PaykitAllowanceEvent.LedgerChanged -> Unit
         }
+    }
+
+    /**
+     * Allowance events post a system notification when allowed, as on iOS: the request sheet that opens right after a
+     * limit is reached would cover an in-app toast. Without the permission they fall back to a toast.
+     */
+    private fun notifyAllowanceEvent(type: Toast.ToastType, title: String, description: String, testTag: String) {
+        if (context.pushNotification(title, description) != ID_NOTIFICATION_SKIPPED) return
+        toast(type = type, title = title, description = description, testTag = testTag)
     }
 
     private fun allowanceFiatAmount(sats: ULong): String =
