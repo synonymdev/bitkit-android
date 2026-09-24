@@ -810,7 +810,7 @@ private fun PaymentRequestSummary(
     modifier: Modifier = Modifier,
 ) {
     val profile = uiState.contactPaymentProfile ?: return
-    val note = uiState.paymentRequestNote?.takeIf { it.isNotBlank() }
+    val note = uiState.paymentRequestNote?.trim()?.takeIf { it.isNotEmpty() }
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
