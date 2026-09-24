@@ -970,6 +970,33 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adoptRingIdentity should mark profile setup pending when the pubky has no profile`() = test {
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertEquals(false, result.getOrNull())
+        assertTrue(profileSetupPending.value)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `adoptRingIdentity should clear profile setup pending when the pubky has a profile`() = test {
+        profileSetupPending.value = true
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile()))
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertEquals(true, result.getOrNull())
+        assertFalse(profileSetupPending.value)
+    }
+
+    @Test
     fun `initialize should clear an adopted identity that is gone from pubky ring`() = test {
         stubAdoptedRingSource()
         whenever(sharedPubkyClient.listRingIdentities())

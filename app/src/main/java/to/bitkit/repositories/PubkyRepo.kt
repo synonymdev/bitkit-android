@@ -337,7 +337,10 @@ class PubkyRepo @Inject constructor(
             Logger.info("Adopted ring identity for '${redacted(publicKey)}'", context = TAG)
             loadProfile()
             loadContacts()
-            _profile.value != null
+            val hasProfile = _profile.value != null
+            runSuspendCatching { settingsStore.setPubkyProfileSetupPending(!hasProfile) }
+                .onFailure { Logger.warn("Failed to save pending profile setup", it, context = TAG) }
+            hasProfile
         }.onFailure {
             runCatching { keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
         }
