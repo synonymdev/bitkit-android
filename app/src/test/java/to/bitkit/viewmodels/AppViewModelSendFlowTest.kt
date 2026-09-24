@@ -259,7 +259,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
-    private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+    private val nonCanonicalTestPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     private val signupAuthUrl =
         "pubkyring://signup?hs=homeserver&relay=https://relay&secret=request&caps=/pub/example/:rw"
     private val legacyAuthorizedSignupAuthUrl = signupAuthUrl.replace("pubkyring://", "pubkyauth://")
@@ -2874,14 +2875,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         advanceUntilIdle()
         sut.mainScreenEffect.test {
-            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            sut.handleDeeplinkIntent(
+                Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$nonCanonicalTestPublicKey".toUri()),
+            )
             assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
             advanceUntilIdle()
 
             pubkyPublicKey.value = testPublicKey
             pubkyContactsLoadVersion.value = 1L
             pubkyContactsLoadCompletionVersion.value = 1L
-            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            sut.handleDeeplinkIntent(
+                Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$nonCanonicalTestPublicKey".toUri()),
+            )
             assertEquals(MainScreenEffect.Navigate(Routes.Profile), awaitItem())
         }
         verify(pubkyRepo, never()).loadContacts()
@@ -2894,7 +2899,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val initialized = CompletableDeferred<Unit>()
         whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
         sut.mainScreenEffect.test {
-            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            sut.handleDeeplinkIntent(
+                Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$nonCanonicalTestPublicKey".toUri()),
+            )
             runCurrent()
             expectNoEvents()
 

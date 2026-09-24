@@ -11,11 +11,17 @@ import kotlin.test.assertNull
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class PubkyContactLinkTest {
-    private val key = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    private val key = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+    private val nonCanonicalKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
     @Test
     fun `accepts raw prefixed and encoded keys`() {
-        listOf(key.removePrefix("pubky"), key, key.uppercase(), key.replace("pubky", "%70ubky")).forEach { value ->
+        listOf(
+            nonCanonicalKey.removePrefix("pubky"),
+            nonCanonicalKey,
+            nonCanonicalKey.uppercase(),
+            nonCanonicalKey.replace("pubky", "%70ubky"),
+        ).forEach { value ->
             assertEquals(key, PubkyContactLink.publicKey("bitkit://contact?pubky=$value".toUri()))
         }
     }
