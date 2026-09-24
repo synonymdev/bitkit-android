@@ -256,10 +256,10 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `onProceedWithoutRestore should exit restore flow`() = test {
         val testError = Exception("Test error")
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(Result.failure(testError))
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Settled, sut.restoreState.value)
 
         sut.onProceedWithoutRestore(onDone = {})
         advanceUntilIdle()

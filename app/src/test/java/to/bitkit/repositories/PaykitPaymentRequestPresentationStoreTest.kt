@@ -1,15 +1,17 @@
 package to.bitkit.repositories
 
+import kotlinx.serialization.SerializationException
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.verifyBlocking
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     companion object {
@@ -19,7 +21,7 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `saving replaces corrupt presentation state`() = test {
+    fun `loading or saving corrupt subscription state preserves it`() = test {
         val keychain = mock<Keychain>()
         var storedValue = "not-json"
         whenever(keychain.loadString(KEY)).thenAnswer { storedValue }
@@ -30,10 +32,10 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
         val sut = PaykitPaymentRequestPresentationStore(keychain)
         val requestId = PaykitPaymentRequestId("request", COUNTERPARTY, "bitkit/server")
 
-        assertTrue(sut.load(IDENTITY).isEmpty())
-        sut.save(IDENTITY, setOf(requestId))
-
-        assertEquals(setOf(requestId), sut.load(IDENTITY))
-        verifyBlocking(keychain) { upsertString(KEY, storedValue) }
+        assertFailsWith<SerializationException> { sut.load(IDENTITY) }
+        assertFailsWith<SerializationException> { sut.save(IDENTITY, setOf(requestId)) }
+        assertFailsWith<SerializationException> { sut.backupSnapshot() }
+        assertEquals("not-json", storedValue)
+        verify(keychain, never()).upsertString(eq(KEY), any())
     }
 }

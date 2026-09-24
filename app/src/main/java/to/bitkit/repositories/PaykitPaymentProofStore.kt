@@ -1,12 +1,14 @@
 package to.bitkit.repositories
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,7 +17,6 @@ class PaykitPaymentProofStore @Inject constructor(
     private val keychain: Keychain,
 ) {
     companion object {
-        private const val TAG = "PaykitPaymentProofStore"
         private val KEY = Keychain.Key.PAYKIT_PENDING_PAYMENT_PROOFS.name
     }
 
@@ -24,13 +25,12 @@ class PaykitPaymentProofStore @Inject constructor(
         val proofs: List<PendingPaykitPaymentProof> = emptyList(),
     )
 
+    private val _backupStateVersion = MutableStateFlow(0L)
+    val backupStateVersion = _backupStateVersion.asStateFlow()
+
     fun load(): List<PendingPaykitPaymentProof> {
         val value = keychain.loadString(KEY) ?: return emptyList()
-        return runCatching { Json.decodeFromString<State>(value).proofs }
-            .getOrElse {
-                Logger.warn("Discarded corrupt pending Paykit payment proof state", it, context = TAG)
-                emptyList()
-            }
+        return Json.decodeFromString<State>(value).proofs
     }
 
     fun completedRequestProofKindsAwaitingSubmission(
@@ -49,6 +49,7 @@ class PaykitPaymentProofStore @Inject constructor(
         } else {
             keychain.upsertString(KEY, Json.encodeToString(State(proofs)))
         }
+        _backupStateVersion.update { it + 1 }
     }
 
     fun hasPendingProofs(): Boolean = keychain.exists(KEY)

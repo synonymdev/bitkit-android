@@ -2,6 +2,9 @@
 
 package to.bitkit.repositories
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -9,8 +12,8 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.ExperimentalTime
@@ -26,11 +29,9 @@ data class PaykitSubscriptionPresentationState(
 class PaykitPaymentRequestPresentationStore @Inject constructor(
     private val keychain: Keychain,
 ) {
-    companion object {
-        private const val TAG = "PaykitPaymentRequestPresentationStore"
-    }
-
     private val mutex = Mutex()
+    private val _backupStateVersion = MutableStateFlow(0L)
+    val backupStateVersion = _backupStateVersion.asStateFlow()
 
     @Serializable
     private data class State(
@@ -65,6 +66,7 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
                 ?: State()
             val state = current.copy(idsByIdentity = current.idsByIdentity + (normalizedIdentity to ids.toList()))
             keychain.upsertString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name, Json.encodeToString(state))
+            _backupStateVersion.update { it + 1 }
         }
     }
 
@@ -75,12 +77,7 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
             ?: return PaykitSubscriptionPresentationState()
         val state = decode(value).subscriptionStatesByIdentity[normalizedIdentity]
             ?: return PaykitSubscriptionPresentationState()
-        val acceptedAt = state.acceptances.mapNotNull { acceptance ->
-            runCatching { Instant.parse(acceptance.acceptedAt) }
-                .getOrNull()
-                ?.let { acceptance.id to it }
-        }
-            .toMap()
+        val acceptedAt = state.acceptances.associate { it.id to Instant.parse(it.acceptedAt) }
         return PaykitSubscriptionPresentationState(
             acceptedAt = acceptedAt,
             presentedProposalIds = state.presentedProposalIds.toSet(),
@@ -107,12 +104,38 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
                     (normalizedIdentity to storedState),
             )
             keychain.upsertString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name, Json.encodeToString(state))
+            _backupStateVersion.update { it + 1 }
         }
     }
 
-    private fun decode(value: String): State = runCatching { Json.decodeFromString<State>(value) }
-        .getOrElse {
-            Logger.warn("Discarded corrupt Paykit payment request presentation state", context = TAG)
-            State()
+    fun backupSnapshot(): Map<String, PaykitPaymentStateBackup.Subscription> {
+        val value = keychain.loadString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name) ?: return emptyMap()
+        return decode(value).subscriptionStatesByIdentity.mapValues { (_, state) ->
+            PaykitPaymentStateBackup.Subscription(
+                acceptances = state.acceptances.map { PaykitPaymentStateBackup.Acceptance(it.id, it.acceptedAt) },
+                presentedProposalIds = state.presentedProposalIds.toSet(),
+            )
         }
+    }
+
+    suspend fun restoreBackup(subscriptions: Map<String, PaykitPaymentStateBackup.Subscription>) {
+        val restored = subscriptions.mapValues { (_, state) ->
+            state.restored()
+            SubscriptionState(
+                acceptances = state.acceptances.map { SubscriptionAcceptance(it.id, it.acceptedAt) },
+                presentedProposalIds = state.presentedProposalIds.toList(),
+            )
+        }
+        mutex.withLock {
+            val state = State(subscriptionStatesByIdentity = restored)
+            keychain.upsertString(Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name, Json.encodeToString(state))
+            _backupStateVersion.update { it + 1 }
+        }
+    }
+
+    private fun decode(value: String): State = Json.decodeFromString<State>(value).also { state ->
+        state.subscriptionStatesByIdentity.values.forEach { subscription ->
+            subscription.acceptances.forEach { Instant.parse(it.acceptedAt) }
+        }
+    }
 }

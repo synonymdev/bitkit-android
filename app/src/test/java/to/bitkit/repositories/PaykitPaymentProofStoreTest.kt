@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import kotlinx.serialization.SerializationException
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -9,7 +10,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
-import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class PaykitPaymentProofStoreTest : BaseUnitTest() {
     companion object {
@@ -17,11 +18,12 @@ class PaykitPaymentProofStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `loading corrupt state returns no proofs`() {
+    fun `loading corrupt state fails without deleting it`() = test {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(KEY)).thenReturn("not-json")
 
-        assertTrue(PaykitPaymentProofStore(keychain).load().isEmpty())
+        assertFailsWith<SerializationException> { PaykitPaymentProofStore(keychain).load() }
+        verify(keychain, never()).delete(KEY)
     }
 
     @Test

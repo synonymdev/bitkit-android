@@ -38,6 +38,7 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.hwWalletNames
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
@@ -49,6 +50,7 @@ import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.MetadataBackupV1
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
@@ -101,6 +103,11 @@ class BackupRepo @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
     private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
     private val privatePaykitAddressReservationRepo: Provider<PrivatePaykitAddressReservationRepo>,
+    private val paykitPaymentProofRepo: Provider<PaykitPaymentProofRepo>,
+    private val paykitPaymentProofStore: PaykitPaymentProofStore,
+    private val paykitPaymentRequestRepo: Provider<PaykitPaymentRequestRepo>,
+    private val paykitPresentationStore: PaykitPaymentRequestPresentationStore,
+    private val keychain: Keychain,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
     private val clock: Clock,
@@ -343,6 +350,8 @@ class BackupRepo @Inject constructor(
         dataListenerJobs.add(observeBackupChanges(pubkyRepo.backupStateVersion, BackupCategory.METADATA))
         dataListenerJobs.add(observeBackupChanges(privatePaykitRepo.get().backupStateVersion, BackupCategory.WALLET))
         dataListenerJobs.add(observeBackupChanges(paykitSdkService.backupStateVersion, BackupCategory.WALLET))
+        dataListenerJobs.add(observeBackupChanges(paykitPaymentProofStore.backupStateVersion, BackupCategory.WALLET))
+        dataListenerJobs.add(observeBackupChanges(paykitPresentationStore.backupStateVersion, BackupCategory.WALLET))
         dataListenerJobs.add(
             observeBackupChanges(
                 privatePaykitAddressReservationRepo.get().backupStateVersion,
@@ -610,6 +619,9 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun getWalletBackupDataBytes(): ByteArray {
+        check(!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
+            "Wallet backup restore is incomplete"
+        }
         val transfers = db.transferDao().getAll()
         val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot().getOrThrow()
         val paykitSdkBackupState = privatePaykitRepo.get().backupSnapshot().getOrThrow()
@@ -622,6 +634,10 @@ class BackupRepo @Inject constructor(
             paykitSdkBackupState = paykitSdkBackupState,
             watchOnlyAccounts = watchOnlyAccountSnapshot.accounts,
             watchOnlyAccountAllocationState = watchOnlyAccountSnapshot.allocationState,
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = paykitPresentationStore.backupSnapshot(),
+                pendingProofs = paykitPaymentProofRepo.get().backupSnapshot(),
+            ),
         )
 
         return json.encodeToString(payload).toByteArray()
@@ -638,6 +654,10 @@ class BackupRepo @Inject constructor(
         val categoriesNeedingRewrite = mutableSetOf<BackupCategory>()
 
         val result = runCatching {
+            // Block replacement backups even if downloading the wallet backup fails.
+            if (!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
+                keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
+            }
             performRestore(BackupCategory.METADATA) { dataBytes ->
                 val restored = restoreMetadataBackup(dataBytes, onCacheRestored)
                 if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.METADATA
@@ -653,9 +673,17 @@ class BackupRepo @Inject constructor(
                 widgetsStore.restoreFromBackup(parsed)
                 parsed.createdAt
             }
+            var didRestoreWalletBackup = false
             performRestore(BackupCategory.WALLET) { dataBytes ->
+                didRestoreWalletBackup = true
                 restoreWalletBackup(dataBytes)
             }.getOrThrow()
+            if (!didRestoreWalletBackup) {
+                check(keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name).isNullOrEmpty()) {
+                    "Wallet backup restore is incomplete"
+                }
+                keychain.delete(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
+            }
             performRestore(BackupCategory.BLOCKTANK) { dataBytes ->
                 val parsed = json.decodeFromString<BlocktankBackupV1>(String(dataBytes))
                 blocktankRepo.restoreFromBackup(parsed)
@@ -735,7 +763,13 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
+        keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, String(dataBytes))
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
+        parsed.paykitPaymentState?.let {
+            paykitPaymentRequestRepo.get().clear()
+            paykitPresentationStore.restoreBackup(it.subscriptions)
+            paykitPaymentProofRepo.get().restoreBackup(it.pendingProofs)
+        }
         db.transferDao().upsert(parsed.transfers)
         watchOnlyAccountRepo.restore(
             parsed.watchOnlyAccounts.orEmpty(),
@@ -748,10 +782,12 @@ class BackupRepo @Inject constructor(
         val addressReservationRepo = privatePaykitAddressReservationRepo.get()
         addressReservationRepo.restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType).getOrThrow()
         val privateRepo = privatePaykitRepo.get()
-        privateRepo.restoreBackup(parsed.paykitSdkBackupState).onFailure {
-            Logger.warn("Failed to restore Paykit SDK backup state", it, context = TAG)
-        }
+        privateRepo.restoreBackup(parsed.paykitSdkBackupState).getOrThrow()
         addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()
+        if (parsed.paykitPaymentState != null) {
+            pubkyRepo.publicKey.value?.let { paykitPaymentRequestRepo.get().activate(it) }
+        }
+        keychain.delete(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
         Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
         return parsed.createdAt
     }
@@ -865,6 +901,7 @@ class BackupRepo @Inject constructor(
             .onFailure {
                 Logger.debug("Restore error for: '$category'", context = TAG)
             }
+            .getOrThrow()
 
         cacheStore.updateBackupStatus(category) {
             it.copy(running = false, synced = createdAtTimestamp, required = createdAtTimestamp)

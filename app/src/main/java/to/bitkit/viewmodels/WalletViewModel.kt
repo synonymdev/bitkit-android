@@ -215,10 +215,13 @@ class WalletViewModel @Inject constructor(
         _restoreState.update { RestoreState.InProgress.Metadata }
         runCatching {
             restoreFromMostRecentBackup()
+        }.onSuccess {
+            _restoreState.update { RestoreState.Completed }
         }.onFailure {
             Logger.error("Restore from backup failed", it, context = TAG)
+            ToastEventBus.send(it)
+            _restoreState.update { RestoreState.Settled }
         }
-        _restoreState.update { RestoreState.Completed }
         backupRepo.setRestorePending(false)
     }
 
@@ -239,6 +242,7 @@ class WalletViewModel @Inject constructor(
             restoreFromRNRemoteBackup()
         } else {
             backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
+                .getOrThrow()
         }
 
         pubkyRepo.initialize()
@@ -250,6 +254,7 @@ class WalletViewModel @Inject constructor(
     }.onFailure {
         Logger.warn("RN remote backup restore failed, falling back to VSS", it, context = TAG)
         backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
+            .getOrThrow()
     }
 
     fun onRestoreContinue() {
