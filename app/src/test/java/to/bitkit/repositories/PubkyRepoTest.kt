@@ -72,9 +72,10 @@ import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
 class PubkyRepoTest : BaseUnitTest() {
     companion object {
         // Valid 52-char z-base-32 key (+ "pubky" prefix = 57 chars)
-        private const val VALID_CONTACT_KEY_A = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        private const val VALID_CONTACT_KEY_B = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        private const val VALID_SELF_KEY = "pubky5rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val VALID_CONTACT_KEY_A = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+        private const val NON_CANONICAL_CONTACT_KEY_A = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val VALID_CONTACT_KEY_B = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+        private const val VALID_SELF_KEY = "pubky5rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
     }
 
     private lateinit var sut: PubkyRepo
@@ -1631,6 +1632,21 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `addContact should canonicalize key before persistence`() = test {
+        authenticateForTesting()
+        val profile = PubkyProfile.placeholder(NON_CANONICAL_CONTACT_KEY_A)
+        whenever { pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_A) }.thenReturn(emptyList())
+
+        val result = sut.addContact(NON_CANONICAL_CONTACT_KEY_A, existingProfile = profile)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_CONTACT_KEY_A, sut.contacts.value.single().publicKey)
+        verifyBlocking(pubkyService) {
+            saveContact(VALID_CONTACT_KEY_A, profile.name, emptyList())
+        }
+    }
+
+    @Test
     fun `refreshContactReceiverPaths should update saved contact receiver paths`() = test {
         authenticateForTesting()
         val contact = PubkyProfile(
@@ -1653,6 +1669,34 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService) {
             saveContact(
                 VALID_CONTACT_KEY_B,
+                "Alice",
+                listOf("bitkit/wallet", "bitkit/server"),
+            )
+        }
+    }
+
+    @Test
+    fun `refreshContactReceiverPaths should preserve a loaded noncanonical key`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(
+                createContactRecord(
+                    publicKey = NON_CANONICAL_CONTACT_KEY_A,
+                    profile = createPaykitProfile("Alice"),
+                ),
+            ),
+        )
+        sut.loadContacts()
+        clearInvocations(pubkyService)
+        whenever(pubkyService.discoverRelevantReceiverPaths(NON_CANONICAL_CONTACT_KEY_A))
+            .thenReturn(listOf("bitkit/wallet", "bitkit/server"))
+
+        val result = sut.refreshContactReceiverPaths(NON_CANONICAL_CONTACT_KEY_A)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) {
+            saveContact(
+                NON_CANONICAL_CONTACT_KEY_A,
                 "Alice",
                 listOf("bitkit/wallet", "bitkit/server"),
             )

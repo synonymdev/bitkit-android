@@ -6035,7 +6035,7 @@ internal fun resolvePastedPubkyRoute(
 ): Routes? {
     if (!isPaykitEnabled) return null
 
-    val normalizedKey = PubkyPublicKeyFormat.normalized(input) ?: return null
+    val normalizedKey = PubkyPublicKeyFormat.canonicalized(input) ?: return null
 
     if (PubkyPublicKeyFormat.matches(normalizedKey, ownPublicKey)) {
         return Routes.Profile

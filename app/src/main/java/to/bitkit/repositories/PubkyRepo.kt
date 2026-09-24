@@ -853,7 +853,7 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
-        val prefixedKey = runCatching { requireAddableContactPublicKey(publicKey) }
+        val prefixedKey = runCatching { requireCanonicalAddableContactPublicKey(publicKey) }
             .getOrElse { return Result.failure(it) }
         return resolveContactProfile(prefixedKey)
             .map { it ?: PubkyProfile.placeholder(prefixedKey) }
@@ -871,7 +871,7 @@ class PubkyRepo @Inject constructor(
         existingProfile: PubkyProfile? = null,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
-            val prefixedKey = requireAddableContactPublicKey(
+            val prefixedKey = requireCanonicalAddableContactPublicKey(
                 publicKey = publicKey,
                 allowExisting = existingProfile != null,
             )
@@ -1455,6 +1455,18 @@ class PubkyRepo @Inject constructor(
 
     private fun requireAddableContactPublicKey(publicKey: String, allowExisting: Boolean = false): String {
         val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
+        return requireValidAddableContactPublicKey(prefixedKey, allowExisting)
+    }
+
+    private fun requireCanonicalAddableContactPublicKey(
+        publicKey: String,
+        allowExisting: Boolean = false,
+    ): String {
+        val prefixedKey = PubkyPublicKeyFormat.canonicalized(publicKey)
+        return requireValidAddableContactPublicKey(prefixedKey, allowExisting)
+    }
+
+    private fun requireValidAddableContactPublicKey(prefixedKey: String?, allowExisting: Boolean): String {
         contactValidationError(prefixedKey, allowExisting)?.let { throw it }
         return checkNotNull(prefixedKey) { "Normalized pubky key is required" }
     }
