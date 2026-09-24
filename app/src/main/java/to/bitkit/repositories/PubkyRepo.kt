@@ -295,7 +295,10 @@ class PubkyRepo @Inject constructor(
         if (!adoptedSourceCheckMutex.tryLock()) return
         try {
             val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: return
-            val ringPubkys = sharedPubkyClient.listRingIdentities().getOrElse { return }
+            val ringPubkys = sharedPubkyClient.listRingIdentities().getOrElse {
+                Logger.warn("Failed to list ring identities", it, context = TAG)
+                return
+            }
             if (ringPubkys.any { "${SharedPubkyContract.RING_SOURCE_PREFIX}$it" == reference }) return
 
             Logger.warn("Adopted ring identity '${redacted(reference)}' is gone, clearing session", context = TAG)
