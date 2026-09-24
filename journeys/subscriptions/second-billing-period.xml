@@ -1,0 +1,23 @@
+<journey name="Second Billing Period">
+  <description>
+    The next period of a monthly subscription comes due without waiting a month. Dev Settings carries
+    a demo clock offset, in debug builds only, that moves subscription scheduling forward by a number
+    of days: proposal anchors and expiry, acceptance, due periods, renewal dates and due
+    notifications. One-time requests, invoices, payments and allowances keep real time, and the offset
+    is Off by default. Requires the active "Journey Sub" from review-and-subscribe.xml with its first
+    period paid on acceptance, and both instances on a debug build.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with "Journey Sub" active and its first period paid, per review-and-subscribe.xml</action>
+    <action>On the creator instance, open the drawer menu, tap Settings (testTag "DrawerSettings"), then Dev Settings (testTag "DevSettings"), and scroll to the PAYKIT section</action>
+    <action>Verify the "Demo clock offset (days)" row (testTag "DemoClockOffset") reads "Off"</action>
+    <action>Tap the row and pick 31 (testTag "DemoClockOffset-31"); verify the row now reads "31"</action>
+    <action>Repeat the two previous steps on the payer instance</action>
+    <action>On the payer instance, return home and verify within about ten seconds that the next period arrives as a Payment Request for "Journey Sub" over 5,000 sats, opening the Swipe To Pay sheet or waiting in the bell (testTag "PaymentRequestsBell")</action>
+    <action>Pay it and verify Bitcoin Sent</action>
+    <action>On the creator instance, verify the payment arrives, as the Received Instant Bitcoin sheet or a new row in Activity</action>
+    <action>On the payer instance, open the drawer menu, tap Subscriptions and tap the "Journey Sub" row</action>
+    <action>Verify the PAYMENTS section lists two payments, today's and one dated a month later, and that RENEWS moved a further month ahead</action>
+    <action>On both instances, open Dev Settings again and set the demo clock offset back to Off (testTag "DemoClockOffset-0"); verify the row reads "Off"</action>
+  </actions>
+</journey>
