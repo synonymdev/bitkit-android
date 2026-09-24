@@ -953,6 +953,19 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adoptRingIdentity should not sign up when the identity record check fails`() = test {
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer { throw TestAppError("Relay unavailable") }
+        whenever(pubkyService.hasIdentityRecord(ringPubky)).thenAnswer { throw TestAppError("No responses") }
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(keychain) { delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+    }
+
+    @Test
     fun `adoptRingIdentity should sign up a ring identity without a published record`() = test {
         val httpClient = identityHttpClient()
         sut = createSut(httpClient)

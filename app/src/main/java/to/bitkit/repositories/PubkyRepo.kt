@@ -325,7 +325,9 @@ class PubkyRepo @Inject constructor(
             )
 
             runSuspendCatching { pubkyService.signIn(secretKeyHex) }.getOrElse {
-                val hasIdentityRecord = runSuspendCatching { pubkyService.hasIdentityRecord(publicKey) }.getOrNull()
+                val hasIdentityRecord = runSuspendCatching { pubkyService.hasIdentityRecord(publicKey) }
+                    .onFailure { Logger.warn("Failed to check ring identity record", it, context = TAG) }
+                    .getOrNull()
                 if (hasIdentityRecord != false) throw it
                 Logger.warn("Signing up ring identity without a published record", it, context = TAG)
                 val homegate = fetchHomegateSignupCode()
