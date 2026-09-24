@@ -17,6 +17,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import to.bitkit.App
 import to.bitkit.R
+import to.bitkit.di.SubscriptionClock
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH
@@ -34,7 +35,7 @@ import kotlin.time.Instant
 @Singleton
 class PaykitSubscriptionNotificationScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val clock: Clock,
+    @SubscriptionClock private val clock: Clock,
     private val workClient: PaykitSubscriptionWorkClient,
 ) {
     private companion object {

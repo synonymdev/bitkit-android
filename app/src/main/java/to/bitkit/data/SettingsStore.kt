@@ -6,6 +6,7 @@ import androidx.datastore.dataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +34,7 @@ private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
 private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore("local_settings")
 
 @Singleton
+@Suppress("TooManyFunctions")
 class SettingsStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
@@ -44,6 +46,7 @@ class SettingsStore @Inject constructor(
     val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
     }
+    val demoClockOffsetDays: Flow<Int> = localStore.data.map { it[DEMO_CLOCK_OFFSET_DAYS_KEY] ?: 0 }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
@@ -107,6 +110,10 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
     }
 
+    suspend fun setDemoClockOffsetDays(days: Int) {
+        localStore.edit { it[DEMO_CLOCK_OFFSET_DAYS_KEY] = days }
+    }
+
     suspend fun addLastUsedTag(newTag: String) {
         store.updateData { currentSettings ->
             val combinedTags = (listOf(newTag) + currentSettings.lastUsedTags).distinct()
@@ -140,6 +147,7 @@ class SettingsStore @Inject constructor(
         private const val MAX_LAST_USED_TAGS = 10
         private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
+        private val DEMO_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("demo_clock_offset_days")
     }
 }
 

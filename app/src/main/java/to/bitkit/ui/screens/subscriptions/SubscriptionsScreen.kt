@@ -102,11 +102,11 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.DemoClock
 import to.bitkit.viewmodels.AppViewModel
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
-import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -945,7 +945,7 @@ private fun SubscriptionCancel(
         SubscriptionProviderCard(
             subscription = subscription,
             contact = contact,
-            subtitle = subscription.rowSubtitle(Clock.System.now()),
+            subtitle = subscription.rowSubtitle(DemoClock.subscriptionNow()),
             onClick = onDetails,
         )
         FillHeight()
@@ -1117,11 +1117,11 @@ private fun PaykitSubscription.renewalText(now: Instant): String {
 
 @Composable
 private fun rememberSubscriptionNow(subscriptions: ImmutableList<PaykitSubscription>): Instant {
-    var now by remember(subscriptions) { mutableStateOf(Clock.System.now()) }
+    var now by remember(subscriptions) { mutableStateOf(DemoClock.subscriptionNow()) }
     LaunchedEffect(subscriptions, now) {
         val nextTransition = nextSubscriptionTransition(subscriptions, now) ?: return@LaunchedEffect
         delay(nextTransition - now)
-        now = Clock.System.now()
+        now = DemoClock.subscriptionNow()
     }
     return now
 }
