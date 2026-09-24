@@ -296,6 +296,7 @@ fun ContentView(
                     appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.APP_FOREGROUND)
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
+                    appViewModel.checkAdoptedPubkySource()
                     appViewModel.refreshPublicPaykitEndpoints()
                     appViewModel.refreshPrivatePaykitEndpoints()
                     appViewModel.startPaykitPaymentRequestPolling()

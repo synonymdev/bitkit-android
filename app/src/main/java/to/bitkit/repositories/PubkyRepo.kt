@@ -94,6 +94,7 @@ class PubkyRepo @Inject constructor(
     private val initializeMutex = Mutex()
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
+    private val adoptedSourceCheckMutex = Mutex()
     private var isServiceInitialized = false
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
@@ -284,16 +285,27 @@ class PubkyRepo @Inject constructor(
         _adoptedSourceLost.update { false }
     }
 
-    private suspend fun checkAdoptedSourcePresent() {
-        val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: return
-        val ringPubkys = sharedPubkyClient.listRingIdentities().getOrElse { return }
-        if (ringPubkys.any { "${SharedPubkyContract.RING_SOURCE_PREFIX}$it" == reference }) return
+    suspend fun checkAdoptedSource(): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            if (initializationReady.isCompleted) checkAdoptedSourcePresent()
+        }.onFailure { Logger.warn("Failed to check adopted ring identity", it, context = TAG) }
+    }
 
-        Logger.warn("Adopted ring identity '${redacted(reference)}' is gone, clearing session", context = TAG)
-        runSuspendCatching { pubkyService.clearSessionAccess() }
-            .onFailure { Logger.warn("Failed to clear adopted session access", it, context = TAG) }
-        clearLocalState()
-        _adoptedSourceLost.update { true }
+    private suspend fun checkAdoptedSourcePresent() {
+        if (!adoptedSourceCheckMutex.tryLock()) return
+        try {
+            val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: return
+            val ringPubkys = sharedPubkyClient.listRingIdentities().getOrElse { return }
+            if (ringPubkys.any { "${SharedPubkyContract.RING_SOURCE_PREFIX}$it" == reference }) return
+
+            Logger.warn("Adopted ring identity '${redacted(reference)}' is gone, clearing session", context = TAG)
+            runSuspendCatching { pubkyService.clearSessionAccess() }
+                .onFailure { Logger.warn("Failed to clear adopted session access", it, context = TAG) }
+            clearLocalState()
+            _adoptedSourceLost.update { true }
+        } finally {
+            adoptedSourceCheckMutex.unlock()
+        }
     }
 
     suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {

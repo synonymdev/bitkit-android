@@ -962,6 +962,34 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `checkAdoptedSource should clear an adopted identity removed from pubky ring after startup`() = test {
+        stubAdoptedRingSource()
+        whenever(sharedPubkyClient.listRingIdentities())
+            .thenReturn(Result.success(persistentListOf(VALID_CONTACT_KEY_A.removePrefix("pubky"))))
+
+        val result = sut.checkAdoptedSource()
+
+        assertTrue(result.isSuccess)
+        assertTrue(sut.adoptedSourceLost.value)
+        verifyBlocking(pubkyService) { clearSessionAccess() }
+    }
+
+    @Test
+    fun `checkAdoptedSource should skip while initialization is running`() = test {
+        val imported = CompletableDeferred<String>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer { imported.await() }
+        stubAdoptedRingSource()
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.success(persistentListOf()))
+        val repo = createSut()
+
+        repo.checkAdoptedSource()
+
+        assertFalse(repo.adoptedSourceLost.value)
+        verifyBlocking(pubkyService, never()) { clearSessionAccess() }
+    }
+
+    @Test
     fun `snapshotSessionBackupState should return null when no pubky credentials exist`() = test {
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)

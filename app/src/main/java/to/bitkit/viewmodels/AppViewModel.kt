@@ -665,6 +665,10 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { refreshPrivatePaykitEndpointsIfEnabled("foreground") }
     }
 
+    fun checkAdoptedPubkySource() {
+        viewModelScope.launch { pubkyRepo.checkAdoptedSource() }
+    }
+
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
         val settings = settingsStore.data.first()
         if (!isPaykitEnabled.value || !settings.sharesPublicPaykitEndpoints) return
