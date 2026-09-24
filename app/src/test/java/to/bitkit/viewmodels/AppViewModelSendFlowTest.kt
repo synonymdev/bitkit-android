@@ -353,6 +353,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever { pubkyRepo.republishIdentityIfNeeded() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.hasIdentity() }.thenAnswer { pubkyPublicKey.value != null }
@@ -2910,16 +2911,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pubky ring callback deeplink is ignored when Paykit UI is disabled`() = test {
-        val intent = Intent(Intent.ACTION_VIEW, "bitkit://pubky-auth/success".toUri())
-
-        sut.handleDeeplinkIntent(intent)
-        advanceUntilIdle()
-
-        verify(pubkyRepo, never()).handleAuthCallback(any())
-    }
-
-    @Test
     fun `pubky auth deeplink shows approval sheet when Paykit UI is enabled`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
@@ -3189,11 +3180,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pubky auth deeplink keeps Ring-only guidance for an imported identity`() = test {
+    fun `pubky auth deeplink shows Pubky Ring toast without a usable secret key`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
-        whenever(context.getString(R.string.profile__auth_approval_ring_only)).thenReturn("Use Ring")
+        whenever(context.getString(R.string.pubky_auth__use_ring)).thenReturn("Use Pubky Ring")
+        whenever(context.getString(R.string.pubky_auth__use_ring_desc)).thenReturn("Open Pubky Ring")
         advanceUntilIdle()
 
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
@@ -3201,10 +3193,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertNull(sut.currentSheet.value)
+        verify(context, never()).getString(R.string.pubky_auth__no_identity)
         verify(toastManager).enqueue(
             check {
-                assertEquals("Use Ring", it.title)
-                assertNull(it.description)
+                assertEquals("Use Pubky Ring", it.title)
+                assertEquals("Open Pubky Ring", it.description)
             }
         )
     }

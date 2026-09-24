@@ -1,7 +1,5 @@
 package to.bitkit.ui.screens.profile
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,8 +12,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,23 +26,23 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.models.PubkyProfile
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.HorizontalSpacer
-import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.shared.util.screen
@@ -50,7 +50,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-private const val PUBKY_RING_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.pubky.ring"
 private const val BG_IMAGE_WIDTH_FRACTION = 0.83f
 private const val TAG_OFFSET_X = -0.179f
 private const val TAG_OFFSET_Y = 0.13f
@@ -68,17 +67,11 @@ fun PubkyChoiceScreen(
     onNavigateToProfile: () -> Unit,
     onBackClick: () -> Unit,
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is PubkyChoiceEffect.OpenRingAuth -> runCatching {
-                    context.startActivity(it.intent)
-                }.onFailure {
-                    viewModel.onRingLaunchFailed()
-                }
                 PubkyChoiceEffect.NavigateToCreateProfile -> onNavigateToCreateProfile()
                 PubkyChoiceEffect.NavigateToContactImportOverview -> onNavigateToContactImportOverview()
                 PubkyChoiceEffect.NavigateToPayContacts -> onNavigateToPayContacts()
@@ -97,13 +90,7 @@ fun PubkyChoiceScreen(
         uiState = uiState,
         onBackClick = onBackClick,
         onCreateProfile = onNavigateToCreateProfile,
-        onImportWithRing = { viewModel.startRingAuth() },
-        onCancelAuth = { viewModel.cancelAuth() },
-        onDownloadRing = {
-            viewModel.dismissRingNotInstalledDialog()
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PUBKY_RING_PLAY_STORE_URL)))
-        },
-        onDismissDialog = { viewModel.dismissRingNotInstalledDialog() },
+        onIdentityClick = viewModel::onIdentityClick,
     )
 }
 
@@ -112,10 +99,7 @@ private fun Content(
     uiState: PubkyChoiceUiState,
     onBackClick: () -> Unit,
     onCreateProfile: () -> Unit,
-    onImportWithRing: () -> Unit,
-    onCancelAuth: () -> Unit,
-    onDownloadRing: () -> Unit,
-    onDismissDialog: () -> Unit,
+    onIdentityClick: (String) -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -153,7 +137,12 @@ private fun Content(
                 actions = { DrawerNavIcon() },
             )
 
-            Column(modifier = Modifier.padding(horizontal = 32.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 32.dp)
+            ) {
                 VerticalSpacer(24.dp)
 
                 Display(
@@ -164,44 +153,52 @@ private fun Content(
                 VerticalSpacer(8.dp)
 
                 BodyM(
-                    text = stringResource(R.string.profile__choice_description),
+                    text = stringResource(
+                        if (uiState.identities.isEmpty()) {
+                            R.string.profile__choice_description
+                        } else {
+                            R.string.profile__choice_description_ring
+                        }
+                    ),
                     color = Colors.White64,
                 )
                 VerticalSpacer(24.dp)
 
-                if (uiState.isLoadingAfterAuth) {
-                    LoadingState(text = stringResource(R.string.profile__choice_loading_profile))
-                } else if (uiState.isWaitingForRing) {
-                    WaitingForRingState(onCancel = onCancelAuth)
-                } else {
-                    OptionCard(
+                when {
+                    uiState.isLoading || uiState.adoptingPubky != null ->
+                        LoadingState(text = stringResource(R.string.profile__choice_loading_profile))
+
+                    uiState.identities.isEmpty() -> OptionCard(
                         iconResId = R.drawable.ic_user_plus,
                         text = stringResource(R.string.profile__choice_create),
                         onClick = onCreateProfile,
+                        caption = stringResource(R.string.profile__choice_create_caption),
                         modifier = Modifier.testTag("PubkyChoiceCreate")
                     )
-                    VerticalSpacer(8.dp)
-                    OptionCard(
-                        iconResId = R.drawable.ic_lock_key,
-                        text = stringResource(R.string.profile__choice_import),
-                        onClick = onImportWithRing,
-                        modifier = Modifier.testTag("PubkyChoiceImport")
-                    )
+
+                    else -> uiState.identities.forEachIndexed { index, identity ->
+                        if (index > 0) VerticalSpacer(8.dp)
+                        OptionCard(
+                            iconResId = R.drawable.ic_lock_key,
+                            text = identity.name,
+                            onClick = { onIdentityClick(identity.pubky) },
+                            caption = identity.caption,
+                            trailing = {
+                                PubkyContactAvatar(
+                                    profile = PubkyProfile.forDisplay(
+                                        publicKey = identity.pubky,
+                                        name = identity.name,
+                                        imageUrl = identity.imageUrl,
+                                    ),
+                                    size = 32.dp,
+                                )
+                            },
+                            modifier = Modifier.testTag("PubkyChoiceIdentity")
+                        )
+                    }
                 }
             }
-
-            FillHeight()
         }
-    }
-
-    if (uiState.showRingNotInstalledDialog) {
-        AppAlertDialog(
-            title = stringResource(R.string.profile__ring_not_installed_title),
-            text = stringResource(R.string.profile__ring_not_installed_description),
-            confirmText = stringResource(R.string.profile__ring_download),
-            onConfirm = onDownloadRing,
-            onDismiss = onDismissDialog,
-        )
     }
 }
 
@@ -211,6 +208,8 @@ private fun OptionCard(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    caption: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -235,28 +234,14 @@ private fun OptionCard(
             )
         }
         HorizontalSpacer(16.dp)
-        BodyMSB(text = text, color = Colors.White)
+        Column(modifier = Modifier.weight(1f)) {
+            caption?.let { Caption13Up(text = it, color = Colors.White64) }
+            BodyMSB(text = text, color = Colors.White)
+        }
+        if (trailing != null) {
+            trailing()
+        }
     }
-}
-
-@Composable
-private fun WaitingForRingState(onCancel: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        GradientCircularProgressIndicator(modifier = Modifier.size(20.dp))
-        HorizontalSpacer(12.dp)
-        BodyM(
-            text = stringResource(R.string.profile__choice_waiting_ring),
-            color = Colors.White64,
-        )
-    }
-    VerticalSpacer(16.dp)
-    SecondaryButton(
-        text = stringResource(R.string.common__cancel),
-        onClick = onCancel,
-    )
 }
 
 @Composable
@@ -273,16 +258,36 @@ private fun LoadingState(text: String) {
 
 @Preview(showBackground = true)
 @Composable
-private fun Preview() {
+private fun PreviewIdentities() {
     AppThemeSurface {
         Content(
-            uiState = PubkyChoiceUiState(),
+            uiState = PubkyChoiceUiState(
+                isLoading = false,
+                identities = persistentListOf(
+                    RingIdentity(
+                        pubky = "a967rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roimbr4",
+                        caption = "A967...MBR4",
+                        name = "Satoshi Nakamoto",
+                        imageUrl = null,
+                    ),
+                ),
+            ),
             onBackClick = {},
             onCreateProfile = {},
-            onImportWithRing = {},
-            onCancelAuth = {},
-            onDownloadRing = {},
-            onDismissDialog = {},
+            onIdentityClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewCreate() {
+    AppThemeSurface {
+        Content(
+            uiState = PubkyChoiceUiState(isLoading = false),
+            onBackClick = {},
+            onCreateProfile = {},
+            onIdentityClick = {},
         )
     }
 }
