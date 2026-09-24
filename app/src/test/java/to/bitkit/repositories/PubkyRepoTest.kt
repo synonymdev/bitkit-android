@@ -217,6 +217,33 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `signup clears a stale ring reference before registering`() = test {
+        val events = mutableListOf<String>()
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        stubSignupKeys()
+        stubAdoptedRingSource()
+        whenever(keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenAnswer { events += "clear" }
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenAnswer {
+            events += "register"
+            registeredSession
+        }
+        whenever(pubkyService.activateRegisteredIdentity(registeredSession)).thenAnswer { events += "activate" }
+
+        assertTrue(sut.approveSignupAuth(directSignupRequest()).isSuccess)
+        assertEquals(listOf("clear", "register", "activate"), events)
+    }
+
+    @Test
+    fun `signup keeps the ring reference when already signed in`() = test {
+        stubAdoptedRingSource()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session")
+
+        assertTrue(sut.approveSignupAuth(directSignupRequest()).isFailure)
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+        verifyBlocking(pubkyService, never()) { registerIdentity(any(), any(), any()) }
+    }
+
+    @Test
     fun `Ring signup stops when registration fails`() = test {
         val request = ringSignupRequest()
         stubSignupKeys()

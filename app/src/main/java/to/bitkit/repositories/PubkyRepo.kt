@@ -912,6 +912,7 @@ class PubkyRepo @Inject constructor(
                 val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
                 if (hasIdentity()) throw PubkyAlreadySignedInError
 
+                keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
                 settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
                 val registeredSession = pubkyService.registerIdentity(
                     secretKeyHex = secretKeyHex,
