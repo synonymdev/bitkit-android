@@ -145,8 +145,8 @@ When the user provides custom instructions after `--`:
   #### Manual Tests
   #### Automated Checks
   ```
-- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), and any temporary journey, one per line as an unchecked checkbox (`- [ ] `), then `new`, `updated`, or `temporary`, then the bare journey file name in backticks, then a dash and what the journey proves.
-- Use `temporary` only when the journey needs a code change or data that will not exist on master (a debug hook, an injected delay, a patched build, or fixture data). Put the journey in a collapsed `<details>` block directly under its line, as [synonymdev/bitkit-android#1310](https://github.com/synonymdev/bitkit-android/pull/1310) did, and do not commit the file. A setup that needs a code change carries that change as a `.diff` in the same block. A reproduction that stays valid after the fix is committed and listed as `new` or `updated`.
+- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line as an unchecked checkbox (`- [ ] `), then `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
+- List a journey as `temporary` only when the user asks for one in custom instructions or a `.ai/pr/` file: a reproduction that needs a code change or data that will not exist on master. Put its XML, and any code change as a `.diff`, in a collapsed `<details>` block under its line, and do not commit it. Never add one unasked; at most, suggest it to the author and ask whether they agree.
 - Reference journeys by bare file name only, never the full path. Only when two listed journeys share the same name, prefix the shortest leading path segment(s) that disambiguate them, the same rule as test files.
 - A PR with a user-visible change adds or updates the journey that proves it, and any journey whose route the diff changes; list them all. Reviewers drive the listed journeys on a device.
 - `#### Journeys` takes one of two empty values: `N/A — no user-visible behaviour change.` when the diff changes nothing a user can see, and `N/A — not drivable; see Manual Tests.` when it does but every flow it touches needs a capability the Capabilities table in `journeys/README.md` does not list. The second value requires a matching step under `#### Manual Tests`.
@@ -195,45 +195,18 @@ Example:
 ```
 
 Concrete style target:
-````md
+```md
 ### QA Notes
 #### Journeys
 - [ ] new `send-amount-over-balance.xml` — error shows before the 15 s timeout
 - [ ] updated `lightning-transfer-detail.xml` — Connection opens Channel Detail
-- [ ] temporary `send-race.xml` — reproduces the race with an injected delay
-
-<details>
-<summary>send-race.xml</summary>
-
-```diff
-diff --git a/app/src/main/java/to/bitkit/viewmodels/SendViewModel.kt b/app/src/main/java/to/bitkit/viewmodels/SendViewModel.kt
---- a/app/src/main/java/to/bitkit/viewmodels/SendViewModel.kt
-+++ b/app/src/main/java/to/bitkit/viewmodels/SendViewModel.kt
-@@ -12,6 +12,7 @@
-     fun send() {
-+        delay(2.seconds) // temporary: reproduce the race
-         payInvoice()
-diff --git a/journeys/send/send-race.xml b/journeys/send/send-race.xml
-new file mode 100644
---- /dev/null
-+++ b/journeys/send/send-race.xml
-@@ -0,0 +1,6 @@
-+<journey name="send race">
-+  <description>Reproduces the send race. Requires the delay in this diff. Do not commit.</description>
-+  <actions>
-+    <action>Launch the app on the wallet home screen</action>
-+  </actions>
-+</journey>
-```
-
-</details>
 #### Manual Tests
 - [ ] Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities
 #### Automated Checks
 - added `TransferViewModelTest.kt` — rejects amounts over the spending balance
 - updated `SendFlowTest.kt` — fixed-amount invoice skips the Amount screen
 - removed `OldFlowTest.kt` — flow no longer exists
-````
+```
 
 **Preview Section (conditional):**
 Only include if the PR template (`.github/pull_request_template.md`) contains a `### Preview` heading:
