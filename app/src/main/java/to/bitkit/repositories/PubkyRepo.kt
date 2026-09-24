@@ -862,6 +862,10 @@ class PubkyRepo @Inject constructor(
         managedSecretKeyFor(publicKey) != null
     }.getOrDefault(false)
 
+    suspend fun hasStoredSecretKey(): Boolean = withContext(ioDispatcher) {
+        keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
     suspend fun hasIdentity(): Boolean = withContext(ioDispatcher) {
         _publicKey.value != null ||
             !keychain.loadString(Keychain.Key.PAYKIT_SESSION.name).isNullOrEmpty() ||

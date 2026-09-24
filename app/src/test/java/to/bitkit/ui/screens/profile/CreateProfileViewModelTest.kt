@@ -35,6 +35,7 @@ class CreateProfileViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.deriveKeys() }.thenReturn(Result.success("pubkyalice" to "secret"))
+        whenever { pubkyRepo.hasStoredSecretKey() }.thenReturn(false)
         whenever { pubkyRepo.fetchRemoteProfile(any()) }.thenReturn(Result.success(null))
 
         sut = CreateProfileViewModel(
@@ -70,6 +71,20 @@ class CreateProfileViewModelTest : BaseUnitTest() {
     fun `save should not publish after a failed lookup for a signed-in pubky`() = test {
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
         whenever { pubkyRepo.fetchRemoteProfile(any()) }.thenReturn(Result.failure(Exception("timeout")))
+        sut = CreateProfileViewModel(context = context, pubkyRepo = pubkyRepo)
+
+        sut.onNameChange("Alice")
+        advanceUntilIdle()
+        sut.save()
+        advanceUntilIdle()
+
+        verify(pubkyRepo, never()).createIdentity(any(), any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `save should not publish after a failed lookup for a stored pubky`() = test {
+        whenever(pubkyRepo.hasStoredSecretKey()).thenReturn(true)
+        whenever(pubkyRepo.fetchRemoteProfile(any())).thenReturn(Result.failure(Exception("timeout")))
         sut = CreateProfileViewModel(context = context, pubkyRepo = pubkyRepo)
 
         sut.onNameChange("Alice")

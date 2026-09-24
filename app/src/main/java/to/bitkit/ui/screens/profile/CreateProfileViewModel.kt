@@ -50,13 +50,13 @@ class CreateProfileViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             pubkyRepo.publicKey.value?.let { publicKey ->
                 _uiState.update { it.copy(derivedPublicKey = publicKey) }
-                checkForExistingProfile(publicKey, hasSession = true)
+                checkForExistingProfile(publicKey, isSignedUp = true)
                 return@launch
             }
             pubkyRepo.deriveKeys()
                 .onSuccess { (publicKey, _) ->
                     _uiState.update { it.copy(derivedPublicKey = publicKey) }
-                    checkForExistingProfile(publicKey, hasSession = false)
+                    checkForExistingProfile(publicKey, isSignedUp = pubkyRepo.hasStoredSecretKey())
                 }
                 .onFailure {
                     Logger.error("Failed to derive keys", it, context = TAG)
@@ -70,11 +70,7 @@ class CreateProfileViewModel @Inject constructor(
         }
     }
 
-    /**
-     * With a session the homeserver is known, so a failed lookup is not treated as "no profile":
-     * saving then could replace an existing profile with an empty one.
-     */
-    private suspend fun checkForExistingProfile(publicKey: String, hasSession: Boolean) {
+    private suspend fun checkForExistingProfile(publicKey: String, isSignedUp: Boolean) {
         pubkyRepo.fetchRemoteProfile(publicKey)
             .onSuccess { profile ->
                 if (profile != null) {
@@ -96,7 +92,7 @@ class CreateProfileViewModel @Inject constructor(
                 }
             }
             .onFailure { error ->
-                if (!hasSession) {
+                if (!isSignedUp) {
                     Logger.debug("No existing remote profile found for '$publicKey'", context = TAG)
                     _uiState.update { it.copy(isLoading = false) }
                     return@onFailure
