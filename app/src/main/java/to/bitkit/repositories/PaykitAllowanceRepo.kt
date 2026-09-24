@@ -65,12 +65,16 @@ enum class PaykitAllowanceAutoPayResult {
 
     /** The on-chain payment was broadcast and recorded. */
     COMPLETED,
+
+    /** The payee has not published a payment list newer than the one last paid; the next refresh tries again. */
+    DEFERRED,
 }
 
 sealed class PaykitAllowanceError(message: String) : AppError(message) {
     data object ContactNotLinked : PaykitAllowanceError("The contact has no linked Paykit receiver")
     data object Unavailable : PaykitAllowanceError("The allowance is unavailable")
     data object PaymentAlreadyRecorded : PaykitAllowanceError("A payment for this request is already in progress")
+    data object PaymentListPending : PaykitAllowanceError("The payee has not published a new payment list yet")
 }
 
 /**
@@ -401,7 +405,7 @@ class PaykitAllowanceRepo @Inject constructor(
             when (result) {
                 PaykitAllowanceAutoPayResult.STARTED, PaykitAllowanceAutoPayResult.COMPLETED -> handledAny = true
                 PaykitAllowanceAutoPayResult.MANUAL -> manualRequestSignatures[request.id] = signature
-                PaykitAllowanceAutoPayResult.NOT_COVERED -> Unit
+                PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
             }
         }
         if (handledAny) refresh()

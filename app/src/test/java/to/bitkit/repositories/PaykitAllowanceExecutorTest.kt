@@ -292,6 +292,16 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `request waits without acceptance while the payee's payment list is pending`() = test {
+        whenever(payer.resolve(any(), any())).thenReturn(Result.failure(PaykitAllowanceError.PaymentListPending))
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.DEFERRED, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+    }
+
+    @Test
     fun `blocked candidate stays manual without acceptance`() = test {
         candidates = listOf(candidate(blocked = AllowanceAccountingBlock.SharedRule("amount_outside_range")))
 
