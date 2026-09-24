@@ -81,7 +81,7 @@ class PubkyChoiceViewModel @Inject constructor(
     private fun loadIdentities() {
         viewModelScope.launch {
             val pubkys = pubkyRepo.ringIdentities().getOrElse {
-                Logger.warn("Listing ring identities failed", it, context = TAG)
+                Logger.warn("Failed to list ring identities", it, context = TAG)
                 persistentListOf()
             }
             val identities = pubkys.map { pubky ->
