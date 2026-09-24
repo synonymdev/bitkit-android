@@ -161,6 +161,9 @@ import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitAllowanceError
+import to.bitkit.repositories.PaykitAllowanceEvent
+import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitSubscription
@@ -189,6 +192,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PubkyService
 import to.bitkit.ui.Routes
+import to.bitkit.ui.components.AllowanceRoute
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -257,6 +261,7 @@ class AppViewModel @Inject constructor(
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
+    private val paykitAllowanceRepo: PaykitAllowanceRepo,
     private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
     private val paykitPaymentRequestDiagnostics: PaykitPaymentRequestDiagnostics,
     private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
@@ -550,6 +555,7 @@ class AppViewModel @Inject constructor(
         observeInitialPaykitLinkBursts()
         observeIncomingPaykitPaymentRequests()
         observePaykitOnchainPaymentResolution()
+        observePaykitAllowanceEvents()
         observeSendEvents()
         viewModelScope.launch {
             checkCriticalAppUpdate()
@@ -695,6 +701,7 @@ class AppViewModel @Inject constructor(
                 preserveRequestedPaymentRequest = paymentRequestIdentity == null,
             )
             paymentRequestIdentity = null
+            paykitAllowanceRepo.deactivate()
             try {
                 paykitPaymentRequestRepo.clear()
             } finally {
@@ -716,6 +723,7 @@ class AppViewModel @Inject constructor(
         isPaymentRequestIdentityActivating = true
         try {
             paykitPaymentRequestRepo.activate(state.publicKey)
+            paykitAllowanceRepo.activate(state.publicKey)
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
             paymentRequestIdentity = state.publicKey
             refreshPrivateOnlyPaykitReceiverMarker("contact sync")
@@ -852,9 +860,53 @@ class AppViewModel @Inject constructor(
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
         paykitPaymentRequestRepo.refresh().onSuccess {
+            paykitAllowanceRepo.refresh()
+            if (paykitAllowanceRepo.processIncomingRequests(paykitPaymentRequestRepo.pendingRequests.value)) {
+                paykitPaymentRequestRepo.refresh()
+            }
             presentNextIncomingPaykitPaymentRequest()
         }
     }
+
+    private fun observePaykitAllowanceEvents() {
+        viewModelScope.launch {
+            paykitAllowanceRepo.events.collect(::handlePaykitAllowanceEvent)
+        }
+    }
+
+    private fun handlePaykitAllowanceEvent(event: PaykitAllowanceEvent) {
+        when (event) {
+            is PaykitAllowanceEvent.PaidAutomatically -> toast(
+                type = Toast.ToastType.LIGHTNING,
+                title = context.getString(R.string.subscriptions__allowance_executed_title),
+                description = context.getString(R.string.subscriptions__allowance_executed_description)
+                    .replace("{amount}", allowanceFiatAmount(event.amountSats))
+                    .replace("{name}", allowanceContactName(event.counterparty)),
+                testTag = "AllowancePaidToast",
+            )
+
+            is PaykitAllowanceEvent.LimitReached -> toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.subscriptions__allowance_limit_title),
+                description = context.getString(R.string.subscriptions__allowance_limit_description)
+                    .replace("{amount}", allowanceFiatAmount(event.amountSats))
+                    .replace("{name}", allowanceContactName(event.counterparty)),
+                testTag = "AllowanceLimitToast",
+            )
+
+            PaykitAllowanceEvent.LedgerChanged -> Unit
+        }
+    }
+
+    private fun allowanceFiatAmount(sats: ULong): String =
+        currencyRepo.convertSatsToFiat(sats.toLong()).getOrNull()?.let { "${it.symbol}${it.formatted}" }
+            ?: "$sats sats"
+
+    private fun allowanceContactName(publicKey: String): String =
+        pubkyRepo.contacts.value.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
+            ?.name
+            ?.takeIf { it.isNotBlank() }
+            ?: PubkyPublicKeyFormat.display(publicKey)
 
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
@@ -982,12 +1034,19 @@ class AppViewModel @Inject constructor(
     private suspend fun presentNextIncomingPaykitPaymentRequest() {
         if (isPresentingPaymentRequest || isPaymentRequestPresentationBlocked()) return
         if (requestedPaymentRequestId == null) {
+            paykitAllowanceRepo.proposalForPresentation()?.let {
+                showSheet(Sheet.Allowance(AllowanceRoute.Review(it.id)))
+                return
+            }
             paykitPaymentRequestRepo.automaticSubscriptionProposals().firstOrNull()?.let {
                 showSheet(Sheet.Subscription(SubscriptionRoute.Review(it.id)))
                 return
             }
         }
-        val requests = paymentRequestsForPresentation() ?: return
+        val requests = paymentRequestsForPresentation()
+            ?.filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) }
+            ?.takeIf { it.isNotEmpty() }
+            ?: return
         val generation = paymentRequestPresentationGeneration
         isPresentingPaymentRequest = true
         activePaymentRequestPresentationGeneration = generation
@@ -3952,20 +4011,47 @@ class AppViewModel @Inject constructor(
             }
         }
 
+        val allowanceAttemptId = beginManualAllowancePayment(preparedPaymentProofRequest).getOrElse {
+            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> proceedWithOnchainPayment(
                 incomingPaymentRequest,
                 preparedPaymentProofRequest,
                 contactPaymentContext,
                 amount,
+                allowanceAttemptId,
             )
 
             SendMethod.LIGHTNING -> proceedWithLightningPayment(
                 incomingPaymentRequest,
                 preparedPaymentProofRequest,
                 amount,
+                allowanceAttemptId,
             )
         }
+    }
+
+    /**
+     * Reports a manual payment of an incoming request to the allowance ledger, so an allowance never pays the same
+     * request again. Only a payment the ledger already holds stops this one; any other ledger failure is logged.
+     */
+    private suspend fun beginManualAllowancePayment(request: PaykitPaymentRequest?): Result<String?> {
+        if (request == null) return Result.success(null)
+        return paykitAllowanceRepo.beginManualPayment(request, paymentProofPreparation().endpointIdentifier)
+            .recoverCatching {
+                if (it is PaykitAllowanceError.PaymentAlreadyRecorded) throw it
+                Logger.warn("Failed to report a manual payment to the allowance ledger", it, context = TAG)
+                null
+            }
+    }
+
+    private fun finishManualAllowancePayment(attemptId: String?, succeeded: Boolean?, transactionId: String? = null) {
+        if (attemptId == null) return
+        viewModelScope.launch { paykitAllowanceRepo.finishManualPayment(attemptId, succeeded, transactionId) }
     }
 
     private suspend fun proceedWithOnchainPayment(
@@ -3973,6 +4059,7 @@ class AppViewModel @Inject constructor(
         preparedPaymentProofRequest: PaykitPaymentRequest?,
         contactPaymentContext: ContactPaymentContext?,
         amount: ULong,
+        allowanceAttemptId: String?,
     ) {
         val address = _sendUiState.value.address
         val tags = _sendUiState.value.selectedTags
@@ -3991,6 +4078,7 @@ class AppViewModel @Inject constructor(
             onBroadcast = { txId ->
                 proofRequest = null
                 completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
+                finishManualAllowancePayment(allowanceAttemptId, succeeded = true, transactionId = txId)
             },
         ).onSuccess { txId ->
             Logger.info("Onchain send result txid: $txId", context = TAG)
@@ -4013,6 +4101,7 @@ class AppViewModel @Inject constructor(
                 incomingPaymentRequest = incomingPaymentRequest,
                 preparedPaymentProofRequest = proofRequest,
                 contactPaymentContext = contactPaymentContext,
+                allowanceAttemptId = allowanceAttemptId,
             )
         }
     }
@@ -4023,10 +4112,12 @@ class AppViewModel @Inject constructor(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
         contactPaymentContext: ContactPaymentContext?,
+        allowanceAttemptId: String? = null,
     ) {
         val amount = _sendUiState.value.amount
         if (paymentStarted && !error.isDefiniteOnchainPreBroadcastFailure()) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = null)
             uncertainOnchainPaymentRequestId = incomingPaymentRequest?.id
             paykitPaymentProofRepo.onchainPaymentResolutions.value
                 .firstOrNull { it.requestId == incomingPaymentRequest?.id }
@@ -4044,6 +4135,7 @@ class AppViewModel @Inject constructor(
         if (paymentStarted) {
             incomingPaymentRequest?.let { paykitPaymentProofRepo.failOnchainPayment(it) }
         }
+        finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
         cancelPaymentProofPreparation(preparedPaymentProofRequest)
         Logger.error("Error sending onchain payment", error, context = TAG)
         if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
@@ -4062,6 +4154,7 @@ class AppViewModel @Inject constructor(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
         amount: ULong,
+        allowanceAttemptId: String?,
     ) {
         val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
         val paymentAmount = if (decodedInvoice.amountSatoshis > 0uL) null else amount
@@ -4088,6 +4181,8 @@ class AppViewModel @Inject constructor(
         }
 
         val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
+        // The node's payment events settle this attempt by hash, like an automatic one.
+        allowanceAttemptId?.let { paykitAllowanceRepo.manualLightningPaymentSent(it, paymentHash) }
 
         sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
             proofRequest = null
@@ -4114,6 +4209,7 @@ class AppViewModel @Inject constructor(
                 return@onFailure
             }
             cancelPaymentProofPreparation(proofRequest)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
             lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
             Logger.error("Error sending lightning payment", error, context = TAG)
