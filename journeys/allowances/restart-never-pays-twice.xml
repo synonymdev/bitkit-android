@@ -1,0 +1,21 @@
+<journey name="Restart Never Pays Twice">
+  <description>
+    Killing the payer while an automatic payment is in flight must never lead to a second payment
+    after relaunch. The app records the request as taken before it hands the payment to the node, so
+    on relaunch it either sees the node finish the first attempt or hands the request back to the
+    payer as an ordinary Payment Request; it never starts a new automatic attempt. The kill has to
+    land within about two seconds of the request arriving, which the app log marks with "Handed an
+    allowance payment to the node".
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with the $5 a payment, $50 a month allowance Active, per set-and-accept.xml</action>
+    <action>On the payer instance, start tailing the app log for "Handed an allowance payment to the node" so the kill can follow it at once</action>
+    <action>On the payee instance, send the payer a one-time Payment Request for $2 with the note "Devlog3"</action>
+    <action>As soon as the log line appears on the payer, run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Relaunch the payer with `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity` and wait for the node to come back up</action>
+    <action>Verify no "Payment Executed" notification is posted for a second attempt after the relaunch</action>
+    <action>Open the drawer menu, tap Subscriptions and tap the Payments tab; verify "Devlog3" is listed exactly once</action>
+    <action>On the payee instance, verify at most one $2.00 payment arrives for "Devlog3"</action>
+    <action>If the kill landed before the node took the payment: on the payer, verify "Devlog3" comes back as an ordinary Payment Request in the bell (testTag "PaymentRequestsBell") rather than being paid automatically, and dismiss it</action>
+  </actions>
+</journey>
