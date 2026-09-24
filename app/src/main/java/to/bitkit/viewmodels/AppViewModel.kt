@@ -74,6 +74,7 @@ import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
@@ -1362,7 +1363,7 @@ class AppViewModel @Inject constructor(
                     is Event.ProbeSuccessful -> Unit
                     is Event.SpliceFailed -> Unit
                     is Event.SplicePending -> Unit
-                    is Event.SyncCompleted -> handleSyncCompleted()
+                    is Event.SyncCompleted -> handleSyncCompleted(event)
                     is Event.SyncProgress -> Unit
                 }
             }.onFailure { e ->
@@ -1450,7 +1451,9 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleSyncCompleted() {
+    private suspend fun handleSyncCompleted(event: Event.SyncCompleted) {
+        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen()
+
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
         val needsPostMigrationSync = migrationService.needsPostMigrationSync()
@@ -1478,6 +1481,16 @@ class AppViewModel @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to reconcile private Paykit on-chain activity", it, context = TAG)
             }
+    }
+
+    private suspend fun completePendingRestoreActivitySeen() {
+        val restoreStartedAt = settingsStore.data.first().pendingRestoreActivitySeenSince
+        if (restoreStartedAt <= 0) return
+        Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
+        // Bounded by the restore start so a payment arriving mid-restore keeps its unseen state.
+        activityRepo.markAllUnseenActivitiesAsSeen(startedBefore = restoreStartedAt.toULong()).onSuccess {
+            settingsStore.update { settings -> settings.copy(pendingRestoreActivitySeenSince = 0) }
+        }
     }
 
     private suspend fun completeRNRemoteBackupRestore() {
@@ -1600,6 +1613,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
         activityRepo.handleOnchainTransactionConfirmed(event.txid, event.details)
+        notifyPaymentReceived(event)
     }
 
     private suspend fun handleOnchainTransactionEvicted(event: Event.OnchainTransactionEvicted) {

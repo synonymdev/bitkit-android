@@ -1059,9 +1059,9 @@ class ActivityRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
-    suspend fun markAllUnseenActivitiesAsSeen(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun markAllUnseenActivitiesAsSeen(startedBefore: ULong? = null): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
-            coreService.activity.markAllUnseenActivitiesAsSeen()
+            coreService.activity.markAllUnseenActivitiesAsSeen(startedBefore)
             notifyActivitiesChanged()
         }.onFailure {
             Logger.error("Failed to mark all activities as seen: $it", it, context = TAG)
