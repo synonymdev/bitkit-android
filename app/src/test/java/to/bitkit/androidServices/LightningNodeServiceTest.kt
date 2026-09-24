@@ -25,10 +25,12 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -453,6 +455,76 @@ class LightningNodeServiceTest : BaseUnitTest() {
 
         val body = paymentNotification.extras?.getString(Notification.EXTRA_TEXT)
         assertEquals($$"Received ₿ 100 ($0.10)", body)
+    }
+
+    @Test
+    fun `confirmed-only onchain receive in background shows notification`() = test {
+        val sheet = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.ONCHAIN,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "confirmed_txid",
+            sats = 5000L,
+        )
+        val notification = NotificationDetails(
+            title = context.getString(R.string.notification__received__title),
+            body = "Received ₿ 5 000",
+        )
+        whenever(notifyPaymentReceivedHandler.invoke(any()))
+            .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowNotification(sheet, notification)))
+        startService()
+        testScheduler.advanceUntilIdle()
+
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        capturedHandler?.invoke(
+            Event.OnchainTransactionConfirmed(
+                txid = "confirmed_txid",
+                blockHash = "block_hash",
+                blockHeight = 100u,
+                confirmationTime = 0uL,
+                details = details,
+            ),
+        )
+        testScheduler.advanceUntilIdle()
+
+        val expectedCommand = NotifyPaymentReceived.Command.Onchain(
+            txid = "confirmed_txid",
+            details = details,
+            confirmationTime = 0uL,
+            includeNotification = true,
+        )
+        verify(notifyPaymentReceivedHandler).invoke(expectedCommand)
+        verify(notifyPaymentReceivedHandler).present(eq(expectedCommand), any(), any())
+        verify(cacheStore).setBackgroundReceive(sheet)
+        val receivedNotifications = Shadows.shadowOf(context.notificationManager).allNotifications.filter {
+            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
+        }
+        assertEquals(1, receivedNotifications.size)
+    }
+
+    @Test
+    fun `skipped confirmed-only onchain receive shows no notification`() = test {
+        whenever(notifyPaymentReceivedHandler.invoke(any()))
+            .thenReturn(Result.success(NotifyPaymentReceived.Result.Skip))
+        startService()
+        testScheduler.advanceUntilIdle()
+
+        capturedHandler?.invoke(
+            Event.OnchainTransactionConfirmed(
+                txid = "old_txid",
+                blockHash = "block_hash",
+                blockHeight = 1u,
+                confirmationTime = 0uL,
+                details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList()),
+            ),
+        )
+        testScheduler.advanceUntilIdle()
+
+        val notification = Shadows.shadowOf(context.notificationManager).allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
+        }
+        assertNull(notification)
+        verify(notifyPaymentReceivedHandler, never()).present(any(), any(), any())
+        verify(cacheStore, never()).setBackgroundReceive(any())
     }
 
     @Test

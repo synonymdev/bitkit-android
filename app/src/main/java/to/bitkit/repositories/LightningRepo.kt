@@ -148,6 +148,9 @@ class LightningRepo @Inject constructor(
     @Volatile
     private var isWiping = false
 
+    @Volatile
+    private var lastKnownNodeId: String? = null
+
     private val channelCache = ConcurrentHashMap<String, ChannelDetails>()
     private val probeOutcomeCache = ConcurrentHashMap<PaymentId, ProbeOutcome>()
     private val probeOutcomeSignal = MutableSharedFlow<ProbeOutcome>(extraBufferCapacity = 64)
@@ -880,6 +883,7 @@ class LightningRepo @Inject constructor(
         lifecycleMutex.withLock {
             stopLocked().mapCatching {
                 Logger.debug("node stopped, calling wipeStorage", context = TAG)
+                lastKnownNodeId = null
                 lightningService.wipeStorage(walletIndex)
                 clearProbeOutcomes()
                 _lightningState.update {
@@ -1732,7 +1736,23 @@ class LightningRepo @Inject constructor(
     }
 
     fun getNodeId(): String? =
-        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.nodeId else null
+        if (_lightningState.value.nodeLifecycleState.isRunning()) {
+            lightningService.nodeId?.also { lastKnownNodeId = it }
+        } else {
+            null
+        }
+
+    /**
+     * Node id of the current node, falling back to the one observed while it last ran.
+     * The id is derived from the wallet mnemonic and only cleared on storage wipe, which is the
+     * single path to another mnemonic, so it always belongs to the active wallet.
+     */
+    fun getLastKnownNodeId(): String? = getNodeId() ?: lastKnownNodeId
+
+    suspend fun awaitNodeId(): String? = lastKnownNodeId
+        ?: executeWhenNodeRunning("awaitNodeId", NODE_ID_WAIT_TIMEOUT) {
+            runCatching { requireNotNull(lightningService.nodeId) { "Node id not available" } }
+        }.getOrNull()?.also { lastKnownNodeId = it }
 
     fun getBalances(): BalanceDetails? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null
@@ -2161,6 +2181,10 @@ class LightningRepo @Inject constructor(
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
+
+        /** Max time to wait for a starting node before its id is treated as unavailable. */
+        private val NODE_ID_WAIT_TIMEOUT = 15.seconds
+
         val SEND_LN_TIMEOUT = 10.seconds
         private val PROBE_TIMEOUT = 60.seconds
         private val PAYMENT_ROUTING_REFRESH_TIMEOUT = 20.seconds

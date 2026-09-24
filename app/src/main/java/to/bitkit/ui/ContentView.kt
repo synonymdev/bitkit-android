@@ -80,7 +80,6 @@ import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
-import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.common.ComingSoonScreen
 import to.bitkit.ui.screens.contacts.AddContactScreen
 import to.bitkit.ui.screens.contacts.AddContactViewModel
@@ -905,7 +904,6 @@ private fun RootNavHost(
             appViewModel = appViewModel,
             onNavigateHomeWidgets = onNavigateHomeWidgets,
         )
-        update()
         recoveryMode(navController, appViewModel)
 
         // TODO extract transferNavigation
@@ -1920,12 +1918,6 @@ private fun NavGraphBuilder.suggestions(
     }
 }
 
-private fun NavGraphBuilder.update() {
-    composableWithDefaultTransitions<Routes.CriticalUpdate> {
-        CriticalUpdateScreen()
-    }
-}
-
 private fun NavGraphBuilder.recoveryMode(
     navController: NavHostController,
     appViewModel: AppViewModel,
@@ -2490,9 +2482,6 @@ sealed interface Routes {
 
     @Serializable
     data object AppStatus : Routes.DeepLinkable
-
-    @Serializable
-    data object CriticalUpdate : Routes.InternalOnly
 
     @Serializable
     data object RecoveryMode : Routes.InternalOnly

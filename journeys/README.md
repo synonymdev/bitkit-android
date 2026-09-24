@@ -4,10 +4,9 @@ A journey is an XML-specified walkthrough of app behaviour, evaluated by an agen
 emulator or device. They are developer-assistance specs: they give an agent a reliable route through
 a flow so it can reproduce a bug, check a change by hand, or show you what a screen does today.
 
-**Journeys are not a QA gate.** Nothing in `.github/workflows` reads `journeys/` — `ui-tests.yml`
-runs the instrumented tests and never touches this directory. They are agent-evaluated and
-non-deterministic, which is why they belong on a manual, developer-triggered run rather than a
-blocking CI gate. An agent runs one on request.
+**Journeys are the QA contract for a PR.** A PR with a user-visible change adds or updates the
+journeys that prove it and lists them in its body, and reviewers drive the listed journeys on a
+device instead of reading a prose walkthrough.
 
 **A journey is not the source of truth.** The `android` CLI ships its own journey documentation
 (`references/journeys.md` in the `android-cli` skill) which says the opposite — "the journey XML is
@@ -110,33 +109,29 @@ Fund a wallet before any amount journey — with a zero balance the caps fall ba
 maximum and the journeys pass for the wrong reason. Per-suite preconditions (Trezor emulator, Pubky
 fixtures, push notifications) live in each suite's README.
 
-## Suites
+## Capabilities
 
-| Suite | Journeys | Notes |
-| --- | --- | --- |
-| [activity](activity) | 1 | Date range sheet under rapid month taps; needs no backend, no README |
-| [amount-limits](amount-limits) | 5 | Number pad caps on all four amount screens, plus preset/unit-switch delete |
-| [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
-| [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
-| [coin-selection](coin-selection) | 1 | Manual coin selection screen; needs 3+ on-chain UTXOs; no README |
-| [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
-| [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
-| [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
-| [lnurl](lnurl) | 1 | LNURL-pay comment kept as the activity note; needs an LNURL-pay endpoint that allows comments; no README |
-| [node-lifecycle](node-lifecycle) | 1 | Detached LDK restart completes; a cancelled RGS server change reconciles and recovers to Running; reads the app log; no README |
-| [notification-permission](notification-permission) | 4 | Background-setup toggles |
-| [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
-| [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
-| [receive](receive) | 1 | Receive sheet tab selection; needs a spending channel, no README |
-| [restore-wallet](restore-wallet) | 1 | Pasting a seed fragment on Restore wallet; needs a wallet-free device; no README |
-| [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
-| [settings](settings) | 1 | Electrum server error toasts; no README |
-| [shop](shop) | 1 | Shop Discover category titles and web view handoff; needs Bitrefill reachable; no README |
-| [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
-| [tags](tags) | 1 | Tag input length cap on an activity; no backend, no README |
-| [transfer](transfer) | 1 | Spending to Savings exit route; needs an open channel and closes it; no README |
-| [transfers](transfers) | 1 | Transfer to Spending settling after the LSP closes the channel; no README |
-| [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
+This table is the authority for what the journey environment provides: a step it covers belongs in a
+journey, and a step it does not is a manual test in the PR body naming the missing capability.
+
+It changes when the environment gains or loses a capability, not when a journey is added, so adding
+a journey does not touch this file. `ls journeys/` is the suite list and each suite's README is its
+own documentation; nothing here restates them. A listing kept here would have to be edited by every
+journey PR, which is what made this file conflict on every merge.
+
+| Capability | Provided by |
+| --- | --- |
+| On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
+| Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
+| Lightning channels, CJIT orders and quoted maxima | the same staging LSP the dev flavor targets, plus its node as an external LN peer — [Backend preconditions](#backend-preconditions), [amount-limits](amount-limits/README.md) |
+| A hardware wallet to pair, watch and sign with | the deterministic Trezor emulator from `bitkit-docker` over the Bridge transport, with the USB attach intent injected by `adb`; USB enumeration, permission grants, the OS picker and BLE are not simulated — [hardware-wallet](hardware-wallet/README.md) |
+| Push notifications to a backgrounded or killed app | an FCM push from a CJIT order paid through `./lsp`, read back with `adb shell dumpsys notification` — [cjit-notifications](cjit-notifications/README.md) |
+| The OS notification-permission dialog | an API 33+ target, reset with `adb shell pm revoke to.bitkit.dev android.permission.POST_NOTIFICATIONS` — [notification-permission](notification-permission/README.md) |
+| An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked on receiver path `bitkit/server` — [payment-requests](payment-requests/README.md) |
+| Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
+| A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
+| LNURL pay, withdraw, channel and auth, and Lightning Addresses | the `bitkit-docker` `lnurl-server` on local regtest, with the app started by `just run docker`, which builds with `E2E=true` and forwards its ports over `adb reverse`; it issues memo invoices, so a check that needs a description-hash invoice needs another endpoint — [lnurl](lnurl) |
+| Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
 
 ## Cross-platform
 
@@ -160,18 +155,25 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
+| `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
+| `onchain-receive/*` | port pending in synonymdev/bitkit-ios#588, which wires `onchainTransactionConfirmed` into the same received-sheet flow but carries no `journeys/` files. Two adaptations when it lands: iOS suppresses replayed historical receives with a `pendingRestoreActivitySeen` flag cleared by the first post-restore on-chain sync, not the one-hour block-timestamp guard used here, so a stale-confirmation step has to drive a restore instead of a clock; and iOS has no foreground-service path, so `confirmed-only-background-notification.xml` has no counterpart |
+| `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
 | `amount-limits/transfer-spending-preset-delete.xml` | not ported yet — the same fix shipped in synonymdev/bitkit-ios#289, so this one should port |
+| `app-update/critical-update-onboarding.xml` | not ported yet — iOS already blocks at the top level in `AppScene`, so the journey applies there once written |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `receive/receive-auto-tab-selection.xml` | not ported — the Auto tab override fix is Android-only so far; iOS parity not checked |
+| `security/pin-lock-on-resume.xml` | not ported yet — iOS already clears the PIN verification on entering the background, so the journey applies; it lands with the iOS side of synonymdev/bitkit-android#1298 |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
+| `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
+| `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
@@ -201,6 +203,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | External amount available | — | `ExternalAmountAvailable` |
 | Background payments setting row | `BackgroundPaymentSettings` | `NotificationsSettings` |
 | Send over-max toast | — *(no tag; assert it from a screenshot)* | `SendAmountExceededToast` |
+| Confirm mnemonic selected slot | `SelectedWord-<n>` | — *(no identifier on `ConfirmWordView` rows)* |
 | Widgets intro screen container | — | `WidgetsOnboarding` |
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |

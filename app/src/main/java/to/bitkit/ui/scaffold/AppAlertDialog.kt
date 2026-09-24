@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.window.DialogProperties
 import to.bitkit.R
+import to.bitkit.ui.LocalIsAppLocked
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Title
@@ -71,6 +72,7 @@ fun AppAlertDialog(
     ),
     textContent: @Composable () -> Unit,
 ) {
+    if (LocalIsAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {

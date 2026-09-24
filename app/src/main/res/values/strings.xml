@@ -579,6 +579,8 @@
     <string name="other__pay_insufficient_savings_description">More ₿ needed to pay this Bitcoin invoice.</string>
     <string name="other__pay_insufficient_spending">Insufficient Spending Balance</string>
     <string name="other__pay_insufficient_spending_amount_description">₿ {amount} more needed to pay this Lightning invoice.</string>
+    <string name="other__pay_self_invoice_description">This invoice was created by your own wallet. Share it with someone else to receive a payment.</string>
+    <string name="other__pay_self_invoice_title">Cannot Pay Own Invoice</string>
     <string name="other__qr_error_header">Unable To Read QR</string>
     <string name="other__qr_error_network_header">Incorrect Network</string>
     <string name="other__qr_error_network_text">Bitkit is currently set to {selectedNetwork} but data is for {dataNetwork}.</string>
@@ -1426,6 +1428,7 @@
     <string name="wallet__recipient_scan">Scan QR</string>
     <string name="wallet__savings__onboarding">&lt;accent&gt;Send\nbitcoin&lt;/accent&gt;\nto your\nsavings balance</string>
     <string name="wallet__savings__title">Savings</string>
+    <string name="wallet__selection_load_error">Bitkit could not load your coins. Please try again.</string>
     <string name="wallet__selection_title">Coin Selection</string>
     <string name="wallet__selection_total_required">Total required</string>
     <string name="wallet__selection_total_selected">Total selected</string>
