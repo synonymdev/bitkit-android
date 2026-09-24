@@ -48,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
@@ -71,6 +72,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionId
+import to.bitkit.ui.components.AllowanceRoute
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -119,6 +121,7 @@ fun SubscriptionsScreen(
     onDetails: (PaykitSubscriptionId) -> Unit,
     onPaymentRequestDetails: (PaykitPaymentRequestId) -> Unit,
     showPayments: Boolean = false,
+    allowancesViewModel: AllowancesViewModel = hiltViewModel(),
 ) {
     val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
@@ -142,6 +145,7 @@ fun SubscriptionsScreen(
         },
         onCreateSubscription = onCreateSubscription,
         paymentsContent = { topPadding ->
+            val autoPaidRequestIds by allowancesViewModel.autoPaidRequestIds.collectAsStateWithLifecycle()
             PaymentRequestsScreen(
                 appViewModel = appViewModel,
                 onBack = onBack,
@@ -149,6 +153,18 @@ fun SubscriptionsScreen(
                 onDetails = onPaymentRequestDetails,
                 showsNavigationBar = false,
                 topPadding = topPadding,
+                autoPaidRequestIds = autoPaidRequestIds,
+            )
+        },
+        allowancesContent = { topPadding ->
+            AllowancesScreen(
+                topPadding = topPadding,
+                onClickAdd = { appViewModel.showSheet(Sheet.Allowance(AllowanceRoute.Set)) },
+                onClickAllowance = {
+                    val route = if (it.isAnswerable) AllowanceRoute.Review(it.id) else AllowanceRoute.Details(it.id)
+                    appViewModel.showSheet(Sheet.Allowance(route))
+                },
+                viewModel = allowancesViewModel,
             )
         },
     )
@@ -166,6 +182,7 @@ internal fun SubscriptionsContent(
     onSubscription: (PaykitSubscription) -> Unit,
     onCreateSubscription: () -> Unit,
     paymentsContent: @Composable (topPadding: Dp) -> Unit,
+    allowancesContent: @Composable (topPadding: Dp) -> Unit = {},
 ) {
     val proposals = subscriptions.filter { it.isPayer && it.isProposalVisible(now) }
     val active = subscriptions.filter { it.isPayer && it.isActive(now) }
@@ -194,6 +211,8 @@ internal fun SubscriptionsContent(
         ) {
             if (selectedTab == SubscriptionTab.Payments) {
                 paymentsContent(headerHeight)
+            } else if (selectedTab == SubscriptionTab.Allowances) {
+                allowancesContent(headerHeight)
             } else if (!hasVisibleSubscriptions) {
                 SubscriptionEmptyState(
                     Modifier
@@ -321,7 +340,7 @@ private fun SubscriptionTabs(
     onTabChange: (SubscriptionTab) -> Unit,
 ) {
     CustomTabRowWithSpacing(
-        tabs = persistentListOf(SubscriptionTab.Overview, SubscriptionTab.Payments),
+        tabs = persistentListOf(SubscriptionTab.Overview, SubscriptionTab.Allowances, SubscriptionTab.Payments),
         currentTabIndex = selectedTab.ordinal,
         selectedColor = Colors.White,
         onTabChange = onTabChange,
@@ -332,12 +351,14 @@ private fun SubscriptionTabs(
 
 internal enum class SubscriptionTab : TabItem {
     Overview,
+    Allowances,
     Payments;
 
     override val uiText: String
         @Composable get() = stringResource(
             when (this) {
                 Overview -> R.string.subscriptions__overview
+                Allowances -> R.string.subscriptions__allowances
                 Payments -> R.string.subscriptions__payments
             }
         )
