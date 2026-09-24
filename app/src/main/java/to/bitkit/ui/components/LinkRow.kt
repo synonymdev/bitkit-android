@@ -61,17 +61,22 @@ private const val MIN_PHONE_DIGITS = 7
 
 private fun String.toLinkUri(): Uri? {
     val trimmed = trim()
-    if (trimmed.isEmpty()) return null
-    if (trimmed.isValidEmail()) return "mailto:$trimmed".toUri()
-    if (trimmed.matches(PHONE_REGEX) && trimmed.count(Char::isDigit) >= MIN_PHONE_DIGITS) {
-        return "tel:${trimmed.filter { it.isDigit() || it == '+' }}".toUri()
-    }
-    if (trimmed.contains(' ')) return null
-
     val scheme = trimmed.toUri().scheme?.lowercase()
-    if (scheme == "mailto" || scheme == "tel") return trimmed.toUri()
-    if (!Patterns.WEB_URL.matcher(trimmed).matches()) return null
-    val withScheme = if (trimmed.contains("://")) trimmed else "https://$trimmed"
+    return when {
+        trimmed.isEmpty() -> null
+        trimmed.isValidEmail() -> "mailto:$trimmed".toUri()
+        trimmed.isPhoneNumber() -> "tel:${trimmed.filter { it.isDigit() || it == '+' }}".toUri()
+        trimmed.contains(' ') -> null
+        scheme == "mailto" || scheme == "tel" -> trimmed.toUri()
+        Patterns.WEB_URL.matcher(trimmed).matches() -> trimmed.toWebUri()
+        else -> null
+    }
+}
+
+private fun String.isPhoneNumber() = matches(PHONE_REGEX) && count(Char::isDigit) >= MIN_PHONE_DIGITS
+
+private fun String.toWebUri(): Uri? {
+    val withScheme = if (contains("://")) this else "https://$this"
     return withScheme.toUri().takeIf {
         it.scheme.equals("http", ignoreCase = true) || it.scheme.equals("https", ignoreCase = true)
     }
