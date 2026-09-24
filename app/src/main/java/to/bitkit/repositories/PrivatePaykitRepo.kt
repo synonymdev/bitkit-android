@@ -407,8 +407,19 @@ class PrivatePaykitRepo @Inject constructor(
                 afterPrivatePaymentListVersion = consumedVersion,
                 amount = PaymentAmountContext(request.amountValue, PaykitIssuerInterop.BITCOIN_ASSET),
             )
-            val paymentListVersion = prepared.resolution.privatePaymentListVersion
-                ?: return@runSuspendCatching null
+            val resolution = prepared.resolution
+            if (
+                resolution.state == PrivatePaymentResolutionState.RECOVERY_PENDING ||
+                resolution.status == PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST
+            ) {
+                // The last list was already paid from; a new one arrives once the payee sees that payment settle.
+                schedulePendingPrivateMessageDrainRetries(
+                    reason = "allowance payment",
+                    retryKeys = listOf(PrivateMessageDrainRetryKey(publicKey, request.counterpartyReceiverPath)),
+                )
+                throw PaykitAllowanceError.PaymentListPending
+            }
+            val paymentListVersion = resolution.privatePaymentListVersion ?: return@runSuspendCatching null
 
             val eligible = eligibleIdentifiers.toSet() intersect request.acceptedPaymentEndpointIdentifiers.toSet()
             val candidates = prepared.resolution.payableEndpoints

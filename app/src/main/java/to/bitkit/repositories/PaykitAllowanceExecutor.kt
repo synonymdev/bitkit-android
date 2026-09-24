@@ -384,7 +384,11 @@ class PaykitAllowanceExecutor @Inject constructor(
             return PaykitAllowanceAutoPayResult.MANUAL
         }
 
-        val payment = payer.resolve(request, candidate.eligiblePaymentEndpointIdentifiers).getOrThrow()
+        val payment = payer.resolve(request, candidate.eligiblePaymentEndpointIdentifiers).getOrElse {
+            if (it !is PaykitAllowanceError.PaymentListPending) throw it
+            Logger.info("Deferred an incoming request until the payee publishes a new payment list", context = TAG)
+            return PaykitAllowanceAutoPayResult.DEFERRED
+        }
         if (payment == null) {
             Logger.info("Kept an incoming request manual: no payable private endpoint", context = TAG)
             return PaykitAllowanceAutoPayResult.MANUAL

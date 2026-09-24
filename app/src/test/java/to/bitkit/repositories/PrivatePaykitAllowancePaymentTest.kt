@@ -184,6 +184,19 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
     }
 
     @Test
+    fun `allowance payment waits for a payment list newer than the one already paid`() = test {
+        stubResolution(
+            resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11),
+            version = null,
+            status = PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST,
+        )
+
+        val result = sut.resolveAllowancePayment(paymentRequest(), eligible(MethodId.Bolt11))
+
+        assertEquals(PaykitAllowanceError.PaymentListPending, result.exceptionOrNull())
+    }
+
+    @Test
     fun `expired request is never resolved`() = test {
         val expired = paymentRequest().copy(expiresAt = Instant.fromEpochSeconds(NOW_SECONDS - 1))
 
@@ -191,12 +204,16 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
         verify(paykitSdkService, never()).prepareAndResolvePrivateContactPayment(any(), any(), anyOrNull(), anyOrNull())
     }
 
-    private suspend fun stubResolution(vararg endpoints: PaykitResolvedPaymentEndpoint, version: ULong? = 7uL) {
+    private suspend fun stubResolution(
+        vararg endpoints: PaykitResolvedPaymentEndpoint,
+        version: ULong? = 7uL,
+        status: PrivatePaymentResolutionStatus = PrivatePaymentResolutionStatus.PAYABLE,
+    ) {
         whenever(paykitSdkService.prepareAndResolvePrivateContactPayment(any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(
                 PaykitPreparedPrivateContactPayment(
                     resolution = PaykitPrivateContactPaymentResolution(
-                        status = PrivatePaymentResolutionStatus.PAYABLE,
+                        status = status,
                         state = PrivatePaymentResolutionState.AVAILABLE,
                         privatePaymentListVersion = version,
                         payableEndpoints = endpoints.toList(),
