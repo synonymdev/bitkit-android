@@ -517,7 +517,7 @@ fun ContentView(
                     is Sheet.Widgets -> Colors.Gray7
                     // Meet the top of the subscription sheets' own gradient, so the grabber strip
                     // does not sit a shade darker than the content right below it.
-                    is Sheet.Subscription -> Colors.Gray6
+                    is Sheet.Subscription, is Sheet.Allowance -> Colors.Gray6
                     else -> DefaultSheetContainerColor
                 },
                 sheets = {
@@ -568,6 +568,8 @@ fun ContentView(
                         Sheet.CreateSubscription -> CreateSubscriptionSheet(appViewModel)
 
                         is Sheet.Subscription -> SubscriptionSheet(appViewModel, sheet.route)
+
+                        is Sheet.Allowance -> Unit // CONTRACT: UI worker renders AllowanceSheet(sheet.route) here
 
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()

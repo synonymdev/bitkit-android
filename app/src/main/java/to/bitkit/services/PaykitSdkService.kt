@@ -2,6 +2,15 @@ package to.bitkit.services
 
 import android.content.Context
 import com.synonym.bitkitcore.mnemonicToSeed
+import com.synonym.paykit.AllowanceAccountingReconciliation
+import com.synonym.paykit.AllowanceAccountingState
+import com.synonym.paykit.AllowanceAssociationRecord
+import com.synonym.paykit.AllowanceCandidate
+import com.synonym.paykit.AllowanceFilter
+import com.synonym.paykit.AllowanceLocalRole
+import com.synonym.paykit.AllowanceRecord
+import com.synonym.paykit.AllowanceSelectionInput
+import com.synonym.paykit.AllowanceTerms
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
@@ -11,6 +20,7 @@ import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
+import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitAndroid
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
@@ -20,6 +30,12 @@ import com.synonym.paykit.PaykitReceiverMarker
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitSdkDefaults
 import com.synonym.paykit.PaymentAmountContext
+import com.synonym.paykit.PaymentAttemptDecision
+import com.synonym.paykit.PaymentAttemptRecord
+import com.synonym.paykit.PaymentExecutionChecks
+import com.synonym.paykit.PaymentOccurrence
+import com.synonym.paykit.PaymentOccurrenceRecord
+import com.synonym.paykit.PaymentOutcomeReport
 import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentProofSubmission
 import com.synonym.paykit.PaymentReference
@@ -27,6 +43,7 @@ import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestFilter
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
+import com.synonym.paykit.PaymentRequestScope
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PaymentTarget
 import com.synonym.paykit.PrivateContactPaymentResolution
@@ -42,6 +59,7 @@ import com.synonym.paykit.PrivateReceivingDetail
 import com.synonym.paykit.PrivateReceivingDetailReservationResponse
 import com.synonym.paykit.PrivateReceivingDetailReservationResponseKind
 import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
+import com.synonym.paykit.PrivateStreamIntakeReport
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyAuthRequest
 import com.synonym.paykit.PubkyClientConfig
@@ -823,6 +841,186 @@ class PaykitSdkService @Inject constructor(
                         proof = PrivateJsonObject(proofJson),
                     ),
                 )
+            }
+        }
+    }
+
+    suspend fun listAllowances(filter: AllowanceFilter): List<AllowanceRecord> {
+        isSetup.await()
+        return operationMutex.withLock {
+            handle().listAllowances(filter)
+        }
+    }
+
+    suspend fun proposeAllowance(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        localRole: AllowanceLocalRole,
+        terms: AllowanceTerms,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.proposeAllowance(counterparty, counterpartyReceiverPath, localRole, terms)
+            }
+        }
+    }
+
+    suspend fun acceptAllowance(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        allowanceId: String,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.acceptAllowance(counterparty, counterpartyReceiverPath, allowanceId)
+            }
+        }
+    }
+
+    suspend fun rejectAllowance(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        allowanceId: String,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.rejectAllowance(counterparty, counterpartyReceiverPath, allowanceId)
+            }
+        }
+    }
+
+    suspend fun endAllowance(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        allowanceId: String,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.endAllowance(counterparty, counterpartyReceiverPath, allowanceId)
+            }
+        }
+    }
+
+    suspend fun receivePrivateMessages(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+    ): PrivateStreamIntakeReport {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.receivePrivateMessages(counterparty, counterpartyReceiverPath)
+            }
+        }
+    }
+
+    suspend fun processOutboundPrivateMessages(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+    ): OutboundPrivateSendReport {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.processOutboundPrivateMessages(counterparty, counterpartyReceiverPath)
+            }
+        }
+    }
+
+    suspend fun allowanceAccountingState(): AllowanceAccountingState? {
+        isSetup.await()
+        return operationMutex.withLock {
+            handle().allowanceAccountingState()
+        }
+    }
+
+    suspend fun reconcileAllowanceAccounting(
+        reconciliation: AllowanceAccountingReconciliation,
+    ): AllowanceAccountingState {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.reconcileAllowanceAccounting(reconciliation)
+            }
+        }
+    }
+
+    suspend fun evaluateAllowanceCandidates(
+        scope: PaymentRequestScope,
+        trustedTime: String,
+    ): List<AllowanceCandidate> {
+        isSetup.await()
+        return operationMutex.withLock {
+            handle().evaluateAllowanceCandidates(scope, trustedTime)
+        }
+    }
+
+    suspend fun acceptPaymentRequestAutomatically(
+        scope: PaymentRequestScope,
+        selection: AllowanceSelectionInput,
+        checks: PaymentExecutionChecks,
+    ): AllowanceAssociationRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.acceptPaymentRequestAutomatically(scope, selection, checks)
+            }
+        }
+    }
+
+    suspend fun reserveAutomaticPayment(
+        occurrence: PaymentOccurrence,
+        expectedAssociationRevision: ULong,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.reserveAutomaticPayment(occurrence, expectedAssociationRevision, checks)
+            }
+        }
+    }
+
+    suspend fun reserveManualPayment(
+        occurrence: PaymentOccurrence,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.reserveManualPayment(occurrence, checks)
+            }
+        }
+    }
+
+    suspend fun beginPaymentExecution(
+        attemptId: String,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.beginPaymentExecution(attemptId, checks)
+            }
+        }
+    }
+
+    suspend fun recordPaymentOutcome(report: PaymentOutcomeReport): PaymentAttemptRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.recordPaymentOutcome(report)
+            }
+        }
+    }
+
+    suspend fun markPaymentManualOnly(occurrence: PaymentOccurrence): PaymentOccurrenceRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.markPaymentManualOnly(occurrence)
             }
         }
     }
