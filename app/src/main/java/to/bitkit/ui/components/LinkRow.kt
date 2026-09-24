@@ -56,9 +56,20 @@ fun LinkRow(
     }
 }
 
+private val PHONE_REGEX = Regex("""^\+?[0-9 ()-]{7,}$""")
+private const val MIN_PHONE_DIGITS = 7
+
 private fun String.toLinkUri(): Uri? {
     val trimmed = trim()
+    if (trimmed.isEmpty()) return null
     if (trimmed.isValidEmail()) return "mailto:$trimmed".toUri()
+    if (trimmed.matches(PHONE_REGEX) && trimmed.count(Char::isDigit) >= MIN_PHONE_DIGITS) {
+        return "tel:${trimmed.filter { it.isDigit() || it == '+' }}".toUri()
+    }
+    if (trimmed.contains(' ')) return null
+
+    val scheme = trimmed.toUri().scheme?.lowercase()
+    if (scheme == "mailto" || scheme == "tel") return trimmed.toUri()
     if (!Patterns.WEB_URL.matcher(trimmed).matches()) return null
     val withScheme = if (trimmed.contains("://")) trimmed else "https://$trimmed"
     return withScheme.toUri().takeIf {
