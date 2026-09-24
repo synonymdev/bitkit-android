@@ -292,6 +292,12 @@ class PaykitSdkService @Inject constructor(
             ?: Logger.debug("Continuing while Pubky identity publication is pending", context = TAG)
     }
 
+    /** Rebroadcasts the identity record when one exists. Returns false only when the network reports none. */
+    suspend fun hasIdentityRecord(publicKey: String): Boolean {
+        isSetup.await()
+        return bootstrap().republishIdentity(publicKey)
+    }
+
     suspend fun currentPublicKey(): String? {
         isSetup.await()
         return operationMutex.withLock {

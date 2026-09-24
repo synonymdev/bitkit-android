@@ -109,6 +109,10 @@ class PubkyService @Inject constructor(
         Unit
     }
 
+    suspend fun hasIdentityRecord(publicKey: String): Boolean = ServiceQueue.CORE.background {
+        paykitSdkService.hasIdentityRecord(publicKey)
+    }
+
     // endregion
 
     // region Auth approval

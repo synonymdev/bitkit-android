@@ -939,6 +939,37 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adoptRingIdentity should not sign up when sign in fails for a published identity`() = test {
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer { throw TestAppError("Relay unavailable") }
+        whenever(pubkyService.hasIdentityRecord(ringPubky)).thenReturn(true)
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertTrue(result.isFailure)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(keychain) { delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+    }
+
+    @Test
+    fun `adoptRingIdentity should sign up a ring identity without a published record`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer { throw TestAppError("No homeserver") }
+        whenever(pubkyService.hasIdentityRecord(ringPubky)).thenReturn(false)
+        whenever(pubkyService.signUp("ring_secret", "test-homeserver", "test-code")).thenReturn(Unit)
+
+        val result = sut.adoptRingIdentity(ringPubky)
+        httpClient.close()
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(pubkyService) { signUp("ring_secret", "test-homeserver", "test-code") }
+    }
+
+    @Test
     fun `initialize should clear an adopted identity that is gone from pubky ring`() = test {
         stubAdoptedRingSource()
         whenever(sharedPubkyClient.listRingIdentities())
@@ -1644,6 +1675,13 @@ class PubkyRepoTest : BaseUnitTest() {
         links = emptyList(),
         status = status,
     )
+
+    private suspend fun stubRingCredential(): String {
+        val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
+        whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("ring_secret"))
+        whenever(pubkyService.publicKeyFromSecret("ring_secret")).thenReturn(ringPubky)
+        return ringPubky
+    }
 
     private suspend fun stubSignupKeys() {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("seed words")
