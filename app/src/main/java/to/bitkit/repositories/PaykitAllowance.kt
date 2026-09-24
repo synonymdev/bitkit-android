@@ -12,6 +12,8 @@ import com.synonym.paykit.AllowanceTerms
 import com.synonym.paykit.PaymentExecutionMode
 import com.synonym.paykit.PaymentExecutionStatus
 import kotlinx.serialization.Serializable
+import to.bitkit.models.safe
+import to.bitkit.services.PaykitReceiverPaths
 import java.math.BigDecimal
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -134,8 +136,13 @@ data class PaykitAllowanceEntry(
     val allowances: List<PaykitAllowance>,
     val limits: PaykitAllowanceLimits?,
 ) {
+    /** An accepted link before any other, and the contact's wallet link before their server link. */
     val primary: PaykitAllowance
-        get() = allowances.firstOrNull { it.lifecycleState == AllowanceLifecycleState.ACCEPTED } ?: allowances.first()
+        get() = allowances.minBy {
+            val acceptedRank = if (it.lifecycleState == AllowanceLifecycleState.ACCEPTED) 0 else 2
+            val walletRank = if (it.counterpartyReceiverPath == PaykitReceiverPaths.WALLET) 0 else 1
+            acceptedRank + walletRank
+        }
     val counterparty: String get() = primary.counterparty
     val role: PaykitAllowance.Role get() = primary.role
     val perPaymentMaxSats: ULong? get() = primary.perPaymentMaxSats
@@ -155,7 +162,9 @@ data class PaykitAllowanceLimits(
     val perPaymentSats: ULong,
     val monthlySats: ULong,
 ) {
-    /** Terms Bitkit proposes: per-payment range 0...max, an anchored UTC calendar month, and the endpoints Bitkit pays. */
+    /**
+     * Terms Bitkit proposes: per-payment range 0...max, an anchored UTC calendar month, and the endpoints Bitkit pays.
+     */
     fun terms(monthAnchor: Instant, allowedPaymentEndpointIdentifiers: List<String>): AllowanceTerms {
         val perPayment = AllowanceAmountRange(minimum = "0", maximum = perPaymentSats.toBitcoinDecimal())
         val month = AllowancePeriod(
@@ -239,7 +248,7 @@ object PaykitAllowanceCapacity {
         val (start, end) = PaykitAllowanceTime.monthlyWindow(anchor, now)
         return attempts
             .filter { it.allowanceId == allowanceId && it.isLive && it.admittedAt >= start && it.admittedAt < end }
-            .fold(0uL) { total, attempt -> total + attempt.amountSats }
+            .fold(0uL) { total, attempt -> total.safe() + attempt.amountSats.safe() }
     }
 
     fun fits(amountSats: ULong, allowance: PaykitAllowance, attempts: List<Attempt>, now: Instant): Boolean {
@@ -247,7 +256,7 @@ object PaykitAllowanceCapacity {
         if (perPaymentMax != null && amountSats > perPaymentMax) return false
         val monthlyLimit = allowance.monthlyLimitSats ?: return true
         val anchor = allowance.monthlyAnchor ?: return true
-        return usedSats(allowance.allowanceId, attempts, anchor, now) + amountSats <= monthlyLimit
+        return usedSats(allowance.allowanceId, attempts, anchor, now).safe() + amountSats.safe() <= monthlyLimit
     }
 
     fun attempts(history: AllowanceAccountingHistory): List<Attempt> = history.occurrences
