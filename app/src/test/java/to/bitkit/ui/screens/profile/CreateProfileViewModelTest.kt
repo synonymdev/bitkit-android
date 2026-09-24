@@ -18,6 +18,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -70,7 +71,7 @@ class CreateProfileViewModelTest : BaseUnitTest() {
     @Test
     fun `save should not publish after a failed lookup for a signed-in pubky`() = test {
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
-        whenever { pubkyRepo.fetchRemoteProfile(any()) }.thenReturn(Result.failure(Exception("timeout")))
+        whenever(pubkyRepo.fetchRemoteProfile(any())).thenReturn(Result.failure(CreateProfileTestAppError("timeout")))
         sut = CreateProfileViewModel(context = context, pubkyRepo = pubkyRepo)
 
         sut.onNameChange("Alice")
@@ -84,7 +85,7 @@ class CreateProfileViewModelTest : BaseUnitTest() {
     @Test
     fun `save should not publish after a failed lookup for a stored pubky`() = test {
         whenever(pubkyRepo.hasStoredSecretKey()).thenReturn(true)
-        whenever(pubkyRepo.fetchRemoteProfile(any())).thenReturn(Result.failure(Exception("timeout")))
+        whenever(pubkyRepo.fetchRemoteProfile(any())).thenReturn(Result.failure(CreateProfileTestAppError("timeout")))
         sut = CreateProfileViewModel(context = context, pubkyRepo = pubkyRepo)
 
         sut.onNameChange("Alice")
@@ -97,7 +98,8 @@ class CreateProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `save should still create a new pubky when the lookup fails before sign-up`() = test {
-        whenever { pubkyRepo.fetchRemoteProfile(any()) }.thenReturn(Result.failure(Exception("no homeserver")))
+        whenever(pubkyRepo.fetchRemoteProfile(any()))
+            .thenReturn(Result.failure(CreateProfileTestAppError("no homeserver")))
         whenever(pubkyRepo.createIdentity(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
         sut = CreateProfileViewModel(context = context, pubkyRepo = pubkyRepo)
 
@@ -109,3 +111,5 @@ class CreateProfileViewModelTest : BaseUnitTest() {
         verify(pubkyRepo).createIdentity(any(), any(), any(), any(), anyOrNull())
     }
 }
+
+private class CreateProfileTestAppError(message: String) : AppError(message)

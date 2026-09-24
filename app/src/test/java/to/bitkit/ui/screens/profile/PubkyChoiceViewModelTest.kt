@@ -16,6 +16,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -73,7 +74,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `listing failure shows no identities`() = test {
-        whenever(pubkyRepo.ringIdentities()).thenReturn(Result.failure(RuntimeException("query failed")))
+        whenever(pubkyRepo.ringIdentities()).thenReturn(Result.failure(PubkyChoiceTestAppError("query failed")))
         createSut()
 
         advanceUntilIdle()
@@ -133,7 +134,8 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onIdentityClick clears the adopting identity and toasts when adoption fails`() = test {
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.failure(RuntimeException("adopt failed")))
+        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY))
+            .thenReturn(Result.failure(PubkyChoiceTestAppError("adopt failed")))
         createSut()
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
@@ -168,3 +170,5 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.navigateToProfile)
     }
 }
+
+private class PubkyChoiceTestAppError(message: String) : AppError(message)
