@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -38,12 +41,15 @@ import to.bitkit.ext.uniqueUtxoKey
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillWidth
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Subtitle
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -55,6 +61,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.utils.AppError
 
 @Composable
 fun SendCoinSelectionScreen(
@@ -70,23 +77,27 @@ fun SendCoinSelectionScreen(
     val activity = activityListViewModel ?: return
     val onchainActivities by activity.onchainActivities.collectAsStateWithLifecycle()
 
-    LaunchedEffect(requiredAmount, onchainActivities) {
-        viewModel.setOnchainActivities(onchainActivities.orEmpty())
+    LaunchedEffect(requiredAmount, address) {
         viewModel.loadUtxos(requiredAmount, address)
     }
 
-    Content(
+    LaunchedEffect(onchainActivities) {
+        viewModel.setOnchainActivities(onchainActivities.orEmpty())
+    }
+
+    SendCoinSelectionContent(
         uiState = uiState,
         tagsByTxId = tagsByTxId,
         onBack = onBack,
         onContinue = { onContinue(uiState.selectedUtxos) },
         onClickUtxo = { viewModel.onToggleUtxo(it) },
         onRenderUtxo = { viewModel.loadTagsForUtxo(it) },
+        onRetry = { viewModel.loadUtxos(requiredAmount, address) },
     )
 }
 
 @Composable
-private fun Content(
+fun SendCoinSelectionContent(
     uiState: CoinSelectionUiState,
     modifier: Modifier = Modifier,
     tagsByTxId: ImmutableMap<String, ImmutableList<String>> = persistentMapOf(),
@@ -94,6 +105,7 @@ private fun Content(
     onContinue: () -> Unit = {},
     onClickUtxo: (SpendableUtxo) -> Unit = {},
     onRenderUtxo: (String) -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -110,6 +122,29 @@ private fun Content(
                 .weight(1f)
                 .padding(horizontal = 16.dp)
         ) {
+            if (uiState.isLoading && uiState.loadError == null && uiState.availableUtxos.isEmpty()) {
+                item {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillParentMaxSize()
+                            .testTag("CoinSelectionLoading")
+                    ) {
+                        GradientCircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    }
+                }
+            }
+
+            if (uiState.loadError != null && uiState.availableUtxos.isEmpty()) {
+                item {
+                    LoadErrorState(
+                        isLoading = uiState.isLoading,
+                        onRetry = onRetry,
+                        modifier = Modifier.fillParentMaxSize()
+                    )
+                }
+            }
+
             // Utxo items
             items(uiState.availableUtxos) { utxo ->
                 UtxoRow(
@@ -158,6 +193,34 @@ private fun Content(
             )
             VerticalSpacer(16.dp)
         }
+    }
+}
+
+@Composable
+private fun LoadErrorState(
+    isLoading: Boolean,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("CoinSelectionLoadError")
+    ) {
+        BodyM(
+            text = stringResource(R.string.wallet__selection_load_error),
+            color = Colors.White64,
+            textAlign = TextAlign.Center,
+        )
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.common__retry),
+            onClick = onRetry,
+            isLoading = isLoading,
+            modifier = Modifier.testTag("CoinSelectionRetry")
+        )
     }
 }
 
@@ -227,7 +290,7 @@ private fun UtxoRow(
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendCoinSelectionContent(
                 uiState = CoinSelectionUiState(
                     availableUtxos = listOf(
                         SpendableUtxo(outpoint = OutPoint(txid = "abc123", vout = 0u), valueSats = 50000uL),
@@ -256,7 +319,7 @@ private fun Preview() {
 private fun PreviewEmpty() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendCoinSelectionContent(
                 uiState = CoinSelectionUiState(
                     availableUtxos = persistentListOf(),
                     totalRequiredSat = 1000uL,
@@ -265,6 +328,36 @@ private fun PreviewEmpty() {
                 ),
                 tagsByTxId = persistentMapOf(),
                 modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewLoading() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendCoinSelectionContent(
+                uiState = CoinSelectionUiState(
+                    isLoading = true,
+                ),
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewLoadError() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendCoinSelectionContent(
+                uiState = CoinSelectionUiState(
+                    loadError = AppError("Node is not setup"),
+                ),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
