@@ -846,7 +846,7 @@ class PubkyRepo @Inject constructor(
             _pendingImportProfile.update { ownProfile }
             _pendingImportContacts.update { contacts }
         }
-    }
+    }.onFailure { Logger.warn("Failed to prepare contact import", it, context = TAG) }
 
     suspend fun clearPendingImport() = withContext(ioDispatcher) {
         _pendingImportProfile.update { null }

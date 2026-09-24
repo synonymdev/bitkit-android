@@ -53,8 +53,14 @@ class PubkyChoiceViewModel @Inject constructor(
             _uiState.update { it.copy(adoptingPubky = pubky) }
             pubkyRepo.adoptRingIdentity(pubky)
                 .onSuccess { hasProfile ->
-                    _uiState.update { it.copy(adoptingPubky = null, navigateToProfile = hasProfile) }
-                    if (!hasProfile) _effects.emit(PubkyChoiceEffect.NavigateToCreateProfile)
+                    if (hasProfile) pubkyRepo.prepareImport()
+                    _uiState.update { it.copy(adoptingPubky = null) }
+                    val effect = when {
+                        !hasProfile -> PubkyChoiceEffect.NavigateToCreateProfile
+                        pubkyRepo.pendingImportContacts.value.isEmpty() -> PubkyChoiceEffect.NavigateToPayContacts
+                        else -> PubkyChoiceEffect.NavigateToContactImportOverview
+                    }
+                    _effects.emit(effect)
                 }
                 .onFailure {
                     Logger.error("Failed to adopt ring identity", it, context = TAG)

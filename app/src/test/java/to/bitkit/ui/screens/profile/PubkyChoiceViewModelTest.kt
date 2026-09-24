@@ -30,6 +30,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val isAuthenticated = MutableStateFlow(false)
+    private val pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
 
     private lateinit var sut: PubkyChoiceViewModel
 
@@ -37,7 +38,9 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization Failed")
         whenever(pubkyRepo.isAuthenticated).thenReturn(isAuthenticated)
+        whenever(pubkyRepo.pendingImportContacts).thenReturn(pendingImportContacts)
         whenever { pubkyRepo.ringIdentities() }.thenReturn(Result.success(persistentListOf()))
+        whenever { pubkyRepo.prepareImport() }.thenReturn(Result.success(Unit))
     }
 
     private fun createSut() {
@@ -80,14 +83,36 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onIdentityClick navigates to profile when the adopted identity has a profile`() = test {
+    fun `onIdentityClick continues to contact import when the adopted identity has follows`() = test {
         whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.success(true))
+        pendingImportContacts.value = listOf(PubkyProfile.placeholder("pubky$RING_PUBKY"))
         createSut()
+        val effects = mutableListOf<PubkyChoiceEffect>()
+        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
 
         sut.onIdentityClick(RING_PUBKY)
         advanceUntilIdle()
 
-        assertTrue(sut.uiState.value.navigateToProfile)
+        assertEquals(PubkyChoiceEffect.NavigateToContactImportOverview, effects.single())
+        assertFalse(sut.uiState.value.navigateToProfile)
+        assertNull(sut.uiState.value.adoptingPubky)
+        effectsJob.cancel()
+    }
+
+    @Test
+    fun `onIdentityClick continues to pay contacts when the adopted identity has no follows`() = test {
+        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.success(true))
+        createSut()
+        val effects = mutableListOf<PubkyChoiceEffect>()
+        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
+
+        sut.onIdentityClick(RING_PUBKY)
+        advanceUntilIdle()
+
+        assertEquals(PubkyChoiceEffect.NavigateToPayContacts, effects.single())
+        assertFalse(sut.uiState.value.navigateToProfile)
+        assertNull(sut.uiState.value.adoptingPubky)
+        effectsJob.cancel()
     }
 
     @Test
