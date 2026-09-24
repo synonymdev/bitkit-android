@@ -28,7 +28,7 @@ fun LinkRow(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val uri = remember(value) { value.toLinkUri() }
+    val uri = remember(label, value) { value.toLinkUri(label) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         VerticalSpacer(16.dp)
@@ -58,14 +58,16 @@ fun LinkRow(
 
 private val PHONE_REGEX = Regex("""^\+?[0-9 ().-]{7,}$""")
 private const val MIN_PHONE_DIGITS = 7
+private val PHONE_LABELS = setOf("phone", "tel", "telephone", "mobile", "cell")
 
-private fun String.toLinkUri(): Uri? {
+private fun String.toLinkUri(label: String): Uri? {
     val trimmed = trim()
     val scheme = trimmed.toUri().scheme?.lowercase()
     return when {
         trimmed.isEmpty() -> null
         trimmed.isValidEmail() -> "mailto:$trimmed".toUri()
-        trimmed.isPhoneNumber() -> trimmed.toTelUri()
+        (trimmed.startsWith('+') || label.trim().lowercase() in PHONE_LABELS) && trimmed.isPhoneNumber() ->
+            trimmed.toTelUri()
         scheme == "tel" -> trimmed.substringAfter(':').trim().takeIf { it.isPhoneNumber() }?.toTelUri()
         trimmed.contains(' ') -> null
         scheme == "mailto" -> trimmed.toUri()
@@ -74,14 +76,14 @@ private fun String.toLinkUri(): Uri? {
     }
 }
 
-private fun String.isPhoneNumber() =
-    matches(PHONE_REGEX) && count(Char::isDigit) >= MIN_PHONE_DIGITS && !Patterns.IP_ADDRESS.matcher(this).matches()
+private fun String.isPhoneNumber() = matches(PHONE_REGEX) && count(Char::isDigit) >= MIN_PHONE_DIGITS
 
 private fun String.toTelUri() = "tel:${filter { it.isDigit() || it == '+' }}".toUri()
 
 private fun String.toWebUri(): Uri? {
     val withScheme = if (contains("://")) this else "https://$this"
     return withScheme.toUri().takeIf {
-        it.scheme.equals("http", ignoreCase = true) || it.scheme.equals("https", ignoreCase = true)
+        val isHttp = it.scheme.equals("http", ignoreCase = true) || it.scheme.equals("https", ignoreCase = true)
+        isHttp && it.host?.substringAfterLast('.').orEmpty().any(Char::isLetter)
     }
 }
