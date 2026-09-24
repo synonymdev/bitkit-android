@@ -38,6 +38,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization Failed")
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(pubkyRepo.isAuthenticated).thenReturn(isAuthenticated)
         whenever(pubkyRepo.pendingImportContacts).thenReturn(pendingImportContacts)
         whenever { pubkyRepo.ringIdentities() }.thenReturn(Result.success(persistentListOf()))
@@ -105,7 +106,9 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.success(true))
         createSut()
         val effects = mutableListOf<PubkyChoiceEffect>()
+        val toasts = mutableListOf<Toast>()
         val effectsJob = launch { sut.effects.collect { effects.add(it) } }
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
 
         sut.onIdentityClick(RING_PUBKY)
         advanceUntilIdle()
@@ -113,7 +116,32 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         assertEquals(PubkyChoiceEffect.NavigateToPayContacts, effects.single())
         assertFalse(sut.uiState.value.navigateToProfile)
         assertNull(sut.uiState.value.adoptingPubky)
+        assertTrue(toasts.isEmpty())
         effectsJob.cancel()
+        toastJob.cancel()
+    }
+
+    @Test
+    fun `onIdentityClick toasts and continues to pay contacts when the follows lookup fails`() = test {
+        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.success(true))
+        whenever(pubkyRepo.prepareImport()).thenReturn(Result.failure(PubkyChoiceTestAppError("follows failed")))
+        createSut()
+        val effects = mutableListOf<PubkyChoiceEffect>()
+        val toasts = mutableListOf<Toast>()
+        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.onIdentityClick(RING_PUBKY)
+        advanceUntilIdle()
+
+        assertEquals(PubkyChoiceEffect.NavigateToPayContacts, effects.single())
+        assertNull(sut.uiState.value.adoptingPubky)
+        val toast = toasts.single()
+        assertEquals(Toast.ToastType.ERROR, toast.type)
+        assertEquals("Error", toast.title)
+        assertEquals("follows failed", toast.description)
+        effectsJob.cancel()
+        toastJob.cancel()
     }
 
     @Test

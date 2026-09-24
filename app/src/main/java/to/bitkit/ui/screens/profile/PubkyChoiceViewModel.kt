@@ -53,7 +53,16 @@ class PubkyChoiceViewModel @Inject constructor(
             _uiState.update { it.copy(adoptingPubky = pubky) }
             pubkyRepo.adoptRingIdentity(pubky)
                 .onSuccess { hasProfile ->
-                    if (hasProfile) pubkyRepo.prepareImport()
+                    if (hasProfile) {
+                        pubkyRepo.prepareImport().onFailure {
+                            Logger.error("Failed to prepare contact import", it, context = TAG)
+                            ToastEventBus.send(
+                                type = Toast.ToastType.ERROR,
+                                title = context.getString(R.string.common__error),
+                                description = it.message,
+                            )
+                        }
+                    }
                     _uiState.update { it.copy(adoptingPubky = null) }
                     val effect = when {
                         !hasProfile -> PubkyChoiceEffect.NavigateToCreateProfile
