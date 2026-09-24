@@ -120,7 +120,7 @@ fixtures, push notifications) live in each suite's README.
 | [backup](backup) | 1 | Clearing a wrong word on Confirm Recovery Phrase; throwaway wallet only, no README |
 | [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
-| [coin-selection](coin-selection) | 1 | Manual coin selection screen; needs 3+ on-chain UTXOs; no README |
+| [coin-selection](coin-selection) | 2 | Manual coin selection screen and its load/retry states on the Send sheet; needs 3+ on-chain UTXOs; no README |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
 | [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
@@ -131,7 +131,7 @@ fixtures, push notifications) live in each suite's README.
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
 | [receive](receive) | 1 | Receive sheet tab selection; needs a spending channel, no README |
 | [restore-wallet](restore-wallet) | 1 | Pasting a seed fragment on Restore wallet; needs a wallet-free device; no README |
-| [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
+| [security](security) | 2 | PIN lock when the app returns from the background; PIN result sheet layout at a long locale and font scale; no README |
 | [send](send) | 1 | Own-invoice guard on the send flow; needs a spending channel and savings; no README |
 | [settings](settings) | 1 | Electrum server error toasts; no README |
 | [shop](shop) | 1 | Shop Discover category titles and web view handoff; needs Bitrefill reachable; no README |
@@ -173,11 +173,13 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `app-update/critical-update-onboarding.xml` | not ported yet — iOS already blocks at the top level in `AppScene`, so the journey applies there once written |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `receive/receive-auto-tab-selection.xml` | not ported — the Auto tab override fix is Android-only so far; iOS parity not checked |
+| `security/pin-lock-on-resume.xml` | not ported yet — iOS already clears the PIN verification on entering the background, so the journey applies; it lands with the iOS side of synonymdev/bitkit-android#1298 |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
+| `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
