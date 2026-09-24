@@ -696,6 +696,7 @@
     <string name="profile__pay_contacts_error_wallet">Wallet is still starting. Try again in a moment.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pay Contacts</string>
+    <string name="profile__pubky_copied">pubky copied to clipboard</string>
     <string name="profile__public_key">Public Key</string>
     <string name="profile__qr_scan_label">Scan to add {name}</string>
     <string name="profile__restore_nav_title">Restore Profile</string>

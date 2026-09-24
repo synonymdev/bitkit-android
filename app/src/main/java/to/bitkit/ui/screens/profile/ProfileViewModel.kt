@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -15,6 +17,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
@@ -22,7 +26,9 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
@@ -32,15 +38,22 @@ class ProfileViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "ProfileViewModel"
+        private val COPIED_POPUP_DURATION = 3.seconds
     }
 
     private val _showSignOutDialog = MutableStateFlow(false)
     private val _isSigningOut = MutableStateFlow(false)
+    private val _showAddTagSheet = MutableStateFlow(false)
+    private val _copiedPublicKey = MutableStateFlow<String?>(null)
+    private val tagUpdateMutex = Mutex()
+    private var hideCopiedPopupJob: Job? = null
     private val controls = combine(
         _showSignOutDialog,
         _isSigningOut,
-    ) { showSignOutDialog, isSigningOut ->
-        ProfileControls(showSignOutDialog, isSigningOut)
+        _showAddTagSheet,
+        _copiedPublicKey,
+    ) { showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey ->
+        ProfileControls(showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey)
     }
 
     val uiState: StateFlow<ProfileUiState> = combine(
@@ -55,6 +68,8 @@ class ProfileViewModel @Inject constructor(
             isLoading = isLoading,
             showSignOutDialog = controls.showSignOutDialog,
             isSigningOut = controls.isSigningOut,
+            showAddTagSheet = controls.showAddTagSheet,
+            copiedPublicKey = controls.copiedPublicKey,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState())
 
@@ -75,6 +90,25 @@ class ProfileViewModel @Inject constructor(
 
     fun dismissSignOutDialog() {
         _showSignOutDialog.update { false }
+    }
+
+    fun showAddTagSheet() {
+        _showAddTagSheet.update { true }
+    }
+
+    fun dismissAddTagSheet() {
+        _showAddTagSheet.update { false }
+    }
+
+    fun addTag(tag: String) {
+        updateTags(
+            transform = { (it + tag).distinct() },
+            onSuccess = { _showAddTagSheet.update { false } },
+        )
+    }
+
+    fun removeTag(tag: String) {
+        updateTags(transform = { tags -> tags.filterNot { it == tag } })
     }
 
     fun signOut() {
@@ -114,12 +148,49 @@ class ProfileViewModel @Inject constructor(
     fun copyPublicKey() {
         val pk = pubkyRepo.publicKey.value ?: return
         context.setClipboardText(pk, context.getString(R.string.profile__public_key))
+        _copiedPublicKey.update { pk }
+        hideCopiedPopupJob?.cancel()
+        hideCopiedPopupJob = viewModelScope.launch {
+            delay(COPIED_POPUP_DURATION)
+            _copiedPublicKey.update { null }
+        }
+    }
+
+    fun dismissCopiedPopup() {
+        hideCopiedPopupJob?.cancel()
+        _copiedPublicKey.update { null }
+    }
+
+    private fun updateTags(
+        transform: (List<String>) -> List<String>,
+        onSuccess: () -> Unit = {},
+    ) {
         viewModelScope.launch {
-            ToastEventBus.send(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
-                testTag = "ProfilePubkyCopiedToast",
-            )
+            tagUpdateMutex.withLock {
+                val profile = pubkyRepo.profile.value ?: return@withLock
+                val tags = transform(profile.tags)
+                if (tags == profile.tags) {
+                    onSuccess()
+                    return@withLock
+                }
+
+                pubkyRepo.saveProfile(
+                    name = profile.name,
+                    bio = profile.bio,
+                    links = profile.links,
+                    tags = tags,
+                    imageUrl = profile.imageUrl,
+                ).onSuccess {
+                    onSuccess()
+                }.onFailure {
+                    Logger.error("Failed to update profile tags", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__edit_save_error),
+                        description = it.message,
+                    )
+                }
+            }
         }
     }
 }
@@ -131,11 +202,15 @@ data class ProfileUiState(
     val isLoading: Boolean = false,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
+    val showAddTagSheet: Boolean = false,
+    val copiedPublicKey: String? = null,
 )
 
 private data class ProfileControls(
     val showSignOutDialog: Boolean,
     val isSigningOut: Boolean,
+    val showAddTagSheet: Boolean,
+    val copiedPublicKey: String?,
 )
 
 sealed interface ProfileEffect {

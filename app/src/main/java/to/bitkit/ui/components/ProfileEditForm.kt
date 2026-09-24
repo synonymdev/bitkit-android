@@ -54,6 +54,7 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.TopBarGradient
 
 private const val BIO_MAX_LENGTH = 160
 
@@ -75,6 +76,7 @@ fun ProfileEditForm(
     onSave: () -> Unit,
     onCancel: () -> Unit,
     isSaveEnabled: Boolean,
+    topBar: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
     avatarContent: @Composable () -> Unit = {},
     publicKeyLabel: String? = null,
@@ -103,6 +105,7 @@ fun ProfileEditForm(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
+            TopBarSpacer()
             ProfileEditHeader(
                 name = name,
                 onNameChange = onNameChange,
@@ -249,6 +252,12 @@ fun ProfileEditForm(
             VerticalSpacer(footerHeight + 16.dp)
         }
 
+        topBar(
+            Modifier
+                .align(Alignment.TopCenter)
+                .background(TopBarGradient)
+        )
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
@@ -382,6 +391,7 @@ private fun Preview() {
             onSave = {},
             onCancel = {},
             isSaveEnabled = true,
+            topBar = {},
             onDelete = {},
             deleteLabel = "Delete Profile",
         )

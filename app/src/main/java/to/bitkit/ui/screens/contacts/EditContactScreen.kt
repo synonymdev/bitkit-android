@@ -97,16 +97,25 @@ private fun Content(
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
 ) {
-    ScreenColumn {
+    val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.contacts__edit_contact_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
+            modifier = modifier,
         )
+    }
 
+    ScreenColumn {
         when {
-            uiState.isLoading -> LoadingState()
-            uiState.isMissing -> EmptyState(onRetryClick = onRetryClick)
+            uiState.isLoading -> {
+                topBar(Modifier)
+                LoadingState()
+            }
+            uiState.isMissing -> {
+                topBar(Modifier)
+                EmptyState(onRetryClick = onRetryClick)
+            }
             else -> ProfileEditForm(
                 name = uiState.name,
                 onNameChange = onNameChange,
@@ -123,6 +132,7 @@ private fun Content(
                 onSave = onSave,
                 onCancel = onBackClick,
                 isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
+                topBar = topBar,
                 avatarContent = {
                     ContactEditAvatar(imageUrl = uiState.imageUrl)
                 },

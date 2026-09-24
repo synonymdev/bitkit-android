@@ -128,14 +128,18 @@ private fun Content(
         }
     }
 
-    ScreenColumn {
+    val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__edit_nav_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
+            modifier = modifier,
         )
+    }
 
+    ScreenColumn {
         if (uiState.isLoading) {
+            topBar(Modifier)
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize()
@@ -159,6 +163,7 @@ private fun Content(
                 onSave = onSave,
                 onCancel = onBackClick,
                 isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
+                topBar = topBar,
                 avatarContent = {
                     AvatarSection(
                         imageUrl = uiState.imageUrl,
