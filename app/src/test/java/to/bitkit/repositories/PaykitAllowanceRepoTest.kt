@@ -1,5 +1,8 @@
 package to.bitkit.repositories
 
+import org.mockito.kotlin.doReturn
+import kotlinx.collections.immutable.persistentListOf
+import org.lightningdevkit.ldknode.ChannelDetails
 import com.synonym.paykit.AllowanceHistoryStatus
 import com.synonym.paykit.AllowanceLifecycleState
 import com.synonym.paykit.AllowanceLocalRole
@@ -342,6 +345,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
     @Test
     fun `covered request stays off the Send sheet until it is found manual`() = test {
+        nodeReady()
         records = listOf(fixtures.record())
         whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.MANUAL)
         sut.activate(identity)
@@ -372,6 +376,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
     @Test
     fun `started payment is reported and refreshes the allowances`() = test {
+        nodeReady()
         records = listOf(fixtures.record())
         sut.activate(identity)
         val uncovered = fixtures.paymentRequest(id = "other", counterparty = fixtures.otherCounterpartyKey)
@@ -382,6 +387,21 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         verify(executor).autoPay(eq(fixtures.paymentRequest()), eq(sut.entries.value.single().allowances), eq(identity))
         verify(executor, never()).autoPay(eq(uncovered), any(), any())
         verify(sdk, times(2)).listAllowances(any())
+    }
+
+    @Test
+    fun `covered request waits while the node's channels reconnect`() = test {
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        val reconnecting = mock<ChannelDetails> { on { isUsable } doReturn false }
+        lightningState.update {
+            it.copy(nodeLifecycleState = NodeLifecycleState.Running, channels = persistentListOf(reconnecting))
+        }
+        val request = fixtures.paymentRequest()
+
+        assertFalse(sut.processIncomingRequests(listOf(request)))
+        assertTrue(sut.isAutomaticallyHandling(request))
+        verify(executor, never()).autoPay(any(), any(), any())
     }
 
     @Test
@@ -442,6 +462,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     // endregion
 
     // region Helpers
+
+    private fun nodeReady() = lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
 
     private fun group(vararg allowanceIds: String) = PaykitAllowanceLocalState.Group(
         id = "group-1",
