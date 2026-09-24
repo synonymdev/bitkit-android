@@ -53,6 +53,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -4482,6 +4483,111 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirmed-only onchain receive shows the sheet after updating the activity`() = test {
+        val sheetDetails = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.ONCHAIN,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "confirmed-txid",
+            sats = 1_000L,
+        )
+        whenever(notifyPaymentReceivedHandler(any()))
+            .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowSheet(sheetDetails)))
+        val details = TransactionDetails(amountSats = 1_000L, inputs = emptyList(), outputs = emptyList())
+
+        emitNodeEvent(
+            Event.OnchainTransactionConfirmed(
+                txid = "confirmed-txid",
+                blockHash = "block-hash",
+                blockHeight = 100u,
+                confirmationTime = 0uL,
+                details = details,
+            ),
+        )
+        advanceUntilIdle()
+
+        val expectedCommand = NotifyPaymentReceived.Command.Onchain(
+            txid = "confirmed-txid",
+            details = details,
+            confirmationTime = 0uL,
+        )
+        inOrder(activityRepo, notifyPaymentReceivedHandler) {
+            verify(activityRepo).handleOnchainTransactionConfirmed("confirmed-txid", details)
+            verify(notifyPaymentReceivedHandler).invoke(expectedCommand)
+            verify(notifyPaymentReceivedHandler).present(eq(expectedCommand), any(), any())
+        }
+        assertEquals(sheetDetails, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `first onchain sync after restore marks unseen activities seen and clears the pending flag`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        whenever {
+            activityRepo.markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
+        }.thenReturn(Result.success(Unit))
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        inOrder(activityRepo, settingsStore) {
+            verify(activityRepo).markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
+            verify(settingsStore).update(any())
+        }
+        assertFalse(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `first onchain sync after restore keeps the pending flag when marking activities seen fails`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        whenever { activityRepo.markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong())) }
+            .thenReturn(Result.failure(AppError("mark seen failed")))
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(activityRepo).markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
+        assertTrue(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `lightning sync after restore keeps the pending flag and activities untouched`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.LIGHTNING_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
+        assertTrue(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `onchain sync without a pending restore leaves unseen activities untouched`() = test {
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
+        verify(settingsStore, never()).update(any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive skips the handler during migration`() = test {
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
+
+        emitNodeEvent(
+            Event.OnchainTransactionConfirmed(
+                txid = "confirmed-txid",
+                blockHash = "block-hash",
+                blockHeight = 100u,
+                confirmationTime = 0uL,
+                details = TransactionDetails(amountSats = 1_000L, inputs = emptyList(), outputs = emptyList()),
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(notifyPaymentReceivedHandler, never()).invoke(any())
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
     fun `received lightning payment is claimed by the UI while foregrounded`() = test {
         val details = NewTransactionSheetDetails(
             type = NewTransactionSheetType.LIGHTNING,
@@ -7888,6 +7994,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
 private const val SAMROCK_SETUP_URL =
     "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+
+/** Stands in for the epoch second a seed restore began. */
+private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"

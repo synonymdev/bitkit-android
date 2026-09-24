@@ -1,7 +1,9 @@
 package to.bitkit.domain.commands
 
 import android.content.Context
-import kotlinx.coroutines.flow.flowOf
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.Event
@@ -18,25 +20,47 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.ext.create
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
+@OptIn(ExperimentalTime::class)
 class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
+    companion object {
+        private val NOW = Instant.fromEpochSeconds(1_700_000_000L)
+
+        /** Stands in for the epoch second a seed restore began. */
+        private const val RESTORE_STARTED_AT = 1_700_000_000L
+    }
 
     private val context: Context = mock()
     private val activityRepo: ActivityRepo = mock()
     private val currencyRepo: CurrencyRepo = mock()
     private val settingsStore: SettingsStore = mock()
+    private val clock: Clock = mock()
+    private val backupRepo: BackupRepo = mock()
+    private val migrationService: MigrationService = mock()
+    private val isRestoring = MutableStateFlow(false)
+    private val isShowingMigrationLoading = MutableStateFlow(false)
+    private val settingsData = MutableStateFlow(SettingsData())
 
     private lateinit var sut: NotifyPaymentReceivedHandler
 
@@ -44,7 +68,11 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     fun setUp() {
         whenever(context.getString(R.string.notification__received__title)).thenReturn("Payment Received")
         whenever(context.getString(any(), any())).thenReturn("Received amount")
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        whenever(settingsStore.data).thenReturn(settingsData)
+        whenever(backupRepo.isRestoring).thenReturn(isRestoring)
+        whenever(migrationService.isShowingMigrationLoading).thenReturn(isShowingMigrationLoading)
+        whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
+        whenever(clock.now()).thenReturn(NOW)
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
             Result.success(
                 ConvertedAmount(
@@ -61,6 +89,10 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         sut = NotifyPaymentReceivedHandler(
             ioDispatcher = testDispatcher,
             activityRepo = activityRepo,
+            backupRepo = backupRepo,
+            migrationService = migrationService,
+            settingsStore = settingsStore,
+            clock = clock,
             receivedNotificationContent = ReceivedNotificationContent(
                 context = context,
                 currencyRepo = currencyRepo,
@@ -133,12 +165,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val details = mock<TransactionDetails> {
             on { amountSats } doReturn 5000L
         }
-        val event = mock<Event.OnchainTransactionReceived> {
-            on { txid } doReturn "txid456"
-            on { this.details } doReturn details
-        }
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = NotifyPaymentReceived.Command.Onchain(event = event)
+        val command = NotifyPaymentReceived.Command.Onchain(txid = "txid456", details = details)
 
         val result = sut(command)
 
@@ -163,12 +191,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val details = mock<TransactionDetails> {
             on { amountSats } doReturn 5000L
         }
-        val event = mock<Event.OnchainTransactionReceived> {
-            on { txid } doReturn "txid456"
-            on { this.details } doReturn details
-        }
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(false)
-        val command = NotifyPaymentReceived.Command.Onchain(event = event)
+        val command = NotifyPaymentReceived.Command.Onchain(txid = "txid456", details = details)
 
         val result = sut(command)
 
@@ -182,12 +206,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val details = mock<TransactionDetails> {
             on { amountSats } doReturn 7500L
         }
-        val event = mock<Event.OnchainTransactionReceived> {
-            on { txid } doReturn "txid789"
-            on { this.details } doReturn details
-        }
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = NotifyPaymentReceived.Command.Onchain(event = event)
+        val command = NotifyPaymentReceived.Command.Onchain(txid = "txid789", details = details)
 
         sut(command)
         sut.claimPresentation(command)
@@ -205,12 +225,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val details = mock<TransactionDetails> {
             on { amountSats } doReturn 5000L
         }
-        val event = mock<Event.OnchainTransactionReceived> {
-            on { txid } doReturn "txid456"
-            on { this.details } doReturn details
-        }
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(false)
-        val command = NotifyPaymentReceived.Command.Onchain(event = event)
+        val command = NotifyPaymentReceived.Command.Onchain(txid = "txid456", details = details)
 
         sut(command)
 
@@ -326,4 +342,291 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertFalse(sut.claimPresentation(command) { false })
         assertTrue(sut.claimPresentation(command))
     }
+
+    @Test
+    fun `confirmed-only recent onchain receive returns ShowSheet`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidConfirmed", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+        assertEquals(NewTransactionSheetType.ONCHAIN, result.sheet.type)
+        assertEquals(NewTransactionSheetDirection.RECEIVED, result.sheet.direction)
+        assertEquals("txidConfirmed", result.sheet.paymentHashOrTxId)
+        assertEquals(5000L, result.sheet.sats)
+        inOrder(activityRepo) {
+            verify(activityRepo).handleOnchainTransactionConfirmed("txidConfirmed", details)
+            verify(activityRepo).shouldShowReceivedSheet("txidConfirmed", 5000uL)
+        }
+        verify(activityRepo, never()).handleOnchainTransactionReceived(any(), any())
+
+        assertTrue(sut.present(command) {})
+        verify(activityRepo).markOnchainActivityAsSeen("txidConfirmed", WalletScope.default)
+    }
+
+    @Test
+    fun `confirmed-only onchain receive does not reapply a confirmation already stored`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        whenever(activityRepo.getOnchainActivityByTxId(eq("txidStored"), eq(WalletScope.default)))
+            .thenReturn(onchainActivity(txId = "txidStored", confirmed = true))
+        val command = confirmedCommand(txid = "txidStored", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+        verify(activityRepo, never()).handleOnchainTransactionConfirmed(any(), any())
+        verify(activityRepo).shouldShowReceivedSheet("txidStored", 5000uL)
+    }
+
+    @Test
+    fun `confirmed-only onchain receive applies the confirmation when the activity is still unconfirmed`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        whenever(activityRepo.getOnchainActivityByTxId(eq("txidUnconfirmed"), eq(WalletScope.default)))
+            .thenReturn(onchainActivity(txId = "txidUnconfirmed", confirmed = false))
+        val command = confirmedCommand(txid = "txidUnconfirmed", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+        verify(activityRepo).handleOnchainTransactionConfirmed("txidUnconfirmed", details)
+    }
+
+    @Test
+    fun `confirmed-only onchain receive returns ShowNotification when includeNotification is true`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(
+            txid = "txidConfirmed",
+            details = details,
+            age = 59.minutes,
+            includeNotification = true,
+        )
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowNotification)
+        assertEquals("txidConfirmed", result.sheet.paymentHashOrTxId)
+        assertEquals("Payment Received", result.notification.title)
+    }
+
+    @Test
+    fun `confirmed-only onchain receive slightly ahead of the device clock returns ShowSheet`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidAhead", details = details, age = (-5).minutes)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+    }
+
+    @Test
+    fun `received then confirmed onchain payment is presented once`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val received = NotifyPaymentReceived.Command.Onchain(txid = "txidOnce", details = details)
+        val confirmed = confirmedCommand(txid = "txidOnce", details = details, age = Duration.ZERO)
+        var presentationCount = 0
+
+        val receivedResult = sut(received).getOrThrow()
+        assertTrue(receivedResult is NotifyPaymentReceived.Result.ShowSheet)
+        assertTrue(sut.present(received) { presentationCount += 1 })
+
+        val confirmedResult = sut(confirmed).getOrThrow()
+
+        assertTrue(confirmedResult is NotifyPaymentReceived.Result.Skip)
+        assertFalse(sut.present(confirmed) { presentationCount += 1 })
+        assertEquals(1, presentationCount)
+        verify(activityRepo, never()).handleOnchainTransactionConfirmed(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive confirmed outside the recent window returns Skip`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidOld", details = details, age = 61.minutes)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).handleOnchainTransactionConfirmed(any(), any())
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive replayed from old history returns Skip`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidReplay", details = details, age = (24 * 365).hours)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive far ahead of the device clock returns Skip`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidFuture", details = details, age = (-2).hours)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain send returns Skip`() = test {
+        val details = TransactionDetails(amountSats = -5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidSent", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).handleOnchainTransactionConfirmed(any(), any())
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive returns Skip while a restore is in progress`() = test {
+        isRestoring.value = true
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidRestore", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).handleOnchainTransactionConfirmed(any(), any())
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive returns Skip while a migration is in progress`() = test {
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidMigration", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+    }
+
+    @Test
+    fun `onchain mempool receive returns Skip while the first sync after restore is pending`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = NotifyPaymentReceived.Command.Onchain(txid = "txidRestored", details = details)
+
+        val result = sut(command).getOrThrow()
+
+        assertEquals(NotifyPaymentReceived.Result.Skip, result)
+        verify(activityRepo).handleOnchainTransactionReceived("txidRestored", details)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive returns Skip while the first sync after restore is pending`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(txid = "txidRestored", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertEquals(NotifyPaymentReceived.Result.Skip, result)
+        verify(activityRepo).handleOnchainTransactionConfirmed("txidRestored", details)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive already marked seen after restore returns Skip`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet("txidHistorical", 5000uL)).thenReturn(false)
+        val command = confirmedCommand(txid = "txidHistorical", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), any())
+    }
+
+    @Test
+    fun `onchain receive notifies again once the first sync after restore is done`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val historical = confirmedCommand(txid = "txidHistorical", details = details, age = Duration.ZERO)
+        val fresh = NotifyPaymentReceived.Command.Onchain(txid = "txidFresh", details = details)
+
+        assertEquals(NotifyPaymentReceived.Result.Skip, sut(historical).getOrThrow())
+
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = 0)
+        val result = sut(fresh).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+        assertEquals("txidFresh", result.sheet.paymentHashOrTxId)
+        assertTrue(sut.present(fresh) {})
+        verify(activityRepo).markOnchainActivityAsSeen("txidFresh", WalletScope.default)
+        verify(activityRepo, never()).markOnchainActivityAsSeen("txidHistorical", WalletScope.default)
+    }
+
+    @Test
+    fun `from maps a confirmed onchain event to a confirmed-only command`() {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        val event = Event.OnchainTransactionConfirmed(
+            txid = "txidMapped",
+            blockHash = "blockHash",
+            blockHeight = 100u,
+            confirmationTime = 1_700_000_000uL,
+            details = details,
+        )
+
+        val command = NotifyPaymentReceived.Command.from(event, includeNotification = true)
+
+        assertEquals(
+            NotifyPaymentReceived.Command.Onchain(
+                txid = "txidMapped",
+                details = details,
+                confirmationTime = 1_700_000_000uL,
+                includeNotification = true,
+            ),
+            command,
+        )
+    }
+
+    private fun onchainActivity(txId: String, confirmed: Boolean) = OnchainActivity.create(
+        id = txId,
+        txType = PaymentType.RECEIVED,
+        txId = txId,
+        value = 5000uL,
+        fee = 100uL,
+        address = "bc1test",
+        timestamp = 1_700_000_000uL,
+        confirmed = confirmed,
+    )
+
+    private fun confirmedCommand(
+        txid: String,
+        details: TransactionDetails,
+        age: Duration,
+        includeNotification: Boolean = false,
+    ) = NotifyPaymentReceived.Command.Onchain(
+        txid = txid,
+        details = details,
+        confirmationTime = (NOW - age).epochSeconds.toULong(),
+        includeNotification = includeNotification,
+    )
 }

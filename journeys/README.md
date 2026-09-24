@@ -158,6 +158,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
+| `onchain-receive/*` | port pending in synonymdev/bitkit-ios#588, which wires `onchainTransactionConfirmed` into the same received-sheet flow but carries no `journeys/` files. Two adaptations when it lands: iOS suppresses replayed historical receives with a `pendingRestoreActivitySeen` flag cleared by the first post-restore on-chain sync, not the one-hour block-timestamp guard used here, so a stale-confirmation step has to drive a restore instead of a clock; and iOS has no foreground-service path, so `confirmed-only-background-notification.xml` has no counterpart |
 | `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
@@ -171,6 +172,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
+| `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
@@ -201,6 +203,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | External amount available | — | `ExternalAmountAvailable` |
 | Background payments setting row | `BackgroundPaymentSettings` | `NotificationsSettings` |
 | Send over-max toast | — *(no tag; assert it from a screenshot)* | `SendAmountExceededToast` |
+| Confirm mnemonic selected slot | `SelectedWord-<n>` | — *(no identifier on `ConfirmWordView` rows)* |
 | Widgets intro screen container | — | `WidgetsOnboarding` |
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
