@@ -61,5 +61,7 @@ private fun String.toLinkUri(): Uri? {
     if (trimmed.isValidEmail()) return "mailto:$trimmed".toUri()
     if (!Patterns.WEB_URL.matcher(trimmed).matches()) return null
     val withScheme = if (trimmed.contains("://")) trimmed else "https://$trimmed"
-    return withScheme.toUri().takeIf { it.scheme == "http" || it.scheme == "https" }
+    return withScheme.toUri().takeIf {
+        it.scheme.equals("http", ignoreCase = true) || it.scheme.equals("https", ignoreCase = true)
+    }
 }
