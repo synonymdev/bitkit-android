@@ -185,7 +185,10 @@ jobs:
 
       - name: Download migration source
         working-directory: bitkit-e2e-tests
-        run: python3 scripts/download-migration-app.py android '${{ matrix.scenario.source }}' '${{ matrix.scenario.version }}'
+        run: python3 scripts/download-migration-app.py android "$MIGRATION_SOURCE" "$MIGRATION_VERSION"
+        env:
+          MIGRATION_SOURCE: ${{ matrix.scenario.source }}
+          MIGRATION_VERSION: ${{ matrix.scenario.version }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
