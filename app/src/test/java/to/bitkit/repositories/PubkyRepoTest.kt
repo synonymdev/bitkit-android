@@ -1423,10 +1423,14 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `initialize should flag session restoration failure when service startup fails with identity error`() = test {
+        var serviceAvailable = false
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
         whenever(pubkyService.initialize()).thenAnswer {
-            throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+            if (!serviceAvailable) {
+                throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+            }
         }
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
         val repo = createSut()
 
         repo.awaitInitialization()
@@ -1436,6 +1440,14 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(pubkyService, never()).importSession(any())
         verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+
+        repo.clearSessionRestorationFailed()
+        repo.restoreSessionIfNeeded()
+        assertFalse(repo.sessionRestorationFailed.value)
+
+        serviceAvailable = true
+        repo.restoreSessionIfNeeded()
+        assertEquals(VALID_SELF_KEY, repo.publicKey.value)
     }
 
     @Test
@@ -1556,6 +1568,9 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(keychain, never()) { delete(any()) }
 
         sut.clearSessionRestorationFailed()
+        sut.restoreSessionIfNeeded()
+        assertFalse(sut.sessionRestorationFailed.value)
+
         canRestore = true
         sut.restoreSessionIfNeeded()
 
@@ -1665,6 +1680,43 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(sut.publicKey.value)
         assertFalse(sut.hasIdentity())
         verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
+    fun `wipe completes while restoration profile loading remains in flight`() = test {
+        sut.awaitInitialization()
+        val credentials = mutableMapOf(Keychain.Key.PAYKIT_SESSION.name to "saved_session")
+        whenever(keychain.loadString(any())).thenAnswer { credentials[it.getArgument<String>(0)] }
+        whenever(keychain.delete(any())).thenAnswer {
+            credentials.remove(it.getArgument<String>(0))
+            Unit
+        }
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        val finishProfileLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            finishProfileLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+        clearInvocations(pubkyStore)
+        val restore = async { sut.restoreSessionIfNeeded() }
+        profileLoadStarted.await()
+
+        try {
+            val wipe = async { sut.wipeLocalState() }
+            wipe.await()
+
+            assertFalse(restore.isCompleted)
+            assertNull(sut.publicKey.value)
+        } finally {
+            finishProfileLoad.complete(Unit)
+        }
+        restore.await()
+
+        assertNull(sut.profile.value)
+        assertTrue(sut.contacts.value.isEmpty())
+        verify(pubkyStore).reset()
     }
 
     @Test

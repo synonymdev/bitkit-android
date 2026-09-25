@@ -185,28 +185,39 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun initialize() = withContext(ioDispatcher) {
-        initializeMutex.withLock { initializeSession() }
+        val restored = initializeMutex.withLock { initializeSession() }
+        if (restored) {
+            loadProfile()
+            loadContacts()
+        }
     }
 
     suspend fun restoreSessionIfNeeded() = withContext(ioDispatcher) {
         awaitInitialization()
-        initializeMutex.withLock {
-            if (_publicKey.value != null || _authState.value != PubkyAuthState.Idle) return@withLock
+        val restored = initializeMutex.withLock {
+            if (_publicKey.value != null || _authState.value != PubkyAuthState.Idle) return@withLock false
             runSuspendCatching {
                 val hasIdentity = hasIdentity()
                 _identityRefreshVersion.update { it + 1 }
-                if (hasIdentity) initializeSession()
+                hasIdentity && initializeSession(notifyFailure = false)
             }.onFailure { Logger.warn("Failed to retry paykit session restoration", it, context = TAG) }
+                .getOrDefault(false)
+        }
+        if (restored) {
+            loadProfile()
+            loadContacts()
         }
     }
 
-    private suspend fun initializeSession() {
+    private suspend fun initializeSession(notifyFailure: Boolean = true): Boolean {
         runSuspendCatching {
             ensureServiceInitialized()
         }.onFailure {
             Logger.error("Failed to initialize paykit", it, context = TAG)
-            if (it.isPaykitIdentityError() && hasSavedSession()) _sessionRestorationFailed.update { true }
-        }.getOrNull() ?: return
+            if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
+                _sessionRestorationFailed.update { true }
+            }
+        }.getOrNull() ?: return false
 
         _sessionRestorationFailed.update { false }
         val result = runSuspendCatching {
@@ -233,15 +244,11 @@ class PubkyRepo @Inject constructor(
             }
             is InitResult.RestorationFailed -> {
                 clearAuthenticatedState(clearCachedProfile = false)
-                _sessionRestorationFailed.update { true }
+                if (notifyFailure) _sessionRestorationFailed.update { true }
             }
         }
         initializationReady.complete(Unit)
-
-        if (result is InitResult.Restored) {
-            loadProfile()
-            loadContacts()
-        }
+        return result is InitResult.Restored
     }
 
     private fun hasSavedSession(): Boolean = runCatching {
