@@ -226,6 +226,7 @@ import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.SheetDeepLinks
+import to.bitkit.ui.utils.SpendingHwSignLink
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.deepLinkableComposable
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
@@ -334,23 +335,46 @@ fun ContentView(
         val uri = pendingScreenDeepLink ?: return@LaunchedEffect
 
         navController.currentBackStackEntryFlow.first()
+
+        val sheet = SheetDeepLinks.sheetFor(uri)
+        val hwSignLink = if (sheet == null) ScreenDeepLinks.spendingHwSignLink(uri) else null
+
+        val shouldNavigate = when {
+            sheet != null -> {
+                appViewModel.showSheet(sheet)
+                false
+            }
+
+            hwSignLink is SpendingHwSignLink.Malformed -> {
+                Logger.warn("Refused spending hw sign deeplink, malformed '$uri'", context = "ContentView")
+                false
+            }
+
+            // Refusals are logged with their specific reason inside prepareSpendingHwSign.
+            hwSignLink is SpendingHwSignLink.Valid -> transferViewModel.prepareSpendingHwSign(
+                walletId = hwSignLink.walletId,
+                amountSats = hwSignLink.amountSats,
+            )
+
+            else -> true
+        }
+
+        if (shouldNavigate) {
+            val request = Intent(Intent.ACTION_VIEW, uri)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            val handled = navController.handleDeepLink(request)
+
+            if (shouldDismissSheetForScreenLink(handled, appViewModel.currentSheet.value)) {
+                appViewModel.hideSheet()
+            }
+            if (!handled) {
+                Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
+            }
+        }
+
+        // Consumed once, at the end: the effect is keyed on pendingScreenDeepLink, so clearing it
+        // early cancels this coroutine mid-prepareSpendingHwSign.
         appViewModel.consumeScreenDeepLink()
-
-        SheetDeepLinks.sheetFor(uri)?.let {
-            appViewModel.showSheet(it)
-            return@LaunchedEffect
-        }
-
-        val request = Intent(Intent.ACTION_VIEW, uri)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        val handled = navController.handleDeepLink(request)
-
-        if (shouldDismissSheetForScreenLink(handled, appViewModel.currentSheet.value)) {
-            appViewModel.hideSheet()
-        }
-        if (!handled) {
-            Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
-        }
     }
 
     LaunchedEffect(appViewModel) {
@@ -1004,13 +1028,15 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onQuoteReady = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
+                    onQuoteReady = {
+                        val amountSats = transferViewModel.spendingUiState.value.clientBalanceSat.toLong()
+                        navController.navigateTo(Routes.SpendingHwSign(walletId, amountSats))
+                    },
                 )
             }
-            composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
-                val walletId = entry.toRoute<Routes.SpendingHwSign>().walletId
+            deepLinkableComposable<Routes.SpendingHwSign> { entry ->
                 SpendingHwSignScreen(
-                    walletId = walletId,
+                    walletId = entry.toRoute<Routes.SpendingHwSign>().walletId,
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
@@ -2335,7 +2361,7 @@ sealed interface Routes {
     data class SpendingAmountHw(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingHwSign(val walletId: String) : Routes.InternalOnly
+    data class SpendingHwSign(val walletId: String, val amountSats: Long) : Routes.DeepLinkable
 
     @Serializable
     data object SpendingHwSigned : Routes.InternalOnly

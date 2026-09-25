@@ -129,6 +129,10 @@ class TransferViewModel @Inject constructor(
 
     fun onConfirmAmount(satsAmount: Long) {
         if (confirmPayJob?.isActive == true || hwTransferSignJob?.isActive == true) return
+        viewModelScope.launch { quoteSpendingAmount(satsAmount) }
+    }
+
+    private suspend fun quoteSpendingAmount(satsAmount: Long): Boolean {
         val values = blocktankRepo.calculateLiquidityOptions(satsAmount.toULong()).getOrNull()
         if (values == null || values.maxLspBalanceSat == 0uL) {
             setTransferEffect(
@@ -139,46 +143,45 @@ class TransferViewModel @Inject constructor(
                     ),
                 )
             )
-            return
+            return false
         }
 
         val lspBalance = maxOf(values.defaultLspBalanceSat, values.minLspBalanceSat)
 
-        viewModelScope.launch {
-            _spendingUiState.update { it.copy(isLoading = true) }
+        _spendingUiState.update { it.copy(isLoading = true) }
 
-            withTimeoutOrNull(1.minutes) {
-                isNodeRunning.first { it }
-            }
+        withTimeoutOrNull(1.minutes) {
+            isNodeRunning.first { it }
+        }
 
-            val feeSat = estimateSpendingFee(
-                clientBalanceSat = satsAmount.toULong(),
-                lspBalanceSat = lspBalance,
-            ).getOrElse { e ->
-                setTransferEffect(TransferEffect.ToastException(e))
-                delay(1.seconds)
-                _spendingUiState.update { it.copy(isLoading = false) }
-                return@launch
-            }
-
-            if (!canFundOrder(feeSat)) {
-                Logger.info("Rejected spending amount '$satsAmount' over funding budget", context = TAG)
-                setTransferEffect(
-                    TransferEffect.ToastError(
-                        title = context.getString(R.string.lightning__spending_amount__error_balance__title),
-                        description = context.getString(
-                            R.string.lightning__spending_amount__error_balance__description
-                        ),
-                    )
-                )
-                _spendingUiState.update { it.copy(isLoading = false) }
-                return@launch
-            }
-
-            onEstimateReady(satsAmount.toULong(), lspBalance, feeSat)
+        val feeSat = estimateSpendingFee(
+            clientBalanceSat = satsAmount.toULong(),
+            lspBalanceSat = lspBalance,
+        ).getOrElse { e ->
+            setTransferEffect(TransferEffect.ToastException(e))
             delay(1.seconds)
             _spendingUiState.update { it.copy(isLoading = false) }
+            return false
         }
+
+        if (!canFundOrder(feeSat)) {
+            Logger.info("Rejected spending amount '$satsAmount' over funding budget", context = TAG)
+            setTransferEffect(
+                TransferEffect.ToastError(
+                    title = context.getString(R.string.lightning__spending_amount__error_balance__title),
+                    description = context.getString(
+                        R.string.lightning__spending_amount__error_balance__description
+                    ),
+                )
+            )
+            _spendingUiState.update { it.copy(isLoading = false) }
+            return false
+        }
+
+        val quoted = onEstimateReady(satsAmount.toULong(), lspBalance, feeSat)
+        delay(1.seconds)
+        _spendingUiState.update { it.copy(isLoading = false) }
+        return quoted
     }
 
     private suspend fun estimateSpendingFee(
@@ -648,9 +651,9 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun onEstimateReady(clientBalanceSat: ULong, lspBalanceSat: ULong, feeSat: ULong) {
+    private suspend fun onEstimateReady(clientBalanceSat: ULong, lspBalanceSat: ULong, feeSat: ULong): Boolean {
         settingsStore.update { it.copy(lightningSetupStep = 0) }
-        if (confirmPayJob?.isActive == true || hwTransferSignJob?.isActive == true) return
+        if (confirmPayJob?.isActive == true || hwTransferSignJob?.isActive == true) return false
         pendingHwFundingBroadcast = null
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = null
@@ -667,6 +670,7 @@ class TransferViewModel @Inject constructor(
             )
         }
         setTransferEffect(TransferEffect.OnQuoteReady)
+        return true
     }
 
     private fun updateAvailableAmount() {
@@ -979,31 +983,66 @@ class TransferViewModel @Inject constructor(
     // region Hardware Wallet
 
     fun updateHwLimits(walletId: String) {
-        viewModelScope.launch {
-            _spendingUiState.update { it.copy(isLoading = true) }
+        viewModelScope.launch { loadHwLimits(walletId) }
+    }
 
-            val account = hwWalletRepo.getFundingAccount(walletId).getOrElse {
-                Logger.error("Failed to load hardware funding account", it, context = TAG)
-                _spendingUiState.update { s -> s.copy(isLoading = false, maxAllowedToSend = 0, balanceAfterFee = 0) }
-                setTransferEffect(TransferEffect.ToastException(it))
-                return@launch
-            }
+    private suspend fun loadHwLimits(walletId: String) {
+        _spendingUiState.update { it.copy(isLoading = true) }
 
-            awaitNodeRunning()
-            updateTransferValues(0uL)
-
-            val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve(account.balanceSats).safe()
-            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount, hwFundingWalletId = walletId) }
-
-            val initialLspFees = estimateInitialLspFees(availableAmount)
-            if (initialLspFees == null) {
-                _spendingUiState.update { it.copy(isLoading = false) }
-                return@launch
-            }
-
-            val balanceAfterLspFee = availableAmount.safe() - initialLspFees.safe()
-            estimateFinalMaxSendAmount(availableAmount, balanceAfterLspFee)
+        val account = hwWalletRepo.getFundingAccount(walletId).getOrElse {
+            Logger.error("Failed to load hardware funding account", it, context = TAG)
+            _spendingUiState.update { s -> s.copy(isLoading = false, maxAllowedToSend = 0, balanceAfterFee = 0) }
+            setTransferEffect(TransferEffect.ToastException(it))
+            return
         }
+
+        awaitNodeRunning()
+        updateTransferValues(0uL)
+
+        val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve(account.balanceSats).safe()
+        _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount, hwFundingWalletId = walletId) }
+
+        val initialLspFees = estimateInitialLspFees(availableAmount)
+        if (initialLspFees == null) {
+            _spendingUiState.update { it.copy(isLoading = false) }
+            return
+        }
+
+        val balanceAfterLspFee = availableAmount.safe() - initialLspFees.safe()
+        estimateFinalMaxSendAmount(availableAmount, balanceAfterLspFee)
+    }
+
+    /**
+     * Admits a `spending-hw-sign` deep link by producing the same quote the amount screen does, so the
+     * sign screen opens on live state instead of a route argument. Returns false when the link is
+     * refused, having logged why. Dev-mode only, gated by ScreenDeepLinks.isEnabled.
+     */
+    suspend fun prepareSpendingHwSign(walletId: String, amountSats: Long): Boolean {
+        if (walletId.isBlank() || amountSats <= 0) return false
+
+        if (hwWalletRepo.wallets.value.none { it.id == walletId }) {
+            Logger.warn("Refused spending hw sign deeplink, unknown wallet '$walletId'", context = TAG)
+            return false
+        }
+
+        // An external link must never discard a signed-but-unbroadcast funding tx, or cancel a sign
+        // that is already running - the user would have to re-approve the spend on the device.
+        val isTransferInFlight = confirmPayJob?.isActive == true ||
+            hwTransferSignJob?.isActive == true ||
+            pendingHwFundingBroadcast != null
+        if (isTransferInFlight) {
+            Logger.warn("Refused spending hw sign deeplink, transfer in flight for '$walletId'", context = TAG)
+            return false
+        }
+
+        loadHwLimits(walletId)
+
+        if (!quoteSpendingAmount(amountSats)) {
+            Logger.warn("Refused spending hw sign deeplink, no quote for '$amountSats' sats", context = TAG)
+            return false
+        }
+
+        return true
     }
 
     /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
