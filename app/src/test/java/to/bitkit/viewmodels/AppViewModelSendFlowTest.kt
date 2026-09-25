@@ -4501,6 +4501,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             txid = "confirmed-txid",
             details = details,
             confirmationTime = 0uL,
+            blockHeight = 100u,
         )
         inOrder(activityRepo, notifyPaymentReceivedHandler) {
             verify(activityRepo).handleOnchainTransactionConfirmed("confirmed-txid", details)
@@ -4525,6 +4526,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(settingsStore).update(any())
         }
         assertFalse(settingsData.value.pendingRestoreActivitySeen)
+        assertEquals(100L, settingsData.value.restoreSyncedBlockHeight)
     }
 
     @Test
@@ -4538,6 +4540,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(activityRepo).markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
         assertTrue(settingsData.value.pendingRestoreActivitySeen)
+        assertEquals(0L, settingsData.value.restoreSyncedBlockHeight)
+    }
+
+    @Test
+    fun `a later onchain sync during the restore sweep does not overwrite the restore tip`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        val sweep = CompletableDeferred<Unit>()
+        whenever { activityRepo.markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong())) }
+            .doSuspendableAnswer {
+                sweep.await()
+                Result.success(Unit)
+            }
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        runCurrent()
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 101u))
+        runCurrent()
+        sweep.complete(Unit)
+        advanceUntilIdle()
+
+        verify(activityRepo).markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
+        assertEquals(100L, settingsData.value.restoreSyncedBlockHeight)
+        assertFalse(settingsData.value.pendingRestoreActivitySeen)
     }
 
     @Test

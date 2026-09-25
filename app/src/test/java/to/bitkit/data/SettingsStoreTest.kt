@@ -97,4 +97,14 @@ class SettingsStoreTest : BaseUnitTest() {
         assertEquals(restoreStartedAt, sut.data.first().pendingRestoreActivitySeenSince)
         assertTrue(sut.data.first().pendingRestoreActivitySeen)
     }
+
+    @Test
+    fun `restoring settings keeps the restore tip recorded on this device`() = test {
+        sut.update { it.copy(restoreSyncedBlockHeight = 900L) }
+        val backup = SettingsBackupV1(createdAt = 0L, settings = SettingsData(restoreSyncedBlockHeight = 5L))
+
+        assertTrue(sut.restoreFromBackup(backup).isSuccess)
+
+        assertEquals(900L, sut.data.first().restoreSyncedBlockHeight)
+    }
 }

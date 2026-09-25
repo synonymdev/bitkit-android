@@ -226,6 +226,17 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoreWallet should release the received sheet hold when the restore fails`() = test {
+        whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.failure(AppError("restore failed")))
+        val settingsData = stubSettingsUpdate()
+
+        sut.restoreWallet("test_mnemonic", null)
+        advanceUntilIdle()
+
+        assertFalse(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
     fun `addTagToSelected should call walletRepo addTagToSelected`() = test {
         sut.addTagToSelected("test_tag")
 

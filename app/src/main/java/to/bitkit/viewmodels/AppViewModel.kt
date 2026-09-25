@@ -401,6 +401,7 @@ class AppViewModel @Inject constructor(
         registerSheet(highBalanceSheet)
     }
     private var isCompletingMigration = false
+    private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
@@ -1452,7 +1453,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleSyncCompleted(event: Event.SyncCompleted) {
-        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen()
+        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
 
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
@@ -1483,13 +1484,27 @@ class AppViewModel @Inject constructor(
             }
     }
 
-    private suspend fun completePendingRestoreActivitySeen() {
-        val restoreStartedAt = settingsStore.data.first().pendingRestoreActivitySeenSince
-        if (restoreStartedAt <= 0) return
-        Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
-        // Bounded by the restore start so a payment arriving mid-restore keeps its unseen state.
-        activityRepo.markAllUnseenActivitiesAsSeen(startedBefore = restoreStartedAt.toULong()).onSuccess {
-            settingsStore.update { settings -> settings.copy(pendingRestoreActivitySeenSince = 0) }
+    private suspend fun completePendingRestoreActivitySeen(syncedBlockHeight: UInt) {
+        // Claimed before the first suspension, so a later sync completing while this sweep runs cannot record its
+        // higher tip and silence a new receive confirmed in between.
+        if (isCompletingRestoreHold) return
+        isCompletingRestoreHold = true
+        try {
+            val restoreStartedAt = settingsStore.data.first().pendingRestoreActivitySeenSince
+            if (restoreStartedAt <= 0) return
+            Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
+            // Bounded by the restore start so a payment arriving mid-restore keeps its unseen state.
+            activityRepo.markAllUnseenActivitiesAsSeen(startedBefore = restoreStartedAt.toULong()).onSuccess {
+                settingsStore.update { settings ->
+                    if (!settings.pendingRestoreActivitySeen) return@update settings
+                    settings.copy(
+                        pendingRestoreActivitySeenSince = 0,
+                        restoreSyncedBlockHeight = syncedBlockHeight.toLong(),
+                    )
+                }
+            }
+        } finally {
+            isCompletingRestoreHold = false
         }
     }
 

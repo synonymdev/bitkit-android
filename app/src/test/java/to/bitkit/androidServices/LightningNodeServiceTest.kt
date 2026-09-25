@@ -490,6 +490,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             txid = "confirmed_txid",
             details = details,
             confirmationTime = 0uL,
+            blockHeight = 100u,
             includeNotification = true,
         )
         verify(notifyPaymentReceivedHandler).invoke(expectedCommand)
