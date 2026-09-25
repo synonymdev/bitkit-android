@@ -1,0 +1,19 @@
+<journey name="Above Limit Asks">
+  <description>
+    A request above the per-payment limit is never paid automatically: it arrives as an ordinary
+    Payment Request that the payer pays by swiping, and a manual payment does not count toward the
+    amount paid automatically. Requires the Active $5 a payment allowance from set-and-accept.xml
+    and a payer balance above the request.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with the $5 a payment, $50 a month allowance Active and at least one automatic payment made, per auto-pay-under-limit.xml</action>
+    <action>On the payee instance, open Subscriptions, the Payments tab (testTag "Tab-payments"), tap Request Payment (testTag "PaymentRequestCreate") and send the payer a one-time Payment Request for $20 with the note "Artpack"</action>
+    <action>Switch to the payer instance</action>
+    <action>Verify the Payment Request sheet (testTag "PaymentRequestsSheet") opens for $20.00 from the payee, or the bell (testTag "PaymentRequestsBell") shows one pending request, and that nothing was sent automatically</action>
+    <action>Verify no "Payment Executed" notification was posted for this request</action>
+    <action>Pay it from the sheet (testTag "PaymentRequestPay-&lt;paymentRequestId&gt;") and complete Swipe To Pay</action>
+    <action>Verify Bitcoin Sent shows about $20.00</action>
+    <action>Open Subscriptions, tap the Payments tab and verify the "Artpack" row is listed without "· Auto-paid" in its subtitle</action>
+    <action>Tap the Allowances tab, tap the payee's row and verify PAID AUTOMATICALLY (testTag "AllowancePaidSoFar") still shows only the automatic payments, not the $20</action>
+  </actions>
+</journey>

@@ -86,6 +86,14 @@ data class PrivatePaykitPaymentContext(
     val paymentListVersion: ULong,
 )
 
+/** The payee's current private endpoint for an automatic Allowance payment. */
+data class PrivatePaykitAllowancePayment(
+    val endpoint: Endpoint,
+    val context: PrivatePaykitPaymentContext,
+    val lightningPaymentHash: String?,
+    val lightningInvoiceHasAmount: Boolean,
+)
+
 @OptIn(ExperimentalTime::class)
 @Suppress("LongParameterList")
 @Singleton

@@ -1,0 +1,26 @@
+<journey name="End Stops Auto Pay">
+  <description>
+    Either side can end an allowance from its detail sheet, and from then on every request asks
+    again. The first half ends it on the payer; the second half sets a fresh allowance and ends it
+    on the payee. In both cases the payer's row keeps the amount that was paid automatically, and the
+    next request waits in the bell as an ordinary Payment Request.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with an Active allowance that has paid at least one request automatically, per auto-pay-under-limit.xml</action>
+    <action>On the payer instance, open the drawer menu, tap Subscriptions, tap the Allowances tab and tap the payee's row</action>
+    <action>Verify the detail sheet (testTag "AllowanceDetail") ends with a swipe control reading "Swipe To End Allowance"</action>
+    <action>Swipe the control to the end</action>
+    <action>Verify the sheet dismisses and the row's status line (testTag "AllowanceRowStatus") reads "Ended · " followed by the amount paid automatically, such as "Ended · $2.00 paid automatically", with the row dimmed</action>
+    <action>Tap the row and verify the detail explanation (testTag "AllowanceDetailStatus") reads "This allowance has ended. Every request asks again." with no swipe control</action>
+    <action>On the payee instance, send the payer a one-time Payment Request for $2 with the note "AfterEnd"</action>
+    <action>On the payer instance, verify it is not paid: no "Payment Executed" notification, and the request waits in the bell (testTag "PaymentRequestsBell") as an ordinary Payment Request</action>
+    <action>Dismiss that request</action>
+    <action>On the payee instance, open Subscriptions and the Allowances tab, and verify the payer's row reads "Ended"</action>
+    <action>Set and accept a fresh $5 a payment, $50 a month allowance between the same two instances, per set-and-accept.xml</action>
+    <action>On the payee instance, tap the Active row, verify the detail ends with "Swipe To End Allowance", and swipe it to the end</action>
+    <action>Verify the payee's row reads "Ended"</action>
+    <action>On the payer instance, verify its row for that allowance reads "Ended · $0.00 paid automatically"</action>
+    <action>On the payee instance, send the payer a one-time Payment Request for $2 with the note "AfterPayeeEnd"</action>
+    <action>On the payer instance, verify it is not paid and waits in the bell as an ordinary Payment Request, then dismiss it</action>
+  </actions>
+</journey>
