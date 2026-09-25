@@ -49,6 +49,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
         /** Stands in for the epoch second a seed restore began. */
         private const val RESTORE_STARTED_AT = 1_700_000_000L
+        private const val RESTORE_SYNCED_HEIGHT = 900u
     }
 
     private val context: Context = mock()
@@ -584,6 +585,43 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirmed-only onchain receive scanned by the restore returns Skip after the hold lifts`() = test {
+        // #1342: LDK events are handled concurrently, so a replayed confirmation can reach the handler after the
+        // first sync already lifted the hold, and a later rescan replays it again.
+        settingsData.value = SettingsData(restoreSyncedBlockHeight = RESTORE_SYNCED_HEIGHT.toLong())
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(
+            txid = "txidHistorical",
+            details = details,
+            age = Duration.ZERO,
+            blockHeight = RESTORE_SYNCED_HEIGHT,
+        )
+
+        val result = sut(command).getOrThrow()
+
+        assertEquals(NotifyPaymentReceived.Result.Skip, result)
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+    }
+
+    @Test
+    fun `confirmed-only onchain receive above the restore tip shows the sheet`() = test {
+        settingsData.value = SettingsData(restoreSyncedBlockHeight = RESTORE_SYNCED_HEIGHT.toLong())
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        val command = confirmedCommand(
+            txid = "txidNew",
+            details = details,
+            age = Duration.ZERO,
+            blockHeight = RESTORE_SYNCED_HEIGHT + 1u,
+        )
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+    }
+
+    @Test
     fun `from maps a confirmed onchain event to a confirmed-only command`() {
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         val event = Event.OnchainTransactionConfirmed(
@@ -601,6 +639,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
                 txid = "txidMapped",
                 details = details,
                 confirmationTime = 1_700_000_000uL,
+                blockHeight = 100u,
                 includeNotification = true,
             ),
             command,
@@ -623,10 +662,12 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         details: TransactionDetails,
         age: Duration,
         includeNotification: Boolean = false,
+        blockHeight: UInt = RESTORE_SYNCED_HEIGHT + 1u,
     ) = NotifyPaymentReceived.Command.Onchain(
         txid = txid,
         details = details,
         confirmationTime = (NOW - age).epochSeconds.toULong(),
+        blockHeight = blockHeight,
         includeNotification = includeNotification,
     )
 }

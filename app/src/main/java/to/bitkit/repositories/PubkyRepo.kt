@@ -128,6 +128,9 @@ class PubkyRepo @Inject constructor(
     private val _contactsLoadVersion = MutableStateFlow(0L)
     val contactsLoadVersion: StateFlow<Long> = _contactsLoadVersion.asStateFlow()
 
+    private val _contactsLoadCompletionVersion = MutableStateFlow(0L)
+    val contactsLoadCompletionVersion: StateFlow<Long> = _contactsLoadCompletionVersion.asStateFlow()
+
     private val _isLoadingContacts = MutableStateFlow(false)
     val isLoadingContacts: StateFlow<Boolean> = _isLoadingContacts.asStateFlow()
 
@@ -854,6 +857,7 @@ class PubkyRepo @Inject constructor(
         if (!loadContactsMutex.tryLock()) return
 
         _isLoadingContacts.update { true }
+        var shouldMarkLoadCompleted = false
         try {
             runSuspendCatching {
                 withContext(ioDispatcher) {
@@ -885,17 +889,20 @@ class PubkyRepo @Inject constructor(
                 }
                 _contacts.update { loadedContacts }
                 markContactsLoaded()
+                shouldMarkLoadCompleted = true
             }.onFailure {
+                shouldMarkLoadCompleted = _publicKey.value == pk
                 Logger.error("Failed to load contacts", it, context = TAG)
             }
         } finally {
             _isLoadingContacts.update { false }
             loadContactsMutex.unlock()
+            if (shouldMarkLoadCompleted && _publicKey.value == pk) markContactsLoadCompleted()
         }
     }
 
     suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
-        val prefixedKey = runCatching { requireAddableContactPublicKey(publicKey) }
+        val prefixedKey = runCatching { requireCanonicalAddableContactPublicKey(publicKey) }
             .getOrElse { return Result.failure(it) }
         return resolveContactProfile(prefixedKey)
             .map { it ?: PubkyProfile.placeholder(prefixedKey) }
@@ -913,7 +920,7 @@ class PubkyRepo @Inject constructor(
         existingProfile: PubkyProfile? = null,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
-            val prefixedKey = requireAddableContactPublicKey(
+            val prefixedKey = requireCanonicalAddableContactPublicKey(
                 publicKey = publicKey,
                 allowExisting = existingProfile != null,
             )
@@ -1461,6 +1468,7 @@ class PubkyRepo @Inject constructor(
         _profile.update { null }
         _contacts.update { emptyList() }
         _contactsLoadVersion.update { 0L }
+        _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
         _sessionRestorationFailed.update { false }
         _authState.update { PubkyAuthState.Idle }
@@ -1468,6 +1476,10 @@ class PubkyRepo @Inject constructor(
 
     private fun markContactsLoaded() {
         _contactsLoadVersion.update { it + 1 }
+    }
+
+    private fun markContactsLoadCompleted() {
+        _contactsLoadCompletionVersion.update { it + 1 }
     }
 
     private suspend fun clearLocalState(publicPaykitCleanupPending: Boolean = false) = withContext(ioDispatcher) {
@@ -1496,6 +1508,18 @@ class PubkyRepo @Inject constructor(
 
     private fun requireAddableContactPublicKey(publicKey: String, allowExisting: Boolean = false): String {
         val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
+        return requireValidAddableContactPublicKey(prefixedKey, allowExisting)
+    }
+
+    private fun requireCanonicalAddableContactPublicKey(
+        publicKey: String,
+        allowExisting: Boolean = false,
+    ): String {
+        val prefixedKey = PubkyPublicKeyFormat.canonicalized(publicKey)
+        return requireValidAddableContactPublicKey(prefixedKey, allowExisting)
+    }
+
+    private fun requireValidAddableContactPublicKey(prefixedKey: String?, allowExisting: Boolean): String {
         contactValidationError(prefixedKey, allowExisting)?.let { throw it }
         return checkNotNull(prefixedKey) { "Normalized pubky key is required" }
     }

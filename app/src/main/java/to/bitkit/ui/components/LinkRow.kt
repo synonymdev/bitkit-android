@@ -1,13 +1,24 @@
 package to.bitkit.ui.components
 
+import android.content.Intent
+import android.net.Uri
+import android.util.Patterns
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.isValidEmail
+import to.bitkit.utils.Logger
+
+private const val TAG = "LinkRow"
 
 @Composable
 fun LinkRow(
@@ -16,6 +27,9 @@ fun LinkRow(
     linkIndex: Int,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val uri = remember(label, value) { value.toLinkUri(label) }
+
     Column(modifier = modifier.fillMaxWidth()) {
         VerticalSpacer(16.dp)
         Text13Up(
@@ -26,9 +40,50 @@ fun LinkRow(
         VerticalSpacer(8.dp)
         BodySSB(
             text = value,
-            modifier = Modifier.testTag("ProfileLinkValue_$linkIndex"),
+            modifier = Modifier
+                .clickableAlpha(
+                    onClick = uri?.let { linkUri ->
+                        {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, linkUri)) }
+                                .onFailure { Logger.warn("Failed to open link '$linkUri'", it, context = TAG) }
+                        }
+                    }
+                )
+                .testTag("ProfileLinkValue_$linkIndex"),
         )
         VerticalSpacer(16.dp)
         HorizontalDivider()
+    }
+}
+
+private val PHONE_REGEX = Regex("""^\+?[0-9 ().-]{7,}$""")
+private const val MIN_PHONE_DIGITS = 7
+private val PHONE_LABELS = setOf("phone", "tel", "telephone", "mobile", "cell")
+
+private fun String.toLinkUri(label: String): Uri? {
+    val trimmed = trim()
+    val scheme = trimmed.toUri().scheme?.lowercase()
+    return when {
+        trimmed.isEmpty() -> null
+        trimmed.isValidEmail() -> "mailto:$trimmed".toUri()
+        (trimmed.startsWith('+') || label.trim().lowercase() in PHONE_LABELS) && trimmed.isPhoneNumber() ->
+            trimmed.toTelUri()
+        scheme == "tel" -> trimmed.substringAfter(':').trim().takeIf { it.isPhoneNumber() }?.toTelUri()
+        trimmed.contains(' ') -> null
+        scheme == "mailto" -> trimmed.toUri()
+        Patterns.WEB_URL.matcher(trimmed).matches() -> trimmed.toWebUri()
+        else -> null
+    }
+}
+
+private fun String.isPhoneNumber() = matches(PHONE_REGEX) && count(Char::isDigit) >= MIN_PHONE_DIGITS
+
+private fun String.toTelUri() = "tel:${filter { it.isDigit() || it == '+' }}".toUri()
+
+private fun String.toWebUri(): Uri? {
+    val withScheme = if (contains("://")) this else "https://$this"
+    return withScheme.toUri().takeIf {
+        val isHttp = it.scheme.equals("http", ignoreCase = true) || it.scheme.equals("https", ignoreCase = true)
+        isHttp && it.host?.substringAfterLast('.').orEmpty().any(Char::isLetter)
     }
 }

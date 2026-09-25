@@ -21,11 +21,15 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
@@ -69,9 +73,10 @@ import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
 class PubkyRepoTest : BaseUnitTest() {
     companion object {
         // Valid 52-char z-base-32 key (+ "pubky" prefix = 57 chars)
-        private const val VALID_CONTACT_KEY_A = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        private const val VALID_CONTACT_KEY_B = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        private const val VALID_SELF_KEY = "pubky5rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val VALID_CONTACT_KEY_A = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+        private const val NON_CANONICAL_CONTACT_KEY_A = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val VALID_CONTACT_KEY_B = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+        private const val VALID_SELF_KEY = "pubky5rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
     }
 
     private lateinit var sut: PubkyRepo
@@ -1481,6 +1486,25 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initialize should complete contacts load after contact fetch failure`() = test {
+        val session = "saved_session"
+        val unprefixedPublicKey = VALID_SELF_KEY.removePrefix("pubky")
+        val pubkyProfile = createPubkyProfile(name = "Restored User")
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(pubkyService.importSession(session)).thenReturn(unprefixedPublicKey)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = pubkyProfile))
+        whenever(pubkyService.contactRecords()).thenAnswer { throw TestAppError("Offline") }
+
+        sut.initialize()
+
+        assertEquals(1L, sut.contactsLoadCompletionVersion.value)
+        assertEquals(0L, sut.contactsLoadVersion.value)
+        assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
     fun `initialize should restore session from local secret key when saved session is missing`() = test {
         val secretKey = "local_secret"
         val publicKey = VALID_SELF_KEY.removePrefix("pubky")
@@ -1807,6 +1831,21 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `addContact should canonicalize key before persistence`() = test {
+        authenticateForTesting()
+        val profile = PubkyProfile.placeholder(NON_CANONICAL_CONTACT_KEY_A)
+        whenever { pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_A) }.thenReturn(emptyList())
+
+        val result = sut.addContact(NON_CANONICAL_CONTACT_KEY_A, existingProfile = profile)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_CONTACT_KEY_A, sut.contacts.value.single().publicKey)
+        verifyBlocking(pubkyService) {
+            saveContact(VALID_CONTACT_KEY_A, profile.name, emptyList())
+        }
+    }
+
+    @Test
     fun `refreshContactReceiverPaths should update saved contact receiver paths`() = test {
         authenticateForTesting()
         val contact = PubkyProfile(
@@ -1829,6 +1868,34 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService) {
             saveContact(
                 VALID_CONTACT_KEY_B,
+                "Alice",
+                listOf("bitkit/wallet", "bitkit/server"),
+            )
+        }
+    }
+
+    @Test
+    fun `refreshContactReceiverPaths should preserve a loaded noncanonical key`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(
+                createContactRecord(
+                    publicKey = NON_CANONICAL_CONTACT_KEY_A,
+                    profile = createPaykitProfile("Alice"),
+                ),
+            ),
+        )
+        sut.loadContacts()
+        clearInvocations(pubkyService)
+        whenever(pubkyService.discoverRelevantReceiverPaths(NON_CANONICAL_CONTACT_KEY_A))
+            .thenReturn(listOf("bitkit/wallet", "bitkit/server"))
+
+        val result = sut.refreshContactReceiverPaths(NON_CANONICAL_CONTACT_KEY_A)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) {
+            saveContact(
+                NON_CANONICAL_CONTACT_KEY_A,
                 "Alice",
                 listOf("bitkit/wallet", "bitkit/server"),
             )
@@ -1916,6 +1983,26 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.loadContacts()
 
         verify(pubkyService, never()).contactRecords()
+    }
+
+    @Test
+    fun `loadContacts should allow retry when failure completion is observed`() = test {
+        authenticateForTesting()
+        val completionVersion = sut.contactsLoadCompletionVersion.value
+        clearInvocations(pubkyService)
+        whenever(pubkyService.contactRecords())
+            .thenAnswer { throw TestAppError("Offline") }
+            .thenReturn(emptyList())
+        val retry = launch(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            sut.contactsLoadCompletionVersion.first { it > completionVersion }
+            sut.loadContacts()
+        }
+
+        sut.loadContacts()
+        retry.join()
+
+        verifyBlocking(pubkyService, times(2)) { contactRecords() }
+        assertEquals(completionVersion + 2, sut.contactsLoadCompletionVersion.value)
     }
 
     @Test
