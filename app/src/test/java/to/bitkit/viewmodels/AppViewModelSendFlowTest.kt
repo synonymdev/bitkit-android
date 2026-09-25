@@ -4501,6 +4501,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             txid = "confirmed-txid",
             details = details,
             confirmationTime = 0uL,
+            blockHeight = 100u,
         )
         inOrder(activityRepo, notifyPaymentReceivedHandler) {
             verify(activityRepo).handleOnchainTransactionConfirmed("confirmed-txid", details)
@@ -4525,6 +4526,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(settingsStore).update(any())
         }
         assertFalse(settingsData.value.pendingRestoreActivitySeen)
+        assertEquals(100L, settingsData.value.restoreSyncedBlockHeight)
     }
 
     @Test
@@ -4538,6 +4540,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(activityRepo).markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
         assertTrue(settingsData.value.pendingRestoreActivitySeen)
+        assertEquals(0L, settingsData.value.restoreSyncedBlockHeight)
     }
 
     @Test

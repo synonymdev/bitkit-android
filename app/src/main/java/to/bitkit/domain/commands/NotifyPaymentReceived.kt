@@ -17,13 +17,14 @@ sealed interface NotifyPaymentReceived {
 
         /**
          * An incoming onchain transaction. [confirmationTime] is the block timestamp in seconds since the
-         * UNIX epoch, set when the wallet first saw the transaction already confirmed without a prior
-         * mempool event.
+         * UNIX epoch and [blockHeight] the confirming block, both set when the wallet first saw the
+         * transaction already confirmed without a prior mempool event.
          */
         data class Onchain(
             val txid: String,
             val details: TransactionDetails,
             val confirmationTime: ULong? = null,
+            val blockHeight: UInt? = null,
             override val includeNotification: Boolean = false,
         ) : Command {
             val isConfirmedOnly: Boolean get() = confirmationTime != null
@@ -47,6 +48,7 @@ sealed interface NotifyPaymentReceived {
                         txid = event.txid,
                         details = event.details,
                         confirmationTime = event.confirmationTime,
+                        blockHeight = event.blockHeight,
                         includeNotification = includeNotification,
                     )
 

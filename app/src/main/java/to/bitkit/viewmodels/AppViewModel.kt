@@ -1452,7 +1452,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleSyncCompleted(event: Event.SyncCompleted) {
-        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen()
+        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
 
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
@@ -1483,13 +1483,18 @@ class AppViewModel @Inject constructor(
             }
     }
 
-    private suspend fun completePendingRestoreActivitySeen() {
+    private suspend fun completePendingRestoreActivitySeen(syncedBlockHeight: UInt) {
         val restoreStartedAt = settingsStore.data.first().pendingRestoreActivitySeenSince
         if (restoreStartedAt <= 0) return
         Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
         // Bounded by the restore start so a payment arriving mid-restore keeps its unseen state.
         activityRepo.markAllUnseenActivitiesAsSeen(startedBefore = restoreStartedAt.toULong()).onSuccess {
-            settingsStore.update { settings -> settings.copy(pendingRestoreActivitySeenSince = 0) }
+            settingsStore.update { settings ->
+                settings.copy(
+                    pendingRestoreActivitySeenSince = 0,
+                    restoreSyncedBlockHeight = syncedBlockHeight.toLong(),
+                )
+            }
         }
     }
 

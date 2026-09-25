@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
@@ -112,16 +113,19 @@ class NotifyPaymentReceivedHandler @Inject constructor(
     }
 
     private suspend fun shouldShowOnchain(command: NotifyPaymentReceived.Command.Onchain): Boolean {
+        // One snapshot for both restore checks: the sweep lifts the hold and records the restore tip in the same
+        // update, so a snapshot either still holds the receive or already knows which blocks are history.
+        val settings = settingsStore.data.first()
         if (command.isConfirmedOnly) {
             if (command.details.amountSats <= 0) return false
-            if (!canShowConfirmedOnly(command)) return false
+            if (!canShowConfirmedOnly(command, settings)) return false
             applyConfirmationIfMissing(command)
         } else {
             activityRepo.handleOnchainTransactionReceived(command.txid, command.details)
             if (command.details.amountSats <= 0) return false
         }
 
-        if (settingsStore.data.first().pendingRestoreActivitySeen) {
+        if (settings.pendingRestoreActivitySeen) {
             Logger.debug("Skipping onchain receive '${command.txid}' until the first sync after restore", context = TAG)
             return false
         }
@@ -142,8 +146,19 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         activityRepo.handleOnchainTransactionConfirmed(command.txid, command.details)
     }
 
-    private suspend fun canShowConfirmedOnly(command: NotifyPaymentReceived.Command.Onchain): Boolean {
+    private suspend fun canShowConfirmedOnly(
+        command: NotifyPaymentReceived.Command.Onchain,
+        settings: SettingsData,
+    ): Boolean {
         val confirmationTime = command.confirmationTime ?: return false
+        val blockHeight = command.blockHeight ?: return false
+        if (blockHeight.toLong() <= settings.restoreSyncedBlockHeight) {
+            Logger.debug(
+                "Skipping confirmed-only receive '${command.txid}' at height '$blockHeight', scanned by the restore",
+                context = TAG,
+            )
+            return false
+        }
         if (backupRepo.isRestoring.value) {
             Logger.debug("Skipping confirmed-only receive '${command.txid}' during restore", context = TAG)
             return false

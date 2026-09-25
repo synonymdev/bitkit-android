@@ -568,7 +568,9 @@ class WalletViewModel @Inject constructor(
         backupRepo.setRestorePending(true)
         // Same reason for the received-sheet hold: by the time the user taps continue the node has
         // already been replaying historical transactions for a while.
-        settingsStore.update { it.copy(pendingRestoreActivitySeenSince = nowTimestamp().epochSecond) }
+        settingsStore.update {
+            it.copy(pendingRestoreActivitySeenSince = nowTimestamp().epochSecond, restoreSyncedBlockHeight = 0)
+        }
 
         walletRepo.restoreWallet(
             mnemonic = mnemonic,
@@ -576,6 +578,8 @@ class WalletViewModel @Inject constructor(
         ).onFailure {
             // Nothing reaches restoreFromBackup when the wallet was never created, so release here.
             backupRepo.setRestorePending(false)
+            // No node starts, so no sync would ever lift the received-sheet hold.
+            settingsStore.update { it.copy(pendingRestoreActivitySeenSince = 0) }
             ToastEventBus.send(it)
         }
     }
