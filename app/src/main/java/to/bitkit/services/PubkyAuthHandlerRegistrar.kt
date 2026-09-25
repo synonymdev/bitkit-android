@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.async.appScope
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.utils.Logger
@@ -48,24 +49,24 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
 
         collectionScope.launch {
             pubkyRepo.awaitInitialization()
-            combine(settingsStore.isPaykitEnabled, pubkyRepo.publicKey) { localFlagEnabled, publicKey ->
-                localFlagEnabled to publicKey
+            combine(
+                settingsStore.isPaykitEnabled,
+                pubkyRepo.publicKey,
+                pubkyRepo.backupStateVersion,
+                pubkyRepo.identityRefreshVersion,
+            ) { localFlagEnabled, publicKey, _, _ ->
+                val hasIdentity = runSuspendCatching { pubkyRepo.hasIdentity() }
+                    .onFailure { Logger.warn("Failed to read saved Pubky identity", it, context = TAG) }
+                    .getOrDefault(true)
+                val isPaykitUiEnabled = PaykitFeatureFlags.isUiEnabled(localFlagEnabled)
+                val hasSecretKey = isPaykitUiEnabled && publicKey != null && pubkyRepo.hasSecretKey()
+                val authEnabled = canHandlePubkyAuth(isPaykitUiEnabled, hasIdentity, hasSecretKey)
+                authEnabled to (isPaykitUiEnabled && !hasIdentity)
             }
                 .distinctUntilChanged()
-                .collectLatest { (localFlagEnabled, publicKey) ->
-                    val isPaykitUiEnabled = PaykitFeatureFlags.isUiEnabled(localFlagEnabled)
-                    val hasIdentity = publicKey != null
-                    val hasSecretKey = isPaykitUiEnabled && hasIdentity && pubkyRepo.hasSecretKey()
-
-                    setAliasEnabled(
-                        aliasComponent,
-                        canHandlePubkyAuth(
-                            isPaykitUiEnabled = isPaykitUiEnabled,
-                            hasIdentity = hasIdentity,
-                            hasSecretKey = hasSecretKey,
-                        ),
-                    )
-                    setAliasEnabled(signupAliasComponent, isPaykitUiEnabled && !hasIdentity)
+                .collectLatest { (authEnabled, signupEnabled) ->
+                    setAliasEnabled(aliasComponent, authEnabled)
+                    setAliasEnabled(signupAliasComponent, signupEnabled)
                 }
         }
     }

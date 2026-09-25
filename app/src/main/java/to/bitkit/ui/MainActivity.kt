@@ -343,6 +343,11 @@ class MainActivity : FragmentActivity() {
         intent.launchKey()?.let { outState.putString(KEY_CONSUMED_LAUNCH_INTENT, it) }
     }
 
+    override fun onResume() {
+        super.onResume()
+        appViewModel.onAppResumed()
+    }
+
     override fun onStop() {
         super.onStop()
         if (!isChangingConfigurations) appViewModel.lockOnBackground()
