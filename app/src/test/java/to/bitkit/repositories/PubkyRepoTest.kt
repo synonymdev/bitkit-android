@@ -888,6 +888,23 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `createIdentity cannot replace a restored Ring identity`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("ring-session")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("")
+        whenever(pubkyService.importSession("ring-session")).thenReturn(VALID_CONTACT_KEY_A)
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        stubSignupKeys()
+
+        sut.initialize()
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_CONTACT_KEY_A, sut.publicKey.value)
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService) { publishPaykitProfile(any()) }
+    }
+
+    @Test
     fun `createIdentity should preserve signup session when pending profile publication fails`() = test {
         val registeredSession = mock<PubkySessionBootstrapResult>()
         stubSignupKeys()
@@ -1563,6 +1580,23 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
         sut.restoreSessionIfNeeded()
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `restoration retry publishes a readable empty identity check`() = test {
+        var readable = false
+        whenever(keychain.loadString(any())).thenAnswer {
+            if (!readable) throw TestAppError("Keychain unavailable")
+            null
+        }
+        sut.initialize()
+        val previousVersion = sut.identityRefreshVersion.value
+
+        readable = true
+        sut.restoreSessionIfNeeded()
+
+        assertEquals(previousVersion + 1, sut.identityRefreshVersion.value)
+        assertFalse(sut.hasIdentity())
     }
 
     @Test

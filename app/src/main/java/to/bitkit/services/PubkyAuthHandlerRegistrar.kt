@@ -53,7 +53,8 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
                 settingsStore.isPaykitEnabled,
                 pubkyRepo.publicKey,
                 pubkyRepo.backupStateVersion,
-            ) { localFlagEnabled, publicKey, _ ->
+                pubkyRepo.identityRefreshVersion,
+            ) { localFlagEnabled, publicKey, _, _ ->
                 val hasIdentity = runSuspendCatching { pubkyRepo.hasIdentity() }
                     .onFailure { Logger.warn("Failed to read saved Pubky identity", it, context = TAG) }
                     .getOrDefault(true)

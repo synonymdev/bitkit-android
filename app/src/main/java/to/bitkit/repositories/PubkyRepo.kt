@@ -143,6 +143,9 @@ class PubkyRepo @Inject constructor(
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
 
+    private val _identityRefreshVersion = MutableStateFlow(0L)
+    val identityRefreshVersion: StateFlow<Long> = _identityRefreshVersion.asStateFlow()
+
     val isAuthenticated: StateFlow<Boolean> = _publicKey.map { it != null }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
@@ -187,7 +190,9 @@ class PubkyRepo @Inject constructor(
         initializeMutex.withLock {
             if (_publicKey.value != null || _authState.value != PubkyAuthState.Idle) return@withLock
             runSuspendCatching {
-                if (hasIdentity()) initializeSession()
+                val hasIdentity = hasIdentity()
+                _identityRefreshVersion.update { it + 1 }
+                if (hasIdentity) initializeSession()
             }.onFailure { Logger.warn("Failed to retry paykit session restoration", it, context = TAG) }
         }
     }
@@ -629,9 +634,17 @@ class PubkyRepo @Inject constructor(
                 withContext(ioDispatcher) {
                     settingsStore.setPubkyProfileSetupPending(false)
                     val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-                    val publicKeyZ32 = if (!storedSecretKeyHex.isNullOrEmpty()) {
-                        pubkyService.signIn(storedSecretKeyHex)
-                        pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
+                    val activePublicKey = _publicKey.value
+                    val localSecretKeyHex = if (activePublicKey == null) {
+                        storedSecretKeyHex
+                    } else {
+                        managedSecretKeyFor(activePublicKey)
+                    }
+                    val publicKeyZ32 = if (!localSecretKeyHex.isNullOrEmpty()) {
+                        pubkyService.signIn(localSecretKeyHex)
+                        pubkyService.publicKeyFromSecret(localSecretKeyHex).ensurePubkyPrefix()
+                    } else if (activePublicKey != null) {
+                        activePublicKey
                     } else {
                         val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
                         val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }

@@ -44,6 +44,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     private val isPaykitEnabled = MutableStateFlow(false)
     private val publicKey = MutableStateFlow<String?>(null)
     private val backupStateVersion = MutableStateFlow(0L)
+    private val identityRefreshVersion = MutableStateFlow(0L)
 
     @Before
     fun setUp() = runBlocking<Unit> {
@@ -52,6 +53,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
         whenever(pubkyRepo.backupStateVersion).thenReturn(backupStateVersion)
+        whenever(pubkyRepo.identityRefreshVersion).thenReturn(identityRefreshVersion)
         whenever(pubkyRepo.hasIdentity()).thenAnswer { publicKey.value != null }
     }
 
@@ -165,13 +167,23 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     }
 
     @Test
-    fun `unreadable credentials do not advertise signup`() = test {
+    fun `signup becomes available when unreadable credentials recover empty`() = test {
         isPaykitEnabled.value = true
-        whenever(pubkyRepo.hasIdentity()).thenAnswer { throw IllegalStateException("Keychain unavailable") }
+        var readable = false
+        whenever(pubkyRepo.hasIdentity()).thenAnswer {
+            check(readable) { "Keychain unavailable" }
+            false
+        }
         createSut().start(backgroundScope)
         runCurrent()
-
         verifyComponentStates(authEnabled = false, signupEnabled = false)
+        clearInvocations(packageManager)
+
+        readable = true
+        identityRefreshVersion.value += 1
+        runCurrent()
+
+        verifyComponentStates(authEnabled = false, signupEnabled = true)
     }
 
     @Test
