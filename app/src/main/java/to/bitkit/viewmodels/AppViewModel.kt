@@ -2904,6 +2904,7 @@ class AppViewModel @Inject constructor(
         resetSendState(
             contactPaymentProfile = contactPaymentProfile,
             isPaymentRequest = isPaymentRequest,
+            paymentRequestNote = incomingPaymentRequest?.note,
             isSubscriptionPayment = incomingPaymentRequest?.billingPeriod != null,
             isInitialSubscriptionPayment = synchronized(contactPaymentContextLock) {
                 activeContactPaymentContext?.isInitialSubscriptionPayment == true
@@ -4660,6 +4661,7 @@ class AppViewModel @Inject constructor(
     suspend fun resetSendState(
         contactPaymentProfile: PubkyProfile? = null,
         isPaymentRequest: Boolean = false,
+        paymentRequestNote: String? = null,
         hardwareWalletId: String? = activeHardwareWalletId,
         isSubscriptionPayment: Boolean = false,
         isInitialSubscriptionPayment: Boolean = false,
@@ -4681,6 +4683,7 @@ class AppViewModel @Inject constructor(
                 onchainFeeUi = OnchainFeeUi(rate = FeeRate.fromSpeed(speed)),
                 contactPaymentProfile = contactPaymentProfile,
                 isPaymentRequest = isPaymentRequest,
+                paymentRequestNote = paymentRequestNote,
                 hardwareWalletId = hardwareWalletId,
                 hardwareWalletName = hardwareWalletId?.let { walletId ->
                     hwWalletRepo.wallets.value.find { it.id == walletId }?.name
@@ -5846,6 +5849,7 @@ data class SendUiState(
     val lastLightningFee: Long = 0L,
     val contactPaymentProfile: PubkyProfile? = null,
     val isPaymentRequest: Boolean = false,
+    val paymentRequestNote: String? = null,
     val hardwareWalletId: String? = null,
     val hardwareWalletName: String? = null,
     val hardwareAvailableSats: ULong = 0uL,

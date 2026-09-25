@@ -1324,6 +1324,7 @@
     <string name="wallet__payment_request_expiry_hour">1 hour</string>
     <string name="wallet__payment_request_expiry_month">1 month</string>
     <string name="wallet__payment_request_expiry_week">1 week</string>
+    <string name="wallet__payment_request_for">For</string>
     <string name="wallet__payment_request_mismatch">The payment details did not match the request. Payment cancelled.</string>
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">What is this payment for?</string>
