@@ -255,9 +255,6 @@ class WatchOnlyAccountRepo @Inject constructor(
                         accountIndex,
                         WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
                     )
-                    if (wasAdded) {
-                        node.syncWallets()
-                    }
                 }
                 trackingResult.onFailure {
                     if (wasAdded) {
