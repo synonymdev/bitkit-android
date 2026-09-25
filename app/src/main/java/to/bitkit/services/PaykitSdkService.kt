@@ -980,12 +980,7 @@ class PaykitSdkService @Inject constructor(
     }
 
     private suspend fun currentSdkStatePublicKeyLocked(): String? {
-        return runSuspendCatching { handle().identityStatus()?.publicKey }
-            .getOrElse {
-                keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
-                resetRuntime()
-                null
-            }
+        return handle().identityStatus()?.publicKey
     }
 
     private suspend fun persistSessionAccess(

@@ -32,6 +32,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.of
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -206,21 +207,41 @@ class WalletViewModel @Inject constructor(
     private fun collectStates() = viewModelScope.launch {
         walletState.collect {
             walletExists = it.walletExists
-            if (it.walletExists && _restoreState.value == RestoreState.InProgress.Wallet) {
-                restoreFromBackup()
+            if (!it.walletExists) return@collect
+
+            when (_restoreState.value) {
+                RestoreState.InProgress.Wallet -> restoreFromBackup()
+                RestoreState.Initial if backupRepo.hasPendingWalletRestore() -> {
+                    _restoreState.update { RestoreState.BackupFailed(1) }
+                }
+
+                else -> Unit
             }
         }
     }
 
-    private suspend fun restoreFromBackup() {
+    private suspend fun restoreFromBackup(resumePendingWalletBackup: Boolean = false) {
+        val retryCount = _restoreState.value.backupRetryCount()
         _restoreState.update { RestoreState.InProgress.Metadata }
-        runCatching {
-            restoreFromMostRecentBackup()
-        }.onFailure {
-            Logger.error("Restore from backup failed", it, context = TAG)
+        try {
+            runSuspendCatching {
+                if (resumePendingWalletBackup) {
+                    backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
+                        .getOrThrow()
+                    pubkyRepo.initialize()
+                } else {
+                    restoreFromMostRecentBackup()
+                }
+            }.onSuccess {
+                _restoreState.update { RestoreState.Completed }
+            }.onFailure {
+                Logger.error("Restore from backup failed", it, context = TAG)
+                ToastEventBus.send(it)
+                _restoreState.update { RestoreState.BackupFailed(retryCount + 1) }
+            }
+        } finally {
+            backupRepo.setRestorePending(false)
         }
-        _restoreState.update { RestoreState.Completed }
-        backupRepo.setRestorePending(false)
     }
 
     private suspend fun restoreFromMostRecentBackup() {
@@ -240,17 +261,19 @@ class WalletViewModel @Inject constructor(
             restoreFromRNRemoteBackup()
         } else {
             backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
+                .getOrThrow()
         }
 
         pubkyRepo.initialize()
     }
 
-    private suspend fun restoreFromRNRemoteBackup() = runCatching {
+    private suspend fun restoreFromRNRemoteBackup() = runSuspendCatching {
         migrationService.restoreFromRNRemoteBackup()
         walletRepo.loadFromCache()
     }.onFailure {
         Logger.warn("RN remote backup restore failed, falling back to VSS", it, context = TAG)
         backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
+            .getOrThrow()
     }
 
     fun onRestoreContinue() {
@@ -269,11 +292,18 @@ class WalletViewModel @Inject constructor(
         lightningRepo.restartNode()
     }
 
+    fun onBackupRestoreRetry() = viewModelScope.launch(bgDispatcher) {
+        backupRepo.setRestorePending(true)
+        restoreFromBackup(resumePendingWalletBackup = true)
+    }
+
     @Suppress("ForbiddenComment")
     fun onProceedWithoutRestore(onDone: () -> Unit) = viewModelScope.launch {
         // TODO start LDK without trying to restore backup state from VSS if possible
-        lightningRepo.stop()
-        delay(LOADING_MS.milliseconds)
+        if (lightningState.value.nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
+            lightningRepo.stop()
+            delay(LOADING_MS.milliseconds)
+        }
         _restoreState.update { RestoreState.Settled }
         onDone()
     }
@@ -630,11 +660,22 @@ sealed interface RestoreState {
     }
 
     data class Retry(val count: Int) : RestoreState
+    data class BackupFailed(val count: Int) : RestoreState
     data object Completed : RestoreState
     data object Settled : RestoreState
 
-    fun retryCount() = (this as? Retry)?.count ?: 0
-    fun countRetry(): RestoreState = if (this is Retry) Retry(count + 1) else Retry(1)
+    fun retryCount() = when (this) {
+        is Retry -> count
+        is BackupFailed -> count
+        else -> 0
+    }
+
+    fun backupRetryCount() = (this as? BackupFailed)?.count ?: 0
+    fun countRetry(): RestoreState = when (this) {
+        is Retry -> Retry(count + 1)
+        is BackupFailed -> BackupFailed(count + 1)
+        else -> Retry(1)
+    }
     fun isOngoing() = this is InProgress
     fun isIdle() = this is Initial || this is Settled
 }
