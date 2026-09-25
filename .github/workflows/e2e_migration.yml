@@ -7,6 +7,14 @@ on:
         description: "Branch of synonymdev/bitkit-e2e-tests to use (main | default-feature-branch | custom branch name)"
         required: false
         default: "default-feature-branch"
+      previous_native_version:
+        description: "Archived native release tag (empty uses the pinned baseline)"
+        required: false
+        default: ""
+      extended_rn:
+        description: "Also run RN 1.1.6 passphrase and legacy-address cases"
+        type: boolean
+        default: false
       post_to_slack:
         description: "Post E2E migration summary to Slack (#bitkit-staging-nightly)"
         type: boolean
@@ -83,25 +91,48 @@ jobs:
       app_branch: ${{ github.head_ref || github.ref_name }}
       e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
 
+  migration-plan:
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && (startsWith(github.head_ref, 'release-') || startsWith(github.base_ref, 'release-')))
+    needs: [e2e-branch]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      all: ${{ steps.plan.outputs.all }}
+      rn: ${{ steps.plan.outputs.rn }}
+      native: ${{ steps.plan.outputs.native }}
+    steps:
+      - name: Resolve E2E tests ref
+        id: e2e-ref
+        uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@main
+        with:
+          selected: ${{ needs.e2e-branch.outputs.branch }}
+          e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
+      - name: Checkout E2E tests
+        uses: actions/checkout@v7
+        with:
+          repository: synonymdev/bitkit-e2e-tests
+          ref: ${{ steps.e2e-ref.outputs.ref }}
+      - name: Resolve migration cases and baseline
+        id: plan
+        run: python3 scripts/migration-matrix.py android
+        env:
+          PREVIOUS_NATIVE_VERSION: ${{ inputs.previous_native_version }}
+          EXTENDED_RN: ${{ inputs.extended_rn || false }}
+
   e2e-tests:
     if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && (startsWith(github.head_ref, 'release-') || startsWith(github.base_ref, 'release-')))
     runs-on: ubuntu-latest
-    needs: [build, e2e-branch]
+    needs: [build, e2e-branch, migration-plan]
 
     strategy:
       fail-fast: false
       matrix:
-        rn_version:
-          - v1.1.6
-          - v1.1.4
-          - v1.1.3
-        scenario:
-          - { name: migration_1-restore, grep: "@migration_1" }
-          - { name: migration_2-migration, grep: "@migration_2" }
-          - { name: migration_3-with-passphrase, grep: "@migration_3" }
-          - { name: migration_4-with-sweep, grep: "@migration_4" }
+        scenario: ${{ fromJSON(needs.migration-plan.outputs.all) }}
 
-    name: e2e-tests - ${{ matrix.rn_version }} - ${{ matrix.scenario.name }}
+    name: android - ${{ matrix.scenario.version }} - ${{ matrix.scenario.name }}
+    env:
+      BACKEND: regtest
+      MIGRATION_EXTENDED: ${{ inputs.extended_rn || false }}
 
     steps:
       - name: Resolve E2E tests ref
@@ -152,13 +183,9 @@ jobs:
           name: bitkit-e2e-apk_${{ github.run_number }}
           path: bitkit-e2e-tests/aut
 
-      - name: Download RN app for migration
-        run: |
-          curl -L -o bitkit-e2e-tests/aut/bitkit_rn_regtest.apk \
-            https://github.com/synonymdev/bitkit-e2e-tests/releases/download/migration-rn-regtest/bitkit_rn_regtest_${{ matrix.rn_version }}.apk
-
-      - name: List APK directory contents
-        run: ls -l bitkit-e2e-tests/aut
+      - name: Download migration source
+        working-directory: bitkit-e2e-tests
+        run: python3 scripts/download-migration-app.py android '${{ matrix.scenario.source }}' '${{ matrix.scenario.version }}'
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -230,18 +257,37 @@ jobs:
           ATTEMPT: 3
 
       - name: Upload E2E Artifacts (${{ matrix.scenario.name }})
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-artifacts_${{ matrix.scenario.name }}_${{ matrix.rn_version }}_${{ github.run_number }}
-          path: bitkit-e2e-tests/artifacts/
+          name: e2e-artifacts_${{ matrix.scenario.name }}_${{ matrix.scenario.version }}_${{ github.run_number }}_${{ github.run_attempt }}
+          path: |
+            bitkit-e2e-tests/artifacts/
+            !bitkit-e2e-tests/artifacts/**/*.env
+
+  migration-result:
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.draft == false && (startsWith(github.head_ref, 'release-') || startsWith(github.base_ref, 'release-'))))
+    needs: [build, e2e-branch, migration-plan, e2e-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all migration jobs to succeed
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, sys
+          failed = {name: job['result'] for name, job in json.loads(os.environ['JOB_RESULTS']).items() if job['result'] != 'success'}
+          if failed:
+              print(f'Migration failed or required jobs did not run: {failed}')
+              sys.exit(1)
+          PYTHON
 
   slack-report:
     if: >-
       always() &&
       (github.event_name == 'schedule' ||
        (github.event_name == 'workflow_dispatch' && inputs.post_to_slack == true))
-    needs: [build, e2e-branch, e2e-tests]
+    needs: [build, e2e-branch, migration-plan, e2e-tests, migration-result]
     runs-on: ubuntu-latest
     steps:
       - name: Resolve E2E tests ref
@@ -263,7 +309,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_STAGING }}
           PLATFORM: android
-          MIGRATION_RESULT: ${{ needs.build.result == 'success' && needs.e2e-branch.result == 'success' && needs.e2e-tests.result == 'success' && 'success' || 'failure' }}
+          MIGRATION_RESULT: ${{ needs.migration-result.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           E2E_BRANCH_RESULT: ${{ needs.e2e-branch.result }}
           E2E_TESTS_RESULT: ${{ needs.e2e-tests.result }}
