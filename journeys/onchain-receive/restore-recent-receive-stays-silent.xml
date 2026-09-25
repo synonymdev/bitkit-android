@@ -23,8 +23,8 @@
     <action>Run: adb shell pm clear to.bitkit.dev, launch to.bitkit.dev and restore the same test vector the same way, tap "GetStartedButton" and dismiss any intro sheet</action>
     <action>Wait 60s on the home screen</action>
     <action>Verify the received sheet (testTag "ReceivedTransaction") never appeared and the home screen shows "TotalBalance"</action>
-    <action>Run: adb logcat -d -s APP:V | grep "scanned by the restore"</action>
-    <action>Verify the log skipped the confirmed-only receive for the deposit's txid</action>
+    <action>Run: adb logcat -d -s APP:V | grep "Skipping.*&lt;txid&gt;"</action>
+    <action>Verify the log skipped the deposit's txid, as "scanned by the restore", "until the first sync after restore" or "during restore" — which one depends on whether its confirmation was handled before or after the restore hold lifted</action>
     <action>Read a new address as above and run in one command: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":21343}' &amp;&amp; ./lsp POST /regtest/chain/mine '{"count":1}'</action>
     <action>Verify within 30s the received sheet (testTag "ReceivedTransaction") shows 21 343 sats</action>
   </actions>

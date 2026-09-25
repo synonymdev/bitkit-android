@@ -4544,6 +4544,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a later onchain sync during the restore sweep does not overwrite the restore tip`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
+        val sweep = CompletableDeferred<Unit>()
+        whenever { activityRepo.markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong())) }
+            .doSuspendableAnswer {
+                sweep.await()
+                Result.success(Unit)
+            }
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        runCurrent()
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 101u))
+        runCurrent()
+        sweep.complete(Unit)
+        advanceUntilIdle()
+
+        verify(activityRepo).markAllUnseenActivitiesAsSeen(eq(RESTORE_STARTED_AT.toULong()))
+        assertEquals(100L, settingsData.value.restoreSyncedBlockHeight)
+        assertFalse(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
     fun `lightning sync after restore keeps the pending flag and activities untouched`() = test {
         settingsData.value = SettingsData(pendingRestoreActivitySeenSince = RESTORE_STARTED_AT)
 

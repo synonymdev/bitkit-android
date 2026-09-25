@@ -150,32 +150,27 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         command: NotifyPaymentReceived.Command.Onchain,
         settings: SettingsData,
     ): Boolean {
-        val confirmationTime = command.confirmationTime ?: return false
-        val blockHeight = command.blockHeight ?: return false
-        if (blockHeight.toLong() <= settings.restoreSyncedBlockHeight) {
-            Logger.debug(
-                "Skipping confirmed-only receive '${command.txid}' at height '$blockHeight', scanned by the restore",
-                context = TAG,
-            )
-            return false
-        }
-        if (backupRepo.isRestoring.value) {
-            Logger.debug("Skipping confirmed-only receive '${command.txid}' during restore", context = TAG)
-            return false
-        }
-        if (migrationService.isShowingMigrationLoading.value || migrationService.needsPostMigrationSync()) {
-            Logger.debug("Skipping confirmed-only receive '${command.txid}' during migration", context = TAG)
-            return false
-        }
+        val skipReason = confirmedOnlySkipReason(command, settings) ?: return true
+        Logger.debug("Skipping confirmed-only receive '${command.txid}' $skipReason", context = TAG)
+        return false
+    }
+
+    private suspend fun confirmedOnlySkipReason(
+        command: NotifyPaymentReceived.Command.Onchain,
+        settings: SettingsData,
+    ): String? {
+        val confirmationTime = command.confirmationTime ?: return "without a confirmation time"
+        val blockHeight = command.blockHeight ?: return "without a block height"
         val age = nowMillis(clock).milliseconds - confirmationTime.toLong().seconds
-        if (age.absoluteValue > MAX_CONFIRMED_ONLY_AGE) {
-            Logger.debug(
-                "Skipping confirmed-only receive '${command.txid}' confirmed at '$confirmationTime'",
-                context = TAG,
-            )
-            return false
+        return when {
+            blockHeight.toLong() <= settings.restoreSyncedBlockHeight ->
+                "at height '$blockHeight', scanned by the restore"
+            backupRepo.isRestoring.value -> "during restore"
+            migrationService.isShowingMigrationLoading.value || migrationService.needsPostMigrationSync() ->
+                "during migration"
+            age.absoluteValue > MAX_CONFIRMED_ONLY_AGE -> "confirmed at '$confirmationTime'"
+            else -> null
         }
-        return true
     }
 
     private suspend fun markAsSeen(command: NotifyPaymentReceived.Command) {
