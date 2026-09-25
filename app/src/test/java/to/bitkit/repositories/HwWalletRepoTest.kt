@@ -1971,7 +1971,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), any())
         verify(trezorRepo, never()).disconnectStaleSession(any())
     }
 
@@ -2001,7 +2001,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
         assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), any())
     }
 
     @Test
@@ -2012,7 +2012,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             feeRate = 3uL,
             totalSpent = 26_250uL,
         )
-        whenever(trezorRepo.broadcastRawTx("rawtx")).thenReturn(Result.success("broadcast-txid"))
+        whenever(trezorRepo.broadcastRawTx(eq("rawtx"), any())).thenReturn(Result.success("broadcast-txid"))
         val sut = createRepo()
 
         val result = sut.broadcastFunding(signedTx)
@@ -2033,7 +2033,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             feeRate = 3uL,
             totalSpent = 26_250uL,
         )
-        whenever(trezorRepo.broadcastRawTx("rawtx"))
+        whenever(trezorRepo.broadcastRawTx(eq("rawtx"), any()))
             .thenReturn(Result.success("core-derived-txid"))
         val sut = createRepo()
 
@@ -2061,7 +2061,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo).disconnectStaleSession("dev1")
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), any())
     }
 
     @Test
@@ -2102,7 +2102,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo, never()).disconnectStaleSession(any())
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), any())
     }
 
     @Test

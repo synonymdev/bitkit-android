@@ -447,7 +447,7 @@ class TrezorViewModel @Inject constructor(
             val signedStep = state.sendStep as? SendStep.Signed ?: return@launch
             val rawTx = signedStep.signedTx.serializedTx
             _uiState.update { it.copy(send = it.send.copy(isBroadcasting = true)) }
-            trezorRepo.broadcastRawTx(serializedTx = rawTx)
+            trezorRepo.broadcastRawTx(serializedTx = rawTx, network = signedStep.network)
                 .onSuccess { txid ->
                     TrezorDebugLog.log("BROADCAST", "SUCCESS txid=$txid")
                     _uiState.update {
@@ -526,7 +526,7 @@ class TrezorViewModel @Inject constructor(
                 accountType = accountInfo.accountType,
                 coinSelection = state.coinSelection,
             )
-                .onSuccess { handleComposeResults(it) }
+                .onSuccess { handleComposeResults(results = it, network = state.selectedNetwork) }
                 .onFailure {
                     TrezorDebugLog.log("COMPOSE", "FAILED: ${it.message}")
                     _uiState.update { it.copy(send = it.send.copy(isComposing = false)) }
@@ -552,7 +552,7 @@ class TrezorViewModel @Inject constructor(
         return true
     }
 
-    private suspend fun handleComposeResults(results: List<ComposeResult>) {
+    private suspend fun handleComposeResults(results: List<ComposeResult>, network: BitkitCoreNetwork) {
         TrezorDebugLog.log("COMPOSE", "Got ${results.size} result(s)")
         results.forEachIndexed { i, r ->
             when (r) {
@@ -575,7 +575,7 @@ class TrezorViewModel @Inject constructor(
                 it.copy(
                     send = it.send.copy(
                         isComposing = false,
-                        step = SendStep.Review(successResult),
+                        step = SendStep.Review(composeResult = successResult, network = network),
                     )
                 )
             }
@@ -594,17 +594,18 @@ class TrezorViewModel @Inject constructor(
     fun signComposedTx() {
         viewModelScope.launch(bgDispatcher) {
             val state = _uiState.value
-            val result = (state.sendStep as? SendStep.Review)?.composeResult ?: return@launch
+            val reviewStep = state.sendStep as? SendStep.Review ?: return@launch
+            val result = reviewStep.composeResult
 
             TrezorDebugLog.log("SIGN", "=== signComposedTx START ===")
-            TrezorDebugLog.log("SIGN", "network=${state.selectedNetwork}")
+            TrezorDebugLog.log("SIGN", "network=${reviewStep.network}")
             TrezorDebugLog.log("SIGN", "psbt length=${result.psbt.length}")
 
             _uiState.update { it.copy(send = it.send.copy(isSigning = true)) }
 
             trezorRepo.signTxFromPsbt(
                 psbtBase64 = result.psbt,
-                network = state.selectedNetwork.toTrezorCoinType(),
+                network = reviewStep.network.toTrezorCoinType(),
             )
                 .onSuccess { signedTx ->
                     TrezorDebugLog.log("SIGN", "=== signComposedTx SUCCESS ===")
@@ -617,7 +618,7 @@ class TrezorViewModel @Inject constructor(
                         it.copy(
                             send = it.send.copy(
                                 isSigning = false,
-                                step = SendStep.Signed(signedTx = signedTx),
+                                step = SendStep.Signed(signedTx = signedTx, network = reviewStep.network),
                             )
                         )
                     }
@@ -1056,10 +1057,14 @@ enum class WatcherConnectionStatus { IDLE, STARTING, CONNECTED, DISCONNECTED, ER
 sealed interface SendStep {
     data object Form : SendStep
 
-    data class Review(val composeResult: ComposeResult.Success) : SendStep
+    data class Review(
+        val composeResult: ComposeResult.Success,
+        val network: BitkitCoreNetwork,
+    ) : SendStep
 
     data class Signed(
         val signedTx: TrezorSignedTx,
+        val network: BitkitCoreNetwork,
         val broadcastTxid: String? = null,
     ) : SendStep
 }
