@@ -57,6 +57,9 @@ fun ULong?.formatToString(pattern: String = DatePattern.DATE_TIME): String? {
     return this?.let { Instant.ofEpochSecond(toLong()).formatted(pattern) }
 }
 
+fun String.toEpochSecondsOrNull(): ULong? =
+    runCatching { Instant.parse(this).epochSecond }.getOrNull()?.takeIf { it >= 0 }?.toULong()
+
 fun Long.toTimeUTC(): String {
     val instant = Instant.ofEpochMilli(this)
     val dateTime = LocalDateTime.ofInstant(instant, ZoneId.of("UTC"))
@@ -239,6 +242,7 @@ enum class UiDateStyle {
     DATE,
     DATE_TIME,
     DATE_TIME_YEAR,
+    DATE_TIME_YEAR_SHORT,
     ;
 
     fun pattern(is24Hour: Boolean): String {
@@ -248,6 +252,7 @@ enum class UiDateStyle {
             DATE -> DAY
             DATE_TIME -> "$DAY, $time"
             DATE_TIME_YEAR -> "$DAY_WITH_YEAR, $time"
+            DATE_TIME_YEAR_SHORT -> "${DatePattern.DATE_FORMAT}, $time"
         }
     }
 
@@ -261,7 +266,6 @@ enum class UiDateStyle {
 
 object DatePattern {
     const val DATE_TIME = "dd/MM/yyyy, HH:mm"
-    const val CHANNEL_DETAILS = "MMM d, yyyy, HH:mm"
     const val LOG_FILE = "yyyy-MM-dd_HH-mm-ss"
     const val LOG_LINE = "yyyy-MM-dd HH:mm:ss.SSS"
 
