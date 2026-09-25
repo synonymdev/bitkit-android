@@ -523,6 +523,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `app resume and connectivity restoration retry the saved Pubky session`() = test {
+        clearInvocations(pubkyRepo)
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        sut.onAppResumed()
+        verify(pubkyRepo, never()).restoreSessionIfNeeded()
+
+        connectivityState.value = ConnectivityState.CONNECTED
+        verify(pubkyRepo).restoreSessionIfNeeded()
+        clearInvocations(pubkyRepo)
+
+        sut.onAppResumed()
+        verify(pubkyRepo).restoreSessionIfNeeded()
+    }
+
+    @Test
     fun `critical update is required for a newer critical build`() = test {
         whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
 

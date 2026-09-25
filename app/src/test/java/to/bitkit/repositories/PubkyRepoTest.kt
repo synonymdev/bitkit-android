@@ -467,6 +467,43 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoration cannot reuse a Ring session while cancelled completion revokes it`() = test {
+        var savedSession: String? = null
+        val completionInstalled = CompletableDeferred<Unit>()
+        val revocationStarted = CompletableDeferred<Unit>()
+        val finishRevocation = CompletableDeferred<Unit>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { savedSession }
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenAnswer { savedSession = "abandoned_session" }
+        whenever(pubkyService.currentPublicKey()).doSuspendableAnswer {
+            completionInstalled.complete(Unit)
+            awaitCancellation()
+        }
+        whenever(pubkyService.signOut()).doSuspendableAnswer {
+            revocationStarted.complete(Unit)
+            finishRevocation.await()
+            savedSession = null
+        }
+        whenever(pubkyService.importSession("abandoned_session")).thenReturn(VALID_SELF_KEY)
+        val request = startAuthForTesting()
+        approveAuthForTesting(request)
+        val completion = async { sut.completeAuthentication() }
+        completionInstalled.await()
+        completion.cancel()
+        revocationStarted.await()
+        sut.cancelAuthentication()
+
+        val retry = async { sut.restoreSessionIfNeeded() }
+        finishRevocation.complete(Unit)
+        completion.join()
+        retry.await()
+
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.hasIdentity())
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
     fun `completeAuthentication should keep session when canceled during profile load`() = test {
         val profileLoadStarted = CompletableDeferred<Unit>()
         val finishProfileLoad = CompletableDeferred<Unit>()
@@ -1477,12 +1514,99 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(pubkyStore, never()).reset()
         verifyBlocking(keychain, never()) { delete(any()) }
 
+        sut.clearSessionRestorationFailed()
         canRestore = true
-        sut.initialize()
+        sut.restoreSessionIfNeeded()
 
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertTrue(sut.isAuthenticated.value)
         assertFalse(sut.sessionRestorationFailed.value)
+    }
+
+    @Test
+    fun `restoration retry recovers service startup failure and skips an active session`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        var isOnline = false
+        whenever(pubkyService.initialize()).thenAnswer {
+            if (!isOnline) throw TestAppError("Offline")
+            Unit
+        }
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        val repo = createSut()
+        repo.awaitInitialization()
+        assertNull(repo.publicKey.value)
+
+        isOnline = true
+        repo.restoreSessionIfNeeded()
+        assertEquals(VALID_SELF_KEY, repo.publicKey.value)
+        clearInvocations(pubkyService)
+
+        repo.restoreSessionIfNeeded()
+        verify(pubkyService, never()).importSession(any())
+        verify(pubkyService, never()).signIn(any())
+    }
+
+    @Test
+    fun `unreadable credentials preserve cached profile and remain retryable`() = test {
+        var readable = false
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer {
+            if (!readable) throw TestAppError("Keychain unavailable")
+            "saved_session"
+        }
+        clearInvocations(pubkyStore)
+
+        sut.initialize()
+
+        assertTrue(sut.sessionRestorationFailed.value)
+        verify(pubkyStore, never()).reset()
+        readable = true
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        sut.restoreSessionIfNeeded()
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `restoration retry skips an identity awaiting Ring approval`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.startAuth()).thenReturn("pubkyauth://request")
+        sut.startAuthentication().getOrThrow()
+        clearInvocations(pubkyService)
+
+        sut.restoreSessionIfNeeded()
+
+        verify(pubkyService, never()).importSession(any())
+        verify(pubkyService, never()).signIn(any())
+    }
+
+    @Test
+    fun `wipe waits for restoration then prevents a queued retry from resurrecting identity`() = test {
+        val credentials = mutableMapOf(Keychain.Key.PAYKIT_SESSION.name to "saved_session")
+        whenever(keychain.loadString(any())).thenAnswer { credentials[it.getArgument<String>(0)] }
+        whenever(keychain.delete(any())).thenAnswer {
+            credentials.remove(it.getArgument<String>(0))
+            Unit
+        }
+        val restoreStarted = CompletableDeferred<Unit>()
+        val finishRestore = CompletableDeferred<Unit>()
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer {
+            restoreStarted.complete(Unit)
+            finishRestore.await()
+            VALID_SELF_KEY
+        }
+        val restore = async { sut.restoreSessionIfNeeded() }
+        restoreStarted.await()
+        val wipe = async { sut.wipeLocalState() }
+        assertFalse(wipe.isCompleted)
+        finishRestore.complete(Unit)
+        restore.await()
+        wipe.await()
+        clearInvocations(pubkyService)
+
+        sut.restoreSessionIfNeeded()
+
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.hasIdentity())
+        verify(pubkyService, never()).importSession(any())
     }
 
     @Test

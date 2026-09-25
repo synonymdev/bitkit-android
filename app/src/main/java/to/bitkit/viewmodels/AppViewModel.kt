@@ -777,6 +777,7 @@ class AppViewModel @Inject constructor(
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
                 .collect {
+                    pubkyRepo.restoreSessionIfNeeded()
                     if (paykitPaymentRequestPollingJob?.isActive == true) {
                         paykitPaymentRequestPollingJob?.cancel()
                         paykitPaymentRequestPollingJob = null
@@ -5703,6 +5704,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
+
+    fun onAppResumed() {
+        viewModelScope.launch {
+            if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.restoreSessionIfNeeded()
+        }
+    }
 
     fun onHomeResumed() {
         checkTimedSheets()

@@ -24,3 +24,15 @@ Create a fresh wallet and a matching Pubky identity, save a contact, and link a 
 5. While a payment request is temporarily unavailable and presentation is retrying, move the clock forward and backward. Retry intervals should remain short, while actual payment expiry and approval continue to use absolute timestamps.
 
 These steps describe the remaining manual verification. Unit tests cover injected restoration failures, state preservation, retry timing, UTC recurrence, and notification scheduling; they do not replace a live grant-session clock-change test.
+
+## Connection loss and saved identity recovery
+
+Network fault injection is not provided by the journey capability table. Use a disposable wallet with a saved local identity, then repeat with a Ring-authorized identity.
+
+1. Record the profile name, public key, contacts, receiving address, and wallet balance while online.
+2. Disable both Wi-Fi and mobile data on the test device, force-stop Bitkit, and reopen it. Wait for session restoration to fail. The cached name must remain, and the app must not advertise Pubky signup for this existing identity.
+3. Re-enable connectivity while leaving Bitkit open. Verify that the same identity and contact list recover without scanning Ring again, signing out, or restarting the app when the saved grant is still valid. For an expired or revoked grant, reauthorization remains required.
+4. Repeat the failed startup and restore connectivity while Bitkit is backgrounded. Return to the foreground from a profile/contact screen and verify the same recovery. Resume must work from any screen, not only Home.
+5. Start a Ring authorization while recovery is pending. Verify that automatic restoration does not replace that attempt. Explicit sign-out or wallet reset must not be undone by a pending restoration.
+
+Both platforms retry automatically on connectivity restoration and app resume. A valid saved session must recover without a new authorization; expired or revoked grants still require Ring.
