@@ -47,6 +47,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -80,6 +82,10 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             (testDispatcher.scheduler.currentTime - schedulerOriginMillis).milliseconds,
         )
     }
+    private var subscriptionOffset = Duration.ZERO
+    private val subscriptionClock = object : Clock {
+        override fun now(): Instant = clock.now() + subscriptionOffset
+    }
     private lateinit var sut: PaykitPaymentRequestRepo
 
     @Before
@@ -108,6 +114,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paymentProofRepo,
             notificationScheduler,
             clock,
+            subscriptionClock,
         )
         sut.activate(LOCAL_IDENTITY)
     }
@@ -445,6 +452,34 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
                 argThat { subscription.id in acceptedAt },
             )
         }
+    }
+
+    @Test
+    fun `demo clock offset makes the next billing period due`() = test {
+        val proposal = paymentRequestRecord()
+        val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(proposal), listOf(active))
+        whenever(
+            paykitSdkService.acceptPaymentRequest(
+                COUNTERPARTY,
+                PaykitReceiverPaths.SERVER,
+                PAYMENT_REQUEST_ID,
+            )
+        ).thenReturn(active)
+        sut.refresh().getOrThrow()
+        sut.accept(sut.subscriptions.value.single()).getOrThrow()
+        assertEquals(
+            listOf(Instant.parse("2027-01-01T08:00:00Z")),
+            sut.pendingRequests.value.mapNotNull { it.billingPeriod?.startsAt },
+        )
+
+        subscriptionOffset = 31.days
+        sut.refresh().getOrThrow()
+
+        assertEquals(
+            listOf(Instant.parse("2027-01-01T08:00:00Z"), Instant.parse("2027-02-01T08:00:00Z")),
+            sut.pendingRequests.value.mapNotNull { it.billingPeriod?.startsAt }.sorted(),
+        )
     }
 
     @Test

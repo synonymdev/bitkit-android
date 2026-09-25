@@ -88,10 +88,10 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.DemoClock
 import to.bitkit.utils.SubscriptionIcon
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
-import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @Composable
@@ -155,7 +155,7 @@ fun CreateSubscriptionSheet(
             initialDraft = PaykitPaymentRequestDraft(
                 amountSats = amountSats,
                 note = name,
-                expiresAt = Clock.System.now() + expiration.duration,
+                expiresAt = DemoClock.subscriptionNow() + expiration.duration,
             ),
             contact = null,
             onBack = { step = SubscriptionCreationStep.Details },
@@ -184,7 +184,7 @@ fun CreateSubscriptionSheet(
                             name = name,
                             description = description,
                             frequency = frequency,
-                            expiresAt = Clock.System.now() + expiration.duration,
+                            expiresAt = DemoClock.subscriptionNow() + expiration.duration,
                             iconBytes = iconBytes,
                         ),
                         target = target,

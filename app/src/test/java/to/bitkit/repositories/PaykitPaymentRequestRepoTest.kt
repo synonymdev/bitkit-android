@@ -110,6 +110,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paymentProofRepo,
             subscriptionNotificationScheduler,
             clock,
+            clock,
         )
         sut.activate(LOCAL_IDENTITY)
     }
