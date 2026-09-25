@@ -295,6 +295,65 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refresh extends a grant to a contact link that linked after it`() = test {
+        records = listOf(fixtures.record(allowanceId = WALLET_ALLOWANCE_ID))
+        localState = PaykitAllowanceLocalState(groups = listOf(group(WALLET_ALLOWANCE_ID)))
+        whenever(sdk.linkedPeers()).thenReturn(
+            listOf(
+                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET),
+                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER),
+            ),
+        )
+        whenever(sdk.proposeAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            fixtures.record(
+                allowanceId = SERVER_ALLOWANCE_ID,
+                receiverPath = PaykitReceiverPaths.SERVER,
+                state = AllowanceLifecycleState.PROPOSED,
+                terms = terms,
+            ).also { record -> records = records + record }
+        }
+
+        sut.activate(identity)
+        sut.refresh()
+
+        val allower = AllowanceLocalRole.ALLOWER
+        verify(sdk).proposeAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER, allower, terms)
+        verify(sdk, never()).proposeAllowance(any(), eq(PaykitReceiverPaths.WALLET), any(), any())
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER)
+        assertEquals(
+            listOf(fixtures.septemberAnchor to PaykitAllowanceRepo.allowedPaymentEndpointIdentifiers()),
+            proposedTerms,
+        )
+        assertEquals(listOf(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID), localState.groups.single().allowanceIds)
+        val entry = sut.entries.value.single()
+        assertEquals("group-1", entry.id)
+        assertEquals(setOf(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID), entry.allowances.map { it.allowanceId }.toSet())
+        assertEquals(PaykitAllowance.Status.ACTIVE, entry.status(fixtures.now))
+    }
+
+    @Test
+    fun `refresh does not extend an ended grant or one that covers every linked path`() = test {
+        whenever(sdk.linkedPeers()).thenReturn(
+            listOf(
+                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET),
+                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER),
+            ),
+        )
+        records = listOf(fixtures.record(allowanceId = WALLET_ALLOWANCE_ID, state = AllowanceLifecycleState.ENDED))
+        localState = PaykitAllowanceLocalState(groups = listOf(group(WALLET_ALLOWANCE_ID)))
+        sut.activate(identity)
+
+        records = listOf(
+            fixtures.record(allowanceId = WALLET_ALLOWANCE_ID),
+            fixtures.record(allowanceId = SERVER_ALLOWANCE_ID, receiverPath = PaykitReceiverPaths.SERVER),
+        )
+        localState = PaykitAllowanceLocalState(groups = listOf(group(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID)))
+        sut.refresh()
+
+        verify(sdk, never()).proposeAllowance(any(), any(), any(), any())
+    }
+
+    @Test
     fun `received proposal is presented once and accepting answers it`() = test {
         val proposalRecord = receivedProposal()
         records = listOf(proposalRecord)

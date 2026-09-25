@@ -103,6 +103,13 @@ class PaykitAllowanceRepo @Inject constructor(
         fun allowedPaymentEndpointIdentifiers(network: Network = Env.network): List<String> =
             (listOf(MethodId.Bolt11) + MethodId.entries.filter { it.isOnchain }).map { it.rawValueForNetwork(network) }
 
+        /** A grant in one of these states still covers the contact, so links that appear later join it. */
+        private val EXTENDABLE_STATUSES = setOf(
+            PaykitAllowance.Status.ACTIVE,
+            PaykitAllowance.Status.NOT_YET_ACTIVE,
+            PaykitAllowance.Status.AWAITING_ANSWER,
+        )
+
         /** The supported receiver paths among [paths], the wallet link first. */
         fun orderedReceiverPaths(paths: Collection<String>): List<String> =
             PaykitReceiverPaths.ordered.filter { it in paths }
@@ -190,26 +197,80 @@ class PaykitAllowanceRepo @Inject constructor(
     suspend fun refresh(): Result<Unit> = withContext(ioDispatcher) {
         val identity = activeIdentity ?: return@withContext Result.success(Unit)
         refreshMutex.withLock {
-            val listing = runSuspendCatching {
-                paykitSdkService.listAllowances(
-                    AllowanceFilter(
-                        counterparty = null,
-                        counterpartyReceiverPath = null,
-                        localRole = null,
-                        states = emptyList(),
-                    ),
-                )
-                    .filter {
-                        it.historyStatus == AllowanceHistoryStatus.CONSISTENT ||
-                            it.historyStatus == AllowanceHistoryStatus.UNRESOLVED_REFERENCES
-                    }
-                    .mapNotNull { PaykitAllowance.from(it) }
-            }.onFailure { Logger.warn("Failed to list Paykit allowances", it, context = TAG) }
+            var listing = listAllowances()
+            if (listing.getOrNull()?.let { extendToNewLinks(identity, it) } == true) listing = listAllowances()
             if (activeIdentity == identity) {
                 publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
             }
             listing.map {}
         }
+    }
+
+    private suspend fun listAllowances(): Result<List<PaykitAllowance>> = runSuspendCatching {
+        paykitSdkService.listAllowances(
+            AllowanceFilter(
+                counterparty = null,
+                counterpartyReceiverPath = null,
+                localRole = null,
+                states = emptyList(),
+            ),
+        )
+            .filter {
+                it.historyStatus == AllowanceHistoryStatus.CONSISTENT ||
+                    it.historyStatus == AllowanceHistoryStatus.UNRESOLVED_REFERENCES
+            }
+            .mapNotNull { PaykitAllowance.from(it) }
+    }.onFailure { Logger.warn("Failed to list Paykit allowances", it, context = TAG) }
+
+    /**
+     * A grant covers the contact's links that were linked when it was made. When another supported link of the
+     * contact links later (typically their Paykit Server folder), proposes the grant's terms there and adds it to the
+     * grant, as a grant made now would. Returns true when any proposal was made.
+     */
+    private suspend fun extendToNewLinks(identity: String, allowances: List<PaykitAllowance>): Boolean {
+        val now = clock.now()
+        val liveGroups = executor.localState(identity).groups.mapNotNull { group ->
+            val members = allowances.filter { it.allowanceId in group.allowanceIds }
+            val isLive = members.size == group.allowanceIds.size &&
+                members.any { it.isAllower && it.status(now) in EXTENDABLE_STATUSES }
+            if (isLive) group to members else null
+        }
+        if (liveGroups.isEmpty()) return false
+        val linkedPeers = runSuspendCatching { paykitSdkService.linkedPeers() }
+            .onFailure { Logger.warn("Failed to list linked peers for allowances", it, context = TAG) }
+            .getOrNull()
+            ?.filter { it.state == LinkedPeerState.LINKED }
+            ?: return false
+
+        var proposed = false
+        for ((group, members) in liveGroups) {
+            val coveredPaths = members.map { it.counterpartyReceiverPath }.toSet()
+            val linkedPaths = linkedPeers
+                .filter { PubkyPublicKeyFormat.matches(it.counterparty, group.counterparty) }
+                .map { it.counterpartyReceiverPath }
+            val newPaths = orderedReceiverPaths(linkedPaths).filterNot { it in coveredPaths }
+            if (newPaths.isEmpty()) continue
+
+            val terms = allowanceTerms(
+                group.limits,
+                members.firstNotNullOfOrNull { it.monthlyAnchor } ?: PaykitAllowanceTime.monthStart(now),
+                allowedPaymentEndpointIdentifiers(),
+            )
+            runSuspendCatching { proposeOnLinks(group.counterparty, newPaths, terms) }
+                .onSuccess { allowanceIds ->
+                    executor.updateLocalState(identity) { state ->
+                        state.copy(
+                            groups = state.groups.map {
+                                if (it.id == group.id) it.copy(allowanceIds = it.allowanceIds + allowanceIds) else it
+                            },
+                        )
+                    }
+                    Logger.info("Extended an allowance to '${allowanceIds.size}' newly linked links", context = TAG)
+                    proposed = true
+                }
+                .onFailure { Logger.warn("Failed to extend an allowance to a newly linked link", it, context = TAG) }
+        }
+        return proposed
     }
 
     /** Proposes the same terms on every supported linked receiver path of the contact and records one entry. */
