@@ -219,7 +219,7 @@ class PubkyRepo @Inject constructor(
             }
         }.getOrNull() ?: return false
 
-        _sessionRestorationFailed.update { false }
+        if (notifyFailure) _sessionRestorationFailed.update { false }
         val result = runSuspendCatching {
             val savedSessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
             val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
@@ -238,12 +238,16 @@ class PubkyRepo @Inject constructor(
                 Logger.debug("Found no saved paykit session", context = TAG)
             }
             is InitResult.Restored -> {
+                _sessionRestorationFailed.update { false }
                 _publicKey.update { result.publicKey }
                 _authState.update { PubkyAuthState.Authenticated }
                 Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
             }
             is InitResult.RestorationFailed -> {
-                clearAuthenticatedState(clearCachedProfile = false)
+                clearAuthenticatedState(
+                    clearCachedProfile = false,
+                    clearRestorationFailure = notifyFailure,
+                )
                 if (notifyFailure) _sessionRestorationFailed.update { true }
             }
         }
@@ -1466,7 +1470,10 @@ class PubkyRepo @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
-    private suspend fun clearAuthenticatedState(clearCachedProfile: Boolean = true) = withContext(ioDispatcher) {
+    private suspend fun clearAuthenticatedState(
+        clearCachedProfile: Boolean = true,
+        clearRestorationFailure: Boolean = true,
+    ) = withContext(ioDispatcher) {
         if (clearCachedProfile) {
             evictPubkyImages()
             runSuspendCatching { pubkyStore.reset() }
@@ -1477,7 +1484,7 @@ class PubkyRepo @Inject constructor(
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
-        _sessionRestorationFailed.update { false }
+        if (clearRestorationFailure) _sessionRestorationFailed.update { false }
         _authState.update { PubkyAuthState.Idle }
     }
 

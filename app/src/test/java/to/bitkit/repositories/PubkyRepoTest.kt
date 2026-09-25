@@ -1567,9 +1567,8 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(pubkyStore, never()).reset()
         verifyBlocking(keychain, never()) { delete(any()) }
 
-        sut.clearSessionRestorationFailed()
         sut.restoreSessionIfNeeded()
-        assertFalse(sut.sessionRestorationFailed.value)
+        assertTrue(sut.sessionRestorationFailed.value)
 
         canRestore = true
         sut.restoreSessionIfNeeded()
