@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,11 +38,11 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.effects.BlockScreenshots
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ConfirmMnemonicScreen(
     uiState: BackupContract.UiState,
@@ -53,71 +54,88 @@ fun ConfirmMnemonicScreen(
     val originalSeed = remember(uiState.bip39Mnemonic) {
         uiState.bip39Mnemonic.split(" ").filter { it.isNotBlank() }.toImmutableList()
     }
-    val shuffledWords = remember(originalSeed) {
-        originalSeed.shuffled().toImmutableList()
+    val shuffledOrder = rememberSaveable(originalSeed) { originalSeed.indices.shuffled() }
+    val shuffledWords = remember(originalSeed, shuffledOrder) {
+        shuffledOrder.map { originalSeed[it] }.toImmutableList()
     }
 
-    var selectedWords by rememberSaveable {
-        mutableStateOf(arrayOfNulls<String>(originalSeed.size))
-    }
-    var pressedStates by rememberSaveable {
-        mutableStateOf(BooleanArray(shuffledWords.size) { false })
+    var selectedIndices by rememberSaveable(originalSeed) {
+        mutableStateOf(listOf<Int>())
     }
 
-    // Calculate if all words are correct
-    val isComplete = selectedWords.all { it != null } &&
-        selectedWords.zip(originalSeed).all { (selected, original) -> selected == original }
+    val isComplete = isMnemonicSelectionComplete(selectedIndices, shuffledWords, originalSeed)
 
     ConfirmMnemonicContent(
         originalSeed = originalSeed,
         shuffledWords = shuffledWords,
-        selectedWords = selectedWords,
-        pressedStates = pressedStates,
+        selectedIndices = selectedIndices.toImmutableList(),
         isComplete = isComplete,
-        onWordPress = { word, shuffledIndex ->
-            val firstNullIndex = selectedWords.indexOfFirst { it == null }
-            if (firstNullIndex == -1) return@ConfirmMnemonicContent
-
-            val lastIndex = firstNullIndex - 1
-            val nextIndex = if (lastIndex == -1) 0 else lastIndex + 1
-
-            // If the word is correct and pressed, do nothing
-            if (pressedStates[shuffledIndex] && nextIndex > 0 && originalSeed[lastIndex] == selectedWords[lastIndex]) {
-                return@ConfirmMnemonicContent
-            }
-
-            // If previous word is incorrect, allow unchecking
-            if (lastIndex >= 0 && selectedWords[lastIndex] != originalSeed[lastIndex]) {
-                // Uncheck if we tap on it
-                if (pressedStates[shuffledIndex] && word == selectedWords[lastIndex]) {
-                    pressedStates = pressedStates.copyOf().apply { this[shuffledIndex] = false }
-                    selectedWords = selectedWords.copyOf().apply { this[lastIndex] = null }
-                }
-                return@ConfirmMnemonicContent
-            }
-
-            // Mark word as pressed and add it to the seed
-            if (nextIndex < originalSeed.size) {
-                pressedStates = pressedStates.copyOf().apply { this[shuffledIndex] = true }
-                selectedWords = selectedWords.copyOf().apply { this[nextIndex] = word }
-            }
+        onWordPress = { shuffledIndex ->
+            selectedIndices = reduceMnemonicSelection(selectedIndices, shuffledIndex, shuffledWords, originalSeed)
+        },
+        onSelectedWordPress = {
+            val lastIndex = selectedIndices.lastOrNull() ?: return@ConfirmMnemonicContent
+            selectedIndices = reduceMnemonicSelection(selectedIndices, lastIndex, shuffledWords, originalSeed)
         },
         onContinue = onContinue,
         onBack = onBack,
     )
 }
 
+/**
+ * Applies a tap on the shuffled word chip at [tappedShuffledIndex] to the [stack] of selected chip indices.
+ * An incorrect last word blocks further selection and is removed only by tapping its own chip.
+ */
+internal fun reduceMnemonicSelection(
+    stack: List<Int>,
+    tappedShuffledIndex: Int,
+    shuffled: List<String>,
+    original: List<String>,
+): List<Int> {
+    if (tappedShuffledIndex !in shuffled.indices) return stack
+    if (!isSelectionPositionCorrect(stack, stack.lastIndex, shuffled, original)) {
+        return if (stack.last() == tappedShuffledIndex) stack.dropLast(1) else stack
+    }
+    if (tappedShuffledIndex in stack) return stack
+    if (stack.size >= original.size) return stack
+    return stack + tappedShuffledIndex
+}
+
+internal fun isMnemonicSelectionComplete(
+    stack: List<Int>,
+    shuffled: List<String>,
+    original: List<String>,
+): Boolean = original.isNotEmpty() &&
+    stack.size == original.size &&
+    stack.indices.all { isSelectionPositionCorrect(stack, it, shuffled, original) }
+
+private fun isSelectionPositionCorrect(
+    stack: List<Int>,
+    position: Int,
+    shuffled: List<String>,
+    original: List<String>,
+): Boolean {
+    if (position < 0) return true
+    val word = shuffled.getOrNull(stack[position]) ?: return false
+    return word == original.getOrNull(position)
+}
+
 @Composable
 private fun ConfirmMnemonicContent(
     originalSeed: ImmutableList<String>,
     shuffledWords: ImmutableList<String>,
-    selectedWords: Array<String?>,
-    pressedStates: BooleanArray,
+    selectedIndices: ImmutableList<Int>,
     isComplete: Boolean,
-    onWordPress: (String, Int) -> Unit,
+    onWordPress: (Int) -> Unit,
+    onSelectedWordPress: () -> Unit,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val selectedWords = remember(originalSeed, shuffledWords, selectedIndices) {
+        List(originalSeed.size) { position ->
+            selectedIndices.getOrNull(position)?.let { shuffledWords.getOrNull(it) }
+        }.toImmutableList()
+    }
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
 
@@ -163,14 +181,14 @@ private fun ConfirmMnemonicContent(
                     .testTag("backup_shuffled_words_grid")
             ) {
                 shuffledWords.forEachIndexed { index, word ->
-                    val isSelected = pressedStates.getOrElse(index, defaultValue = { false })
+                    val isSelected = index in selectedIndices
                     PrimaryButton(
                         text = word,
                         color = if (isSelected) Colors.White32 else Colors.White16,
                         enableGradient = !isSelected,
                         fullWidth = false,
                         size = ButtonSize.Small,
-                        onClick = { onWordPress(word, index) },
+                        onClick = { onWordPress(index) },
                         modifier = Modifier.testTag("Word-$word")
                     )
                 }
@@ -192,6 +210,7 @@ private fun ConfirmMnemonicContent(
                             number = index + 1,
                             word = word ?: "",
                             isCorrect = word == originalSeed.getOrNull(index),
+                            onClick = onSelectedWordPress,
                         )
                     }
                 }
@@ -205,6 +224,7 @@ private fun ConfirmMnemonicContent(
                             number = actualIndex + 1,
                             word = word ?: "",
                             isCorrect = word == originalSeed.getOrNull(actualIndex),
+                            onClick = onSelectedWordPress,
                         )
                     }
                 }
@@ -230,8 +250,14 @@ private fun SelectedWordItem(
     number: Int,
     word: String,
     isCorrect: Boolean,
+    onClick: () -> Unit,
 ) {
-    Row {
+    val isIncorrect = word.isNotEmpty() && !isCorrect
+    Row(
+        modifier = Modifier
+            .clickableAlpha(enabled = isIncorrect, onClick = onClick)
+            .testTag("SelectedWord-$number")
+    ) {
         BodyMSB(text = "$number.", color = Colors.White64)
         Spacer(modifier = Modifier.width(4.dp))
         BodyMSB(
@@ -249,10 +275,10 @@ private fun Preview() {
         ConfirmMnemonicContent(
             originalSeed = testWords,
             shuffledWords = testWords.shuffled().toImmutableList(),
-            selectedWords = arrayOfNulls(testWords.size),
-            pressedStates = BooleanArray(testWords.size) { false },
+            selectedIndices = persistentListOf(),
             isComplete = false,
-            onWordPress = { _, _ -> },
+            onWordPress = {},
+            onSelectedWordPress = {},
             onContinue = {},
             onBack = {},
         )
@@ -267,11 +293,11 @@ private fun Preview2() {
     AppThemeSurface {
         ConfirmMnemonicContent(
             originalSeed = testWords,
-            shuffledWords = testWords.shuffled().toImmutableList(),
-            selectedWords = testWords.take(half).toTypedArray<String?>() + arrayOfNulls<String>(half),
-            pressedStates = BooleanArray(testWords.size) { it < half },
+            shuffledWords = testWords,
+            selectedIndices = List(half) { it }.toImmutableList(),
             isComplete = false,
-            onWordPress = { _, _ -> },
+            onWordPress = {},
+            onSelectedWordPress = {},
             onContinue = {},
             onBack = {},
         )
@@ -286,11 +312,11 @@ private fun Preview24Words() {
     AppThemeSurface {
         ConfirmMnemonicContent(
             originalSeed = testWords,
-            shuffledWords = testWords.shuffled().toImmutableList(),
-            selectedWords = testWords.take(half).toTypedArray<String?>() + arrayOfNulls<String>(half),
-            pressedStates = BooleanArray(testWords.size) { it < half },
+            shuffledWords = testWords,
+            selectedIndices = List(half) { it }.toImmutableList(),
             isComplete = false,
-            onWordPress = { _, _ -> },
+            onWordPress = {},
+            onSelectedWordPress = {},
             onContinue = {},
             onBack = {},
         )

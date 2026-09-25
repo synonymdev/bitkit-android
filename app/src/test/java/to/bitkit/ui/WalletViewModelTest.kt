@@ -42,6 +42,8 @@ import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletViewModelTest : BaseUnitTest() {
@@ -210,6 +212,20 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoreWallet should arm the received sheet hold before the node syncs`() = test {
+        // The node starts replaying historical txs as soon as the restore begins, so the hold has to
+        // be armed here rather than when the user taps continue.
+        whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val settingsData = stubSettingsUpdate()
+
+        sut.restoreWallet("test_mnemonic", null)
+        advanceUntilIdle()
+
+        assertTrue(settingsData.value.pendingRestoreActivitySeen)
+        assertTrue(settingsData.value.pendingRestoreActivitySeenSince > 0)
+    }
+
+    @Test
     fun `addTagToSelected should call walletRepo addTagToSelected`() = test {
         sut.addTagToSelected("test_tag")
 
@@ -250,6 +266,38 @@ class WalletViewModelTest : BaseUnitTest() {
         sut.onRestoreContinue()
 
         assertEquals(RestoreState.Settled, sut.restoreState.value)
+    }
+
+    @Test
+    fun `onRestoreContinue should request address type pruning`() = test {
+        val settingsData = stubSettingsUpdate()
+
+        sut.onRestoreContinue()
+        advanceUntilIdle()
+
+        assertTrue(settingsData.value.pendingRestoreAddressTypePrune)
+    }
+
+    @Test
+    fun `onRestoreContinue should skip address type pruning when backup had monitored types`() = test {
+        whenever(settingsStore.restoredMonitoredTypesFromBackup).thenReturn(true)
+        val settingsData = stubSettingsUpdate()
+
+        sut.onRestoreContinue()
+        advanceUntilIdle()
+
+        assertFalse(settingsData.value.pendingRestoreAddressTypePrune)
+    }
+
+    @Test
+    fun `onRestoreContinue should not arm the received sheet hold, the restore already did`() = test {
+        // Regression: arming it here left the node replaying historical txs before the hold existed.
+        val settingsData = stubSettingsUpdate()
+
+        sut.onRestoreContinue()
+        advanceUntilIdle()
+
+        assertFalse(settingsData.value.pendingRestoreActivitySeen)
     }
 
     @Test
@@ -499,5 +547,15 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(testWalletRepo, never()).refreshBip21()
+    }
+
+    private fun stubSettingsUpdate(): MutableStateFlow<SettingsData> {
+        val settingsData = MutableStateFlow(SettingsData())
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsData.value = transform(settingsData.value)
+            Unit
+        }
+        return settingsData
     }
 }
