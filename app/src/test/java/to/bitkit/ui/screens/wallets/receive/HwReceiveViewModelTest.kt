@@ -4,13 +4,16 @@ import android.content.Context
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -23,6 +26,7 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwReceiveViewModelTest : BaseUnitTest() {
@@ -38,6 +42,9 @@ class HwReceiveViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(hwWalletRepo.wallets).thenReturn(wallets)
         whenever(hwWalletRepo.observeReceiveAddress(any(), any())).thenReturn(receiveAddress)
+        whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
+        whenever { hwWalletRepo.disconnectStaleSession(any()) }.thenReturn(Result.success(Unit))
+        whenever(context.getString(any())).thenReturn("message")
         sut = HwReceiveViewModel(context, hwWalletRepo)
     }
 
@@ -99,14 +106,68 @@ class HwReceiveViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cancel clears the cached receive address`() = test {
+    fun `cancel without using the device keeps its session`() = test {
         whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).thenReturn(Result.success(RECEIVE_ADDRESS))
         sut.loadAddress(WALLET_ID)
         advanceUntilIdle()
 
         sut.cancel()
+        advanceUntilIdle()
 
         assertEquals(HwReceiveUiState(), sut.uiState.value)
+        verify(hwWalletRepo, never()).disconnectStaleSession(any())
+    }
+
+    @Test
+    fun `cancel after verification closes the hardware session`() = test {
+        whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).thenReturn(Result.success(RECEIVE_ADDRESS))
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.verifyReceiveAddress(WALLET_ID, RECEIVE_ADDRESS))
+            .thenReturn(Result.success(Unit))
+        sut.loadAddress(WALLET_ID)
+        advanceUntilIdle()
+        sut.verifyAddress()
+        advanceUntilIdle()
+
+        sut.cancel()
+        advanceUntilIdle()
+
+        assertEquals(HwReceiveUiState(), sut.uiState.value)
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
+    }
+
+    @Test
+    fun `cancel during verification closes the hardware session`() = test {
+        val verificationStarted = CompletableDeferred<Unit>()
+        whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).thenReturn(Result.success(RECEIVE_ADDRESS))
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.verifyReceiveAddress(WALLET_ID, RECEIVE_ADDRESS)).doSuspendableAnswer {
+            verificationStarted.complete(Unit)
+            awaitCancellation()
+        }
+        sut.loadAddress(WALLET_ID)
+        advanceUntilIdle()
+        sut.verifyAddress()
+        verificationStarted.await()
+
+        sut.cancel()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isVerifyingAddress)
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
+    }
+
+    @Test
+    fun `watcher address change keeps a session the sheet never used`() = test {
+        whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).thenReturn(Result.success(RECEIVE_ADDRESS))
+        sut.loadAddress(WALLET_ID)
+        advanceUntilIdle()
+
+        receiveAddress.value = NEXT_RECEIVE_ADDRESS
+        advanceUntilIdle()
+
+        assertEquals(NEXT_RECEIVE_ADDRESS, sut.uiState.value.address)
+        verify(hwWalletRepo, never()).disconnectStaleSession(any())
     }
 
     @Test
@@ -161,6 +222,26 @@ class HwReceiveViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(NEXT_RECEIVE_ADDRESS, sut.uiState.value.address)
+        assertFalse(sut.uiState.value.isVerifyingAddress)
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
+    }
+
+    @Test
+    fun `verification timeout closes the hardware session`() = test {
+        val timeout = runCatching {
+            withTimeout(0.seconds) { awaitCancellation() }
+        }.exceptionOrNull()!!
+        whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).thenReturn(Result.success(RECEIVE_ADDRESS))
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.verifyReceiveAddress(WALLET_ID, RECEIVE_ADDRESS))
+            .thenReturn(Result.failure(timeout))
+        sut.loadAddress(WALLET_ID)
+        advanceUntilIdle()
+
+        sut.verifyAddress()
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
         assertFalse(sut.uiState.value.isVerifyingAddress)
     }
 

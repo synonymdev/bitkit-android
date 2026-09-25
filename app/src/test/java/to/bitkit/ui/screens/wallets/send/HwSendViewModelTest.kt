@@ -3,9 +3,10 @@ package to.bitkit.ui.screens.wallets.send
 import android.content.Context
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.TrezorException
-import com.synonym.bitkitcore.TrezorFeatures
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -13,17 +14,21 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.ActivityService
@@ -34,6 +39,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwSendViewModelTest : BaseUnitTest() {
@@ -50,6 +56,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(coreService.activity).thenReturn(activityService)
+        whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
         sut = HwSendViewModel(
             context = context,
             hwWalletRepo = hwWalletRepo,
@@ -81,7 +88,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             totalSpent = signedTx.totalSpent,
         )
         whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
-        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(connectedDevice()))
         whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
             .thenReturn(Result.success(funding))
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(
@@ -174,12 +181,30 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a device holding another wallet shows the wallet mismatch`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.failure(HwWalletMismatchError()))
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(context.getString(R.string.hardware__wallet_mismatch)).thenReturn("Different wallet")
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        assertEquals("Different wallet", toasts.single().description)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
+    }
+
+    @Test
     fun `composition timeout shows payment timeout`() = test {
         val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
-        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(connectedDevice()))
         whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
             .thenReturn(Result.failure(timeout))
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
@@ -288,6 +313,88 @@ class HwSendViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
     }
 
+    @Test
+    fun `sheet can be left while the device connects`() = test {
+        val fixture = stubSuccessfulPayment()
+        val connectStarted = CompletableDeferred<Unit>()
+        val connectResult = CompletableDeferred<Result<HwConnectedDevice>>()
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).doSuspendableAnswer {
+            connectStarted.complete(Unit)
+            connectResult.await()
+        }
+
+        sut.signAndBroadcast(request())
+        connectStarted.await()
+
+        assertTrue(sut.uiState.value.isSigning)
+        assertTrue(sut.uiState.value.isConnectingDevice)
+        assertTrue(sut.uiState.value.canLeave)
+
+        connectResult.complete(Result.success(connectedDevice()))
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
+        assertFalse(sut.uiState.value.isConnectingDevice)
+    }
+
+    @Test
+    fun `sheet cannot be left while the device signs`() = test {
+        val fixture = stubSuccessfulPayment()
+        val signStarted = CompletableDeferred<Unit>()
+        val signResult = CompletableDeferred<Result<HwFundingSignedTx>>()
+        whenever(hwWalletRepo.signFunding(WALLET_ID, fixture.funding)).doSuspendableAnswer {
+            signStarted.complete(Unit)
+            signResult.await()
+        }
+
+        sut.signAndBroadcast(request())
+        signStarted.await()
+
+        assertTrue(sut.uiState.value.isSigning)
+        assertFalse(sut.uiState.value.isConnectingDevice)
+        assertFalse(sut.uiState.value.canLeave)
+
+        signResult.complete(Result.success(fixture.signedTx))
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `sheet cannot be left while a broadcast is unresolved`() = test {
+        assertFalse(HwSendUiState(isSigning = true, isBroadcastUnresolved = true).canLeave)
+        assertFalse(HwSendUiState(isSigning = true, isConnectingDevice = true, isBroadcastUnresolved = true).canLeave)
+        assertTrue(HwSendUiState().canLeave)
+    }
+
+    @Test
+    fun `cancel while connecting stops before signing and broadcasting`() = test {
+        val fixture = stubSuccessfulPayment()
+        val connectStarted = CompletableDeferred<Unit>()
+        whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
+        var connectCalls = 0
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).doSuspendableAnswer {
+            connectCalls += 1
+            if (connectCalls > 1) return@doSuspendableAnswer Result.success(connectedDevice())
+            connectStarted.complete(Unit)
+            awaitCancellation()
+        }
+
+        sut.signAndBroadcast(request())
+        connectStarted.await()
+        sut.cancel()
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any())
+        assertEquals(HwSendUiState(), sut.uiState.value)
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
+    }
+
     private suspend fun stubSuccessfulPayment(): PaymentFixture {
         val funding = HwFundingTransaction(
             psbt = "psbt",
@@ -309,7 +416,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             totalSpent = signedTx.totalSpent,
         )
         whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
-        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(connectedDevice()))
         whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
             .thenReturn(Result.success(funding))
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(Result.success(signedTx))
@@ -330,6 +437,8 @@ class HwSendViewModelTest : BaseUnitTest() {
         val signedTx: HwFundingSignedTx,
         val broadcast: HwFundingBroadcastResult,
     )
+
+    private fun connectedDevice() = HwConnectedDevice(vendor = HwWalletVendor.TREZOR, id = "dev1")
 
     private companion object {
         const val WALLET_ID = "hardware-wallet"

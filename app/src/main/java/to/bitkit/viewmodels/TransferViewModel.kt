@@ -10,6 +10,7 @@ import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -46,15 +47,16 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.isBroadcastConnectivityFailure
-import to.bitkit.ext.isTrezorDeviceBusy
-import to.bitkit.ext.isTrezorFirmwareError
-import to.bitkit.ext.isTrezorSessionFailure
-import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.isHwDeviceBusy
+import to.bitkit.ext.isHwFirmwareError
+import to.bitkit.ext.isHwSessionFailure
+import to.bitkit.ext.isHwUserCancellation
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
@@ -63,6 +65,7 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
+import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -70,6 +73,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
+import to.bitkit.utils.HwErrorPresenter
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.math.min
@@ -97,6 +101,10 @@ class TransferViewModel @Inject constructor(
     private val boltzService: BoltzService,
     private val clock: Clock,
 ) : ViewModel() {
+
+    /** Paired hardware wallets, for screens that render vendor-specific device visuals. */
+    val hardwareWallets: StateFlow<ImmutableList<HwWallet>>
+        get() = hwWalletRepo.wallets
     private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
     val spendingUiState = _spendingUiState.asStateFlow()
 
@@ -118,6 +126,7 @@ class TransferViewModel @Inject constructor(
     val transferEffects = MutableSharedFlow<TransferEffect>()
     fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
     private var hwTransferSignJob: Job? = null
+    private var hwTransferAttempt = 0
     private var hwFeeEstimateJob: Job? = null
     private var confirmFeeJob: Job? = null
     private var confirmPayJob: Job? = null
@@ -964,9 +973,10 @@ class TransferViewModel @Inject constructor(
         val walletId = activeHwTransferWalletId
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
+        hwTransferAttempt++
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = null
-        _spendingUiState.update { it.copy(isSigning = false) }
+        _spendingUiState.update { it.copy(isSigning = false, isConnectingDevice = false) }
         if (walletId != null) {
             viewModelScope.launch {
                 hwWalletRepo.disconnectStaleSession(walletId)
@@ -1052,6 +1062,7 @@ class TransferViewModel @Inject constructor(
 
         activeHwTransferWalletId = walletId
         _spendingUiState.update { it.copy(isSigning = true) }
+        val attempt = ++hwTransferAttempt
         hwTransferSignJob = viewModelScope.launch {
             try {
                 val signedOrder = _spendingUiState.value.order
@@ -1090,8 +1101,12 @@ class TransferViewModel @Inject constructor(
                     }
                     .onFailure { handleHardwareTransferFailure(it, walletId) }
             } finally {
-                _spendingUiState.update { it.copy(isSigning = false) }
-                hwTransferSignJob = null
+                // A cancelled job can outlive cancelHardwareTransfer() while a device call returns, and
+                // must not reset the state of a transfer attempt started after it.
+                if (hwTransferAttempt == attempt) {
+                    _spendingUiState.update { it.copy(isSigning = false, isConnectingDevice = false) }
+                    hwTransferSignJob = null
+                }
             }
         }
     }
@@ -1186,14 +1201,23 @@ class TransferViewModel @Inject constructor(
 
     @Suppress("ThrowsCount")
     private suspend fun ensureHardwareConnected(walletId: String) {
-        runCatching {
-            withTimeout(HW_RECONNECT_TIMEOUT) {
-                hwWalletRepo.ensureConnected(walletId).getOrThrow()
+        // Nothing has been sent to the device for signing yet, so the screen may be left while this
+        // waits; a Jade may sit here for minutes waiting for its PIN.
+        val attempt = hwTransferAttempt
+        _spendingUiState.update { it.copy(isConnectingDevice = true) }
+        try {
+            runCatching {
+                // A Jade reconnect may include entering the PIN on the device, so the budget is per vendor.
+                withTimeout(hwWalletRepo.reconnectTimeout(walletId)) {
+                    hwWalletRepo.ensureConnected(walletId).getOrThrow()
+                }
+            }.getOrElse {
+                it.rethrowIfCancellation()
+                if (it.isHwUserCancellation()) throw it
+                throw HardwareReconnectError(it)
             }
-        }.getOrElse {
-            it.rethrowIfCancellation()
-            if (it.isTrezorUserCancellation()) throw it
-            throw HardwareReconnectError(it)
+        } finally {
+            if (hwTransferAttempt == attempt) _spendingUiState.update { it.copy(isConnectingDevice = false) }
         }
     }
 
@@ -1222,7 +1246,7 @@ class TransferViewModel @Inject constructor(
     ): HwFundingSignedTx {
         val firstAttempt = runSuspendCatching { signHardwareFundingOnce(walletId, funding) }
         val error = firstAttempt.exceptionOrNull() ?: return firstAttempt.getOrThrow()
-        if (!error.isTrezorSessionFailure()) throw error
+        if (!error.isHwSessionFailure()) throw error
 
         ensureHardwareConnected(walletId)
         return signHardwareFundingOnce(walletId, funding)
@@ -1262,7 +1286,7 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun handleHardwareTransferFailure(e: Throwable, walletId: String) {
-        if (e.isTrezorUserCancellation()) {
+        if (e.isHwUserCancellation()) {
             Logger.info("Hardware transfer cancelled on device for '$walletId'", context = TAG)
             return
         }
@@ -1272,16 +1296,26 @@ class TransferViewModel @Inject constructor(
             _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
             return
         }
-        if (e.isTrezorDeviceBusy()) {
-            Logger.warn("Blocked hardware transfer for locked or busy Trezor '$walletId'", e, context = TAG)
+        if (generateSequence(e) { it.cause }.any { it is HwWalletMismatchError }) {
+            // The device is connected but holds another wallet, so reconnecting it would not help.
+            Logger.warn("Rejected hardware device holding another wallet for '$walletId'", e, context = TAG)
             ToastEventBus.send(
-                type = Toast.ToastType.INFO,
-                title = context.getString(R.string.hardware__device_busy),
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = context.getString(R.string.hardware__wallet_mismatch),
             )
             return
         }
-        if (e.isTrezorFirmwareError()) {
-            Logger.warn("Received Trezor firmware error for '$walletId'", e, context = TAG)
+        if (e.isHwDeviceBusy()) {
+            Logger.warn("Blocked hardware transfer for locked or busy device '$walletId'", e, context = TAG)
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = HwErrorPresenter.userMessage(context, e),
+            )
+            return
+        }
+        if (e.isHwFirmwareError()) {
+            Logger.warn("Received hardware firmware error for '$walletId'", e, context = TAG)
             showHardwareReconnectRequiredError()
             return
         }
@@ -1850,9 +1884,6 @@ class TransferViewModel @Inject constructor(
         /** Minimum fallback fee rate when fee estimates are temporarily unavailable. */
         private const val HW_FUNDING_FALLBACK_SATS_PER_VBYTE = 3uL
 
-        /** Upper bound for reconnecting a known device before the UI asks for reconnect. */
-        private val HW_RECONNECT_TIMEOUT = 30.seconds
-
         /** Upper bound for exact hardware funding composition before signing starts. */
         private val HW_COMPOSE_TIMEOUT = 45.seconds
 
@@ -1911,6 +1942,7 @@ data class TransferToSpendingUiState(
     val quarterAmount: Long = 0,
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
+    val isConnectingDevice: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
     val isHwPassphraseRequired: Boolean = false,
     val isVerifyingHwPassphrase: Boolean = false,
@@ -1926,6 +1958,12 @@ data class TransferToSpendingUiState(
     val hwFundingWalletId: String? = null,
 ) {
     val isBusy: Boolean get() = isConfirmPaying || isSigning
+
+    /**
+     * Whether the hardware sign screen may be left. Connecting or unlocking can be abandoned, and leaving
+     * cancels it; once the device is asked to sign, or a broadcast is on its way, it cannot.
+     */
+    val canLeave: Boolean get() = !isBusy || isConnectingDevice
 
     val confirmLeavingAmountSats: ULong
         get() = if (shouldUseSendAll) {
