@@ -182,7 +182,7 @@ private fun Content(
             ) {
                 val clientBalance = state.clientBalanceSat
                 val lspFee = state.feeSat.safe() - clientBalance.safe()
-                val total = state.feeSat.safe() + miningFeeSats.safe()
+                val total = state.confirmLeavingAmountSats
                 val lspBalance = state.lspBalanceSat
 
                 VerticalSpacer(32.dp)

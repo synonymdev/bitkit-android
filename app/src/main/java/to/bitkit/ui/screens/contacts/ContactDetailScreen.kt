@@ -42,6 +42,7 @@ import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheet
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
@@ -327,7 +328,7 @@ private fun ContactBody(
             )
             ActionButton(
                 onClick = onClickCopy,
-                iconRes = R.drawable.ic_copy,
+                iconRes = R.drawable.ic_copy_simple,
                 modifier = Modifier.testTag("ContactCopy")
             )
             ActionButton(
@@ -344,7 +345,7 @@ private fun ContactBody(
             } else {
                 ActionButton(
                     onClick = onClickEdit,
-                    iconRes = R.drawable.ic_edit,
+                    iconRes = R.drawable.ic_pencil,
                     modifier = Modifier.testTag("ContactEdit")
                 )
             }
@@ -367,27 +368,36 @@ private fun ContactBody(
                 .testTag("ContactViewTagsHeader")
         )
         VerticalSpacer(8.dp)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            tags.forEach { tag ->
-                TagButton(
-                    text = tag,
-                    onClick = { onRemoveTag(tag) },
-                    accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
-                    displayIconClose = true,
-                )
+        if (tags.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                tags.forEach { tag ->
+                    TagButton(
+                        text = tag,
+                        onClick = { onRemoveTag(tag) },
+                        accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
+                        displayIconClose = true,
+                    )
+                }
             }
+            VerticalSpacer(8.dp)
         }
-        VerticalSpacer(8.dp)
         Row(modifier = Modifier.fillMaxWidth()) {
-            TagButton(
+            PrimaryButton(
                 text = stringResource(R.string.profile__add_tag),
                 onClick = onAddTag,
-                icon = painterResource(R.drawable.ic_tag),
-                displayIconClose = true,
+                size = ButtonSize.Small,
+                fullWidth = false,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_tag),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
                 modifier = Modifier.testTag("ContactAddTag")
             )
         }
