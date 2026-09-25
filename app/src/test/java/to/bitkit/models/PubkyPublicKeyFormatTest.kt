@@ -39,6 +39,15 @@ class PubkyPublicKeyFormatTest {
     }
 
     @Test
+    fun `canonicalized clears final padding bits`() {
+        val nonCanonicalKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val canonicalKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+
+        assertEquals(canonicalKey, PubkyPublicKeyFormat.canonicalized(nonCanonicalKey))
+        assertEquals(canonicalKey, PubkyPublicKeyFormat.canonicalized(canonicalKey))
+    }
+
+    @Test
     fun `redacted shortens normalized pubky keys`() {
         val rawKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 

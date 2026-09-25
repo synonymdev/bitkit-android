@@ -254,12 +254,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pubkyPublicKey = MutableStateFlow<String?>(null)
     private val pubkyContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     private val pubkyContactsLoadVersion = MutableStateFlow(0L)
+    private val pubkyContactsLoadCompletionVersion = MutableStateFlow(0L)
     private val pendingPaykitPaymentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
-    private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+    private val nonCanonicalTestPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     private val signupAuthUrl =
         "pubkyring://signup?hs=homeserver&relay=https://relay&secret=request&caps=/pub/example/:rw"
     private val legacyAuthorizedSignupAuthUrl = signupAuthUrl.replace("pubkyring://", "pubkyauth://")
@@ -362,6 +364,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(Unit))
         whenever(pubkyRepo.contactsLoadVersion).thenReturn(pubkyContactsLoadVersion)
+        whenever(pubkyRepo.contactsLoadCompletionVersion).thenReturn(pubkyContactsLoadCompletionVersion)
         whenever(paykitPaymentRequestRepo.pendingRequests).thenReturn(pendingPaykitPaymentRequests)
         whenever(paykitPaymentRequestRepo.paymentRequestHistory).thenReturn(paykitPaymentRequestHistory)
         whenever(paykitPaymentRequestRepo.subscriptions).thenReturn(paykitSubscriptions)
@@ -2897,6 +2900,202 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(testPublicKey, sut.sendUiState.value.addressInput)
         assertTrue(sut.sendUiState.value.isAddressInputValid)
         verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink opens add contact or own profile through scanner routing`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(
+                Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$nonCanonicalTestPublicKey".toUri()),
+            )
+            assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
+            advanceUntilIdle()
+
+            pubkyPublicKey.value = testPublicKey
+            pubkyContactsLoadVersion.value = 1L
+            pubkyContactsLoadCompletionVersion.value = 1L
+            sut.handleDeeplinkIntent(
+                Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$nonCanonicalTestPublicKey".toUri()),
+            )
+            assertEquals(MainScreenEffect.Navigate(Routes.Profile), awaitItem())
+        }
+        verify(pubkyRepo, never()).loadContacts()
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink waits for restored contacts and unlock before opening saved contact`() = test {
+        enablePaykitUi()
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(
+                Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$nonCanonicalTestPublicKey".toUri()),
+            )
+            runCurrent()
+            expectNoEvents()
+
+            pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+            initialized.complete(Unit)
+            runCurrent()
+            expectNoEvents()
+
+            settingsData.value = SettingsData(isPinEnabled = true)
+            sut.resetIsAuthenticatedState()
+            pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+            pubkyContactsLoadVersion.value = 1L
+            pubkyContactsLoadCompletionVersion.value = 1L
+            advanceUntilIdle()
+            expectNoEvents()
+
+            sut.setIsAuthenticated(true)
+            assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        verify(pubkyRepo, never()).loadContacts()
+        verify(refreshContactPaykitReceivers).invoke(testPublicKey)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink retries contacts after initial load failure`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        whenever(pubkyRepo.loadContacts()).thenAnswer {
+            pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+            pubkyContactsLoadVersion.value = 1L
+            pubkyContactsLoadCompletionVersion.value = 2L
+        }
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            runCurrent()
+            expectNoEvents()
+
+            pubkyContactsLoadCompletionVersion.value = 1L
+
+            assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
+            advanceUntilIdle()
+        }
+        verify(pubkyRepo).loadContacts()
+        verify(refreshContactPaykitReceivers).invoke(testPublicKey)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink waits for in-flight contacts retry`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val retryAttempted = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.loadContacts()).thenAnswer { retryAttempted.complete(Unit) }
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            runCurrent()
+            expectNoEvents()
+
+            pubkyContactsLoadCompletionVersion.value = 1L
+            retryAttempted.await()
+            expectNoEvents()
+
+            pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+            pubkyContactsLoadVersion.value = 1L
+            pubkyContactsLoadCompletionVersion.value = 2L
+
+            assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
+            advanceUntilIdle()
+        }
+        verify(pubkyRepo).loadContacts()
+        verify(refreshContactPaykitReceivers).invoke(testPublicKey)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink rejects when contacts retry fails`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        whenever(pubkyRepo.loadContacts()).thenAnswer {
+            pubkyContactsLoadCompletionVersion.value = 2L
+        }
+        whenever(context.getString(R.string.other__scan_err_decoding)).thenReturn("Decoding Error")
+        whenever(context.getString(R.string.other__scan__error__generic)).thenReturn("Unable to read data")
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
+            runCurrent()
+            expectNoEvents()
+
+            pubkyContactsLoadCompletionVersion.value = 1L
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+        verify(pubkyRepo).loadContacts()
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Decoding Error", it.title)
+                assertEquals("Unable to read data", it.description)
+            }
+        )
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact deeplink does not route when Paykit is disabled or wallet is missing`() = test {
+        val intent = Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri())
+        sut.mainScreenEffect.test {
+            sut.handleDeeplinkIntent(intent)
+            advanceUntilIdle()
+            expectNoEvents()
+
+            enablePaykitUi()
+            whenever(walletRepo.walletExists()).thenReturn(false)
+            sut.handleDeeplinkIntent(intent)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `invalid contact deeplink rejects without waiting for initialization or starting payment or auth`() = test {
+        enablePaykitUi()
+        val invalidLinks = listOf(
+            "bitkit://contact",
+            "bitkit://contact?pubky=$testPublicKey&pubky=$testPublicKey",
+            "bitkit://contact/recovery-mode?pubky=$testPublicKey",
+            "bitkit://contact?pubky=invalid",
+            "bitkit://contact?pubky=bitcoin%3Abc1example",
+            "bitkit://contact?pubky=pubkyauth%3A%2F%2Fsignin_grant",
+        )
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { awaitCancellation() }
+        whenever(context.getString(R.string.other__scan_err_decoding)).thenReturn("Decoding Error")
+        whenever(context.getString(R.string.other__scan__error__generic)).thenReturn("Unable to read data")
+        sut.mainScreenEffect.test {
+            invalidLinks.forEach { link ->
+                settingsData.value = SettingsData(isPinEnabled = true)
+                sut.resetIsAuthenticatedState()
+                runCurrent()
+                sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, link.toUri()))
+                runCurrent()
+                sut.setIsAuthenticated(true)
+                advanceUntilIdle()
+            }
+            expectNoEvents()
+        }
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).awaitInitialization()
+        verify(coreService, never()).decode(any())
+        verify(lightningRepo, never()).setRecoveryMode(true)
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager, times(invalidLinks.size)).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Decoding Error", it.title)
+                assertEquals("Unable to read data", it.description)
+            }
+        )
     }
 
     @Test

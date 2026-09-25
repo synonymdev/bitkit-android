@@ -1,0 +1,20 @@
+<journey name="pubky contact deeplink">
+  <description>Precondition: an onboarded wallet with Paykit enabled, a Pubky profile, one saved contact and PIN enabled. Have the saved contact's key, your own key and a valid unsaved key ready. The pubky value accepts a raw 52-character key or the pubky-prefixed form and must be URL-encoded. Open each link with adb shell am start -a android.intent.action.VIEW -d "&lt;link&gt;" to.bitkit.dev. No payment or new contact save is needed.</description>
+  <actions>
+    <action>Open bitkit://contact?pubky=&lt;unsaved-public-key&gt;</action>
+    <action>Verify Add Contact opens with the supplied key prefilled and no contact saved</action>
+    <action>Navigate back to the wallet</action>
+    <action>Open bitkit://contact?pubky=&lt;saved-contact-public-key&gt;</action>
+    <action>Verify Contact Detail opens for that contact, not Add Contact or a payment sheet</action>
+    <action>Navigate back to the wallet</action>
+    <action>Open bitkit://contact?pubky=&lt;own-public-key&gt;</action>
+    <action>Verify Profile opens without adding yourself as a contact</action>
+    <action>Navigate back to the wallet, then terminate the app</action>
+    <action>Open bitkit://contact?pubky=&lt;saved-contact-public-key&gt;</action>
+    <action>Verify the PIN screen appears before any contact screen</action>
+    <action>Unlock the wallet and verify Contact Detail opens for the saved contact exactly once</action>
+    <action>Navigate back to the wallet</action>
+    <action>Open bitkit://contact?pubky=invalid</action>
+    <action>Verify no contact, payment or authorization flow opens</action>
+  </actions>
+</journey>
