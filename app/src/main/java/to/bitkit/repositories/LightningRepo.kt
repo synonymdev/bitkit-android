@@ -768,6 +768,11 @@ class LightningRepo @Inject constructor(
             _lightningState.update { state -> state.copy(isSyncingWallet = false) }
             syncMutex.unlock()
         }.onFailure {
+            if (it is CancellationException) {
+                // A cancellation is not a sync failure, but a sync requested meanwhile must still run
+                if (syncPending.getAndSet(false)) syncAsync()
+                throw it
+            }
             _lightningState.update { state -> state.copy(lastSyncError = it) }
             startSyncRetryLoopIfNeeded()
         }
