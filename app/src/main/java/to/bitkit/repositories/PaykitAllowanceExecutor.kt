@@ -17,6 +17,7 @@ import com.synonym.paykit.PaymentOutcomeReport
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestScope
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -351,7 +352,8 @@ class PaykitAllowanceExecutor @Inject constructor(
         try {
             runSuspendCatching {
                 ensureReconciled(identity)
-                admitAndPay(request, allowances, identity)
+                // Survive a cancelled caller: stopping after the acceptance would leave the request unpaid.
+                withContext(NonCancellable) { admitAndPay(request, allowances, identity) }
             }.getOrElse {
                 Logger.warn("Kept an incoming request on the manual flow after an allowance error", it, context = TAG)
                 PaykitAllowanceAutoPayResult.MANUAL

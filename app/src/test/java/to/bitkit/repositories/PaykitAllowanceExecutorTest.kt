@@ -21,6 +21,7 @@ import com.synonym.paykit.PaymentOutcome
 import com.synonym.paykit.PaymentOutcomeReport
 import com.synonym.paykit.PaymentRequestScope
 import com.synonym.paykit.PrivateStreamIntakeReport
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import org.junit.Before
@@ -442,6 +443,24 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(payer).failOnchainPayment(definite)
         verify(payer, never()).failOnchainPayment(uncertain)
         verify(payer, never()).completeOnchainPayment(any(), any(), any())
+    }
+
+    @Test
+    fun `on-chain payment completes when its caller is cancelled during the send`() = test {
+        whenever(payer.resolve(any(), any())).thenReturn(Result.success(onchainPayment()))
+        val sendResult = CompletableDeferred<Result<String>>()
+        whenever(payer.payOnchain(any(), any())).doSuspendableAnswer { sendResult.await() }
+        val request = fixtures.paymentRequest()
+
+        val caller = launch { sut.autoPay(request, listOf(fixtures.allowance()), identity) }
+        assertEquals(Stage.SENDING, sut.localState(identity).journal.single().stage)
+        caller.cancel()
+        sendResult.complete(Result.success(TXID))
+        caller.join()
+
+        verify(payer).completeOnchainPayment(request, TXID, fixtures.onchainIdentifier)
+        assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.SUCCEEDED)), recordedOutcomes)
+        assertEquals(Stage.SUCCEEDED, sut.localState(identity).journal.single().stage)
     }
 
     // endregion
