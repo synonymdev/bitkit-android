@@ -83,4 +83,28 @@ class SettingsStoreTest : BaseUnitTest() {
         assertFalse(sut.data.first().ignoresSwitchUnitToast)
         assertFalse(sut.data.first().ignoresHideBalanceToast)
     }
+
+    @Test
+    fun `restoring settings keeps the received sheet hold armed by the restore in flight`() = test {
+        // Regression: the hold is armed before the backup is read, so a wholesale settings restore used
+        // to wipe it and let the replayed history raise Received sheets over the wallet.
+        val restoreStartedAt = 1_700_000_000L
+        sut.update { it.copy(pendingRestoreActivitySeenSince = restoreStartedAt) }
+        val backup = SettingsBackupV1(createdAt = 0L, settings = SettingsData())
+
+        assertTrue(sut.restoreFromBackup(backup).isSuccess)
+
+        assertEquals(restoreStartedAt, sut.data.first().pendingRestoreActivitySeenSince)
+        assertTrue(sut.data.first().pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `restoring settings keeps the restore tip recorded on this device`() = test {
+        sut.update { it.copy(restoreSyncedBlockHeight = 900L) }
+        val backup = SettingsBackupV1(createdAt = 0L, settings = SettingsData(restoreSyncedBlockHeight = 5L))
+
+        assertTrue(sut.restoreFromBackup(backup).isSuccess)
+
+        assertEquals(900L, sut.data.first().restoreSyncedBlockHeight)
+    }
 }

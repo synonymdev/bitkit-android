@@ -396,9 +396,7 @@ fun ContentView(
             NodeLifecycleState.Running -> {
                 val restoreComplete = restoreState !is RestoreState.InProgress
                 val metadataComplete = !isRestoringFromRNRemoteBackup
-                if (restoreComplete && metadataComplete) {
-                    walletInitShouldFinish = true
-                }
+                walletInitShouldFinish = restoreComplete && metadataComplete
             }
 
             is NodeLifecycleState.ErrorStarting -> {
@@ -409,12 +407,23 @@ fun ContentView(
         }
     }
 
-    if (walletIsInitializing) {
-        if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
+    val backupRestoreFailed =
+        restoreState is RestoreState.BackupFailed && nodeLifecycleState == NodeLifecycleState.Running
+
+    if (walletIsInitializing || backupRestoreFailed) {
+        if (nodeLifecycleState is NodeLifecycleState.ErrorStarting || backupRestoreFailed) {
             WalletRestoreErrorView(
                 retryCount = restoreState.retryCount(),
                 hazeState = hazeState,
-                onRetry = walletViewModel::onRestoreRetry,
+                onRetry = {
+                    if (backupRestoreFailed) {
+                        walletIsInitializing = true
+                        walletInitShouldFinish = false
+                        walletViewModel.onBackupRestoreRetry()
+                    } else {
+                        walletViewModel.onRestoreRetry()
+                    }
+                },
                 onProceedWithoutRestore = {
                     walletViewModel.onProceedWithoutRestore {
                         walletIsInitializing = false

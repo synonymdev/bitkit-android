@@ -146,6 +146,7 @@ When the user provides custom instructions after `--`:
   #### Automated Checks
   ```
 - Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line as an unchecked checkbox (`- [ ] `), then `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
+- List a journey as `temporary` only when the user asks for one in custom instructions or a `.ai/pr/` file: a reproduction that needs a code change or data that will not exist on master. Put its XML, and any code change as a `.diff`, in a collapsed `<details>` block under its line, and do not commit it. Never add one unasked; at most, suggest it to the author and ask whether they agree.
 - Reference journeys by bare file name only, never the full path. Only when two listed journeys share the same name, prefix the shortest leading path segment(s) that disambiguate them, the same rule as test files.
 - A PR with a user-visible change adds or updates the journey that proves it, and any journey whose route the diff changes; list them all. Reviewers drive the listed journeys on a device.
 - `#### Journeys` takes one of two empty values: `N/A — no user-visible behaviour change.` when the diff changes nothing a user can see, and `N/A — not drivable; see Manual Tests.` when it does but every flow it touches needs a capability the Capabilities table in `journeys/README.md` does not list. The second value requires a matching step under `#### Manual Tests`.

@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,12 +52,12 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-private const val BG_IMAGE_WIDTH_FRACTION = 0.83f
-private const val TAG_OFFSET_X = -0.179f
-private const val TAG_OFFSET_Y = 0.13f
-private const val KEYRING_OFFSET_X = 0.341f
-private const val KEYRING_OFFSET_Y = 0.06f
-private const val TAG_ALPHA = 0.6f
+private const val TAG_WIDTH_FRACTION = 0.736f
+private const val TAG_OFFSET_X = -0.197f
+private const val TAG_OFFSET_Y = 0.067f
+private const val KEYRING_WIDTH_FRACTION = 0.83f
+private const val KEYRING_OFFSET_X = 0.335f
+private const val KEYRING_OFFSET_Y = -0.109f
 private const val KEYRING_ALPHA = 0.9f
 
 @Composable
@@ -103,7 +105,7 @@ private fun Content(
 ) {
     Box(
         modifier = Modifier
-            .screen()
+            .screen(insets = WindowInsets.statusBars)
             .clipToBounds()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -112,10 +114,9 @@ private fun Content(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .fillMaxWidth(BG_IMAGE_WIDTH_FRACTION)
-                    .align(Alignment.Center)
-                    .offset(x = maxWidth * TAG_OFFSET_X, y = maxHeight * TAG_OFFSET_Y)
-                    .alpha(TAG_ALPHA)
+                    .fillMaxWidth(TAG_WIDTH_FRACTION)
+                    .align(Alignment.BottomStart)
+                    .offset(x = maxWidth * TAG_OFFSET_X, y = maxWidth * TAG_OFFSET_Y)
             )
 
             Image(
@@ -123,9 +124,9 @@ private fun Content(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .fillMaxWidth(BG_IMAGE_WIDTH_FRACTION)
-                    .align(Alignment.Center)
-                    .offset(x = maxWidth * KEYRING_OFFSET_X, y = maxHeight * KEYRING_OFFSET_Y)
+                    .fillMaxWidth(KEYRING_WIDTH_FRACTION)
+                    .align(Alignment.BottomStart)
+                    .offset(x = maxWidth * KEYRING_OFFSET_X, y = maxWidth * KEYRING_OFFSET_Y)
                     .alpha(KEYRING_ALPHA)
             )
         }

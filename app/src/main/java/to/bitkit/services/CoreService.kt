@@ -113,6 +113,7 @@ import com.synonym.bitkitcore.TxInput as BitkitCoreTxInput
 import com.synonym.bitkitcore.TxOutput as BitkitCoreTxOutput
 import com.synonym.bitkitcore.getLnurlInvoiceForPayData as coreGetLnurlInvoiceForPayData
 import com.synonym.bitkitcore.getTransactionDetails as getBitkitCoreTransactionDetails
+import com.synonym.bitkitcore.markActivityAsSeen as coreMarkActivityAsSeen
 
 // region Core
 
@@ -1695,18 +1696,13 @@ class ActivityService(
         walletId: String = defaultWalletId,
         seenAt: ULong? = null,
     ) = ServiceQueue.CORE.background {
-        val activity = getActivityById(walletId = walletId, activityId = activityId) ?: run {
+        if (getActivityById(walletId = walletId, activityId = activityId) == null) {
             Logger.warn("Cannot mark activity as seen - activity not found: $activityId", context = TAG)
             return@background
         }
 
         val timestamp = seenAt ?: nowTimestamp().epochSecond.toULong()
-        val updatedActivity = when (activity) {
-            is Activity.Lightning -> Activity.Lightning(activity.v1.copy(seenAt = timestamp))
-            is Activity.Onchain -> Activity.Onchain(activity.v1.copy(seenAt = timestamp))
-        }
-
-        updateActivity(activityId = activityId, activity = updatedActivity)
+        coreMarkActivityAsSeen(walletId = walletId, activityId = activityId, seenAt = timestamp)
         Logger.info("Marked activity $activityId as seen at $timestamp", context = TAG)
     }
 
@@ -1724,7 +1720,14 @@ class ActivityService(
         markActivityAsSeen(activity.id, walletId = activity.walletId, seenAt = seenAt)
     }
 
-    suspend fun markAllUnseenActivitiesAsSeen() = ServiceQueue.CORE.background {
+    /**
+     * Marks every unseen activity as seen.
+     *
+     * [startedBefore] limits the pass to activity that already existed at that epoch second. The restore sweep passes
+     * the moment the restore began, so a payment that genuinely arrives while the restore is still running keeps its
+     * unseen state and still notifies the user.
+     */
+    suspend fun markAllUnseenActivitiesAsSeen(startedBefore: ULong? = null) = ServiceQueue.CORE.background {
         val timestamp = nowTimestamp().epochSecond.toULong()
         val activities = getActivities(
             walletId = null,
@@ -1743,6 +1746,12 @@ class ActivityService(
                 is Activity.Onchain -> activity.v1.seenAt != null
                 is Activity.Lightning -> activity.v1.seenAt != null
             }
+            val createdAt = when (activity) {
+                is Activity.Onchain -> activity.v1.timestamp
+                is Activity.Lightning -> activity.v1.timestamp
+            }
+
+            if (startedBefore != null && createdAt > startedBefore) continue
 
             if (!isSeen) {
                 markActivityAsSeen(activity.rawId(), walletId = activity.walletId(), seenAt = timestamp)

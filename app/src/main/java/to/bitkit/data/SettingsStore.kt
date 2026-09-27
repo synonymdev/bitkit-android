@@ -55,7 +55,14 @@ class SettingsStore @Inject constructor(
                 .copy(ignoresSwitchUnitToast = false, ignoresHideBalanceToast = false)
                 .withDefaultPaykitPaymentMethods()
                 .withRequiredNativeSegwitMonitoring()
-            store.updateData { data }
+            store.updateData { current ->
+                // The received-sheet hold is armed before the backup is read, so it has to survive the
+                // settings the backup brings with it - otherwise the replayed history raises sheets.
+                data.copy(
+                    pendingRestoreActivitySeenSince = current.pendingRestoreActivitySeenSince,
+                    restoreSyncedBlockHeight = current.restoreSyncedBlockHeight,
+                )
+            }
 
             val monitored = data.addressTypesToMonitor
             val selected = data.selectedAddressType
@@ -198,7 +205,27 @@ data class SettingsData(
     val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
     val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
     val pendingRestoreAddressTypePrune: Boolean = false,
-)
+    /**
+     * When a seed restore began, as epoch seconds, or 0 when no restore is being suppressed.
+     *
+     * Suppresses the on-chain received sheet for the historical transactions the post-restore sync replays. Set as
+     * the restore starts, before the node is started, because the node syncs long before the backup is read - setting
+     * it on the Get Started tap left a window where replayed transactions could still raise a sheet. Doubles as the
+     * cutoff for the sweep that marks those transactions seen, so a payment arriving mid-restore is not swept up with
+     * them. Cleared by the first on-chain sync completion whose sweep succeeds.
+     */
+    val pendingRestoreActivitySeenSince: Long = 0,
+    /**
+     * Chain tip of the first on-chain sync after the latest seed restore, or 0 when none completed.
+     *
+     * Everything confirmed at or below it was already on chain when the restore scanned the wallet, so it outlives
+     * [pendingRestoreActivitySeenSince]: LDK events are handled concurrently, and a later rescan replays those
+     * confirmations too, so their received sheets must stay silent however late they are handled.
+     */
+    val restoreSyncedBlockHeight: Long = 0,
+) {
+    val pendingRestoreActivitySeen: Boolean get() = pendingRestoreActivitySeenSince > 0
+}
 
 data class BalanceUnitSwitch(
     val previousDisplay: PrimaryDisplay,

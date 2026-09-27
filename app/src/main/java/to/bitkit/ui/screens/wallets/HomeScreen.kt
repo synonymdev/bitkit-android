@@ -136,6 +136,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
@@ -1420,6 +1421,7 @@ private fun ProfileButton(
     displayImageUri: String?,
     onClick: () -> Unit,
 ) {
+    val name = displayName ?: stringResource(R.string.profile__your_name)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -1438,19 +1440,17 @@ private fun ProfileButton(
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(Colors.Gray4)
+                    .background(Colors.Gray6)
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_user_square),
-                    contentDescription = null,
-                    tint = Colors.White32,
-                    modifier = Modifier.size(16.dp)
+                CaptionB(
+                    text = name.firstOrNull()?.uppercase().orEmpty(),
+                    color = Colors.White,
                 )
             }
         }
 
         Title(
-            text = displayName ?: stringResource(R.string.profile__your_name),
+            text = name,
             maxLines = 1,
         )
     }

@@ -104,7 +104,6 @@ class LightningNodeService : Service() {
     }
 
     private suspend fun handlePaymentReceived(event: Event) {
-        if (event !is Event.PaymentReceived && event !is Event.OnchainTransactionReceived) return
         val command = NotifyPaymentReceived.Command.from(event, includeNotification = true) ?: return
 
         notifyPaymentReceivedHandler(command).onSuccess { result ->

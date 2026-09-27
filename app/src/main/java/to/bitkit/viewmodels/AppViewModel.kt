@@ -74,6 +74,7 @@ import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
@@ -119,6 +120,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyContactLink
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SamRockSetupRequest
@@ -398,6 +400,7 @@ class AppViewModel @Inject constructor(
         registerSheet(highBalanceSheet)
     }
     private var isCompletingMigration = false
+    private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
@@ -1376,7 +1379,7 @@ class AppViewModel @Inject constructor(
                     is Event.ProbeSuccessful -> Unit
                     is Event.SpliceFailed -> Unit
                     is Event.SplicePending -> Unit
-                    is Event.SyncCompleted -> handleSyncCompleted()
+                    is Event.SyncCompleted -> handleSyncCompleted(event)
                     is Event.SyncProgress -> Unit
                 }
             }.onFailure { e ->
@@ -1464,7 +1467,9 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleSyncCompleted() {
+    private suspend fun handleSyncCompleted(event: Event.SyncCompleted) {
+        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
+
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
         val needsPostMigrationSync = migrationService.needsPostMigrationSync()
@@ -1492,6 +1497,30 @@ class AppViewModel @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to reconcile private Paykit on-chain activity", it, context = TAG)
             }
+    }
+
+    private suspend fun completePendingRestoreActivitySeen(syncedBlockHeight: UInt) {
+        // Claimed before the first suspension, so a later sync completing while this sweep runs cannot record its
+        // higher tip and silence a new receive confirmed in between.
+        if (isCompletingRestoreHold) return
+        isCompletingRestoreHold = true
+        try {
+            val restoreStartedAt = settingsStore.data.first().pendingRestoreActivitySeenSince
+            if (restoreStartedAt <= 0) return
+            Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
+            // Bounded by the restore start so a payment arriving mid-restore keeps its unseen state.
+            activityRepo.markAllUnseenActivitiesAsSeen(startedBefore = restoreStartedAt.toULong()).onSuccess {
+                settingsStore.update { settings ->
+                    if (!settings.pendingRestoreActivitySeen) return@update settings
+                    settings.copy(
+                        pendingRestoreActivitySeenSince = 0,
+                        restoreSyncedBlockHeight = syncedBlockHeight.toLong(),
+                    )
+                }
+            }
+        } finally {
+            isCompletingRestoreHold = false
+        }
     }
 
     private suspend fun completeRNRemoteBackupRestore() {
@@ -1614,6 +1643,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
         activityRepo.handleOnchainTransactionConfirmed(event.txid, event.details)
+        notifyPaymentReceived(event)
     }
 
     private suspend fun handleOnchainTransactionEvicted(event: Event.OnchainTransactionEvicted) {
@@ -2359,25 +2389,48 @@ class AppViewModel @Inject constructor(
         data: String,
         allowPubkyAuth: Boolean,
     ): Boolean {
-        if (source != ScanSource.DEEPLINK || !allowPubkyAuth) return true
-        if (!PubkyAuthRequest.isProtocolUrl(data)) return true
+        if (source != ScanSource.DEEPLINK) return true
+        val uri = Uri.parse(data)
+        val isContactLink = PubkyContactLink.matches(uri)
+        if (isContactLink && PubkyContactLink.publicKey(uri) == null) return true
+        if (!isContactLink && (!allowPubkyAuth || !PubkyAuthRequest.isProtocolUrl(data))) return true
 
         if (!PubkyAuthRequest.isSignupUrl(data)) {
             val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
                 pubkyRepo.awaitInitialization()
-                true
+                awaitContactDataForDeeplink(isContactLink)
             } ?: false
             if (!isInitializationReady) {
-                Logger.warn("Timed out waiting for Pubky initialization", context = TAG)
+                Logger.warn("Failed to initialize Pubky deeplink", context = TAG)
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__auth_error_title),
-                    description = context.getString(R.string.profile__auth_error_timeout),
+                    title = context.getString(
+                        if (isContactLink) R.string.other__scan_err_decoding else R.string.profile__auth_error_title,
+                    ),
+                    description = context.getString(
+                        if (isContactLink) {
+                            R.string.other__scan__error__generic
+                        } else {
+                            R.string.profile__auth_error_timeout
+                        },
+                    ),
                 )
                 return false
             }
         }
         return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
+    }
+
+    private suspend fun awaitContactDataForDeeplink(isContactLink: Boolean): Boolean {
+        if (!isContactLink || pubkyRepo.publicKey.value == null) return true
+
+        pubkyRepo.contactsLoadCompletionVersion.first { it > 0 }
+        if (pubkyRepo.contactsLoadVersion.value > 0L) return true
+
+        val completionVersion = pubkyRepo.contactsLoadCompletionVersion.value
+        pubkyRepo.loadContacts()
+        pubkyRepo.contactsLoadCompletionVersion.first { it > completionVersion }
+        return pubkyRepo.contactsLoadVersion.value > 0L
     }
 
     private suspend fun isPaykitUiEnabledFromSettings() =
@@ -2880,7 +2933,18 @@ class AppViewModel @Inject constructor(
     ) = withContext(bgDispatcher) {
         if (rejectPubkyAuthScan(result, allowPubkyAuth, contactPaymentContext)) return@withContext
 
-        val input = result.removeLightningSchemes()
+        val input = if (routePubkyKeys && PubkyContactLink.matches(Uri.parse(result))) {
+            PubkyContactLink.publicKey(Uri.parse(result)) ?: run {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.other__scan__error__generic),
+                )
+                return@withContext
+            }
+        } else {
+            result.removeLightningSchemes()
+        }
 
         val contactPaymentProfile = activeContactPaymentProfile()
         val incomingPaymentRequest = activeIncomingPaymentRequest()
@@ -2889,6 +2953,7 @@ class AppViewModel @Inject constructor(
         resetSendState(
             contactPaymentProfile = contactPaymentProfile,
             isPaymentRequest = isPaymentRequest,
+            paymentRequestNote = incomingPaymentRequest?.note,
             isSubscriptionPayment = incomingPaymentRequest?.billingPeriod != null,
             isInitialSubscriptionPayment = synchronized(contactPaymentContextLock) {
                 activeContactPaymentContext?.isInitialSubscriptionPayment == true
@@ -2941,12 +3006,12 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        if (routePubkyKeys && isPaykitEnabled.value) {
+        if (routePubkyKeys && isPaykitUiEnabledFromSettings()) {
             val route = resolvePastedPubkyRoute(
                 input = input,
                 ownPublicKey = pubkyRepo.publicKey.value,
                 contacts = pubkyRepo.contacts.value,
-                isPaykitEnabled = isPaykitEnabled.value,
+                isPaykitEnabled = true,
             )
 
             if (route != null) {
@@ -4645,6 +4710,7 @@ class AppViewModel @Inject constructor(
     suspend fun resetSendState(
         contactPaymentProfile: PubkyProfile? = null,
         isPaymentRequest: Boolean = false,
+        paymentRequestNote: String? = null,
         hardwareWalletId: String? = activeHardwareWalletId,
         isSubscriptionPayment: Boolean = false,
         isInitialSubscriptionPayment: Boolean = false,
@@ -4666,6 +4732,7 @@ class AppViewModel @Inject constructor(
                 onchainFeeUi = OnchainFeeUi(rate = FeeRate.fromSpeed(speed)),
                 contactPaymentProfile = contactPaymentProfile,
                 isPaymentRequest = isPaymentRequest,
+                paymentRequestNote = paymentRequestNote,
                 hardwareWalletId = hardwareWalletId,
                 hardwareWalletName = hardwareWalletId?.let { walletId ->
                     hwWalletRepo.wallets.value.find { it.id == walletId }?.name
@@ -5579,6 +5646,7 @@ class AppViewModel @Inject constructor(
 
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
         val value = uri.toString()
+        val isContactLink = PubkyContactLink.matches(uri)
         if (SamRockSetupRequest.isProtocolUrl(value)) {
             if (!walletRepo.walletExists()) return@launch
 
@@ -5596,7 +5664,7 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        if (uri.isRecoveryModeDeeplink()) {
+        if (!isContactLink && uri.isRecoveryModeDeeplink()) {
             lightningRepo.setRecoveryMode(enabled = true)
             delay(SCREEN_TRANSITION_DELAY)
             mainScreenEffect(
@@ -5620,7 +5688,12 @@ class AppViewModel @Inject constructor(
 
         if (!walletRepo.walletExists()) return@launch
 
-        launchScan(source = ScanSource.DEEPLINK, data = value, startDelay = SCREEN_TRANSITION_DELAY)
+        launchScan(
+            source = ScanSource.DEEPLINK,
+            data = value,
+            startDelay = SCREEN_TRANSITION_DELAY,
+            routePubkyKeys = isContactLink,
+        )
     }
 
     fun consumeScreenDeepLink() {
@@ -5811,6 +5884,7 @@ data class SendUiState(
     val lastLightningFee: Long = 0L,
     val contactPaymentProfile: PubkyProfile? = null,
     val isPaymentRequest: Boolean = false,
+    val paymentRequestNote: String? = null,
     val hardwareWalletId: String? = null,
     val hardwareWalletName: String? = null,
     val hardwareAvailableSats: ULong = 0uL,
@@ -5989,7 +6063,7 @@ internal fun resolvePastedPubkyRoute(
 ): Routes? {
     if (!isPaykitEnabled) return null
 
-    val normalizedKey = PubkyPublicKeyFormat.normalized(input) ?: return null
+    val normalizedKey = PubkyPublicKeyFormat.canonicalized(input) ?: return null
 
     if (PubkyPublicKeyFormat.matches(normalizedKey, ownPublicKey)) {
         return Routes.Profile

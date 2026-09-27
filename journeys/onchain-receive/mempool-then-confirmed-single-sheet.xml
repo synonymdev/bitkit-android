@@ -1,0 +1,21 @@
+<journey name="mempool-first onchain receive shows one sheet after confirmation">
+  <description>
+    Covers issue #797. Confirmed events now reach the received-payment handler, so a deposit seen
+    in the mempool first must not show a second sheet when it confirms. The handler dedupes on the
+    txid and on the persisted seen state.
+
+    Precondition: onboarded regtest wallet, node running, app in the foreground on the home screen.
+  </description>
+  <actions>
+    <action>Tap Receive (testTag "Receive") and verify the Receive sheet opens (testTag "ReceiveScreen")</action>
+    <action>Tap the "Savings" receive tab (the tab row carries no test tag), tap "Show Details" (testTag "ShowDetails") and read the address from testTag "ReceiveOnchainAddress"</action>
+    <action>Press back to return to the home screen</action>
+    <action>Run: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":14797}'</action>
+    <action>Wait up to 30s and verify the received sheet (testTag "ReceivedTransaction") is visible with the deposited amount</action>
+    <action>Tap the sheet button (testTag "ReceivedTransactionButton")</action>
+    <action>Run: ./lsp POST /regtest/chain/mine '{"count":1}'</action>
+    <action>Run: adb logcat -d -s APP:V | grep &lt;txid&gt; and wait until an "LDK event fired" line shows OnchainTransactionConfirmed</action>
+    <action>Wait 30s after that event and verify the received sheet does not appear again</action>
+    <action>Verify no "Payment Received" notification is posted: adb shell dumpsys notification --noredact | grep "Payment Received"</action>
+  </actions>
+</journey>

@@ -18,6 +18,8 @@ The accepted journey uses:
 
 Rejected fixture shapes stay in unit tests because Bitkit intentionally does not present requests that fail the contract gate.
 
+`request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked on receiver path `bitkit/wallet`, and the payer holds enough balance to pay 21,000 sats.
+
 ## Reference evidence
 
 The source wallet-leg run completed this path on regtest on 2026-08-22: Bitkit presented the incoming request, opened the on-chain payment, broadcast it, and confirmed transaction
@@ -33,6 +35,8 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Pay action: `PaymentRequestPay-<paymentRequestId>`
 - Dismiss action: `PaymentRequestDismiss-<paymentRequestId>`
 - Payment confirmation: `PaymentRequestConfirm`
+- Confirmation summary: `PaymentRequestFrom`, `PaymentRequestFor`
+- Confirmation invoice note: `PaymentRequestInvoiceNote`
 - Confirmation details: `SendConfirmToggleDetails`
 - Saved-contact recipient: `ReviewContactRecipient`
 

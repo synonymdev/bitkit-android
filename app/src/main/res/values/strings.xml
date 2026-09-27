@@ -695,6 +695,7 @@
     <string name="profile__pay_contacts_error_wallet">Wallet is still starting. Try again in a moment.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pay Contacts</string>
+    <string name="profile__pubky_copied">pubky copied to clipboard</string>
     <string name="profile__public_key">Public Key</string>
     <string name="profile__qr_scan_label">Scan to add {name}</string>
     <string name="profile__restore_nav_title">Restore Profile</string>
@@ -1317,6 +1318,7 @@
     <string name="wallet__payment_request_expiry_hour">1 hour</string>
     <string name="wallet__payment_request_expiry_month">1 month</string>
     <string name="wallet__payment_request_expiry_week">1 week</string>
+    <string name="wallet__payment_request_for">For</string>
     <string name="wallet__payment_request_mismatch">The payment details did not match the request. Payment cancelled.</string>
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">What is this payment for?</string>
