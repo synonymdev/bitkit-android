@@ -776,6 +776,23 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `failed recipient discovery drops contacts that are no longer saved`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers())
+            .thenReturn(listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)))
+            .thenThrow(IllegalStateException("linked peers unavailable"))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+            listOf(PaykitReceiverPaths.SERVER),
+        )
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+
+        val result = sut.refreshEligibleTargets(listOf(SECOND_IDENTITY), force = true)
+
+        assertTrue(result.isFailure)
+        assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
     fun `recipient discovery retries capabilities that are not published yet`() = test {
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.linkedPeers()).thenReturn(
