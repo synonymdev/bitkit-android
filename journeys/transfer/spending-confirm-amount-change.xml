@@ -1,0 +1,42 @@
+<journey name="spending confirm amount change">
+  <description>
+    Verifies that a transfer to spending pays only the amount Spending Confirm shows
+    (synonymdev/bitkit-android#1361). When the funding plan rebuilt at swipe differs from the screen,
+    the swipe pays nothing: the screen shows the new network fee and total, and the next swipe pays
+    them. A plan that still matches the screen pays on the first swipe, as the transfer E2E covers.
+
+    The amount changes through coin selection: Spending Confirm sizes the network fee for two inputs,
+    then a larger UTXO confirms before the swipe, so the plan rebuilt at swipe spends one input and
+    pays a lower network fee.
+
+    iOS differs in two steps: its first swipe also shows a "Please try again." toast, and it has no
+    app-log step.
+
+    Precondition: a freshly onboarded dev wallet on the staging regtest backend with no channel and
+    exactly two confirmed on-chain UTXOs of 150 000 sats each (two ./lsp deposits to the wallet's
+    savings address, each followed by a mine). Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap Receive (testTag "Receive"), tap the "Savings" receive tab (the tab row carries no test tag), tap "Show Details" (testTag "ShowDetails"), read the address from testTag "ReceiveOnchainAddress", then press back to the home screen</action>
+    <action>Tap the Savings balance card (testTag "ActivitySavings"), then "Transfer To Spending" (testTag "TransferToSpending")</action>
+    <action>If the spending intro appears, tap "Get Started" (testTag "SpendingIntro-button")</action>
+    <action>Enter 200 000 on the number pad (testTags "N2", "N0", "N0", "N0", "N0", "N0") and tap "Continue" (testTag "SpendingAmountContinue")</action>
+    <action>Verify the confirm screen is visible (testTag "SpendingConfirmMore") and wait until its network fee is shown</action>
+    <action>Note the amounts under "Network Fee" and "Total"</action>
+    <action>Run: adb logcat -c</action>
+    <action>Run in one command: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":500000}' &amp;&amp; ./lsp POST /regtest/chain/mine '{"count":1}'</action>
+    <action>Wait 30s for the wallet to sync the new UTXO</action>
+    <action>If the received sheet (testTag "ReceivedTransaction") is visible, tap its button (testTag "ReceivedTransactionButton")</action>
+    <action>Verify the confirm screen still shows the amounts noted before the deposit</action>
+    <action>Swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
+    <action>Verify the confirm screen stays visible (testTag "SpendingConfirmMore") and the setting up screen (testTag "LightningSettingUp") does not appear</action>
+    <action>Verify "Network Fee" now shows a lower amount than noted, and "Total" is lower by the same difference</action>
+    <action>Run: adb logcat -d -s APP:V | grep "Waiting for another swipe"</action>
+    <action>Verify the log shows one "Waiting for another swipe, amount changed from" line with the noted total and the new total</action>
+    <action>Note the new amounts under "Network Fee" and "Total"</action>
+    <action>Swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
+    <action>Wait up to 90s for the setting up screen (testTag "LightningSettingUp")</action>
+    <action>Run: adb logcat -d -s APP:V | grep "BT confirm"</action>
+    <action>Verify the last "BT confirm" line shows the new network fee as miningFee</action>
+  </actions>
+</journey>
