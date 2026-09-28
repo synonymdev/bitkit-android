@@ -1428,6 +1428,38 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingConfirm keeps the shown plan and allows a retry when the rebuilt fee estimate fails`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("fee estimate unavailable")))
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        val shown = sut.spendingUiState.value
+        assertFalse(shown.isConfirmPaying)
+        assertTrue(shown.isConfirmFeeReady)
+        assertEquals(1_000uL, shown.miningFeeSats)
+        assertEquals(99_000uL, shown.confirmLeavingAmountSats)
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+    }
+
+    @Test
     fun `onTransferToSpendingConfirm pays on the first swipe when the created order costs less`() = test {
         val estimate = spendingOrder(feeSat = 98_000uL)
         val createdOrder = estimate.copy(

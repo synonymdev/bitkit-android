@@ -323,7 +323,7 @@ class TransferViewModel @Inject constructor(
             try {
                 val paid = runSuspendCatching {
                     val order = getOrCreateSpendingOrder() ?: return@runSuspendCatching false
-                    paySpendingConfirmOrder(order)
+                    paySpendingConfirmOrder(order, shown = state)
                 }.onFailure {
                     Logger.error("Failed to pay spending confirm order", it, context = TAG)
                     ToastEventBus.send(it)
@@ -364,13 +364,19 @@ class TransferViewModel @Inject constructor(
     private suspend fun spendingSizingAddress(): String? =
         walletRepo.getAddresses(count = 1).onFailure { ToastEventBus.send(it) }.getOrNull()?.firstOrNull()?.address
 
-    private suspend fun paySpendingConfirmOrder(order: IBtOrder): Boolean {
+    private suspend fun paySpendingConfirmOrder(order: IBtOrder, shown: TransferToSpendingUiState): Boolean {
         val plan = spendingConfirmFundingPlan?.takeIf { it.orderId == order.id }
             ?: buildSpendingConfirmFundingPlan(order).getOrElse {
                 Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
                 ToastEventBus.send(it)
                 return false
-            }.also { spendingConfirmFundingPlan = it }
+            }
+        if (plan.miningFeeSats == 0uL) {
+            Logger.warn("Skipped paying order '${order.id}' without a mining fee estimate", context = TAG)
+            ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__try_again))
+            return false
+        }
+        spendingConfirmFundingPlan = plan
 
         Logger.debug(
             "BT confirm: spendable=${plan.spendableBalance}, feeSat=${order.feeSat}, " +
@@ -379,7 +385,6 @@ class TransferViewModel @Inject constructor(
             context = TAG,
         )
 
-        val shown = _spendingUiState.value
         val payable = shown.withFundingPlan(plan, feeSat = order.feeSat)
         val shownTotal = shown.confirmLeavingAmountSats
         val payableTotal = payable.confirmLeavingAmountSats
