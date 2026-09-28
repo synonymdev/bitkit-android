@@ -6,6 +6,7 @@ import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
@@ -668,6 +669,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.paymentRequests()).thenReturn(
             listOf(
                 paymentRequestRecord(id = "malformed", expiresAt = "not-a-timestamp"),
+                paymentRequestRecord(id = "deadline", paymentDeadline = PaymentDeadline.PeriodStart(3600uL)),
                 paymentRequestRecord(id = "unsupported", endpoints = listOf("btc-unsupported-method")),
             ),
         )
@@ -782,6 +784,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
         amount: String = "0.001",
         expiresAt: String? = null,
+        paymentDeadline: PaymentDeadline? = null,
         endpoints: List<String> = listOf(MethodId.Bolt11.rawValue),
         metadata: PrivateJsonObject = METADATA,
         recurrence: PaymentRequestRecurrence = this.recurrence,
@@ -802,6 +805,8 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             proposalExpiresAt = expiresAt,
             recurrence = recurrence,
             acceptedPaymentEndpointIdentifiers = endpoints,
+            conversion = null,
+            paymentDeadline = paymentDeadline,
             metadata = metadata,
         ),
         acceptedEventId = null,
@@ -810,6 +815,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         rejectedOutboundStatus = null,
         canceledEventId = null,
         canceledOutboundStatus = null,
+        conversionQuotes = emptyList(),
         paymentProofs = paymentProofs,
         lastStreamItemId = 1uL,
         lastOutboundMessageId = null,

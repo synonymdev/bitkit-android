@@ -97,6 +97,7 @@ data class PaykitPaymentRequest(
         RecurringRequest("recurring_request", shouldLogIncomingRejection = false),
         UnsupportedRecurrence("unsupported_recurrence"),
         UnsupportedAsset("unsupported_asset"),
+        UnsupportedPaymentDeadline("unsupported_payment_deadline"),
         InvalidAmount("invalid_amount"),
         AmountOutOfRange("amount_out_of_range"),
         NoSupportedEndpoint("no_supported_endpoint"),
@@ -1319,6 +1320,9 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
                 PaykitPaymentRequest.ParseFailure.UnsupportedRecurrence
             },
         )
+    }
+    if (requestTerms.paymentDeadline != null) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline)
     }
     if (requestTerms.amount.asset != PaykitIssuerInterop.BITCOIN_ASSET) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)

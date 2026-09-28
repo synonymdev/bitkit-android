@@ -5,6 +5,7 @@ package to.bitkit.repositories
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
@@ -165,6 +166,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 PaykitPaymentRequest.ParseFailure.NonActionableState,
             paymentRequestRecord().copy(terms = null) to PaykitPaymentRequest.ParseFailure.MissingTerms,
             paymentRequestRecord(asset = "BTC") to PaykitPaymentRequest.ParseFailure.UnsupportedAsset,
+            paymentRequestRecord(paymentDeadline = PaymentDeadline.At(clock.now().plus(1.seconds).toString())) to
+                PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline,
             paymentRequestRecord(amount = "not-bitcoin") to PaykitPaymentRequest.ParseFailure.InvalidAmount,
             paymentRequestRecord(amount = "184467440737.09551615") to
                 PaykitPaymentRequest.ParseFailure.AmountOutOfRange,
@@ -821,6 +824,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         amount: String = "0.001",
         asset: String = "btc",
         expiresAt: String? = null,
+        paymentDeadline: PaymentDeadline? = null,
         endpoints: List<String> = listOf(MethodId.Bolt11.rawValue),
         counterparty: String = COUNTERPARTY,
         receiverPath: String = PaykitReceiverPaths.SERVER,
@@ -843,6 +847,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proposalExpiresAt = expiresAt,
             recurrence = recurrence,
             acceptedPaymentEndpointIdentifiers = endpoints,
+            conversion = null,
+            paymentDeadline = paymentDeadline,
             metadata = metadata,
         ),
         acceptedEventId = null,
@@ -851,6 +857,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         rejectedOutboundStatus = null,
         canceledEventId = null,
         canceledOutboundStatus = null,
+        conversionQuotes = emptyList(),
         paymentProofs = paymentProofs,
         lastStreamItemId = 1uL,
         lastOutboundMessageId = null,

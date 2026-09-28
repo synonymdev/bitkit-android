@@ -291,6 +291,7 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
     val role = localRole.toSubscriptionRole() ?: return null
     val requestTerms = terms ?: return null
     val sdkRecurrence = requestTerms.recurrence ?: return null
+    if (requestTerms.paymentDeadline != null) return null
     if (
         requestTerms.amount.asset != "btc" ||
         sdkRecurrence.every == 0u ||
