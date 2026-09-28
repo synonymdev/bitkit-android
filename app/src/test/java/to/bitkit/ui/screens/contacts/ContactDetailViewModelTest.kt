@@ -12,27 +12,39 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.PaykitPaymentRequestRepo
+import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactDetailViewModelTest : BaseUnitTest() {
     companion object {
-        private const val TEST_PUBLIC_KEY = "pubkytest-contact"
+        private const val TEST_PUBLIC_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     }
 
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+    private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo = mock()
+    private val eligibleTargets = MutableStateFlow<List<PaykitPaymentRequestTarget>>(emptyList())
+    private val target = PaykitPaymentRequestTarget(TEST_PUBLIC_KEY, "bitkit/wallet")
+    private val openedPayment = PublicPaykitPaymentResult.Opened(
+        paymentRequest = "bitcoin:bcrt1qtest",
+        privatePaymentContext = null,
+    )
 
     @Test
     fun `deleting contact emits deleted effect`() = test {
@@ -200,10 +212,106 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         verify(pubkyRepo, times(2)).updateContact(any(), any(), any(), anyOrNull(), any(), any())
     }
 
+    @Test
+    fun `pay tap shows request or pay sheet for an eligible contact`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+
+            assertTrue(sut.uiState.value.showRequestOrPaySheet)
+            assertEquals(target, sut.uiState.value.paymentRequestTarget)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `pay tap refreshes eligibility when the contact is not a known target`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        verify(paykitPaymentRequestRepo).refreshEligibleTarget(TEST_PUBLIC_KEY)
+        assertTrue(sut.uiState.value.showRequestOrPaySheet)
+    }
+
+    @Test
+    fun `pay tap opens payment when the contact cannot receive requests`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(null))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+            assertFalse(sut.uiState.value.isPayLoading)
+            assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+        }
+    }
+
+    @Test
+    fun `paying from the request or pay sheet opens the payment`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+            sut.payContact()
+            advanceUntilIdle()
+
+            val effect = assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            assertEquals(openedPayment.paymentRequest, effect.paymentRequest)
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+            assertFalse(sut.uiState.value.isPayLoading)
+        }
+    }
+
+    @Test
+    fun `unsaved contact skips the payment request check`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(emptyList()))
+        whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(createContact()))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTarget(any())
+        assertFalse(sut.uiState.value.showRequestOrPaySheet)
+    }
+
     private fun createSut() = ContactDetailViewModel(
         context = context,
         pubkyRepo = pubkyRepo,
         privatePaykitRepo = privatePaykitRepo,
+        paykitPaymentRequestRepo = paykitPaymentRequestRepo.also {
+            whenever(it.eligibleTargets).thenReturn(eligibleTargets)
+        },
         savedStateHandle = SavedStateHandle(mapOf("publicKey" to TEST_PUBLIC_KEY)),
     )
 

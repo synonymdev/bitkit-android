@@ -47,6 +47,7 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
@@ -674,6 +675,41 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             sut.eligibleTargets.value,
         )
         verifyBlocking(paykitSdkService, times(1)) { paymentRequestReceiverPaths(COUNTERPARTY) }
+    }
+
+    @Test
+    fun `single recipient refresh adds a newly eligible contact`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+            listOf(PaykitReceiverPaths.SERVER),
+        )
+
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+
+        val expected = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
+        assertEquals(expected, target)
+        assertEquals(listOf(expected), sut.eligibleTargets.value)
+    }
+
+    @Test
+    fun `single recipient refresh removes a contact that is no longer linked`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+            emptyList(),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+            listOf(PaykitReceiverPaths.SERVER),
+        )
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+
+        assertNull(target)
+        assertTrue(sut.eligibleTargets.value.isEmpty())
     }
 
     @Test

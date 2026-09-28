@@ -20,9 +20,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +34,7 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.AddTagSheet
@@ -72,15 +70,13 @@ fun ContactDetailScreen(
     onBackClick: () -> Unit,
     onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Unit,
     onActivityClick: (String) -> Unit,
-    canRequestPayment: Boolean = false,
-    onRequestPayment: () -> Unit = {},
+    onRequestPayment: (PaykitPaymentRequestTarget) -> Unit = {},
     showDeleteAction: Boolean = false,
     onContactDeleted: () -> Unit = {},
     onEditContact: (String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var showRequestOrPay by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
@@ -99,13 +95,7 @@ fun ContactDetailScreen(
         showDeleteAction = showDeleteAction,
         onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickCopy = { viewModel.copyPublicKey() },
-        onClickPay = {
-            if (canRequestPayment) {
-                showRequestOrPay = true
-            } else {
-                viewModel.payContact()
-            }
-        },
+        onClickPay = { viewModel.onClickPay() },
         onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
         onClickRetry = { viewModel.loadContact() },
@@ -117,17 +107,16 @@ fun ContactDetailScreen(
         onConfirmDelete = { viewModel.deleteContact() },
     )
 
-    if (showRequestOrPay && uiState.profile != null) {
+    val requestOrPayContact = uiState.profile
+    val paymentRequestTarget = uiState.paymentRequestTarget
+    if (uiState.showRequestOrPaySheet && requestOrPayContact != null && paymentRequestTarget != null) {
         RequestOrPaySheet(
-            contact = requireNotNull(uiState.profile),
-            onDismiss = { showRequestOrPay = false },
-            onPay = {
-                showRequestOrPay = false
-                viewModel.payContact()
-            },
+            contact = requestOrPayContact,
+            onDismiss = { viewModel.dismissRequestOrPaySheet() },
+            onPay = { viewModel.payContact() },
             onRequest = {
-                showRequestOrPay = false
-                onRequestPayment()
+                viewModel.dismissRequestOrPaySheet()
+                onRequestPayment(paymentRequestTarget)
             },
         )
     }
@@ -235,6 +224,7 @@ private fun Content(
                 profile = currentProfile,
                 tags = uiState.tags,
                 showPayButton = uiState.showPayButton,
+                isPayLoading = uiState.isPayLoading,
                 showDeleteAction = showDeleteAction,
                 onClickEdit = onClickEdit,
                 onClickDelete = onClickDelete,
@@ -273,6 +263,7 @@ private fun ContactBody(
     profile: PubkyProfile,
     tags: ImmutableList<String>,
     showPayButton: Boolean,
+    isPayLoading: Boolean,
     showDeleteAction: Boolean,
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
@@ -318,6 +309,7 @@ private fun ContactBody(
                 ActionButton(
                     onClick = onClickPay,
                     iconRes = R.drawable.ic_coins,
+                    enabled = !isPayLoading,
                     modifier = Modifier.testTag("ContactPay")
                 )
             }

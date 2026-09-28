@@ -458,6 +458,32 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
+    suspend fun refreshEligibleTarget(savedPublicKey: String): Result<PaykitPaymentRequestTarget?> {
+        val generation = stateGeneration.get()
+        val expectedIdentity = activeIdentity
+        return withContext(ioDispatcher) {
+            runSuspendCatching {
+                val publicKey = PubkyPublicKeyFormat.normalized(savedPublicKey) ?: return@runSuspendCatching null
+                if (!isAvailable() || expectedIdentity == null) return@runSuspendCatching null
+                val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
+                val discovery = targetContext(listOf(publicKey), expectedIdentity)
+                    ?.let { eligibleTargets(it, previousTargets) }
+                    ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
+                val target = discovery.targets.firstOrNull()
+                operationMutex.withLock {
+                    if (!isCurrentState(generation, expectedIdentity)) return@withLock
+                    if (target == null && !discovery.isComplete) return@withLock
+                    _eligibleTargets.update { targets ->
+                        targets.filterNot { it.publicKey == publicKey } + listOfNotNull(target)
+                    }
+                }
+                target
+            }.onFailure {
+                Logger.warn("Failed to refresh Paykit payment request recipient", it, context = TAG)
+            }
+        }
+    }
+
     suspend fun propose(
         draft: PaykitPaymentRequestDraft,
         target: PaykitPaymentRequestTarget,
