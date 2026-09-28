@@ -28,6 +28,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitSdkService
@@ -39,6 +40,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Instant
 
+/** New proof kinds must be readable on both platforms before either platform writes them to a wallet backup. */
 @Serializable
 enum class PaykitPaymentProofKind(val type: String) {
     Lightning("bitcoin-bolt11-preimage"),
@@ -119,6 +121,15 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
+
+    suspend fun backupSnapshot(): List<PaykitPaymentStateBackup.Proof> = withContext(ioDispatcher) {
+        operationMutex.withLock { store.load().map { PaykitPaymentStateBackup.Proof(it) } }
+    }
+
+    suspend fun restoreBackup(proofs: List<PaykitPaymentStateBackup.Proof>) = withContext(ioDispatcher) {
+        val restored = proofs.map { it.restored() }
+        operationMutex.withLock { persist(restored) }
+    }
     private val _onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     val onchainPaymentResolutions = _onchainPaymentResolutions.asStateFlow()
 
@@ -405,7 +416,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                             )
                         }
                 }
-            }.onFailure { Logger.warn("Failed to reconcile pending Paykit payment proofs", it, context = TAG) }
+            }.onFailure { Logger.error("Failed to reconcile pending Paykit payment proofs", it, context = TAG) }
         }
     }
 

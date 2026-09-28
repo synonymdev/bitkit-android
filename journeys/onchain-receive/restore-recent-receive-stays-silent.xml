@@ -1,0 +1,31 @@
+<journey name="recent receive stays silent after a seed restore">
+  <description>
+    Covers issue #1342. A deposit confirmed within the last hour, restored from its seed, must not show
+    the received sheet: its confirmation is inside the one-hour window, and LDK events are handled
+    concurrently, so it could reach the handler after the first sync had lifted the restore hold. The
+    first onchain sync after a restore records its chain tip, and confirmed-only receives at or below
+    it stay silent. A deposit mined after the restore still shows the sheet.
+
+    Precondition: a throwaway emulator (both halves wipe the app with `adb shell pm clear`; never run
+    this on a device holding a wallet you need). The wallet is the public BIP39 test vector
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", so
+    other developers may have funded it on the shared regtest chain; only the deposit made here is
+    asserted on. Enter the words with the host-clipboard paste described in
+    restore-wallet/paste-seed-fragment.xml, never with `adb shell input text`. Run the whole journey
+    within the hour, or the one-hour window alone keeps the sheet silent and the run proves nothing.
+  </description>
+  <actions>
+    <action>Run: adb shell pm clear to.bitkit.dev, launch to.bitkit.dev, tap "Continue", "SkipIntro", "RestoreWallet" and "MultipleDevices-button"</action>
+    <action>Paste the test vector into "Word-0" as in restore-wallet/paste-seed-fragment.xml, tap "RestoreButton", then "GetStartedButton", and dismiss any intro sheet until the home screen shows (testTag "TotalBalance")</action>
+    <action>Tap Receive (testTag "Receive"), tap the "Savings" receive tab, tap "Show Details" (testTag "ShowDetails"), read the address from testTag "ReceiveOnchainAddress", and press back to the home screen</action>
+    <action>Run in one command: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":21342}' &amp;&amp; ./lsp POST /regtest/chain/mine '{"count":1}'</action>
+    <action>Verify within 30s the received sheet (testTag "ReceivedTransaction") shows 21 342 sats, then tap "ReceivedTransactionButton"</action>
+    <action>Run: adb shell pm clear to.bitkit.dev, launch to.bitkit.dev and restore the same test vector the same way, tap "GetStartedButton" and dismiss any intro sheet</action>
+    <action>Wait 60s on the home screen</action>
+    <action>Verify the received sheet (testTag "ReceivedTransaction") never appeared and the home screen shows "TotalBalance"</action>
+    <action>Run: adb logcat -d -s APP:V | grep "Skipping.*&lt;txid&gt;"</action>
+    <action>Verify the log skipped the deposit's txid, as "scanned by the restore", "until the first sync after restore" or "during restore" — which one depends on whether its confirmation was handled before or after the restore hold lifted</action>
+    <action>Read a new address as above and run in one command: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":21343}' &amp;&amp; ./lsp POST /regtest/chain/mine '{"count":1}'</action>
+    <action>Verify within 30s the received sheet (testTag "ReceivedTransaction") shows 21 343 sats</action>
+  </actions>
+</journey>
