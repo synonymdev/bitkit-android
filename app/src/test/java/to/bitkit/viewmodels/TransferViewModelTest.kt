@@ -1439,6 +1439,31 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingConfirm compares with the amounts shown when the user swiped`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val creation = CompletableDeferred<Result<IBtOrder>>()
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        whenever(blocktankRepo.createOrder(any(), any(), any())).doSuspendableAnswer { creation.await() }
+
+        sut.onTransferToSpendingConfirm()
+        runCurrent()
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+        prepareConfirm()
+        assertEquals(2_500uL, sut.spendingUiState.value.miningFeeSats)
+        creation.complete(Result.success(order))
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        assertFeesChangedToast(toasts, FEES_CHANGED_NETWORK, delta = 1_500uL)
+    }
+
+    @Test
     fun `onTransferToSpendingConfirm shows the fee increase in fiat when fiat is the primary display`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
         val increase = ConvertedAmount(
