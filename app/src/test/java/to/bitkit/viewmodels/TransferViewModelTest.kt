@@ -62,6 +62,7 @@ import to.bitkit.env.Defaults
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BalanceState
+import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
@@ -1491,6 +1492,45 @@ class TransferViewModelTest : BaseUnitTest() {
         verifySendOnChain(sats = order.feeSat, count = 0)
         assertEquals(
             FEES_CHANGED_NETWORK.replace("{amount}", increase.formattedWithSymbol()),
+            toasts.single().description,
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm shows the fee increase in the classic bitcoin unit`() = test {
+        currencyState.value = CurrencyState(
+            primaryDisplay = PrimaryDisplay.BITCOIN,
+            displayUnit = BitcoinDisplayUnit.CLASSIC,
+        )
+
+        val toasts = triggerNetworkFeesChanged()
+
+        assertEquals(
+            FEES_CHANGED_NETWORK.replace("{amount}", "$BITCOIN_SYMBOL 0.00001500"),
+            toasts.single().description,
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm shows the fee increase in bitcoin when fiat has no rate`() = test {
+        currencyState.value = CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)
+
+        val toasts = triggerNetworkFeesChanged()
+
+        assertFeesChangedToast(toasts, FEES_CHANGED_NETWORK, delta = 1_500uL)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm shows the fee increase in classic bitcoin when fiat has no rate`() = test {
+        currencyState.value = CurrencyState(
+            primaryDisplay = PrimaryDisplay.FIAT,
+            displayUnit = BitcoinDisplayUnit.CLASSIC,
+        )
+
+        val toasts = triggerNetworkFeesChanged()
+
+        assertEquals(
+            FEES_CHANGED_NETWORK.replace("{amount}", "$BITCOIN_SYMBOL 0.00001500"),
             toasts.single().description,
         )
     }
@@ -3076,6 +3116,24 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(FEES_CHANGED_NETWORK)
     }
 
+    private suspend fun TestScope.triggerNetworkFeesChanged(): List<Toast> {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        return toasts
+    }
+
     private fun TestScope.collectToasts(): List<Toast> {
         val toasts = mutableListOf<Toast>()
         backgroundScope.launch { ToastEventBus.events.collect { toasts.add(it) } }
@@ -3087,6 +3145,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val toast = toasts.single()
         assertEquals(Toast.ToastType.INFO, toast.type)
         assertEquals(FEES_CHANGED_TITLE, toast.title)
+        assertFalse(toast.description.orEmpty().contains("{amount}"))
         assertEquals(body.replace("{amount}", "$BITCOIN_SYMBOL ${delta.formatToModernDisplay()}"), toast.description)
     }
 
@@ -3197,8 +3256,8 @@ class TransferViewModelTest : BaseUnitTest() {
         const val ADVANCED_CLIENT_BALANCE = 100_000uL
         const val ADVANCED_BUDGET = 110_000uL
         const val FEES_CHANGED_TITLE = "Fees changed"
-        const val FEES_CHANGED_SERVICE = "Fees are ₿ {amount} higher now that your order is created."
-        const val FEES_CHANGED_NETWORK = "Fees are ₿ {amount} higher because fee rates changed."
+        const val FEES_CHANGED_SERVICE = "Fees are {amount} higher now that your order is created."
+        const val FEES_CHANGED_NETWORK = "Fees are {amount} higher because fee rates changed."
         const val NETWORK_FEE = 2_112uL
         const val SERVICE_FEE = 286uL
         const val LSP_FEE = 2_398uL // NETWORK_FEE + SERVICE_FEE
