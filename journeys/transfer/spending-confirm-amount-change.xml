@@ -22,7 +22,7 @@
     <action>If the spending intro appears, tap "Get Started" (testTag "SpendingIntro-button")</action>
     <action>Enter 200 000 on the number pad (testTags "N2", "N0", "N0", "N0", "N0", "N0") and tap "Continue" (testTag "SpendingAmountContinue")</action>
     <action>Verify the confirm screen is visible (testTag "SpendingConfirmMore") and wait until its network fee is shown</action>
-    <action>Note the amounts under "Network Fee" and "Total"</action>
+    <action>Note the amounts under "Network Fees" and "Total"</action>
     <action>Run: adb logcat -c</action>
     <action>Run in one command: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":500000}' &amp;&amp; ./lsp POST /regtest/chain/mine '{"count":1}'</action>
     <action>Wait 30s for the wallet to sync the new UTXO</action>
@@ -30,10 +30,10 @@
     <action>Verify the confirm screen still shows the amounts noted before the deposit</action>
     <action>Swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
     <action>Verify the confirm screen stays visible (testTag "SpendingConfirmMore") and the setting up screen (testTag "LightningSettingUp") does not appear</action>
-    <action>Verify "Network Fee" now shows a lower amount than noted, and "Total" is lower by the same difference</action>
+    <action>Verify "Network Fees" now shows a lower amount than noted, and "Total" is lower by the same difference</action>
     <action>Run: adb logcat -d -s APP:V | grep "Waiting for another swipe"</action>
     <action>Verify the log shows one "Waiting for another swipe, amount changed from" line with the noted total and the new total</action>
-    <action>Note the new amounts under "Network Fee" and "Total"</action>
+    <action>Note the new amounts under "Network Fees" and "Total"</action>
     <action>Swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
     <action>Wait up to 90s for the setting up screen (testTag "LightningSettingUp")</action>
     <action>Run: adb logcat -d -s APP:V | grep "BT confirm"</action>
