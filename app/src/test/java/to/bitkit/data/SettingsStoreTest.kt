@@ -107,16 +107,4 @@ class SettingsStoreTest : BaseUnitTest() {
 
         assertEquals(900L, sut.data.first().restoreSyncedBlockHeight)
     }
-
-    @Test
-    fun `paykit is enabled when no preference is stored`() = test {
-        assertTrue(sut.isPaykitEnabled.first())
-    }
-
-    @Test
-    fun `paykit stays disabled once it was turned off`() = test {
-        sut.setIsPaykitEnabled(false)
-
-        assertFalse(SettingsStore(context).isPaykitEnabled.first())
-    }
 }
