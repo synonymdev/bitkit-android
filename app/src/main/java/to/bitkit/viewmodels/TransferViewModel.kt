@@ -391,7 +391,10 @@ class TransferViewModel @Inject constructor(
         if (payableTotal > shownTotal) {
             Logger.info("Waiting for another swipe, total rose from '$shownTotal' to '$payableTotal'", context = TAG)
             _spendingUiState.update { it.withFundingPlan(plan, feeSat = order.feeSat) }
-            sendFeesIncreasedToast(isServiceFee = order.feeSat > shown.feeSat, delta = payableTotal.safe() - shownTotal.safe())
+            sendFeesIncreasedToast(
+                isServiceFee = order.feeSat > shown.feeSat,
+                delta = payableTotal.safe() - shownTotal.safe(),
+            )
             return false
         }
         if (payableTotal != shownTotal) {
