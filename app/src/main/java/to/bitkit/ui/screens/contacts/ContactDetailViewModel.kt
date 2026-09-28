@@ -124,7 +124,9 @@ class ContactDetailViewModel @Inject constructor(
             val target = _uiState.value.paymentRequestTarget
                 ?: withTimeoutOrNull(PAYMENT_REQUEST_TARGET_WAIT) { refreshPaymentRequestTarget().await() }
             if (target != null) {
-                _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = true) }
+                _uiState.update {
+                    it.copy(isPayLoading = false, paymentRequestTarget = target, showRequestOrPaySheet = true)
+                }
                 return@launch
             }
             openPayment()
@@ -149,13 +151,18 @@ class ContactDetailViewModel @Inject constructor(
         viewModelScope.launch {
             paykitPaymentRequestRepo.eligibleTargets.collect { targets ->
                 val target = targets.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
-                _uiState.update { it.copy(paymentRequestTarget = target) }
+                _uiState.update {
+                    it.copy(
+                        paymentRequestTarget = target,
+                        showRequestOrPaySheet = it.showRequestOrPaySheet && target != null,
+                    )
+                }
             }
         }
     }
 
     private fun refreshPaymentRequestTarget(): Deferred<PaykitPaymentRequestTarget?> {
-        paymentRequestTargetRefresh?.let { return it }
+        paymentRequestTargetRefresh?.takeIf { it.isActive }?.let { return it }
         return viewModelScope.async {
             val isSaved = pubkyRepo.contacts.value.any { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
             if (!isSaved) return@async null
