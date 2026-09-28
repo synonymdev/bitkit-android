@@ -504,6 +504,24 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ensureConnected rejects a locked session that unlocks into another seed`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.LOCKED))
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport(xpub = "zpubOther"))
+        val sut = createRepo()
+        sut.autoReconnect(preferredTransport = TransportType.USB).getOrThrow()
+        whenever { jadeService.isConnected() }.thenReturn(true)
+
+        val result = sut.ensureConnected(knownUsb.id)
+
+        assertIs<HwWalletMismatchError>(result.exceptionOrNull())
+        verify(jadeTransport).disconnectDevice(USB_PATH)
+        verify(jadeService).disconnect()
+        assertNull(sut.state.value.connected)
+    }
+
+    @Test
     fun `a bluetooth link is released after the app stays in the background`() = test {
         val knownBle = knownUsb.copy(
             id = "jade:bluetooth:$EFUSE_MAC",

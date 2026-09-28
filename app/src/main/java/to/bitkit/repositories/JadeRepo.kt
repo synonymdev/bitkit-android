@@ -290,6 +290,13 @@ class JadeRepo @Inject constructor(
                 ?: return@runSuspendCatching connectKnownDevice(deviceId, forceSession = true).getOrThrow()
             if (!current.isLocked) return@runSuspendCatching current
             val version = unlockConnected()
+            // A locked reconnect trusted the stored entry without reading keys, so the unlocked seed is
+            // checked now: a Jade restored with another seed must not pass as the paired wallet.
+            val entry = knownDevices().firstOrNull { it.matches(deviceId) && it.walletId == current.walletId }
+                ?: knownDevice(deviceId)
+            runSuspendCatching { rejectOtherWallet(exportAccounts(), entry) }
+                .onFailure { cleanupFailedConnection(current.path) }
+                .getOrThrow()
             current.copy(versionInfo = version).also { unlocked ->
                 _state.update { it.copy(connected = unlocked) }
             }
