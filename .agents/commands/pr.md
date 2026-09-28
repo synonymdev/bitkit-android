@@ -19,7 +19,7 @@ Create a PR on GitHub using the `gh` CLI for the currently checked-out branch.
 
 ### 1. Check for Existing PR
 Run `gh pr view --json number,url 2>/dev/null` to check if a PR already exists for this branch.
-- If PR exists: Output `PR already exists: [URL]` and stop
+- If PR exists and the user requested a model-section update: follow "Updating models on an existing PR" below, then stop. Otherwise output `PR already exists: [URL]` and stop.
 - If no PR: Continue
 
 ### 2. Parse Arguments
@@ -136,6 +136,16 @@ When the user provides custom instructions after `--`:
 - Preserve exact manual testing steps provided by the user (don't summarize or omit details)
 - If custom instructions include automated checks or coverage notes, place them under `#### Automated Checks`
 
+**Models used:**
+- Include `### Models used` using the policy in `AGENTS.md` under Agent workflow.
+- Always include `Planning/scoping` and `Implementation`; add one numbered entry per review round
+  that actually happened. Use `Review: Not performed` if there were no rounds.
+- Use the reported model names, `Not used` for a phase without AI involvement, or `Unknown` if the
+  model was not recorded. The same model can appear in all phases. List multiple models within a
+  phase when applicable; never substitute the PR-writing model for an unknown earlier model.
+- Preserve known entries when updating the PR and append later review rounds. This is informational;
+  it does not require different models or certify review quality.
+
 **QA Notes / Validation:**
 - QA Notes separate actionable human QA instructions from automated verification coverage.
 - Always use this structure:
@@ -227,6 +237,13 @@ Only include if the PR template (`.github/pull_request_template.md`) contains a 
   - Add code comment under each placeholder describing what it should show
   - Example: `<!-- VIDEO_1: Record the send flow by scanning a LN invoice and setting amount to 5000 sats -->`
 
+### 6b. Verification and review
+
+Before publishing, apply the verification requirements in `AGENTS.md` under Agent workflow.
+Prefer an independent subagent review with fresh context as described there before marking the PR
+ready for human review. Record only review rounds that actually occurred in Models used.
+A dry run only prepares the description; it does not certify verification or review completion.
+
 ### 7. Save PR Description
 Before creating the PR:
 - Get next PR number: `gh api "repos/$REPO/issues?per_page=1&state=all&sort=created&direction=desc" --jq '.[0].number'` then add 1 (using repo from Step 3)
@@ -293,3 +310,12 @@ If no media files were found (generated placeholders):
 - [ ] VIDEO_2: [description]
 ```
 List all media placeholders as TODOs with their descriptions.
+
+### Updating models on an existing PR
+
+When the user requests a model-section update on an existing PR:
+- Read the current body with `gh pr view --json number,url,body` and collect the known phase/round
+  models. Apply the Models used rules above, preserving earlier entries and all other PR content.
+- Save the complete updated body to `.ai/pr_NN.md` using the actual PR number. With `--dry`, stop
+  after saving and report the path; otherwise apply it with `gh pr edit NN --body-file .ai/pr_NN.md`.
+- This metadata-only update does not require rerunning application checks or another review round.

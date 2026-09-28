@@ -6,6 +6,50 @@ This file provides guidance to Codex, Claude Code, and Cursor when working with 
 
 Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
+## Agent workflow
+
+### Verification
+
+- For code changes, keep the full gate: run `just compile`, `just test`, and `just lint` before
+  reporting completion or the final PR creation/update/push. Follow the batching and focused rerun
+  guidance under Rules; targeted checks during development do not replace this gate.
+- Fix relevant local check failures caused by the change and rerun the affected checks before
+  reporting work as complete, asking the user to run those checks, pushing, or creating/updating a PR.
+- If a check is blocked by missing prerequisites or fails for an unrelated reason, investigate and
+  report the command, cause, and remaining verification. Do not mark blocked, skipped, or unrun
+  checks as passed or describe validation as complete.
+- For user-visible changes, run the relevant journeys when their prerequisites are available; report
+  any missing prerequisites and untested flows explicitly.
+- In the final handoff, report the commands run and their results, including failures and blockers.
+  Documentation-only changes need documentation checks such as `git diff --check` and validation of
+  changed references, not an application build or device run.
+
+### Independent review (recommended)
+
+Before marking a PR ready for human review, preferably run an independent review using a subagent
+with fresh context. Give the reviewer the requirements, scope, acceptance criteria, applicable
+repository guidelines, and base/head revisions (or the working-tree diff for uncommitted changes).
+Include intentional platform differences, but do not pass the implementation conversation or its
+justification of the solution. The reviewer should inspect the diff, callers, and surrounding code
+independently. Address actionable findings and recheck the affected changes.
+
+The reviewer may use the same model as the implementation agent. A separate context is the
+recommendation; using a different model is not required. If subagents are unavailable, use a separate
+review session when practical. Do not describe a self-review as an independent review.
+
+### Models used
+
+Include `### Models used` in the PR body with `Planning/scoping`, `Implementation`, and one
+`Review round N` entry for each review round that actually happened. Record the model name reported
+by the tool for each phase as work proceeds, including subagent reviews; list multiple models if a
+phase used more than one. The same model may appear in every phase.
+
+This section is informational, not a quality score, verification result, or approval requirement.
+Use `Not used` when a phase had no AI involvement and `Unknown` when the model was not recorded;
+never infer a model from a tool name or fill earlier phases with the current model. If no review
+round happened, write `Review: Not performed` instead of inventing a round. Preserve known entries
+and update the section after later review rounds. See `.agents/commands/pr.md` for PR formatting.
+
 ## Build Commands
 
 ```sh

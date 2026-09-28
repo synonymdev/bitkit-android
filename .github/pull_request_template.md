@@ -31,3 +31,11 @@
 #### Automated Checks
 
 <!-- Flat list in the keyword order `added`, `updated`, `removed`, `ran`: keyword, bare test file name, dash, the behaviour proven — `- added `TransferViewModelTest.kt` — rejects amounts over the spending balance`; `ran` only for what CI does not run. `N/A` when nothing changed. -->
+
+### Models used
+
+<!-- Informational: the same model may be used in every phase. Use the reported model name(s), `Not used` for a phase without AI involvement, or `Unknown` if not recorded. Add `- Review round N: <model name>` only for rounds that happened, replacing `Review: Not performed` when the first round occurs. Preserve entries and append later rounds. -->
+
+- Planning/scoping: `<model name>`
+- Implementation: `<model name>`
+- Review: Not performed
