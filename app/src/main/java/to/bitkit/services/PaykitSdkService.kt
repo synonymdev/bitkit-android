@@ -77,6 +77,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -975,8 +976,12 @@ class PaykitSdkService @Inject constructor(
     ) {
         persistSessionAccess(result.sessionAccess)
         sessionProvider.setLiveSessionAccess(result.sessionAccess)
+        val cachedOwner = pubkyStore.data.first().ownerPublicKey
+        val previousOwner = cachedOwner ?: previousPublicKey
+        if (previousOwner != null && !PubkyPublicKeyFormat.matches(previousOwner, result.publicKey)) {
+            pubkyStore.reset()
+        }
         if (!PubkyPublicKeyFormat.matches(previousPublicKey, result.publicKey)) {
-            if (previousPublicKey != null) pubkyStore.reset()
             keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
         }
         resetRuntime()

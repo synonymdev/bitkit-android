@@ -944,6 +944,19 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `profile cache records the authenticated identity owner`() = test {
+        var cached = PubkyStoreData()
+        whenever { pubkyStore.update(any()) }.thenAnswer {
+            cached = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(cached)
+            Unit
+        }
+
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+
+        assertEquals(VALID_SELF_KEY, cached.ownerPublicKey)
+    }
+
+    @Test
     fun `snapshotSessionBackupState should prefer local seed over session secret`() = test {
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session_secret")

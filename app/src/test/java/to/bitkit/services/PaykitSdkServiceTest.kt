@@ -12,6 +12,7 @@ import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicContactSharingPolicy
 import com.synonym.paykit.ReceiverNoiseSecretKey
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -76,7 +77,9 @@ class PaykitSdkServiceTest {
                 "initialize", "cancel" -> whenever(sdk.initialize()).thenThrow(error)
             }
             var handlesCreated = 0
-            val service = PaykitSdkService(mock(), keychain, mock()) {
+            val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+            val service = PaykitSdkService(mock(), keychain, store) {
                 handlesCreated++
                 sdk
             }
@@ -125,28 +128,23 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `activation isolates cached identity data and preserves same owner or legacy backup`() = runTest {
+    fun `activation isolates cached identity data by sdk or cache owner`() = runTest {
         val originalKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val differentKey = "5" + originalKey.drop(1)
-        val cases = listOf(originalKey, "pubky$originalKey", differentKey, null).map { it to false } +
-            (differentKey to true)
-        for ((previousKey, resetFails) in cases) {
+        for ((previousKey, cachedOwner, resetFails) in identityCacheCases(originalKey, differentKey)) {
             val keychain = mock<Keychain>()
-            val blocking = mock<Keychain.BlockingAccess>()
-            whenever(keychain.accessBlocking<Any?>(any())).doAnswer {
-                it.getArgument<Keychain.BlockingAccess.() -> Any?>(0).invoke(blocking)
-            }
-            whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name))
-                .thenReturn(ByteArray(32) { 1 })
+            stubReceiverNoiseSecret(keychain)
             val sdk = mock<PaykitSdk>()
             whenever(sdk.identityStatus()).thenReturn(IdentityStatus(previousKey, false))
             val originalCache = PubkyStoreData(
+                ownerPublicKey = cachedOwner,
                 cachedName = "Original profile",
                 cachedImageUri = "pubky://original/avatar",
                 contactProfileOverrides = mapOf(originalKey to PubkyProfileData("Private label", "")),
             )
             var cache = originalCache
             val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(cache))
             val resetError = AppError("Cache unavailable")
             whenever(store.reset()).thenAnswer {
                 if (resetFails) throw resetError
@@ -170,7 +168,7 @@ class PaykitSdkServiceTest {
             }
             service.activateRegisteredIdentity(result)
 
-            if (previousKey == differentKey) {
+            if (previousKey == differentKey || cachedOwner == differentKey) {
                 assertEquals(PubkyStoreData(), cache)
                 inOrder(store, sdk) {
                     verify(store).reset()
@@ -381,4 +379,24 @@ class PaykitSdkServiceTest {
         upsertBytes: (ByteArray) -> Unit = {},
         deriveBytes: () -> ByteArray,
     ) = PaykitReceiverNoiseKeyStore(loadBytes, upsertBytes, deriveBytes)
+
+    private fun stubReceiverNoiseSecret(keychain: Keychain) {
+        val blocking = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Any?>(any())).doAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Any?>(0).invoke(blocking)
+        }
+        whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name))
+            .thenReturn(ByteArray(32) { 1 })
+    }
+
+    private fun identityCacheCases(originalKey: String, differentKey: String) = listOf(
+        Triple(originalKey, null, false),
+        Triple("pubky$originalKey", null, false),
+        Triple(differentKey, null, false),
+        Triple(null, null, false),
+        Triple(null, originalKey, false),
+        Triple(null, differentKey, false),
+        Triple(originalKey, differentKey, false),
+        Triple(differentKey, null, true),
+    )
 }

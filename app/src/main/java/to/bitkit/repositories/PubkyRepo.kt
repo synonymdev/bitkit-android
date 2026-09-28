@@ -1140,8 +1140,12 @@ class PubkyRepo @Inject constructor(
         overrides: Map<String, PubkyProfileData>?,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
+            val ownerPublicKey = _publicKey.value
             pubkyStore.update {
-                it.copy(contactProfileOverrides = overrides ?: emptyMap())
+                it.copy(
+                    ownerPublicKey = ownerPublicKey,
+                    contactProfileOverrides = overrides ?: emptyMap(),
+                )
             }
             notifyBackupStateChanged()
         }
@@ -1299,23 +1303,35 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun upsertContactProfileOverride(profile: PubkyProfile) {
         val prefixedKey = profile.publicKey.ensurePubkyPrefix()
+        val ownerPublicKey = requireNotNull(_publicKey.value) { "Pubky identity unavailable" }
         pubkyStore.update { data ->
-            data.copy(contactProfileOverrides = data.contactProfileOverrides + (prefixedKey to profile.toProfileData()))
+            data.copy(
+                ownerPublicKey = ownerPublicKey,
+                contactProfileOverrides = data.contactProfileOverrides + (prefixedKey to profile.toProfileData()),
+            )
         }
         notifyBackupStateChanged()
     }
 
     private suspend fun removeContactProfileOverride(publicKey: String) {
         val prefixedKey = publicKey.ensurePubkyPrefix()
+        val ownerPublicKey = requireNotNull(_publicKey.value) { "Pubky identity unavailable" }
         pubkyStore.update { data ->
-            data.copy(contactProfileOverrides = data.contactProfileOverrides - prefixedKey)
+            data.copy(
+                ownerPublicKey = ownerPublicKey,
+                contactProfileOverrides = data.contactProfileOverrides - prefixedKey,
+            )
         }
         notifyBackupStateChanged()
     }
 
     private suspend fun cacheMetadata(profile: PubkyProfile) {
         pubkyStore.update {
-            it.copy(cachedName = profile.name, cachedImageUri = profile.imageUrl)
+            it.copy(
+                ownerPublicKey = profile.publicKey,
+                cachedName = profile.name,
+                cachedImageUri = profile.imageUrl,
+            )
         }
     }
 
