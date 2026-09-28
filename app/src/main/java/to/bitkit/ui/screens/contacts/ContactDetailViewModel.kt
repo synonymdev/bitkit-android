@@ -135,7 +135,8 @@ class ContactDetailViewModel @Inject constructor(
     }
 
     fun dismissRequestOrPaySheet() {
-        _uiState.update { it.copy(showRequestOrPaySheet = false) }
+        if (_uiState.value.isPayLoading) payJob?.cancel()
+        _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
     }
 
     fun payContact() {

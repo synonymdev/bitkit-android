@@ -3,12 +3,15 @@ package to.bitkit.ui.screens.contacts
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -281,6 +284,35 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.uiState.value.showRequestOrPaySheet)
+    }
+
+    @Test
+    fun `dismissing the sheet while paying cancels the payment`() = test {
+        val paymentStarted = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            paymentStarted.complete(Unit)
+            awaitCancellation()
+        }
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.payContact()
+            paymentStarted.await()
+            assertTrue(sut.uiState.value.isPayLoading)
+
+            sut.dismissRequestOrPaySheet()
+            advanceUntilIdle()
+
+            assertFalse(sut.uiState.value.isPayLoading)
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+            expectNoEvents()
+        }
     }
 
     @Test
