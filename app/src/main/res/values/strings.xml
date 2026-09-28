@@ -391,6 +391,9 @@
     <string name="lightning__spending_amount__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
     <string name="lightning__spending_confirm__amount">To spending</string>
     <string name="lightning__spending_confirm__default">Use Defaults</string>
+    <string name="lightning__spending_confirm__fees_increased_network">Network fees are ₿ {amount} higher because network fees or your savings balance changed while you were on this screen. Swipe again to confirm.</string>
+    <string name="lightning__spending_confirm__fees_increased_service">Service fees are ₿ {amount} higher now that your order is created. Swipe again to confirm.</string>
+    <string name="lightning__spending_confirm__fees_increased_title">Fees increased</string>
     <string name="lightning__spending_confirm__lsp_fee">Service fees</string>
     <string name="lightning__spending_confirm__network_fee">Network fees</string>
     <string name="lightning__spending_confirm__total">Total</string>

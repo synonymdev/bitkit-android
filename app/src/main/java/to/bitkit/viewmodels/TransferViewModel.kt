@@ -59,6 +59,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
@@ -321,7 +322,7 @@ class TransferViewModel @Inject constructor(
         confirmPayJob = viewModelScope.launch {
             try {
                 val paid = runSuspendCatching {
-                    val order = ensureSpendingOrder() ?: return@runSuspendCatching false
+                    val order = getOrCreateSpendingOrder() ?: return@runSuspendCatching false
                     paySpendingConfirmOrder(order)
                 }.onFailure {
                     Logger.error("Failed to pay spending confirm order", it, context = TAG)
@@ -339,16 +340,20 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun ensureSpendingOrder(): IBtOrder? {
+    private suspend fun getOrCreateSpendingOrder(): IBtOrder? {
         val state = _spendingUiState.value
-        val order = state.order ?: blocktankRepo.createOrder(
+        return state.order ?: blocktankRepo.createOrder(
             spendingBalanceSats = state.clientBalanceSat,
             receivingBalanceSats = state.lspBalanceSat,
         ).getOrElse {
             ToastEventBus.send(it)
             return null
         }.also { created -> _spendingUiState.update { it.copy(order = created) } }
-        if (order.feeSat > state.feeSat) {
+    }
+
+    private suspend fun ensureSpendingOrder(): IBtOrder? {
+        val order = getOrCreateSpendingOrder() ?: return null
+        if (order.feeSat > _spendingUiState.value.feeSat) {
             spendingConfirmFundingPlan = null
             _spendingUiState.update { it.copy(feeSat = order.feeSat) }
             return null
@@ -376,18 +381,16 @@ class TransferViewModel @Inject constructor(
 
         val shown = _spendingUiState.value
         val payable = shown.withFundingPlan(plan, feeSat = order.feeSat)
-        if (
-            payable.feeSat != shown.feeSat ||
-            payable.miningFeeSats != shown.miningFeeSats ||
-            payable.confirmLeavingAmountSats != shown.confirmLeavingAmountSats
-        ) {
-            Logger.info(
-                "Waiting for another swipe, amount changed from '${shown.confirmLeavingAmountSats}' " +
-                    "to '${payable.confirmLeavingAmountSats}'",
-                context = TAG,
-            )
-            _spendingUiState.update { it.withFundingPlan(plan, feeSat = order.feeSat) }
+        val shownTotal = shown.confirmLeavingAmountSats
+        val payableTotal = payable.confirmLeavingAmountSats
+        if (payableTotal > shownTotal) {
+            Logger.info("Waiting for another swipe, total rose from '$shownTotal' to '$payableTotal'", context = TAG)
+            _spendingUiState.update { payable }
+            sendFeesIncreasedToast(isServiceFee = order.feeSat > shown.feeSat, delta = payableTotal - shownTotal)
             return false
+        }
+        if (payableTotal != shownTotal) {
+            Logger.info("Paying rebuilt plan, total changed from '$shownTotal' to '$payableTotal'", context = TAG)
         }
 
         if (plan.shouldUseSendAll && plan.maxSendable < order.feeSat) {
@@ -431,6 +434,19 @@ class TransferViewModel @Inject constructor(
             }
             .onFailure { ToastEventBus.send(it) }
             .isSuccess
+    }
+
+    private suspend fun sendFeesIncreasedToast(isServiceFee: Boolean, delta: ULong) {
+        val description = if (isServiceFee) {
+            R.string.lightning__spending_confirm__fees_increased_service
+        } else {
+            R.string.lightning__spending_confirm__fees_increased_network
+        }
+        ToastEventBus.send(
+            type = Toast.ToastType.INFO,
+            title = context.getString(R.string.lightning__spending_confirm__fees_increased_title),
+            description = context.getString(description).replace("{amount}", delta.formatToModernDisplay()),
+        )
     }
 
     private suspend fun buildSpendingConfirmFundingPlan(order: IBtOrder): Result<SpendingConfirmFundingPlan> =
