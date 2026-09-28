@@ -1,16 +1,17 @@
 <journey name="spending confirm amount change">
   <description>
-    Verifies that a transfer to spending pays only the amount Spending Confirm shows
-    (synonymdev/bitkit-android#1361). When the funding plan rebuilt at swipe differs from the screen,
-    the swipe pays nothing: the screen shows the new network fee and total, and the next swipe pays
-    them. A plan that still matches the screen pays on the first swipe, as the transfer E2E covers.
+    Verifies that a transfer to spending never pays more than the total Spending Confirm shows
+    (synonymdev/bitkit-android#1361). The funding plan is rebuilt when the order is created at swipe.
+    A plan that costs the same or less pays on that swipe, at the rebuilt amount. A plan whose total is
+    higher pays nothing: the screen shows the new amounts and a "Fees increased" toast, and the next
+    swipe pays them. The higher-total case needs a spend of the wallet's own UTXO outside the app, which
+    the Capabilities table does not list, so unit tests and a manual test cover it.
 
     The amount changes through coin selection: Spending Confirm sizes the network fee for two inputs,
     then a larger UTXO confirms before the swipe, so the plan rebuilt at swipe spends one input and
-    pays a lower network fee.
+    pays a lower network fee, at once.
 
-    iOS differs in two steps: its first swipe also shows a "Please try again." toast, and it has no
-    app-log step.
+    iOS differs in one step: it has no app-log step.
 
     Precondition: a freshly onboarded dev wallet on the staging regtest backend with no channel and
     exactly two confirmed on-chain UTXOs of 150 000 sats each (two ./lsp deposits to the wallet's
@@ -29,14 +30,8 @@
     <action>If the received sheet (testTag "ReceivedTransaction") is visible, tap its button (testTag "ReceivedTransactionButton")</action>
     <action>Verify the confirm screen still shows the amounts noted before the deposit</action>
     <action>Swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
-    <action>Verify the confirm screen stays visible (testTag "SpendingConfirmMore") and the setting up screen (testTag "LightningSettingUp") does not appear</action>
-    <action>Verify "Network Fees" now shows a lower amount than noted, and "Total" is lower by the same difference</action>
-    <action>Run: adb logcat -d -s APP:V | grep "Waiting for another swipe"</action>
-    <action>Verify the log shows one "Waiting for another swipe, amount changed from" line with the noted total and the new total</action>
-    <action>Note the new amounts under "Network Fees" and "Total"</action>
-    <action>Swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
     <action>Wait up to 90s for the setting up screen (testTag "LightningSettingUp")</action>
     <action>Run: adb logcat -d -s APP:V | grep "BT confirm"</action>
-    <action>Verify the last "BT confirm" line shows the new network fee as miningFee</action>
+    <action>Verify the last "BT confirm" line shows a lower miningFee than the "Network Fees" amount noted, not the amount the screen showed</action>
   </actions>
 </journey>
