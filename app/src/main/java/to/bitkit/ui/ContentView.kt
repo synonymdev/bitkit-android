@@ -296,6 +296,7 @@ fun ContentView(
                     appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.APP_FOREGROUND)
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
+                    appViewModel.checkAdoptedPubkySource()
                     appViewModel.refreshPublicPaykitEndpoints()
                     appViewModel.refreshPrivatePaykitEndpoints()
                     appViewModel.startPaykitPaymentRequestPolling()
@@ -361,6 +362,9 @@ fun ContentView(
                 } else {
                     navController.navigateTo(it.route)
                 }
+
+                MainScreenEffect.NavigateToPubkyChoice ->
+                    navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
 
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
