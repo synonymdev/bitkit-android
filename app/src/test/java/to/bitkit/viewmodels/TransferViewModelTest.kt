@@ -60,13 +60,16 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.models.AddressModel
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BalanceState
+import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
@@ -75,6 +78,8 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
+import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletRepo
@@ -88,6 +93,7 @@ import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.screens.transfer.previewSpendingState
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
+import java.math.BigDecimal
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -114,9 +120,11 @@ class TransferViewModelTest : BaseUnitTest() {
     private val transferRepo = mock<TransferRepo>()
     private val clock = mock<Clock>()
     private val boltzService = mock<BoltzService>()
+    private val currencyRepo = mock<CurrencyRepo>()
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val blocktankState = MutableStateFlow(BlocktankState())
+    private val currencyState = MutableStateFlow(CurrencyState())
     private val boltzEvents = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 8)
     private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val feeResponse = mock<IBtEstimateFeeResponse2>()
@@ -135,6 +143,8 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
+        whenever(currencyRepo.currencyState).thenReturn(currencyState)
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(Result.failure(AppError("no rate")))
         whenever(boltzService.events).thenReturn(boltzEvents)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(boltzService.isSwapSupported).thenReturn(true)
@@ -163,6 +173,7 @@ class TransferViewModelTest : BaseUnitTest() {
             transferRepo = transferRepo,
             clock = clock,
             boltzService = boltzService,
+            currencyRepo = currencyRepo,
         )
     }
 
@@ -1326,7 +1337,7 @@ class TransferViewModelTest : BaseUnitTest() {
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
         stubSendOnChainSuccess()
-        stubFeesIncreasedStrings()
+        stubFeesChangedStrings()
         val toasts = collectToasts()
         quoteOrder(estimate)
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(createdOrder))
@@ -1341,7 +1352,7 @@ class TransferViewModelTest : BaseUnitTest() {
         assertFalse(shown.isConfirmPaying)
         assertEquals(100_000uL, shown.confirmLeavingAmountSats)
         verifySendOnChain(sats = createdOrder.feeSat, count = 0)
-        assertFeesIncreasedToast(toasts, FEES_INCREASED_SERVICE, delta = 1_000uL)
+        assertFeesChangedToast(toasts, FEES_CHANGED_SERVICE, delta = 1_000uL)
 
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
@@ -1398,7 +1409,7 @@ class TransferViewModelTest : BaseUnitTest() {
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
         stubSendOnChainSuccess()
-        stubFeesIncreasedStrings()
+        stubFeesChangedStrings()
         val toasts = collectToasts()
         quoteOrder(order)
         prepareConfirm()
@@ -1415,7 +1426,7 @@ class TransferViewModelTest : BaseUnitTest() {
         assertEquals(100_500uL, shown.confirmLeavingAmountSats)
         verifySendOnChain(sats = order.feeSat, count = 0)
         verify(cacheStore, never()).addPaidOrder(any(), any())
-        assertFeesIncreasedToast(toasts, FEES_INCREASED_NETWORK, delta = 1_500uL)
+        assertFeesChangedToast(toasts, FEES_CHANGED_NETWORK, delta = 1_500uL)
 
         stubSingleUtxoFunding(miningFee = 1_000uL)
         sut.onTransferToSpendingConfirm()
@@ -1428,7 +1439,39 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onTransferToSpendingConfirm keeps the shown plan and allows a retry when the rebuilt fee estimate fails`() = test {
+    fun `onTransferToSpendingConfirm shows the fee increase in fiat when fiat is the primary display`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val increase = ConvertedAmount(
+            value = BigDecimal("0.95"),
+            formatted = "0.95",
+            symbol = "$",
+            currency = "USD",
+            flag = "",
+            sats = 1_500,
+        )
+        currencyState.value = CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)
+        whenever(currencyRepo.convertSatsToFiat(eq(1_500L), anyOrNull())).thenReturn(Result.success(increase))
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        assertEquals(
+            FEES_CHANGED_NETWORK.replace("{amount}", increase.formattedWithSymbol()),
+            toasts.single().description,
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm keeps the shown plan when the rebuilt fee estimate fails`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
@@ -2149,6 +2192,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 transferRepo = transferRepo,
                 clock = clock,
                 boltzService = boltzService,
+                currencyRepo = currencyRepo,
             )
 
             quoteOrder(order, viewModel)
@@ -2998,13 +3042,13 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(miningFee))
     }
 
-    private fun stubFeesIncreasedStrings() {
-        whenever(context.getString(R.string.lightning__spending_confirm__fees_increased_title))
-            .thenReturn(FEES_INCREASED_TITLE)
-        whenever(context.getString(R.string.lightning__spending_confirm__fees_increased_service))
-            .thenReturn(FEES_INCREASED_SERVICE)
-        whenever(context.getString(R.string.lightning__spending_confirm__fees_increased_network))
-            .thenReturn(FEES_INCREASED_NETWORK)
+    private fun stubFeesChangedStrings() {
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_title))
+            .thenReturn(FEES_CHANGED_TITLE)
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_service))
+            .thenReturn(FEES_CHANGED_SERVICE)
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
+            .thenReturn(FEES_CHANGED_NETWORK)
     }
 
     private fun TestScope.collectToasts(): List<Toast> {
@@ -3013,12 +3057,12 @@ class TransferViewModelTest : BaseUnitTest() {
         return toasts
     }
 
-    private fun assertFeesIncreasedToast(toasts: List<Toast>, body: String, delta: ULong) {
+    private fun assertFeesChangedToast(toasts: List<Toast>, body: String, delta: ULong) {
         assertEquals(1, toasts.size)
         val toast = toasts.single()
         assertEquals(Toast.ToastType.INFO, toast.type)
-        assertEquals(FEES_INCREASED_TITLE, toast.title)
-        assertEquals(body.replace("{amount}", delta.formatToModernDisplay()), toast.description)
+        assertEquals(FEES_CHANGED_TITLE, toast.title)
+        assertEquals(body.replace("{amount}", "$BITCOIN_SYMBOL ${delta.formatToModernDisplay()}"), toast.description)
     }
 
     private fun TestScope.prepareConfirm() {
@@ -3127,9 +3171,9 @@ class TransferViewModelTest : BaseUnitTest() {
         const val LSP_BALANCE = 252_368uL
         const val ADVANCED_CLIENT_BALANCE = 100_000uL
         const val ADVANCED_BUDGET = 110_000uL
-        const val FEES_INCREASED_TITLE = "Fees increased"
-        const val FEES_INCREASED_SERVICE = "Service fees are ₿ {amount} higher."
-        const val FEES_INCREASED_NETWORK = "Network fees are ₿ {amount} higher."
+        const val FEES_CHANGED_TITLE = "Fees changed"
+        const val FEES_CHANGED_SERVICE = "Fees are ₿ {amount} higher now that your order is created."
+        const val FEES_CHANGED_NETWORK = "Fees are ₿ {amount} higher because fee rates changed."
         const val NETWORK_FEE = 2_112uL
         const val SERVICE_FEE = 286uL
         const val LSP_FEE = 2_398uL // NETWORK_FEE + SERVICE_FEE

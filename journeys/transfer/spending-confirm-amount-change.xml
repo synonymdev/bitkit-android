@@ -3,7 +3,7 @@
     Verifies that a transfer to spending never pays more than the total Spending Confirm shows
     (synonymdev/bitkit-android#1361). The funding plan is rebuilt when the order is created at swipe.
     A plan that costs the same or less pays on that swipe, at the rebuilt amount. A plan whose total is
-    higher pays nothing: the screen shows the new amounts and a "Fees increased" toast, and the next
+    higher pays nothing: the screen shows the new amounts and a "Fees changed" toast, and the next
     swipe pays them. The higher-total case needs a spend of the wallet's own UTXO outside the app, which
     the Capabilities table does not list, so unit tests and a manual test cover it.
 

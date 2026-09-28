@@ -59,9 +59,12 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
-import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.formatMoney
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletRepo
@@ -96,6 +99,7 @@ class TransferViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val boltzService: BoltzService,
+    private val currencyRepo: CurrencyRepo,
     private val clock: Clock,
 ) : ViewModel() {
     private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
@@ -391,7 +395,7 @@ class TransferViewModel @Inject constructor(
         if (payableTotal > shownTotal) {
             Logger.info("Waiting for another swipe, total rose from '$shownTotal' to '$payableTotal'", context = TAG)
             _spendingUiState.update { it.withFundingPlan(plan, feeSat = order.feeSat) }
-            sendFeesIncreasedToast(
+            sendFeesChangedToast(
                 isServiceFee = order.feeSat > shown.feeSat,
                 delta = payableTotal.safe() - shownTotal.safe(),
             )
@@ -444,17 +448,24 @@ class TransferViewModel @Inject constructor(
             .isSuccess
     }
 
-    private suspend fun sendFeesIncreasedToast(isServiceFee: Boolean, delta: ULong) {
+    private suspend fun sendFeesChangedToast(isServiceFee: Boolean, delta: ULong) {
         val description = if (isServiceFee) {
-            R.string.lightning__spending_confirm__fees_increased_service
+            R.string.lightning__spending_confirm__fees_changed_service
         } else {
-            R.string.lightning__spending_confirm__fees_increased_network
+            R.string.lightning__spending_confirm__fees_changed_network
         }
         ToastEventBus.send(
             type = Toast.ToastType.INFO,
-            title = context.getString(R.string.lightning__spending_confirm__fees_increased_title),
-            description = context.getString(description).replace("{amount}", delta.formatToModernDisplay()),
+            title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
+            description = context.getString(description).replace("{amount}", formatPrimaryAmount(delta)),
         )
+    }
+
+    private fun formatPrimaryAmount(sats: ULong): String {
+        val state = currencyRepo.currencyState.value
+        val fiat = currencyRepo.convertSatsToFiat(sats.toLong()).getOrNull()
+        if (state.primaryDisplay == PrimaryDisplay.FIAT && fiat != null) return fiat.formattedWithSymbol()
+        return "$BITCOIN_SYMBOL ${sats.formatMoney(state.displayUnit)}"
     }
 
     private suspend fun buildSpendingConfirmFundingPlan(order: IBtOrder): Result<SpendingConfirmFundingPlan> =
