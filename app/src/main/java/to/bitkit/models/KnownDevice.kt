@@ -76,17 +76,6 @@ internal fun KnownDevice.isReplacedBy(known: KnownDevice, refreshed: KnownDevice
     return known.hardwareId != null && hardwareId != null && hardwareId != known.hardwareId
 }
 
-/**
- * Whether this entry was read from the same hardware as [known] yet shares none of its keys. The device
- * then holds another seed or passphrase than the one this entry was paired with.
- */
-internal fun KnownDevice.holdsOtherSeedThan(known: KnownDevice): Boolean {
-    if (vendor != known.vendor) return false
-    val hardwareId = hardwareId?.takeIf { it.isNotBlank() } ?: return false
-    if (hardwareId != known.hardwareId) return false
-    return xpubs.isNotEmpty() && xpubs.values.none { it in known.xpubs.values }
-}
-
 internal fun deriveHardwareWalletId(xpubs: Map<String, String>, vendor: HwWalletVendor): String? =
     if (xpubs.isEmpty()) {
         null

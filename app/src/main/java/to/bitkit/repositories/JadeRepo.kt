@@ -48,7 +48,6 @@ import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.deriveHardwareWalletId
 import to.bitkit.models.findHardwareWalletId
-import to.bitkit.models.holdsOtherSeedThan
 import to.bitkit.models.isBlePath
 import to.bitkit.models.isReplacedBy
 import to.bitkit.models.matches
@@ -656,7 +655,7 @@ class JadeRepo @Inject constructor(
             val known = if (version.jadeState.isUnlocked()) {
                 val xpubs = exportAccounts()
                 rejectOtherWallet(xpubs, expected)
-                addOrUpdateKnownDevice(device, version, xpubs, isPairing = expected == null)
+                addOrUpdateKnownDevice(device, version, xpubs)
             } else {
                 // Still locked, so its keys cannot be read: only an entry already holding them is usable.
                 val entry = expected ?: knownDevice(deviceIdFor(device.transport, version.efuseMac) ?: device.path)
@@ -734,7 +733,6 @@ class JadeRepo @Inject constructor(
         device: JadeDeviceInfo,
         version: JadeVersionInfo,
         fetchedXpubs: Map<String, String>,
-        isPairing: Boolean,
     ): KnownDevice {
         val stored = loadKnownDevices()
         val storedEntries = stored.map { it.id to it.walletKey }.toSet()
@@ -765,13 +763,9 @@ class JadeRepo @Inject constructor(
             vendor = HwWalletVendor.BLOCKSTREAM,
             jadeDeviceId = version.efuseMac,
         )
-        // The efuse MAC survives a wipe, so a Jade paired again after a restore would leave the old seed's
-        // unsignable wallet behind. Only a READY Jade proves its stored seed changed: a TEMP session runs a
-        // temporary seed on top of it. An on-device passphrase cannot be told apart and replaces it as well.
-        val dropsOtherSeeds = isPairing && version.jadeState == JadeState.READY
-        val updated = knownDevices.filterNot {
-            it.isReplacedBy(known, refreshed = previous) || dropsOtherSeeds && it.holdsOtherSeedThan(known)
-        } + known
+        // Another seed on the same Jade is kept: an on-device passphrase looks exactly like a wipe, and its
+        // wallet is still signable. A stale one is removed from Settings, where its data can be kept.
+        val updated = knownDevices.filterNot { it.isReplacedBy(known, refreshed = previous) } + known
         saveKnownDevices(
             updated,
             pendingName = pendingName?.let { PendingNameUpdate(resolvedWalletId, name = null) },
