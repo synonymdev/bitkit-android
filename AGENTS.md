@@ -44,6 +44,13 @@ Include `### Models used` in the PR body with `Planning/scoping`, `Implementatio
 by the tool for each phase as work proceeds, including subagent reviews; list multiple models if a
 phase used more than one. The same model may appear in every phase.
 
+Record the reasoning effort alongside each model as `model-name (reasoning: medium)`, using the
+actual setting for that phase or review round. Check available session/run metadata before using
+`Unknown`. If a phase used multiple model/effort combinations, list each combination. Use
+`reasoning: Unknown` when the setting was not recorded, or `reasoning: Not exposed` when the tool
+does not expose a reasoning setting. Do not infer effort from the model name or apply the current
+setting to earlier phases. `Not used` and `Review: Not performed` need no reasoning value.
+
 This section is informational, not a quality score, verification result, or approval requirement.
 Use `Not used` when a phase had no AI involvement and `Unknown` when the model was not recorded;
 never infer a model from a tool name or fill earlier phases with the current model. If no review
