@@ -350,6 +350,34 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay tap cancels a stalled eligibility check before paying`() = test {
+        var isCheckCancelled = false
+        var wasCheckCancelledBeforePayment = false
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            try {
+                awaitCancellation()
+            } finally {
+                isCheckCancelled = true
+            }
+        }
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            wasCheckCancelledBeforePayment = isCheckCancelled
+            Result.success(openedPayment)
+        }
+        val sut = createSut()
+
+        sut.effects.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+
+            assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            assertTrue(wasCheckCancelledBeforePayment)
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+        }
+    }
+
+    @Test
     fun `pay tap opens payment when the contact cannot receive requests`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
         whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(null))

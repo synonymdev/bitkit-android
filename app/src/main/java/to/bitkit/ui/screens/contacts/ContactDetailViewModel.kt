@@ -13,6 +13,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -121,8 +122,7 @@ class ContactDetailViewModel @Inject constructor(
         if (payJob?.isActive == true) return
         payJob = viewModelScope.launch {
             _uiState.update { it.copy(isPayLoading = true) }
-            val target = _uiState.value.paymentRequestTarget
-                ?: withTimeoutOrNull(PAYMENT_REQUEST_TARGET_WAIT) { refreshPaymentRequestTarget().await() }
+            val target = _uiState.value.paymentRequestTarget ?: awaitPaymentRequestTarget()
             if (target != null) {
                 _uiState.update {
                     it.copy(isPayLoading = false, paymentRequestTarget = target, showRequestOrPaySheet = true)
@@ -160,6 +160,13 @@ class ContactDetailViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private suspend fun awaitPaymentRequestTarget(): PaykitPaymentRequestTarget? {
+        val refresh = refreshPaymentRequestTarget()
+        val target = withTimeoutOrNull(PAYMENT_REQUEST_TARGET_WAIT) { refresh.await() }
+        if (refresh.isActive) refresh.cancelAndJoin()
+        return target
     }
 
     private fun refreshPaymentRequestTarget(): Deferred<PaykitPaymentRequestTarget?> {
