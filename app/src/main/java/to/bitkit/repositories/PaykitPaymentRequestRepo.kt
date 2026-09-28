@@ -270,6 +270,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val repoScope = appScope(ioDispatcher, TAG)
     private var expirationJob: Job? = null
     private var cachedTargetContext: PaykitPaymentRequestTargetContext? = null
+    private val targetRefreshTicket = AtomicLong()
+    private val targetWriteTickets = mutableMapOf<String, Long>()
     private val _pendingRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     val pendingRequests: StateFlow<List<PaykitPaymentRequest>> = _pendingRequests.asStateFlow()
     private val _paymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
@@ -437,10 +439,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
                                 return@operation
                             }
                             cachedTargetContext = null
+                            targetWriteTickets.clear()
                             _eligibleTargets.update { emptyList() }
                         }
                         return@discovery
                     }
+                    val ticket = targetRefreshTicket.incrementAndGet()
                     val context = targetContext(savedPublicKeys, expectedIdentity)
                     if (!force && context == cachedTargetContext) return@discovery
                     val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
@@ -449,7 +453,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     operationMutex.withLock operation@{
                         if (!isCurrentState(generation, expectedIdentity)) return@operation
                         cachedTargetContext = context.takeIf { discovery.isComplete }
-                        _eligibleTargets.update { discovery.targets }
+                        val newerKeys = targetWriteTickets.filterValues { it > ticket }.keys
+                        savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized)
+                            .filterNot { it in newerKeys }
+                            .forEach { targetWriteTickets[it] = ticket }
+                        _eligibleTargets.update { current ->
+                            discovery.targets.filterNot { it.publicKey in newerKeys } +
+                                current.filter { it.publicKey in newerKeys }
+                        }
                     }
                 }
             }.onFailure {
@@ -470,17 +481,20 @@ class PaykitPaymentRequestRepo @Inject constructor(
             runSuspendCatching {
                 val publicKey = PubkyPublicKeyFormat.normalized(savedPublicKey) ?: return@runSuspendCatching null
                 if (!isAvailable() || expectedIdentity == null) return@runSuspendCatching null
-                targetDiscoveryMutex.withLock {
-                    val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
-                    val discovery = targetContext(listOf(publicKey), expectedIdentity)
-                        ?.let { eligibleTargets(it, previousTargets) }
-                        ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
-                    val target = discovery.targets.firstOrNull()
-                    operationMutex.withLock {
-                        if (!isCurrentState(generation, expectedIdentity)) return@withLock
-                        _eligibleTargets.update { targets ->
-                            targets.filterNot { it.publicKey == publicKey } + listOfNotNull(target)
-                        }
+                val ticket = targetRefreshTicket.incrementAndGet()
+                val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
+                val discovery = targetContext(listOf(publicKey), expectedIdentity)
+                    ?.let { eligibleTargets(it, previousTargets) }
+                    ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
+                val target = discovery.targets.firstOrNull()
+                operationMutex.withLock {
+                    if (!isCurrentState(generation, expectedIdentity)) return@withLock target
+                    if ((targetWriteTickets[publicKey] ?: 0L) > ticket) {
+                        return@withLock _eligibleTargets.value.firstOrNull { it.publicKey == publicKey }
+                    }
+                    targetWriteTickets[publicKey] = ticket
+                    _eligibleTargets.update { targets ->
+                        targets.filterNot { it.publicKey == publicKey } + listOfNotNull(target)
                     }
                     target
                 }
@@ -1253,6 +1267,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         _subscriptions.update { emptyList() }
         _eligibleTargets.update { emptyList() }
         cachedTargetContext = null
+        targetWriteTickets.clear()
         subscriptionNotificationScheduler.cancel()
     }
 

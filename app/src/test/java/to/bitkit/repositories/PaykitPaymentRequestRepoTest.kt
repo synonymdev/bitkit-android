@@ -765,14 +765,74 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val fullRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
         fullLookupStarted.await()
-        val singleRefresh = async { sut.refreshEligibleTarget(COUNTERPARTY) }
-        runCurrent()
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
         releaseFullLookup.complete(Unit)
         fullRefresh.await().getOrThrow()
-        val target = singleRefresh.await().getOrThrow()
 
         assertNull(target)
         assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
+    fun `older single recipient refresh does not overwrite a newer full refresh`() = test {
+        val singleLookupStarted = CompletableDeferred<Unit>()
+        val releaseSingleLookup = CompletableDeferred<Unit>()
+        var lookups = 0
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+            lookups += 1
+            if (lookups > 1) return@doSuspendableAnswer listOf(PaykitReceiverPaths.SERVER)
+            singleLookupStarted.complete(Unit)
+            releaseSingleLookup.await()
+            emptyList()
+        }
+
+        val singleRefresh = async { sut.refreshEligibleTarget(COUNTERPARTY) }
+        singleLookupStarted.await()
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        releaseSingleLookup.complete(Unit)
+        val target = singleRefresh.await().getOrThrow()
+
+        val expected = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
+        assertEquals(expected, target)
+        assertEquals(listOf(expected), sut.eligibleTargets.value)
+    }
+
+    @Test
+    fun `older full refresh keeps its results for other contacts`() = test {
+        val fullLookupStarted = CompletableDeferred<Unit>()
+        val releaseFullLookup = CompletableDeferred<Unit>()
+        var counterpartyLookups = 0
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(
+                linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER),
+                linkedPeer(SECOND_IDENTITY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER),
+            ),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+            counterpartyLookups += 1
+            if (counterpartyLookups > 1) return@doSuspendableAnswer emptyList()
+            fullLookupStarted.complete(Unit)
+            releaseFullLookup.await()
+            listOf(PaykitReceiverPaths.SERVER)
+        }
+        whenever(paykitSdkService.paymentRequestReceiverPaths(SECOND_IDENTITY))
+            .thenReturn(listOf(PaykitReceiverPaths.SERVER))
+
+        val fullRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY, SECOND_IDENTITY)) }
+        fullLookupStarted.await()
+        sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        releaseFullLookup.complete(Unit)
+        fullRefresh.await().getOrThrow()
+
+        assertEquals(
+            listOf(PaykitPaymentRequestTarget(SECOND_IDENTITY, PaykitReceiverPaths.SERVER)),
+            sut.eligibleTargets.value,
+        )
     }
 
     @Test
