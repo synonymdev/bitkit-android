@@ -713,6 +713,40 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `single recipient refresh removes a contact that stopped accepting requests`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+            .thenReturn(listOf(PaykitReceiverPaths.SERVER), emptyList())
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+
+        assertNull(target)
+        assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
+    fun `single recipient refresh keeps a known target while capability lookup fails`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+            .thenReturn(listOf(PaykitReceiverPaths.SERVER))
+            .thenThrow(IllegalStateException("marker unavailable"))
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+
+        val expected = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
+        assertEquals(expected, target)
+        assertEquals(listOf(expected), sut.eligibleTargets.value)
+    }
+
+    @Test
     fun `recipient discovery retries capabilities that are not published yet`() = test {
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.linkedPeers()).thenReturn(

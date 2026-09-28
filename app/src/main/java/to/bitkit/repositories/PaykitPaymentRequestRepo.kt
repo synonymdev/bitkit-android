@@ -472,7 +472,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 val target = discovery.targets.firstOrNull()
                 operationMutex.withLock {
                     if (!isCurrentState(generation, expectedIdentity)) return@withLock
-                    if (target == null && !discovery.isComplete) return@withLock
                     _eligibleTargets.update { targets ->
                         targets.filterNot { it.publicKey == publicKey } + listOfNotNull(target)
                     }
