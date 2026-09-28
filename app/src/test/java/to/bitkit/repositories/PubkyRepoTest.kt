@@ -571,6 +571,55 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `completed authentication loads new identity after previous loads finish`() = test {
+        val oldPublicKey = VALID_SELF_KEY
+        val newPublicKey = VALID_CONTACT_KEY_A
+        authenticateForTesting(publicKey = oldPublicKey)
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        val contactsLoadStarted = CompletableDeferred<Unit>()
+        val finishOldProfileLoad = CompletableDeferred<Unit>()
+        val finishOldContactsLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(oldPublicKey, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            finishOldProfileLoad.await()
+            createResolution(oldPublicKey, pubkyProfile = createPubkyProfile(name = "Old Profile"))
+        }
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            if (sut.publicKey.value == oldPublicKey) {
+                contactsLoadStarted.complete(Unit)
+                finishOldContactsLoad.await()
+                emptyList()
+            } else {
+                listOf(createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("New Contact")))
+            }
+        }
+        val oldProfileLoad = async { sut.loadProfile() }
+        val oldContactsLoad = async { sut.loadContacts() }
+        profileLoadStarted.await()
+        contactsLoadStarted.await()
+
+        sut.wipeLocalState()
+        whenever(pubkyService.currentPublicKey()).thenReturn(newPublicKey.removePrefix("pubky"))
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("new_session")
+        whenever(pubkyService.resolveContactProfile(newPublicKey, true))
+            .thenReturn(createResolution(newPublicKey, pubkyProfile = createPubkyProfile(name = "New Profile")))
+        val authRequest = startAuthForTesting()
+        approveAuthForTesting(authRequest)
+        val newAuthentication = async { sut.completeAuthentication() }
+
+        assertFalse(newAuthentication.isCompleted)
+        finishOldProfileLoad.complete(Unit)
+        finishOldContactsLoad.complete(Unit)
+        oldProfileLoad.await()
+        oldContactsLoad.await()
+        assertTrue(newAuthentication.await().isSuccess)
+
+        assertEquals(newPublicKey, sut.publicKey.value)
+        assertEquals("New Profile", sut.profile.value?.name)
+        assertEquals(listOf("New Contact"), sut.contacts.value.map { it.name })
+    }
+
+    @Test
     fun `cancelAuthentication should reset state to idle`() = test {
         whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         sut.startAuthentication()
@@ -1986,82 +2035,6 @@ class PubkyRepoTest : BaseUnitTest() {
                 listOf("bitkit/wallet", "bitkit/server"),
             )
         }
-    }
-
-    @Test
-    fun `loadProfile should ignore stale result when authenticated key changes`() = test {
-        val oldSecret = "old_secret"
-        val oldPublicKey = "old_public_key"
-        val newSecret = "new_secret"
-        val newPublicKey = "new_public_key"
-        authenticateForTesting(
-            publicKey = oldPublicKey,
-            secret = oldSecret,
-            profileName = "Initial Old",
-        )
-        whenever(pubkyService.completeAuth()).thenReturn(Unit)
-        whenever(pubkyService.currentPublicKey()).thenReturn(newPublicKey)
-        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(newSecret)
-        whenever(pubkyService.contactRecords()).thenReturn(emptyList())
-        val staleProfile = createPubkyProfile(name = "Stale Old")
-        whenever(pubkyService.resolveContactProfile(oldPublicKey.ensurePubkyPrefixForTest(), true)).thenAnswer {
-            runBlocking {
-                approveAuthForTesting(startAuthForTesting())
-                sut.completeAuthentication()
-            }
-            createResolution(oldPublicKey.ensurePubkyPrefixForTest(), pubkyProfile = staleProfile)
-        }
-
-        sut.loadProfile()
-
-        assertEquals(newPublicKey.ensurePubkyPrefixForTest(), sut.publicKey.value)
-        assertNull(sut.profile.value)
-    }
-
-    @Test
-    fun `loadContacts should ignore stale result when authenticated key changes`() = test {
-        val oldSecret = "old_secret"
-        val oldPublicKey = "old_public_key"
-        val newSecret = "new_secret"
-        val newPublicKey = "new_public_key"
-        val existingContact = PubkyProfile(
-            publicKey = VALID_CONTACT_KEY_B,
-            name = "Existing Contact",
-            bio = "",
-            imageUrl = null,
-            links = emptyList(),
-            tags = emptyList(),
-            status = null,
-        )
-        val staleContactKey = "pubkystale-contact"
-
-        authenticateForTesting(
-            publicKey = oldPublicKey,
-            secret = oldSecret,
-            profileName = "Initial Old",
-        )
-        sut.addContact(existingContact.publicKey, existingProfile = existingContact)
-
-        whenever(pubkyService.completeAuth()).thenReturn(Unit)
-        whenever(pubkyService.currentPublicKey()).thenReturn(newPublicKey)
-        val newProfile = createPubkyProfile(name = "New User")
-        whenever(pubkyService.resolveContactProfile(newPublicKey.ensurePubkyPrefixForTest(), true))
-            .thenReturn(createResolution(newPublicKey.ensurePubkyPrefixForTest(), pubkyProfile = newProfile))
-        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(oldSecret)
-        whenever(pubkyService.contactRecords()).thenAnswer {
-            runBlocking {
-                approveAuthForTesting(startAuthForTesting())
-                sut.completeAuthentication()
-            }
-            listOf(createContactRecord(staleContactKey, profile = createPaykitProfile("Stale Contact")))
-        }
-
-        sut.loadContacts()
-
-        val contacts = sut.contacts.value
-        assertEquals(newPublicKey.ensurePubkyPrefixForTest(), sut.publicKey.value)
-        assertTrue(contacts.isEmpty())
-        assertEquals(0L, sut.contactsLoadVersion.value)
     }
 
     @Test

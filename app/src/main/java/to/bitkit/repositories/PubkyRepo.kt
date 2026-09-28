@@ -580,7 +580,11 @@ class PubkyRepo @Inject constructor(
 
     suspend fun loadProfile() {
         val pk = _publicKey.value ?: return
-        if (!loadProfileMutex.tryLock()) return
+        loadProfileMutex.lock()
+        if (_publicKey.value != pk) {
+            loadProfileMutex.unlock()
+            return
+        }
 
         _isLoadingProfile.update { true }
         try {
@@ -867,7 +871,11 @@ class PubkyRepo @Inject constructor(
 
     suspend fun loadContacts() {
         val pk = _publicKey.value ?: return
-        if (!loadContactsMutex.tryLock()) return
+        loadContactsMutex.lock()
+        if (_publicKey.value != pk) {
+            loadContactsMutex.unlock()
+            return
+        }
 
         _isLoadingContacts.update { true }
         var shouldMarkLoadCompleted = false
