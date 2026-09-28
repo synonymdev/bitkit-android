@@ -287,6 +287,40 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `request or pay sheet stays open while paying when the contact stops being eligible`() = test {
+        val paymentStarted = CompletableDeferred<Unit>()
+        val paymentResult = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            paymentStarted.complete(Unit)
+            paymentResult.await()
+        }
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.payContact()
+            paymentStarted.await()
+            eligibleTargets.value = emptyList()
+            advanceUntilIdle()
+
+            assertTrue(sut.uiState.value.showRequestOrPaySheet)
+            assertTrue(sut.uiState.value.isPayLoading)
+
+            paymentResult.complete(Result.success(openedPayment))
+            advanceUntilIdle()
+
+            assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+            assertFalse(sut.uiState.value.isPayLoading)
+        }
+    }
+
+    @Test
     fun `dismissing the sheet while paying cancels the payment`() = test {
         val paymentStarted = CompletableDeferred<Unit>()
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))

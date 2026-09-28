@@ -155,7 +155,7 @@ class ContactDetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         paymentRequestTarget = target,
-                        showRequestOrPaySheet = it.showRequestOrPaySheet && target != null,
+                        showRequestOrPaySheet = it.showRequestOrPaySheet && (target != null || it.isPayLoading),
                     )
                 }
             }

@@ -109,15 +109,16 @@ fun ContactDetailScreen(
 
     val requestOrPayContact = uiState.profile
     val paymentRequestTarget = uiState.paymentRequestTarget
-    if (uiState.showRequestOrPaySheet && requestOrPayContact != null && paymentRequestTarget != null) {
+    if (uiState.showRequestOrPaySheet && requestOrPayContact != null) {
         RequestOrPaySheet(
             contact = requestOrPayContact,
             isPayLoading = uiState.isPayLoading,
+            canRequest = paymentRequestTarget != null,
             onDismiss = { viewModel.dismissRequestOrPaySheet() },
             onPay = { viewModel.payContact() },
             onRequest = {
                 viewModel.dismissRequestOrPaySheet()
-                onRequestPayment(paymentRequestTarget)
+                paymentRequestTarget?.let(onRequestPayment)
             },
         )
     }
@@ -128,6 +129,7 @@ fun ContactDetailScreen(
 private fun RequestOrPaySheet(
     contact: PubkyProfile,
     isPayLoading: Boolean,
+    canRequest: Boolean,
     onDismiss: () -> Unit,
     onPay: () -> Unit,
     onRequest: () -> Unit,
@@ -178,7 +180,7 @@ private fun RequestOrPaySheet(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_request),
                     onClick = onRequest,
-                    enabled = !isPayLoading,
+                    enabled = canRequest && !isPayLoading,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_received),
