@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.Job
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
@@ -68,7 +69,7 @@ import to.bitkit.ui.utils.withAccent
 fun ContactDetailScreen(
     viewModel: ContactDetailViewModel,
     onBackClick: () -> Unit,
-    onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Unit,
+    onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Job?,
     onActivityClick: (String) -> Unit,
     onRequestPayment: (PaykitPaymentRequestTarget) -> Unit = {},
     showDeleteAction: Boolean = false,
@@ -81,8 +82,10 @@ fun ContactDetailScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is ContactDetailEffect.OpenPayment ->
-                    onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext)
+                is ContactDetailEffect.OpenPayment -> {
+                    val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext)
+                    viewModel.onPaymentOpening(scanJob)
+                }
                 ContactDetailEffect.ContactDeleted -> onContactDeleted()
             }
         }

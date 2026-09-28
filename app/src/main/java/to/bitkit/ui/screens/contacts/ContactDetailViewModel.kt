@@ -78,6 +78,7 @@ class ContactDetailViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
 
     private var payJob: Job? = null
+    private var paymentScanJob: Job? = null
     private var paymentRequestTargetRefresh: Deferred<PaykitPaymentRequestTarget?>? = null
     private var paymentRequestTargetCheckedAt: Long? = null
 
@@ -126,7 +127,7 @@ class ContactDetailViewModel @Inject constructor(
     }
 
     fun onClickPay() {
-        if (payJob?.isActive == true) return
+        if (payJob?.isActive == true || _uiState.value.isPayLoading) return
         payJob = viewModelScope.launch {
             _uiState.update { it.copy(isPayLoading = true) }
             val target = _uiState.value.paymentRequestTarget ?: awaitPaymentRequestTarget()
@@ -136,21 +137,33 @@ class ContactDetailViewModel @Inject constructor(
                 }
                 return@launch
             }
-            openPayment()
-            _uiState.update { it.copy(isPayLoading = false) }
+            if (!openPayment()) _uiState.update { it.copy(isPayLoading = false) }
         }
     }
 
     fun dismissRequestOrPaySheet() {
-        if (_uiState.value.isPayLoading) payJob?.cancel()
+        if (_uiState.value.isPayLoading) {
+            payJob?.cancel()
+            paymentScanJob?.cancel()
+            paymentScanJob = null
+        }
         _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
     }
 
     fun payContact() {
-        if (payJob?.isActive == true) return
+        if (payJob?.isActive == true || _uiState.value.isPayLoading) return
         payJob = viewModelScope.launch {
             _uiState.update { it.copy(isPayLoading = true) }
-            openPayment()
+            if (!openPayment()) _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
+        }
+    }
+
+    fun onPaymentOpening(scanJob: Job?) {
+        paymentScanJob = scanJob
+        viewModelScope.launch {
+            scanJob?.join()
+            if (paymentScanJob !== scanJob) return@launch
+            paymentScanJob = null
             _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
         }
     }
@@ -192,11 +205,13 @@ class ContactDetailViewModel @Inject constructor(
         return clock.nowMs() - checkedAt < PAYMENT_REQUEST_TARGET_REUSE.inWholeMilliseconds
     }
 
-    private suspend fun openPayment() {
+    private suspend fun openPayment(): Boolean {
+        var isOpened = false
         privatePaykitRepo.beginSavedContactPayment(publicKey)
             .onSuccess {
                 when (it) {
-                    is PublicPaykitPaymentResult.Opened ->
+                    is PublicPaykitPaymentResult.Opened -> {
+                        isOpened = true
                         _effects.emit(
                             ContactDetailEffect.OpenPayment(
                                 it.paymentRequest,
@@ -204,6 +219,7 @@ class ContactDetailViewModel @Inject constructor(
                                 it.privatePaymentContext,
                             )
                         )
+                    }
                     PublicPaykitPaymentResult.NoEndpoint ->
                         showPayError(R.string.slashtags__error_pay_empty_msg)
                     PublicPaykitPaymentResult.NotOpened ->
@@ -216,6 +232,7 @@ class ContactDetailViewModel @Inject constructor(
                 Logger.warn("Failed to begin Paykit payment for '$redactedPublicKey'", it, context = TAG)
                 showPayError(R.string.slashtags__error_pay_not_opened_msg)
             }
+        return isOpened
     }
 
     private suspend fun showPayError(messageRes: Int) {

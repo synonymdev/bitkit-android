@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -342,8 +343,40 @@ class ContactDetailViewModelTest : BaseUnitTest() {
             advanceUntilIdle()
 
             assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            assertTrue(sut.uiState.value.showRequestOrPaySheet)
+            sut.onPaymentOpening(null)
+            advanceUntilIdle()
+
             assertFalse(sut.uiState.value.showRequestOrPaySheet)
             assertFalse(sut.uiState.value.isPayLoading)
+        }
+    }
+
+    @Test
+    fun `dismissing the sheet while the amount screen opens cancels the scan`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.payContact()
+            advanceUntilIdle()
+            assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            val scanJob = Job()
+            sut.onPaymentOpening(scanJob)
+
+            sut.dismissRequestOrPaySheet()
+            advanceUntilIdle()
+
+            assertTrue(scanJob.isCancelled)
+            assertFalse(sut.uiState.value.isPayLoading)
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
         }
     }
 
@@ -418,8 +451,15 @@ class ContactDetailViewModelTest : BaseUnitTest() {
             advanceUntilIdle()
 
             assertFalse(sut.uiState.value.showRequestOrPaySheet)
-            assertFalse(sut.uiState.value.isPayLoading)
             assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            assertTrue(sut.uiState.value.isPayLoading)
+
+            val scanJob = Job()
+            sut.onPaymentOpening(scanJob)
+            scanJob.complete()
+            advanceUntilIdle()
+
+            assertFalse(sut.uiState.value.isPayLoading)
         }
     }
 
@@ -440,6 +480,16 @@ class ContactDetailViewModelTest : BaseUnitTest() {
 
             val effect = assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
             assertEquals(openedPayment.paymentRequest, effect.paymentRequest)
+            val scanJob = Job()
+            sut.onPaymentOpening(scanJob)
+            advanceUntilIdle()
+
+            assertTrue(sut.uiState.value.showRequestOrPaySheet)
+            assertTrue(sut.uiState.value.isPayLoading)
+
+            scanJob.complete()
+            advanceUntilIdle()
+
             assertFalse(sut.uiState.value.showRequestOrPaySheet)
             assertFalse(sut.uiState.value.isPayLoading)
         }
