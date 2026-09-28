@@ -137,12 +137,11 @@ class ContactDetailViewModel @Inject constructor(
     }
 
     fun payContact() {
-        _uiState.update { it.copy(showRequestOrPaySheet = false) }
         if (payJob?.isActive == true) return
         payJob = viewModelScope.launch {
             _uiState.update { it.copy(isPayLoading = true) }
             openPayment()
-            _uiState.update { it.copy(isPayLoading = false) }
+            _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
         }
     }
 

@@ -112,6 +112,7 @@ fun ContactDetailScreen(
     if (uiState.showRequestOrPaySheet && requestOrPayContact != null && paymentRequestTarget != null) {
         RequestOrPaySheet(
             contact = requestOrPayContact,
+            isPayLoading = uiState.isPayLoading,
             onDismiss = { viewModel.dismissRequestOrPaySheet() },
             onPay = { viewModel.payContact() },
             onRequest = {
@@ -126,6 +127,7 @@ fun ContactDetailScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun RequestOrPaySheet(
     contact: PubkyProfile,
+    isPayLoading: Boolean,
     onDismiss: () -> Unit,
     onPay: () -> Unit,
     onRequest: () -> Unit,
@@ -163,6 +165,7 @@ private fun RequestOrPaySheet(
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
                     onClick = onPay,
+                    isLoading = isPayLoading,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_sent),
@@ -175,6 +178,7 @@ private fun RequestOrPaySheet(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_request),
                     onClick = onRequest,
+                    enabled = !isPayLoading,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_received),
@@ -309,7 +313,7 @@ private fun ContactBody(
                 ActionButton(
                     onClick = onClickPay,
                     iconRes = R.drawable.ic_coins,
-                    enabled = !isPayLoading,
+                    isLoading = isPayLoading,
                     modifier = Modifier.testTag("ContactPay")
                 )
             }
