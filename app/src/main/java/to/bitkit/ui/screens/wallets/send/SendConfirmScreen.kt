@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,7 +73,6 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
@@ -834,6 +834,7 @@ private fun PaymentRequestSummary(
 ) {
     val profile = uiState.contactPaymentProfile ?: return
     val note = uiState.oneOffPaymentRequestNote
+    val noteColor = if (note != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -850,20 +851,17 @@ private fun PaymentRequestSummary(
                 testTag = "PaymentRequestFrom",
             )
         }
-        if (note != null) {
-            SendCell(
-                caption = stringResource(R.string.wallet__payment_request_for),
-                modifier = Modifier.weight(1f)
-            ) {
-                PaymentRequestSummaryValue(
-                    text = note,
-                    icon = R.drawable.ic_note,
-                    iconColor = iconColor,
-                    testTag = "PaymentRequestFor",
-                )
-            }
-        } else {
-            FillWidth()
+        SendCell(
+            caption = stringResource(R.string.wallet__payment_request_for),
+            modifier = Modifier.weight(1f)
+        ) {
+            PaymentRequestSummaryValue(
+                text = note ?: stringResource(R.string.wallet__payment_request_not_specified),
+                textColor = noteColor,
+                icon = R.drawable.ic_note,
+                iconColor = iconColor,
+                testTag = "PaymentRequestFor",
+            )
         }
     }
 }
@@ -875,6 +873,7 @@ private fun PaymentRequestSummaryValue(
     iconColor: Color,
     testTag: String,
     modifier: Modifier = Modifier,
+    textColor: Color = MaterialTheme.colorScheme.primary,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -889,6 +888,7 @@ private fun PaymentRequestSummaryValue(
         )
         BodySSB(
             text = text,
+            color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.testTag(testTag)
