@@ -348,7 +348,21 @@ Refresh `.ai/slack-release-{newVersionName}.md` with finalized values.
 git checkout master
 ```
 
-### 10. Output Summary
+### 10. Required Release Handoffs
+
+These follow-ups happen after the relevant release milestone; do not run them early just because the release branch and tag exist.
+
+1. After the Android and iOS `release-{newVersionName}` branches are staging or migration green, switch to `bitkit-e2e-tests` and run:
+
+   ```text
+   /archive-release {newVersionName}
+   ```
+
+   This archives the validated regtest APK and iOS simulator build. In the same E2E follow-up, update the released platform entry in `config/migration-baselines.json` to `{newVersionName}` and record the uploaded asset checksum in `config/migration-checksums.json`. Open and merge that E2E change so the next release tests migration from the actual previous release.
+
+2. After the store release is live, switch to the shared `bitkit` repository and run `/updater` for Android (or Both when both platforms shipped). Confirm the published updater JSON before considering the release complete.
+
+### 11. Output Summary
 
 ```
 Release v{newVersionName} (build {newVersionCode})
@@ -372,4 +386,6 @@ Next steps:
 - Submit to Play Store when QA passes
 - Publish the draft release on GitHub after store release
 - Merge release branch PR into master
+- After staging/migration is green: run `/archive-release {newVersionName}` from `bitkit-e2e-tests`, then update its migration baseline and checksum
+- After the store release is live: run `/updater` from the shared `bitkit` repository
 ```
