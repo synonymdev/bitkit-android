@@ -1,0 +1,30 @@
+<journey name="paykit on by default">
+  <description>
+    Verifies a new wallet shows Paykit without any change in Dev Settings, and that the Dev Settings
+    switch still turns Paykit off and back on.
+    Precondition: a fresh install of the dev build, onboarded with a new wallet, Dev Settings never
+    opened. Start on the wallet home screen. Toasts never appear in `android layout`; assert them
+    from a screenshot taken right after the tap.
+  </description>
+  <actions>
+    <action>Verify the profile button (testTag "ProfileButton") is visible in the home header</action>
+    <action>Tap the menu icon (testTag "HeaderMenu")</action>
+    <action>Verify Subscriptions (testTag "DrawerSubscriptions") is visible in the drawer</action>
+    <action>Tap Settings (testTag "DrawerSettings")</action>
+    <action>Tap the Advanced tab (testTag "Tab-advanced")</action>
+    <action>Tap Dev Settings (testTag "DevSettings")</action>
+    <action>Scroll to the PAYKIT section and verify the Enable Paykit UI switch (testTag "PaykitUiToggle") is on</action>
+    <action>Tap the Enable Paykit UI switch (testTag "PaykitUiToggle")</action>
+    <action>Verify the "Paykit UI disabled" toast (testTag "PaykitUiDisabledToast") appears and the switch is off</action>
+    <action>Tap back (testTag "NavigationBack") until the wallet home screen is visible</action>
+    <action>Verify the profile button (testTag "ProfileButton") is not visible</action>
+    <action>Tap the menu icon (testTag "HeaderMenu")</action>
+    <action>Verify Subscriptions (testTag "DrawerSubscriptions") is not visible in the drawer</action>
+    <action>Tap Settings (testTag "DrawerSettings"), then the Advanced tab (testTag "Tab-advanced"), then Dev Settings (testTag "DevSettings")</action>
+    <action>Scroll to the PAYKIT section and tap the Enable Paykit UI switch (testTag "PaykitUiToggle")</action>
+    <action>Tap Enable in the "Enable Paykit UI?" dialog</action>
+    <action>Verify the "Paykit UI enabled" toast (testTag "PaykitUiEnabledToast") appears and the switch is on</action>
+    <action>Tap back (testTag "NavigationBack") until the wallet home screen is visible</action>
+    <action>Verify the profile button (testTag "ProfileButton") is visible</action>
+  </actions>
+</journey>
