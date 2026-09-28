@@ -31,6 +31,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactDetailViewModelTest : BaseUnitTest() {
@@ -42,6 +45,10 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo = mock()
+    private var now = Instant.fromEpochSeconds(1_800_000_000)
+    private val clock = object : Clock {
+        override fun now() = now
+    }
     private val eligibleTargets = MutableStateFlow<List<PaykitPaymentRequestTarget>>(emptyList())
     private val target = PaykitPaymentRequestTarget(TEST_PUBLIC_KEY, "bitkit/wallet")
     private val openedPayment = PublicPaykitPaymentResult.Opened(
@@ -247,12 +254,31 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        verify(paykitPaymentRequestRepo, times(2)).refreshEligibleTarget(TEST_PUBLIC_KEY)
+        verify(paykitPaymentRequestRepo, times(1)).refreshEligibleTarget(TEST_PUBLIC_KEY)
         assertTrue(sut.uiState.value.showRequestOrPaySheet)
     }
 
     @Test
-    fun `pay tap rechecks eligibility after an earlier check found none`() = test {
+    fun `pay tap reuses a recent check that found no request support`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(null))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+        now += 10.seconds
+
+        sut.effects.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+
+            assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            verify(paykitPaymentRequestRepo, times(1)).refreshEligibleTarget(TEST_PUBLIC_KEY)
+        }
+    }
+
+    @Test
+    fun `pay tap rechecks eligibility once an earlier empty check is stale`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
         whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
             .thenReturn(Result.success(null), Result.success(target))
@@ -260,6 +286,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(openedPayment))
         val sut = createSut()
         advanceUntilIdle()
+        now += 31.seconds
 
         sut.onClickPay()
         advanceUntilIdle()
@@ -441,6 +468,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         paykitPaymentRequestRepo = paykitPaymentRequestRepo.also {
             whenever(it.eligibleTargets).thenReturn(eligibleTargets)
         },
+        clock = clock,
         savedStateHandle = SavedStateHandle(mapOf("publicKey" to TEST_PUBLIC_KEY)),
     )
 

@@ -25,6 +25,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
+import to.bitkit.ext.nowMs
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
@@ -39,6 +40,7 @@ import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("TooManyFunctions")
@@ -48,6 +50,7 @@ class ContactDetailViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
+    private val clock: Clock,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -56,6 +59,9 @@ class ContactDetailViewModel @Inject constructor(
 
         /** How long a Pay tap waits for the payment request check before falling back to paying. */
         private val PAYMENT_REQUEST_TARGET_WAIT = 2.seconds
+
+        /** How long a finished payment request check is reused before Pay checks again. */
+        private val PAYMENT_REQUEST_TARGET_REUSE = 30.seconds
     }
 
     private val publicKey: String = checkNotNull(
@@ -73,6 +79,7 @@ class ContactDetailViewModel @Inject constructor(
 
     private var payJob: Job? = null
     private var paymentRequestTargetRefresh: Deferred<PaykitPaymentRequestTarget?>? = null
+    private var paymentRequestTargetCheckedAt: Long? = null
 
     init {
         loadContact()
@@ -170,12 +177,19 @@ class ContactDetailViewModel @Inject constructor(
     }
 
     private fun refreshPaymentRequestTarget(): Deferred<PaykitPaymentRequestTarget?> {
-        paymentRequestTargetRefresh?.takeIf { it.isActive }?.let { return it }
+        paymentRequestTargetRefresh?.takeIf { it.isActive || isPaymentRequestTargetCheckRecent() }?.let { return it }
+        paymentRequestTargetCheckedAt = null
         return viewModelScope.async {
             val isSaved = pubkyRepo.contacts.value.any { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
             if (!isSaved) return@async null
             paykitPaymentRequestRepo.refreshEligibleTarget(publicKey).getOrNull()
+                .also { paymentRequestTargetCheckedAt = clock.nowMs() }
         }.also { paymentRequestTargetRefresh = it }
+    }
+
+    private fun isPaymentRequestTargetCheckRecent(): Boolean {
+        val checkedAt = paymentRequestTargetCheckedAt ?: return false
+        return clock.nowMs() - checkedAt < PAYMENT_REQUEST_TARGET_REUSE.inWholeMilliseconds
     }
 
     private suspend fun openPayment() {
