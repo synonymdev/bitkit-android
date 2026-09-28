@@ -378,6 +378,8 @@ class PubkyRepo @Inject constructor(
                 _publicKey.update { pk }
                 _authState.update { PubkyAuthState.Authenticated }
                 shouldRevokeSessionOnFailure = false
+                initializeMutex.unlock()
+                isInitializationLocked = false
                 Logger.info("Completed pubky auth for '${redacted(pk)}'", context = TAG)
                 loadProfile()
                 loadContacts()

@@ -536,6 +536,41 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wipe completes while completed authentication profile loading remains in flight`() = test {
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        val finishProfileLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenReturn(Unit)
+        whenever(pubkyService.currentPublicKey()).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            finishProfileLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+
+        val authRequest = startAuthForTesting()
+        approveAuthForTesting(authRequest)
+        val completion = async { sut.completeAuthentication() }
+        profileLoadStarted.await()
+        clearInvocations(pubkyStore)
+
+        try {
+            val wipe = async { sut.wipeLocalState() }
+            wipe.await()
+
+            assertFalse(completion.isCompleted)
+            assertNull(sut.publicKey.value)
+        } finally {
+            finishProfileLoad.complete(Unit)
+        }
+        assertTrue(completion.await().isSuccess)
+
+        assertNull(sut.profile.value)
+        assertTrue(sut.contacts.value.isEmpty())
+        verify(pubkyStore).reset()
+    }
+
+    @Test
     fun `cancelAuthentication should reset state to idle`() = test {
         whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         sut.startAuthentication()

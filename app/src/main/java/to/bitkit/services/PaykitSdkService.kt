@@ -991,7 +991,6 @@ class PaykitSdkService @Inject constructor(
     }
 
     private suspend fun currentSdkStatePublicKeyLocked(): String? {
-        // Read the persisted owner without restoring the grant we are about to replace.
         sessionProvider.suspendStoredSessionAccess()
         return try {
             handle().identityStatus()?.publicKey
