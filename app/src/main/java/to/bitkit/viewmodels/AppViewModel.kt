@@ -123,8 +123,6 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyContactLink
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.models.PubkyRingAuthCallback
-import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.models.Suggestion
@@ -543,6 +541,18 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            pubkyRepo.adoptedSourceLost.collect { lost ->
+                if (lost) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__source_lost),
+                    )
+                    mainScreenEffect(MainScreenEffect.NavigateToPubkyChoice)
+                    pubkyRepo.clearAdoptedSourceLost()
+                }
+            }
+        }
         observeReceiveSheetInvoice()
         observeLdkNodeEvents()
         observeLightningUsableChannels()
@@ -656,6 +666,10 @@ class AppViewModel @Inject constructor(
 
     fun refreshPrivatePaykitEndpoints() {
         viewModelScope.launch { refreshPrivatePaykitEndpointsIfEnabled("foreground") }
+    }
+
+    fun checkAdoptedPubkySource() {
+        viewModelScope.launch { pubkyRepo.checkAdoptedSource() }
     }
 
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
@@ -5662,12 +5676,6 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        PubkyRingAuthCallback.parse(uri)?.let {
-            if (!isPaykitEnabled.value) return@launch
-            handlePubkyRingAuthCallback(it)
-            return@launch
-        }
-
         if (PubkyAuthRequest.isProtocolUrl(value)) {
             launchScan(
                 source = ScanSource.DEEPLINK,
@@ -5716,7 +5724,8 @@ class AppViewModel @Inject constructor(
         if (!isSignup && !pubkyRepo.hasSecretKey()) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.profile__auth_approval_ring_only),
+                title = context.getString(R.string.pubky_auth__use_ring),
+                description = context.getString(R.string.pubky_auth__use_ring_desc),
             )
             return
         }
@@ -5739,21 +5748,6 @@ class AppViewModel @Inject constructor(
             title = context.getString(R.string.pubky_auth__already_signed_in),
         )
         return true
-    }
-
-    private suspend fun handlePubkyRingAuthCallback(callback: PubkyRingAuthCallback) {
-        when (val result = pubkyRepo.handleAuthCallback(callback)) {
-            is PubkyRingAuthCallbackHandlingResult.TrustedError -> {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__auth_error_title),
-                    description = result.message ?: context.getString(R.string.other__qr_error_text),
-                )
-            }
-            PubkyRingAuthCallbackHandlingResult.Handled,
-            PubkyRingAuthCallbackHandlingResult.Ignored,
-            -> Unit
-        }
     }
 
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
@@ -5977,6 +5971,7 @@ sealed class MainScreenEffect {
         val clearStack: Boolean = false,
     ) : MainScreenEffect()
 
+    data object NavigateToPubkyChoice : MainScreenEffect()
     data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }

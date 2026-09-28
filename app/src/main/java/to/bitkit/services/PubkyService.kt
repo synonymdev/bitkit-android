@@ -40,10 +40,6 @@ class PubkyService @Inject constructor(
         paykitSdkService.importSession(secret).publicKey
     }
 
-    suspend fun importExternalSession(secret: String): String = ServiceQueue.CORE.background {
-        paykitSdkService.importSession(secret, includeLocalSecret = false).publicKey
-    }
-
     suspend fun currentPublicKey(): String? = ServiceQueue.CORE.background {
         paykitSdkService.currentPublicKey()
     }
@@ -54,6 +50,10 @@ class PubkyService @Inject constructor(
 
     suspend fun forgetSessionAccess() = ServiceQueue.CORE.background {
         paykitSdkService.forgetSessionAccess()
+    }
+
+    suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.clearSessionAccess()
     }
 
     suspend fun removeBitkitPaymentEndpoints() = ServiceQueue.CORE.background {
@@ -109,21 +109,8 @@ class PubkyService @Inject constructor(
         Unit
     }
 
-    // endregion
-
-    // region Auth flow (Ring)
-
-    suspend fun startAuth(): String = ServiceQueue.CORE.background {
-        paykitSdkService.startAuth()
-    }
-
-    suspend fun completeAuth(): Unit = ServiceQueue.CORE.background {
-        paykitSdkService.completeAuth()
-        Unit
-    }
-
-    suspend fun cancelAuth() = ServiceQueue.CORE.background {
-        paykitSdkService.cancelAuth()
+    suspend fun hasIdentityRecord(publicKey: String): Boolean = ServiceQueue.CORE.background {
+        paykitSdkService.hasIdentityRecord(publicKey)
     }
 
     // endregion
