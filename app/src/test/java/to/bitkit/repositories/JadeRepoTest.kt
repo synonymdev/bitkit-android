@@ -259,6 +259,43 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pairing a jade restored with another seed drops the old seed's wallet`() = test {
+        val knownBle = knownUsb.copy(
+            id = "jade:bluetooth:$EFUSE_MAC",
+            path = STALE_BLE_PATH,
+            transportType = TransportType.BLUETOOTH,
+        )
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb, knownBle))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport(xpub = "zpubOther"))
+        val sut = createRepo()
+        sut.scan()
+
+        sut.connect(USB_PATH).getOrThrow()
+
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull(), eq(HwWalletVendor.BLOCKSTREAM))
+        assertEquals(listOf("zpubOther"), captor.firstValue.single().xpubs.values.toList())
+    }
+
+    @Test
+    fun `pairing a jade in a temporary session keeps the stored seed's wallet`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.TEMP))
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport(xpub = "zpubOther"))
+        val sut = createRepo()
+        sut.scan()
+
+        sut.connect(USB_PATH).getOrThrow()
+
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull(), eq(HwWalletVendor.BLOCKSTREAM))
+        assertEquals(setOf("zpubNS", "zpubOther"), captor.firstValue.flatMap { it.xpubs.values }.toSet())
+    }
+
+    @Test
     fun `reconnecting a known jade rejects a different device`() = test {
         whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
         whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))

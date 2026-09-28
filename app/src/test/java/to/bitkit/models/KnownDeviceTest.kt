@@ -70,6 +70,30 @@ class KnownDeviceTest {
     }
 
     @Test
+    fun `a jade entry holds another seed only when the same hardware shares none of its keys`() {
+        val stored = KnownDevice(
+            id = "jade:serial:aabbcc",
+            name = null,
+            path = "/dev/bus/usb/001/004",
+            transportType = TransportType.USB,
+            label = null,
+            model = "Jade",
+            lastConnectedAt = 1L,
+            xpubs = mapOf("nativeSegwit" to "zpub"),
+            vendor = HwWalletVendor.BLOCKSTREAM,
+            jadeDeviceId = "aabbcc",
+        )
+        val reseeded = stored.copy(xpubs = mapOf("nativeSegwit" to "other"))
+        val reread = stored.copy(xpubs = mapOf("nativeSegwit" to "zpub", "taproot" to "tr"))
+        val otherJade = reseeded.copy(jadeDeviceId = "ddeeff")
+
+        assertTrue(stored.holdsOtherSeedThan(reseeded))
+        assertFalse(stored.holdsOtherSeedThan(reread))
+        assertFalse(stored.holdsOtherSeedThan(otherJade))
+        assertFalse(stored.copy(xpubs = emptyMap()).holdsOtherSeedThan(reseeded))
+    }
+
+    @Test
     fun `wallet ids are derived in the vendor namespace`() {
         val xpubs = mapOf("nativeSegwit" to "zpub")
 

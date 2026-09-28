@@ -64,8 +64,9 @@ internal fun walletKey(xpubs: Map<String, String>, fallback: String): String =
  * Whether a stored entry gives way to the one just read. That covers the identity it holds and the
  * entry this connect refreshed, since reading a previously rejected address type changes the
  * walletKey and matching on the new key alone would leave the old entry behind as a duplicate.
- * Wallets of a seed the device no longer carries go too: nothing would ever supersede them by key
- * material. An unknown device id proves nothing, so those entries are left alone.
+ * Wallets of a seed the device no longer carries go too when its device id changes on a wipe, as a
+ * Trezor's does: nothing would ever supersede them by key material. An unknown device id proves
+ * nothing, so those entries are left alone.
  */
 internal fun KnownDevice.isReplacedBy(known: KnownDevice, refreshed: KnownDevice?): Boolean {
     if (vendor != known.vendor) return false
@@ -73,6 +74,17 @@ internal fun KnownDevice.isReplacedBy(known: KnownDevice, refreshed: KnownDevice
     if (walletKey == known.walletKey) return true
     if (refreshed != null && walletKey == refreshed.walletKey) return true
     return known.hardwareId != null && hardwareId != null && hardwareId != known.hardwareId
+}
+
+/**
+ * Whether this entry was read from the same hardware as [known] yet shares none of its keys. The device
+ * then holds another seed or passphrase than the one this entry was paired with.
+ */
+internal fun KnownDevice.holdsOtherSeedThan(known: KnownDevice): Boolean {
+    if (vendor != known.vendor) return false
+    val hardwareId = hardwareId?.takeIf { it.isNotBlank() } ?: return false
+    if (hardwareId != known.hardwareId) return false
+    return xpubs.isNotEmpty() && xpubs.values.none { it in known.xpubs.values }
 }
 
 internal fun deriveHardwareWalletId(xpubs: Map<String, String>, vendor: HwWalletVendor): String? =
