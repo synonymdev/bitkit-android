@@ -23,6 +23,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwReceiveAddressMismatchError
+import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.HwErrorPresenter
@@ -207,6 +208,11 @@ class HwReceiveViewModel @Inject constructor(
             generateSequence(error) { it.cause }.any { it is HwPassphraseRequiredError } -> {
                 _uiState.update { it.copy(isPassphraseRequired = true) }
             }
+            generateSequence(error) { it.cause }.any { it is HwWalletMismatchError } -> ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = context.getString(R.string.hardware__wallet_mismatch),
+            )
             error.isHwDeviceBusy() -> ToastEventBus.send(
                 type = Toast.ToastType.INFO,
                 title = HwErrorPresenter.userMessage(context, error),
