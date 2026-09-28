@@ -52,15 +52,15 @@ import to.bitkit.ext.isTrezorSessionFailure
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
-import to.bitkit.models.BITCOIN_SYMBOL
-import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatMoney
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
@@ -389,34 +389,9 @@ class TransferViewModel @Inject constructor(
             context = TAG,
         )
 
-        val payable = shown.withFundingPlan(plan, feeSat = order.feeSat)
-        val shownTotal = shown.confirmLeavingAmountSats
-        val payableTotal = payable.confirmLeavingAmountSats
-        if (payableTotal > shownTotal) {
-            Logger.info("Waiting for another swipe, total rose from '$shownTotal' to '$payableTotal'", context = TAG)
-            _spendingUiState.update { it.withFundingPlan(plan, feeSat = order.feeSat) }
-            sendFeesChangedToast(
-                isServiceFee = order.feeSat > shown.feeSat,
-                delta = payableTotal.safe() - shownTotal.safe(),
-            )
-            return false
-        }
-        if (payableTotal != shownTotal) {
-            Logger.info("Paying rebuilt plan, total changed from '$shownTotal' to '$payableTotal'", context = TAG)
-        }
+        if (holdForFeesChange(order, shown, plan)) return false
 
-        if (plan.shouldUseSendAll && plan.maxSendable < order.feeSat) {
-            Logger.error(
-                "Insufficient balance for transfer: maxSendable=${plan.maxSendable}, " +
-                    "orderFee=${order.feeSat}",
-                context = TAG,
-            )
-            ToastEventBus.send(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__pay_insufficient_savings),
-            )
-            return false
-        }
+        if (isSendAllBelowOrderFee(order, plan)) return false
 
         val address = order.payment?.onchain?.address.orEmpty()
         return lightningRepo
@@ -446,6 +421,45 @@ class TransferViewModel @Inject constructor(
             }
             .onFailure { ToastEventBus.send(it) }
             .isSuccess
+    }
+
+    private suspend fun isSendAllBelowOrderFee(order: IBtOrder, plan: SpendingConfirmFundingPlan): Boolean {
+        if (!plan.shouldUseSendAll || plan.maxSendable >= order.feeSat) return false
+
+        Logger.error(
+            "Insufficient balance for transfer: maxSendable=${plan.maxSendable}, " +
+                "orderFee=${order.feeSat}",
+            context = TAG,
+        )
+        ToastEventBus.send(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__pay_insufficient_savings),
+        )
+        return true
+    }
+
+    private suspend fun holdForFeesChange(
+        order: IBtOrder,
+        shown: TransferToSpendingUiState,
+        plan: SpendingConfirmFundingPlan,
+    ): Boolean {
+        val payable = shown.withFundingPlan(plan, feeSat = order.feeSat)
+        val shownTotal = shown.confirmLeavingAmountSats
+        val payableTotal = payable.confirmLeavingAmountSats
+        if (payableTotal > shownTotal) {
+            Logger.info("Waiting for another swipe, total rose from '$shownTotal' to '$payableTotal'", context = TAG)
+            _spendingUiState.update { it.withFundingPlan(plan, feeSat = order.feeSat) }
+            sendFeesChangedToast(
+                isServiceFee = order.feeSat > shown.feeSat,
+                delta = payableTotal.safe() - shownTotal.safe(),
+            )
+            return true
+        }
+        if (payableTotal != shownTotal) {
+            Logger.info("Paying rebuilt plan, total changed from '$shownTotal' to '$payableTotal'", context = TAG)
+        }
+
+        return false
     }
 
     private suspend fun sendFeesChangedToast(isServiceFee: Boolean, delta: ULong) {
