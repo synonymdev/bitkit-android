@@ -747,6 +747,35 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `single recipient refresh is not overwritten by an older full refresh`() = test {
+        val fullLookupStarted = CompletableDeferred<Unit>()
+        val releaseFullLookup = CompletableDeferred<Unit>()
+        var lookups = 0
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+            lookups += 1
+            if (lookups > 1) return@doSuspendableAnswer emptyList()
+            fullLookupStarted.complete(Unit)
+            releaseFullLookup.await()
+            listOf(PaykitReceiverPaths.SERVER)
+        }
+
+        val fullRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
+        fullLookupStarted.await()
+        val singleRefresh = async { sut.refreshEligibleTarget(COUNTERPARTY) }
+        runCurrent()
+        releaseFullLookup.complete(Unit)
+        fullRefresh.await().getOrThrow()
+        val target = singleRefresh.await().getOrThrow()
+
+        assertNull(target)
+        assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
     fun `recipient discovery retries capabilities that are not published yet`() = test {
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.linkedPeers()).thenReturn(
