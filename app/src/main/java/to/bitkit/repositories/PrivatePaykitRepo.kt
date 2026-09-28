@@ -582,7 +582,7 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
     private suspend fun beginSavedContactPaymentWithRetry(publicKey: String): PublicPaykitPaymentResult {
-        refreshPrivateEndpointsBeforePayment(publicKey)
+        retryScope.launch { refreshPrivateEndpointsBeforePayment(publicKey) }
         var result = beginContactPayment(publicKey, paymentRequest = null).getOrThrow()
         for (retryDelay in privatePaymentResolutionRetryDelays) {
             if (result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList) return result

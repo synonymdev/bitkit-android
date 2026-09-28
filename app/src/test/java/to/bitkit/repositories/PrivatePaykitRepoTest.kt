@@ -63,6 +63,7 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -1189,6 +1190,34 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             result,
         )
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment does not wait for the local endpoint publish`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        val publishStarted = CompletableDeferred<Unit>()
+        val stalledPublish = CompletableDeferred<Unit>()
+        whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }.doSuspendableAnswer {
+            publishStarted.complete(Unit)
+            stalledPublish.await()
+            privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY))
+        }
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertIs<PublicPaykitPaymentResult.Opened>(result)
+        publishStarted.await()
+        stalledPublish.complete(Unit)
     }
 
     @Test
