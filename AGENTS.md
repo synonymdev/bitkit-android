@@ -37,6 +37,19 @@ The reviewer may use the same model as the implementation agent. A separate cont
 recommendation; using a different model is not required. If subagents are unavailable, use a separate
 review session when practical. Do not describe a self-review as an independent review.
 
+### Review summary metadata
+
+AI reviewers should end each review summary with `Reviewer model: <model name>` and
+`Reasoning effort: <effort>` on separate lines, including reviews with no findings. Include this
+footer once per review, not on each inline comment. It describes that review round and complements
+the PR's Models used section; it is informational, not an approval or quality claim.
+
+Use the model and effort actually used for the review, checking available session/run metadata
+first. Use `Unknown` for an unrecorded model or effort, and `Not exposed` for a reasoning setting
+the tool does not expose. Never copy the implementation model or infer settings from tool names.
+If multiple model/effort combinations contributed, list each pair in the footer. Unassisted human
+reviews do not need it; AI-assisted human reviews should identify the AI model and effort used.
+
 ### Models used
 
 Include `### Models used` in the PR body with `Planning/scoping`, `Implementation`, and one
