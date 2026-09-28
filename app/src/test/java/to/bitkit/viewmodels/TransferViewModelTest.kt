@@ -45,6 +45,7 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
@@ -1104,12 +1105,13 @@ class TransferViewModelTest : BaseUnitTest() {
 
         quoteOrder(order)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
         assertEquals(true, sut.spendingUiState.value.isConfirmPaying)
         assertTrue(fundingPaidEmitted)
-        verify(lightningRepo).selectUtxosWithAlgorithm(
+        verify(lightningRepo, atLeastOnce()).selectUtxosWithAlgorithm(
             targetAmountSats = eq(order.feeSat),
             satsPerVByte = any(),
             algorithm = eq(CoinSelectionAlgorithm.LARGEST_FIRST),
@@ -1148,6 +1150,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         quoteOrder(order)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
@@ -1212,6 +1215,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         quoteOrder(order)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
@@ -1255,6 +1259,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
         stubSendOnChainSuccess()
+        prepareConfirm()
 
         sut.onTransferToSpendingConfirm()
         runCurrent()
@@ -1300,6 +1305,7 @@ class TransferViewModelTest : BaseUnitTest() {
         ).thenReturn(Result.failure(AppError("Coin selection failed")), Result.success(TXID))
         quoteOrder(order)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         sut.onTransferToSpendingConfirm()
@@ -1326,6 +1332,7 @@ class TransferViewModelTest : BaseUnitTest() {
         quoteOrder(estimate)
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(createdOrder))
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
@@ -1354,6 +1361,98 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingConfirm pays on the first swipe when the plan matches the screen`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(listOf(stubUtxo(110_000uL))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        stubSendOnChainSuccess()
+        quoteOrder(order)
+        prepareConfirm()
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm waits for another swipe when the mining fee changes after confirming`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(listOf(stubUtxo(110_000uL))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        stubSendOnChainSuccess()
+        quoteOrder(order)
+        prepareConfirm()
+        assertEquals(99_000uL, sut.spendingUiState.value.confirmLeavingAmountSats)
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(2_000uL))
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        val shown = sut.spendingUiState.value
+        assertFalse(shown.isConfirmPaying)
+        assertTrue(shown.isConfirmFeeReady)
+        assertEquals(2_000uL, shown.miningFeeSats)
+        assertEquals(100_000uL, shown.confirmLeavingAmountSats)
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm waits for another swipe when the created order costs less`() = test {
+        val estimate = spendingOrder(feeSat = 98_000uL)
+        val createdOrder = estimate.copy(
+            feeSat = 97_000uL,
+            serviceFeeSat = estimate.serviceFeeSat - 1_000uL,
+        )
+        stubSpendableBalances(spendable = 110_000uL)
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(listOf(stubUtxo(110_000uL))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        stubSendOnChainSuccess()
+        quoteOrder(estimate)
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(createdOrder))
+        prepareConfirm()
+        assertEquals(99_000uL, sut.spendingUiState.value.confirmLeavingAmountSats)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        val shown = sut.spendingUiState.value
+        assertFalse(shown.isConfirmPaying)
+        assertEquals(createdOrder.feeSat, shown.feeSat)
+        assertEquals(98_000uL, shown.confirmLeavingAmountSats)
+        verifySendOnChain(sats = createdOrder.feeSat, count = 0)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = createdOrder.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(createdOrder.id, TXID)
+    }
+
+    @Test
     fun `a new quote does not reuse an unpaid order from the previous confirmation`() = test {
         val estimate = spendingOrder(feeSat = 98_000uL)
         val firstOrder = estimate.copy(
@@ -1373,6 +1472,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(blocktankRepo.createOrder(any(), any(), any()))
             .thenReturn(Result.success(firstOrder), Result.success(nextOrder))
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         assertEquals(firstOrder, sut.spendingUiState.value.order)
@@ -1380,6 +1480,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onConfirmAmount(estimate.clientBalanceSat.toLong())
         advanceUntilIdle()
         assertNull(sut.spendingUiState.value.order)
+        prepareConfirm()
 
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
@@ -1397,6 +1498,7 @@ class TransferViewModelTest : BaseUnitTest() {
         stubSendOnChainSuccess()
         quoteOrder(paidOrder)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         verify(cacheStore).addPaidOrder(eq(paidOrder.id), eq(TXID))
@@ -1471,6 +1573,7 @@ class TransferViewModelTest : BaseUnitTest() {
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
         quoteOrder(order)
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         assertEquals(order, sut.spendingUiState.value.order)
@@ -2838,6 +2941,27 @@ class TransferViewModelTest : BaseUnitTest() {
                 ),
             ),
         )
+    }
+
+    private suspend fun verifySendOnChain(sats: ULong, count: Int) {
+        verify(lightningRepo, times(count)).sendOnChain(
+            address = any(),
+            sats = eq(sats),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+        )
+    }
+
+    private fun TestScope.prepareConfirm() {
+        sut.prepareSpendingConfirmFunding()
+        advanceUntilIdle()
     }
 
     private suspend fun TestScope.quoteOrder(order: IBtOrder, viewModel: TransferViewModel = sut) {

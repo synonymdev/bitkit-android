@@ -287,14 +287,7 @@ class TransferViewModel @Inject constructor(
             buildSpendingConfirmFundingPlan(target)
                 .onSuccess { plan ->
                     spendingConfirmFundingPlan = plan
-                    _spendingUiState.update {
-                        it.copy(
-                            isConfirmFeeReady = true,
-                            miningFeeSats = plan.miningFeeSats,
-                            shouldUseSendAll = plan.shouldUseSendAll,
-                            spendableBalance = plan.spendableBalance,
-                        )
-                    }
+                    _spendingUiState.update { it.withFundingPlan(plan) }
                 }
                 .onFailure {
                     spendingConfirmFundingPlan = null
@@ -380,6 +373,22 @@ class TransferViewModel @Inject constructor(
                 "sendAll=${plan.shouldUseSendAll}",
             context = TAG,
         )
+
+        val shown = _spendingUiState.value
+        val payable = shown.withFundingPlan(plan, feeSat = order.feeSat)
+        if (
+            payable.feeSat != shown.feeSat ||
+            payable.miningFeeSats != shown.miningFeeSats ||
+            payable.confirmLeavingAmountSats != shown.confirmLeavingAmountSats
+        ) {
+            Logger.info(
+                "Waiting for another swipe, amount changed from '${shown.confirmLeavingAmountSats}' " +
+                    "to '${payable.confirmLeavingAmountSats}'",
+                context = TAG,
+            )
+            _spendingUiState.update { it.withFundingPlan(plan, feeSat = order.feeSat) }
+            return false
+        }
 
         if (plan.shouldUseSendAll && plan.maxSendable < order.feeSat) {
             Logger.error(
@@ -1934,6 +1943,17 @@ data class TransferToSpendingUiState(
             feeSat.safe() + miningFeeSats.safe()
         }
 }
+
+private fun TransferToSpendingUiState.withFundingPlan(
+    plan: SpendingConfirmFundingPlan,
+    feeSat: ULong = this.feeSat,
+) = copy(
+    feeSat = feeSat,
+    isConfirmFeeReady = true,
+    miningFeeSats = plan.miningFeeSats,
+    shouldUseSendAll = plan.shouldUseSendAll,
+    spendableBalance = plan.spendableBalance,
+)
 
 private data class SpendingFundingTarget(
     val feeSat: ULong,
