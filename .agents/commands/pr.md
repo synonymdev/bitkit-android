@@ -143,11 +143,13 @@ When the user provides custom instructions after `--`:
 - Use the reported model names, `Not used` for a phase without AI involvement, or `Unknown` if the
   model was not recorded. The same model can appear in all phases. List multiple models within a
   phase when applicable; never substitute the PR-writing model for an unknown earlier model.
-- Include each model's actual reasoning effort as `model-name (reasoning: medium)`. Consult
+- Include each model's actual reasoning effort as `` `model-name` (reasoning: `medium`) ``. Consult
   available session/run metadata first; use `reasoning: Unknown` if unrecorded or
   `reasoning: Not exposed` if the tool does not expose the setting. Never infer it from the model
   or current configuration. List each model/effort combination used within a phase; omit effort
   for `Not used` and `Review: Not performed`.
+- Wrap the model name and reasoning value in separate inline-code spans; keep the phase label
+  and `(reasoning: ...)` punctuation outside them. Apply this to every phase and review round.
 - Preserve known entries when updating the PR and append later review rounds. This is informational;
   it does not require different models or certify review quality.
 

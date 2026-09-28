@@ -57,7 +57,7 @@ Include `### Models used` in the PR body with `Planning/scoping`, `Implementatio
 by the tool for each phase as work proceeds, including subagent reviews; list multiple models if a
 phase used more than one. The same model may appear in every phase.
 
-Record the reasoning effort alongside each model as `model-name (reasoning: medium)`, using the
+Record the reasoning effort alongside each model as `` `model-name` (reasoning: `medium`) ``, using the
 actual setting for that phase or review round. Check available session/run metadata before using
 `Unknown`. If a phase used multiple model/effort combinations, list each combination. Use
 `reasoning: Unknown` when the setting was not recorded, or `reasoning: Not exposed` when the tool

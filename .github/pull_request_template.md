@@ -34,8 +34,8 @@
 
 ### Models used
 
-<!-- Informational: the same model may be used in every phase. Use the reported model name(s), `Not used` for a phase without AI involvement, or `Unknown` if not recorded. Record each model with its actual effort as `model-name (reasoning: medium)`; check available session/run metadata first. Use `reasoning: Unknown` if unrecorded or `reasoning: Not exposed` if the tool does not expose it; omit effort for unused phases. Add `- Review round N: model-name (reasoning: effort)` only for rounds that happened, replacing `Review: Not performed` when the first round occurs. Preserve entries and append later rounds. -->
+<!-- Informational: the same model may be used in every phase. Use the reported model name(s), `Not used` for a phase without AI involvement, or `Unknown` if not recorded. Record each model with its actual effort as `` `model-name` (reasoning: `medium`) ``; check available session/run metadata first. Use `reasoning: Unknown` if unrecorded or `reasoning: Not exposed` if the tool does not expose it; omit effort for unused phases. Add ``- Review round N: `model-name` (reasoning: `effort`)`` only for rounds that happened, replacing `Review: Not performed` when the first round occurs. Preserve entries and append later rounds. -->
 
-- Planning/scoping: `<model name> (reasoning: <effort>)`
-- Implementation: `<model name> (reasoning: <effort>)`
+- Planning/scoping: `<model name>` (reasoning: `<effort>`)
+- Implementation: `<model name>` (reasoning: `<effort>`)
 - Review: Not performed
