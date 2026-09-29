@@ -198,6 +198,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val disableAllToasts = settingsStore.data.map { it.disableAllToasts }
+        .asStateFlow(initialValue = false)
+
+    fun setDisableAllToasts(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(disableAllToasts = value) }
+        }
+    }
+
     val isSavingsSwapEnabled = settingsStore.data.map { it.isSavingsSwapEnabled }
         .asStateFlow(initialValue = false)
 
