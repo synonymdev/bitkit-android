@@ -40,7 +40,7 @@ class SettingsStore @Inject constructor(
     private val localStore = context.localSettingsDataStore
 
     val data: Flow<SettingsData> = store.data
-    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
+    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: true }
     val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
     }

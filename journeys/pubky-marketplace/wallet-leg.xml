@@ -5,11 +5,9 @@
     Precondition: two clean wallets and the integration fixture runtime described in this suite's
     README.
     Configure the fixture Electrum endpoint and Android emulator port mappings before either
-    wallet's first launch. After creating both wallets, enable Paykit UI in Dev Settings (testTag
-    "PaykitUiToggle"), confirm the warning, and verify activation (testTag "PaykitUiEnabledToast").
-    Then create a Bitkit-generated Pubky identity in each wallet. Pubky Ring-imported identities
-    cannot approve the fixture setup auth URL. Start with the seller wallet open and the fixture's
-    fresh setup auth URL available.
+    wallet's first launch. After creating both wallets, create a Bitkit-generated Pubky identity
+    in each wallet. Pubky Ring-imported identities cannot approve the fixture setup auth URL. Start
+    with the seller wallet open and the fixture's fresh setup auth URL available.
   </description>
   <actions>
     <action>Open the fixture setup auth URL in the seller wallet</action>

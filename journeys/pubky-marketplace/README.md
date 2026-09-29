@@ -32,10 +32,9 @@ adb -s <device> reverse tcp:15411 tcp:15411
 adb -s <device> reverse tcp:15412 tcp:15412
 ```
 
-After creating each wallet, enable Paykit UI in Dev Settings (`PaykitUiToggle`), confirm the warning,
-and verify activation (`PaykitUiEnabledToast`). Then choose **Create profile with Bitkit** to create
-a Bitkit-generated Pubky identity in each wallet. Do not import the identity with Pubky Ring; an
-imported identity cannot approve the fixture setup auth URL.
+After creating each wallet, choose **Create profile with Bitkit** to create a Bitkit-generated Pubky
+identity in each wallet. Do not import the identity with Pubky Ring; an imported identity cannot
+approve the fixture setup auth URL.
 
 The request and endpoint must satisfy the issuer contract from Android issue
 [#1208](https://github.com/synonymdev/bitkit-android/issues/1208): lowercase `btc`, a

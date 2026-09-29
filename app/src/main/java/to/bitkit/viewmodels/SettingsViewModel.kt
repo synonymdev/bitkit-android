@@ -58,7 +58,7 @@ class SettingsViewModel @Inject constructor(
             val settings = settingsStore.data.first()
             val isPaykitEnabled = PaykitFeatureFlags.isUiEnabled(settingsStore.isPaykitEnabled.first())
             if (!isPaykitEnabled && settings.hasPaykitState()) {
-                updatePaykitEnabled(false)
+                clearPaykitState()
             }
         }
     }
@@ -252,17 +252,18 @@ class SettingsViewModel @Inject constructor(
 
     private suspend fun updatePaykitEnabled(value: Boolean) {
         val shouldEnable = value && PaykitFeatureFlags.isUiAvailable
+        settingsStore.setIsPaykitEnabled(shouldEnable)
+        if (!shouldEnable) clearPaykitState()
+    }
+
+    private suspend fun clearPaykitState() {
         val previousSettings = settingsStore.data.first()
         val hadPublicPaykitState = previousSettings.hasPublicPaykitPublicationState()
         val hadPrivatePaykitState = previousSettings.sharesPrivatePaykitEndpoints
-        settingsStore.setIsPaykitEnabled(shouldEnable)
-
-        if (!shouldEnable) {
-            settingsStore.update {
-                it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
-            }
-            removePaykitEndpoints(hadPublicPaykitState, hadPrivatePaykitState)
+        settingsStore.update {
+            it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
         }
+        removePaykitEndpoints(hadPublicPaykitState, hadPrivatePaykitState)
     }
 
     private suspend fun removePaykitEndpoints(hadPublicPaykitState: Boolean, hadPrivatePaykitState: Boolean) {
