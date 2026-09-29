@@ -165,7 +165,7 @@
                 android:resource="@xml/shortcuts" />
         </activity>
 
-        <!-- Enabled only while Bitkit can authorize with a locally managed Pubky identity. -->
+        <!-- Enabled only while Bitkit can read its Pubky identity's secret key, stored locally or in Pubky Ring. -->
         <activity-alias
             android:name=".ui.MainActivityPubkyAuth"
             android:targetActivity=".ui.MainActivity"

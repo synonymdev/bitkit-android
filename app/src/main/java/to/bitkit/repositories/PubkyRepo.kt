@@ -124,6 +124,9 @@ class PubkyRepo @Inject constructor(
     private val _adoptedSourceLost = MutableStateFlow(false)
     val adoptedSourceLost: StateFlow<Boolean> = _adoptedSourceLost.asStateFlow()
 
+    private val _adoptedSourceUnreachable = MutableStateFlow(false)
+    val adoptedSourceUnreachable: StateFlow<Boolean> = _adoptedSourceUnreachable.asStateFlow()
+
     private val _pendingImportProfile = MutableStateFlow<PubkyProfile?>(null)
     val pendingImportProfile: StateFlow<PubkyProfile?> = _pendingImportProfile.asStateFlow()
 
@@ -300,9 +303,13 @@ class PubkyRepo @Inject constructor(
             val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: return
             val ringPubkys = sharedPubkyClient.listRingIdentities().getOrElse {
                 Logger.warn("Failed to list ring identities", it, context = TAG)
+                _adoptedSourceUnreachable.update { true }
                 return
             }
-            if (ringPubkys.any { "${SharedPubkyContract.RING_SOURCE_PREFIX}$it" == reference }) return
+            if (ringPubkys.any { "${SharedPubkyContract.RING_SOURCE_PREFIX}$it" == reference }) {
+                _adoptedSourceUnreachable.update { false }
+                return
+            }
 
             val adoptedPubky = reference.removePrefix(SharedPubkyContract.RING_SOURCE_PREFIX)
             Logger.warn("Adopted ring identity '${redacted(adoptedPubky)}' is gone, clearing session", context = TAG)
@@ -1367,6 +1374,7 @@ class PubkyRepo @Inject constructor(
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
         _sessionRestorationFailed.update { false }
+        _adoptedSourceUnreachable.update { false }
     }
 
     private fun markContactsLoaded() {

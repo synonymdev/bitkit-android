@@ -20,7 +20,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Advertises Pubky signup and authorization handlers when their required identity state is available. */
+/**
+ * Advertises Pubky signup and authorization handlers when their required identity state is available.
+ *
+ * The authorization handler is re-checked when the identity, the Paykit flag or the reachability of an adopted
+ * Pubky Ring pubky changes, so it follows Pubky Ring going away and coming back without a restart.
+ */
 @Singleton
 internal class PubkyAuthHandlerRegistrar @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -48,8 +53,12 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
 
         collectionScope.launch {
             pubkyRepo.awaitInitialization()
-            combine(settingsStore.isPaykitEnabled, pubkyRepo.publicKey) { localFlagEnabled, publicKey ->
-                localFlagEnabled to publicKey
+            combine(
+                settingsStore.isPaykitEnabled,
+                pubkyRepo.publicKey,
+                pubkyRepo.adoptedSourceUnreachable,
+            ) { localFlagEnabled, publicKey, adoptedSourceUnreachable ->
+                Triple(localFlagEnabled, publicKey, adoptedSourceUnreachable)
             }
                 .distinctUntilChanged()
                 .collectLatest { (localFlagEnabled, publicKey) ->

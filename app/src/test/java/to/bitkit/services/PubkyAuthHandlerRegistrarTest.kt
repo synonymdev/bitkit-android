@@ -18,6 +18,7 @@ import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
@@ -42,6 +43,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     private val settingsStore: SettingsStore = mock()
     private val isPaykitEnabled = MutableStateFlow(false)
     private val publicKey = MutableStateFlow<String?>(null)
+    private val adoptedSourceUnreachable = MutableStateFlow(false)
 
     @Before
     fun setUp() {
@@ -49,6 +51,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         whenever(context.packageManager).thenReturn(packageManager)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
+        whenever(pubkyRepo.adoptedSourceUnreachable).thenReturn(adoptedSourceUnreachable)
     }
 
     @Test
@@ -118,7 +121,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     }
 
     @Test
-    fun `handler is disabled for a Ring managed identity`() = test {
+    fun `handler is disabled while the Ring pubky secret key is unavailable`() = test {
         isPaykitEnabled.value = true
         publicKey.value = "pubkyring"
         whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
@@ -127,6 +130,42 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         runCurrent()
 
         verifyComponentStates(authEnabled = false, signupEnabled = false)
+    }
+
+    @Test
+    fun `handler is enabled when Pubky Ring becomes reachable again for the same pubky`() = test {
+        isPaykitEnabled.value = true
+        publicKey.value = "pubkyring"
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
+        createSut().start(backgroundScope)
+        runCurrent()
+        adoptedSourceUnreachable.value = true
+        runCurrent()
+        clearInvocations(packageManager)
+
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        adoptedSourceUnreachable.value = false
+        runCurrent()
+
+        verifyComponentStates(authEnabled = true, signupEnabled = false)
+        verify(pubkyRepo, times(3)).hasSecretKey()
+    }
+
+    @Test
+    fun `handler is disabled when Pubky Ring becomes unreachable for the same pubky`() = test {
+        isPaykitEnabled.value = true
+        publicKey.value = "pubkyring"
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        createSut().start(backgroundScope)
+        runCurrent()
+        clearInvocations(packageManager)
+
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
+        adoptedSourceUnreachable.value = true
+        runCurrent()
+
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
+        verify(pubkyRepo, times(2)).hasSecretKey()
     }
 
     @Test

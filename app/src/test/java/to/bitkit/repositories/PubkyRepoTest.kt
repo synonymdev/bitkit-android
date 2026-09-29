@@ -1444,7 +1444,53 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.initialize()
 
         assertFalse(sut.adoptedSourceLost.value)
+        assertTrue(sut.adoptedSourceUnreachable.value)
         verifyBlocking(pubkyService, never()) { clearSessionAccess() }
+    }
+
+    @Test
+    fun `checkAdoptedSource should mark pubky ring reachable again without changing the identity`() = test {
+        val session = "saved_session"
+        val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
+        stubAdoptedRingSource()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(pubkyService.importSession(session)).thenReturn(ringPubky)
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.failure(TestAppError("Unavailable")))
+        sut.initialize()
+        assertTrue(sut.adoptedSourceUnreachable.value)
+
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.success(persistentListOf(ringPubky)))
+        val result = sut.checkAdoptedSource()
+
+        assertTrue(result.isSuccess)
+        assertFalse(sut.adoptedSourceUnreachable.value)
+        assertFalse(sut.adoptedSourceLost.value)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(sharedPubkyClient, never()) { ringCredential(any()) }
+    }
+
+    @Test
+    fun `checkAdoptedSource should reset the unreachable flag when pubky ring drops the pubky`() = test {
+        stubAdoptedRingSource()
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.failure(TestAppError("Unavailable")))
+        sut.checkAdoptedSource()
+        assertTrue(sut.adoptedSourceUnreachable.value)
+
+        whenever(sharedPubkyClient.listRingIdentities())
+            .thenReturn(Result.success(persistentListOf(VALID_CONTACT_KEY_A.removePrefix("pubky"))))
+        sut.checkAdoptedSource()
+
+        assertTrue(sut.adoptedSourceLost.value)
+        assertFalse(sut.adoptedSourceUnreachable.value)
+    }
+
+    @Test
+    fun `checkAdoptedSource should not query pubky ring without an adopted pubky`() = test {
+        val result = sut.checkAdoptedSource()
+
+        assertTrue(result.isSuccess)
+        assertFalse(sut.adoptedSourceUnreachable.value)
+        verifyBlocking(sharedPubkyClient, never()) { listRingIdentities() }
     }
 
     @Test
