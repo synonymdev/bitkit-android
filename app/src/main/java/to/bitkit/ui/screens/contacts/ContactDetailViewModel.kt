@@ -143,12 +143,19 @@ class ContactDetailViewModel @Inject constructor(
     }
 
     fun dismissRequestOrPaySheet() {
-        if (_uiState.value.isPayLoading) {
-            payJob?.cancel()
-            paymentScanJob?.cancel()
-            paymentScanJob = null
-        }
+        if (_uiState.value.isPayLoading) cancelPendingPayment()
         _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
+    }
+
+    override fun onCleared() {
+        paymentScanJob?.cancel()
+        super.onCleared()
+    }
+
+    private fun cancelPendingPayment() {
+        payJob?.cancel()
+        paymentScanJob?.cancel()
+        paymentScanJob = null
     }
 
     fun payContact() {

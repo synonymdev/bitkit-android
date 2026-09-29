@@ -473,6 +473,57 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `leaving the screen while paying cancels the payment`() = test {
+        val paymentStarted = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            paymentStarted.complete(Unit)
+            awaitCancellation()
+        }
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.onClickPay()
+            paymentStarted.await()
+            assertTrue(sut.uiState.value.isPayLoading)
+
+            sut.dismissRequestOrPaySheet()
+            advanceUntilIdle()
+
+            assertFalse(sut.uiState.value.isPayLoading)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `leaving the screen while the amount screen opens cancels the scan`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+            assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            val scanJob = Job()
+            sut.onPaymentOpening(scanJob)
+
+            sut.dismissRequestOrPaySheet()
+            advanceUntilIdle()
+
+            assertTrue(scanJob.isCancelled)
+            assertFalse(sut.uiState.value.isPayLoading)
+        }
+    }
+
+    @Test
     fun `pay tap cancels a stalled eligibility check before paying`() = test {
         var isCheckCancelled = false
         var wasCheckCancelledBeforePayment = false
