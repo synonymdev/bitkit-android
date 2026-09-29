@@ -32,7 +32,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -156,9 +155,18 @@ private fun IncomingPaymentRequestDetailsContent(
                         text = "${request.detailsAmountPrefix()} $it".withAccent(accentColor = Colors.White64),
                     )
                     FillWidth()
-                    PaymentRequestDetailsIcon(request)
+                    if (request.hasPaymentEvidence) {
+                        PaymentRequestDetailsIcon(request)
+                    } else {
+                        PubkyContactAvatar(profile = contact, size = 48.dp)
+                    }
                 }
             }
+            BodyM(
+                text = paymentRequestStatus(request, isPending = isPending),
+                color = Colors.White64,
+                modifier = Modifier.testTag("PaymentRequestDetailsStatus")
+            )
             VerticalSpacer(24.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 RequestDetailCell(
@@ -292,27 +300,21 @@ private fun PaymentRequestTags(
     }
 }
 
-private fun PaykitPaymentRequest.detailsAmountPrefix(): String =
-    if (direction == PaykitPaymentRequestDirection.Incoming) "-" else "+"
+internal fun PaykitPaymentRequest.detailsAmountPrefix(): String = when {
+    !hasPaymentEvidence -> ""
+    direction == PaykitPaymentRequestDirection.Incoming -> "-"
+    else -> "+"
+}
 
 @Composable
 private fun PaymentRequestDetailsIcon(request: PaykitPaymentRequest) {
-    val isCompleted = request.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
     val isIncomingRequest = request.direction == PaykitPaymentRequestDirection.Incoming
     CircularIcon(
         icon = painterResource(
-            if (isCompleted == isIncomingRequest) R.drawable.ic_sent else R.drawable.ic_received
+            if (isIncomingRequest) R.drawable.ic_sent else R.drawable.ic_received
         ),
-        iconColor = when {
-            isCompleted -> request.paymentRailIconColor
-            isIncomingRequest -> Colors.Purple
-            else -> Colors.Brand
-        },
-        backgroundColor = when {
-            isCompleted -> request.paymentRailBackgroundColor
-            isIncomingRequest -> Colors.Purple16
-            else -> Colors.Brand16
-        },
+        iconColor = request.paymentRailIconColor,
+        backgroundColor = request.paymentRailBackgroundColor,
         size = 48.dp,
     )
 }

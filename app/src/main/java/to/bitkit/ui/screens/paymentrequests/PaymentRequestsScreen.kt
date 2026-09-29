@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -332,7 +333,8 @@ internal fun PaymentRequestsContent(
                                 compactSubtitle = subscriptions.nameFor(request)
                                     ?: request.note?.takeIf(String::isNotBlank)
                                     ?: paymentRequestDate(request),
-                                showSignedAmount = true,
+                                showSignedAmount = request.hasPaymentEvidence,
+                                fiatStatus = paymentRequestStatus(request),
                                 onClick = { onDetails(request.id) },
                             )
                         }
@@ -472,21 +474,13 @@ internal fun paymentRequestDate(request: PaykitPaymentRequest): String = request
 } ?: paymentRequestStatus(request)
 
 @Composable
-private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
+internal fun paymentRequestStatus(request: PaykitPaymentRequest, isPending: Boolean = false): String {
     if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(Clock.System.now())) {
         return stringResource(R.string.wallet__payment_request_status_expired)
     }
 
     return when (request.lifecycleState) {
-        PaymentRequestLifecycleState.PROPOSED -> {
-            if (request.direction == PaykitPaymentRequestDirection.Incoming) {
-                stringResource(R.string.wallet__payment_request_status_unavailable)
-            } else if (request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
-                stringResource(R.string.wallet__payment_request_waiting)
-            } else {
-                stringResource(R.string.wallet__payment_request_sending)
-            }
-        }
+        PaymentRequestLifecycleState.PROPOSED -> stringResource(proposedPaymentRequestStatusRes(request, isPending))
         PaymentRequestLifecycleState.PROPOSAL_EXPIRED ->
             stringResource(R.string.wallet__payment_request_status_expired)
         PaymentRequestLifecycleState.ACCEPTED ->
@@ -504,6 +498,17 @@ private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
         PaymentRequestLifecycleState.UNKNOWN,
         -> stringResource(R.string.wallet__payment_request_status_unavailable)
     }
+}
+
+@StringRes
+internal fun proposedPaymentRequestStatusRes(request: PaykitPaymentRequest, isPending: Boolean): Int = when {
+    request.direction == PaykitPaymentRequestDirection.Incoming && isPending ->
+        R.string.wallet__payment_request_waiting
+    request.direction == PaykitPaymentRequestDirection.Incoming ->
+        R.string.wallet__payment_request_status_unavailable
+    request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent ->
+        R.string.wallet__payment_request_waiting
+    else -> R.string.wallet__payment_request_sending
 }
 
 @Composable
@@ -636,7 +641,10 @@ internal fun PaymentRequestCard(
     }
 }
 
-private fun PaykitPaymentRequest.amountPrefix(isOutgoingPayment: Boolean, showSignedAmount: Boolean): String = when {
+internal val PaykitPaymentRequest.hasPaymentEvidence: Boolean
+    get() = lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
+
+internal fun PaykitPaymentRequest.amountPrefix(isOutgoingPayment: Boolean, showSignedAmount: Boolean): String = when {
     isOutgoingPayment -> "-"
     showSignedAmount && direction == PaykitPaymentRequestDirection.Incoming -> "-"
     showSignedAmount -> "+"
@@ -663,7 +671,7 @@ internal val PaykitPaymentRequest.paymentRailBackgroundColor
     get() = if (paymentProofKind == PaykitPaymentProofKind.Lightning) Colors.Purple16 else Colors.Brand16
 
 private fun PaykitPaymentRequest.showsPaymentRailIcon(isOutgoingPayment: Boolean): Boolean =
-    isOutgoingPayment || lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
+    isOutgoingPayment || hasPaymentEvidence
 
 private fun PaykitPaymentRequest.paymentWasSent(isOutgoingPayment: Boolean): Boolean =
     isOutgoingPayment || direction == PaykitPaymentRequestDirection.Incoming

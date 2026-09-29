@@ -20,6 +20,8 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 
 `request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked on receiver path `bitkit/wallet`, and the payer holds enough balance to pay 21,000 sats.
 
+`safe-retry-after-failed-send.xml` uses a second Bitkit instance restored from the payer's seed to reduce the shared wallet balance after the first instance has opened the 100,000 sat request. Keep Paykit disabled on the second instance. Mine the balance-reduction transaction and wait for the first instance to sync before swiping, so the request passes initial validation but fails before broadcast. Then add regtest funds through `./lsp`, mine blocks, and wait for the payer to sync before retrying the same request.
+
 ## Reference evidence
 
 The source wallet-leg run completed this path on regtest on 2026-08-22: Bitkit presented the incoming request, opened the on-chain payment, broadcast it, and confirmed transaction
@@ -39,5 +41,6 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Confirmation invoice note: `PaymentRequestInvoiceNote`
 - Confirmation details: `SendConfirmToggleDetails`
 - Saved-contact recipient: `ReviewContactRecipient`
+- Swipe confirmation control: `GRAB`
 
 `android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI Automator hierarchy when a documented container tag is not present in the formatted layout output.
