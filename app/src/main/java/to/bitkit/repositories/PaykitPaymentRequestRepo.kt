@@ -700,27 +700,29 @@ class PaykitPaymentRequestRepo @Inject constructor(
         return PaykitPaymentRequestCreation(request, creatorIdentity, wasPublishedToActiveState)
     }
 
-    suspend fun accept(request: PaykitPaymentRequest): Result<Unit> {
-        if (!request.requiresAcceptance) {
-            return withContext(ioDispatcher) {
-                runSuspendCatching {
-                    operationMutex.withLock {
-                        if (_pendingRequests.value.none { it.id == request.id }) {
-                            throw PaykitPaymentRequestError.RequestUnavailable
-                        }
+    suspend fun accept(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            if (paykitSdkService.linkedPeers().any {
+                it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty) &&
+                    it.counterpartyReceiverPath == request.counterpartyReceiverPath
+            }) {
+                throw PaykitPaymentRequestError.RequestUnavailable
+            }
+            if (!request.requiresAcceptance) {
+                operationMutex.withLock {
+                    if (_pendingRequests.value.none { it.id == request.id }) {
+                        throw PaykitPaymentRequestError.RequestUnavailable
                     }
                 }
+            } else {
+                updateRequest(request, PaymentRequestLifecycleState.ACCEPTED) {
+                    paykitSdkService.acceptPaymentRequest(
+                        counterparty = it.counterparty,
+                        counterpartyReceiverPath = it.counterpartyReceiverPath,
+                        paymentRequestId = it.paymentRequestId,
+                    )
+                }.getOrThrow()
             }
-        }
-        return updateRequest(
-            request = request,
-            resultingState = PaymentRequestLifecycleState.ACCEPTED,
-        ) {
-            paykitSdkService.acceptPaymentRequest(
-                counterparty = it.counterparty,
-                counterpartyReceiverPath = it.counterpartyReceiverPath,
-                paymentRequestId = it.paymentRequestId,
-            )
         }.onFailure {
             Logger.warn("Failed to accept incoming Paykit payment request", it, context = TAG)
         }
@@ -834,6 +836,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
         paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         val now = clock.now()
         val records = paykitSdkService.paymentRequests()
+        val blockedPeers = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.BLOCKED }
+        val availableRecords = records.filterNot { record ->
+            blockedPeers.any {
+                PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
+                    it.counterpartyReceiverPath == record.counterpartyReceiverPath
+            }
+        }
         val locallyCompletedProofKinds = expectedIdentity
             ?.let(paymentProofStore::completedRequestProofKindsAwaitingSubmission)
             .orEmpty()
@@ -841,7 +850,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val locallyInFlightRequestIds = expectedIdentity
             ?.let(paymentProofStore::inFlightRequestIds)
             .orEmpty()
-        val subscriptions = records.mapNotNull(PaymentRequestRecord::toPaykitSubscription)
+        val subscriptions = availableRecords.mapNotNull(PaymentRequestRecord::toPaykitSubscription)
             .map { it.withExpiredLifecycle(now) }
         val restoredAcceptances = subscriptions
             .filter {
@@ -887,7 +896,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 else -> null
             }
         }
-        val oneTimeIncoming = records.mapNotNull { record ->
+        val oneTimeIncoming = availableRecords.mapNotNull { record ->
             when (val result = record.parseIncomingPaykitPaymentRequest(now)) {
                 is PaykitPaymentRequestParseResult.Parsed -> result.request
                 is PaykitPaymentRequestParseResult.Rejected -> {

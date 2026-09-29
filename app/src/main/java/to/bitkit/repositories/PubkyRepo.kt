@@ -94,6 +94,8 @@ class PubkyRepo @Inject constructor(
     private val initializeMutex = Mutex()
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
+    private val contactsLock = Any()
+    private var contactsRevision = 0L
     private val adoptedSourceCheckMutex = Mutex()
     private var isServiceInitialized = false
 
@@ -628,7 +630,7 @@ class PubkyRepo @Inject constructor(
         }
         pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
         notifyBackupStateChanged()
-        _contacts.update { emptyList() }
+        updateContacts { emptyList() }
         markContactsLoaded()
         Logger.info("Deleted all contacts", context = TAG)
     }
@@ -680,6 +682,7 @@ class PubkyRepo @Inject constructor(
         val pk = _publicKey.value ?: return
         if (!loadContactsMutex.tryLock()) return
 
+        val revision = synchronized(contactsLock) { contactsRevision }
         _isLoadingContacts.update { true }
         var shouldMarkLoadCompleted = false
         try {
@@ -711,7 +714,13 @@ class PubkyRepo @Inject constructor(
                     Logger.debug("Skipped stale contacts load for '${redacted(pk)}'", context = TAG)
                     return@onSuccess
                 }
-                _contacts.update { loadedContacts }
+                synchronized(contactsLock) {
+                    if (contactsRevision != revision) {
+                        shouldMarkLoadCompleted = true
+                        return@onSuccess
+                    }
+                    _contacts.update { loadedContacts }
+                }
                 markContactsLoaded()
                 shouldMarkLoadCompleted = true
             }.onFailure {
@@ -751,8 +760,8 @@ class PubkyRepo @Inject constructor(
             val profile = existingProfile?.copy(publicKey = prefixedKey)
                 ?: resolveContactProfile(prefixedKey).getOrThrow()
                 ?: PubkyProfile.placeholder(prefixedKey)
-            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
-            _contacts.update { current ->
+            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey), restorePrivateConnection = true)
+            updateContacts { current ->
                 (current.filter { it.publicKey != prefixedKey } + profile)
                     .sortedBy { it.name.lowercase() }
             }
@@ -793,7 +802,7 @@ class PubkyRepo @Inject constructor(
             )
             pubkyService.saveContact(prefixedKey, name)
             upsertContactProfileOverride(updatedProfile)
-            _contacts.update { current ->
+            updateContacts { current ->
                 current.map { if (it.publicKey == prefixedKey) updatedProfile else it }
                     .sortedBy { it.name.lowercase() }
             }
@@ -807,7 +816,7 @@ class PubkyRepo @Inject constructor(
             val prefixedKey = publicKey.ensurePubkyPrefix()
             pubkyService.removeContact(prefixedKey)
             removeContactProfileOverride(prefixedKey)
-            _contacts.update { current -> current.filter { it.publicKey != prefixedKey } }
+            updateContacts { current -> current.filter { it.publicKey != prefixedKey } }
             markContactsLoaded()
             Logger.info("Removed contact '${redacted(prefixedKey)}'", context = TAG)
         }
@@ -822,7 +831,7 @@ class PubkyRepo @Inject constructor(
                         runSuspendCatching {
                             val profile = resolveContactProfile(prefixedKey).getOrThrow()
                                 ?: PubkyProfile.placeholder(prefixedKey)
-                            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
+                            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey), restorePrivateConnection = true)
                             profile
                         }.onFailure {
                             Logger.warn("Failed to import contact '${redacted(prefixedKey)}'", it, context = TAG)
@@ -830,7 +839,7 @@ class PubkyRepo @Inject constructor(
                     }
                 }.awaitAll().filterNotNull()
             }
-            _contacts.update { current ->
+            updateContacts { current ->
                 val existing = current.map { it.publicKey }.toSet()
                 (current + imported.filter { it.publicKey !in existing })
                     .sortedBy { it.name.lowercase() }
@@ -1291,11 +1300,18 @@ class PubkyRepo @Inject constructor(
         runSuspendCatching { pubkyStore.reset() }
         _publicKey.update { null }
         _profile.update { null }
-        _contacts.update { emptyList() }
+        updateContacts { emptyList() }
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
         _sessionRestorationFailed.update { false }
+    }
+
+    private fun updateContacts(transform: (List<PubkyProfile>) -> List<PubkyProfile>) {
+        synchronized(contactsLock) {
+            contactsRevision++
+            _contacts.update(transform)
+        }
     }
 
     private fun markContactsLoaded() {

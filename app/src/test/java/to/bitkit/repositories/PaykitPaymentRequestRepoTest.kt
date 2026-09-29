@@ -90,6 +90,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
         whenever(paykitSdkService.paymentRequests()).thenReturn(emptyList())
+        whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
         whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
@@ -117,6 +118,32 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @After
     fun tearDown() = test {
         sut.clear()
+    }
+
+    @Test
+    fun `blocking peer hides requests from an earlier snapshot`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        assertEquals(1, sut.pendingRequests.value.size)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED, record.counterpartyReceiverPath)),
+        )
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(record.paymentRequestId), sut.paymentRequestHistory.value.map { it.paymentRequestId })
+    }
+
+    @Test
+    fun `blocking an already presented accepted request prevents payment`() = test {
+        val record = paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED, record.counterpartyReceiverPath)),
+        )
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, sut.accept(request).exceptionOrNull())
     }
 
     @Test

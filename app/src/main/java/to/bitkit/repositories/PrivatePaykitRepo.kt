@@ -1364,11 +1364,13 @@ class PrivatePaykitRepo @Inject constructor(
             ).forEach { receiverPath ->
                 runSuspendCatching {
                     val report = paykitSdkService.clearPrivatePaymentList(publicKey, receiverPath)
+                        ?: return@runSuspendCatching false
                     if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
                         throw PrivatePaykitError.PrivateUnavailable
                     }
+                    true
                 }.onSuccess {
-                    clearedRetryKeys += PrivateMessageDrainRetryKey(publicKey, receiverPath)
+                    if (it) clearedRetryKeys += PrivateMessageDrainRetryKey(publicKey, receiverPath)
                 }.onFailure {
                     failedPublicKeys += publicKey
                     firstError = firstError ?: it

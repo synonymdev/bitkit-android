@@ -510,13 +510,22 @@ class PaykitSdkService @Inject constructor(
         publicKey: String,
         label: String?,
         receiverPaths: List<String>? = null,
+        restorePrivateConnection: Boolean = false,
     ): ContactRecord {
         isSetup.await()
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
-                val existingPaths = handle.contactRecord(publicKey)?.receiverPaths.orEmpty()
+                val existing = handle.contactRecord(publicKey)
+                check(restorePrivateConnection || existing != null) { "Contact no longer exists" }
+                val existingPaths = existing?.receiverPaths.orEmpty()
                 val contactPaths = mergedReceiverPaths(existingPaths + receiverPaths.orEmpty())
-                handle.saveContact(ContactUpdate(publicKey, contactPaths, label))
+                handle.saveContact(ContactUpdate(publicKey, contactPaths, label)).also {
+                    if (restorePrivateConnection) {
+                        handle.linkedPeers().filter {
+                            it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
+                        }.forEach { handle.unblockPeer(it.counterparty, it.counterpartyReceiverPath) }
+                    }
+                }
             }
         }
     }
@@ -524,8 +533,12 @@ class PaykitSdkService @Inject constructor(
     suspend fun removeContact(publicKey: String): ContactRecord? {
         isSetup.await()
         return operationMutex.withLock {
-            handle().removeContact(publicKey).also {
-                notifyBackupStateChanged()
+            withStateRevisionTracking { handle ->
+                val record = handle.contactRecord(publicKey)
+                val peers = handle.linkedPeers().filter { PubkyPublicKeyFormat.matches(it.counterparty, publicKey) }
+                val receiverPaths = (record?.receiverPaths.orEmpty() + peers.map { it.counterpartyReceiverPath }).distinct()
+                receiverPaths.forEach { handle.blockPeer(publicKey, it) }
+                handle.removeContact(publicKey)
             }
         }
     }
@@ -649,10 +662,16 @@ class PaykitSdkService @Inject constructor(
     suspend fun clearPrivatePaymentList(
         counterparty: String,
         receiverPath: String,
-    ): PrivatePaymentListDeliveryReport {
+    ): PrivatePaymentListDeliveryReport? {
         isSetup.await()
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
+                if (handle.linkedPeers().any {
+                    it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, counterparty) &&
+                        it.counterpartyReceiverPath == receiverPath
+                }) {
+                    return@withStateRevisionTracking null
+                }
                 handle.clearPrivatePaymentListAndProcessOutbound(counterparty, receiverPath)
             }
         }

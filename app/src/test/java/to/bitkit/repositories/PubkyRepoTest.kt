@@ -1458,7 +1458,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(VALID_CONTACT_KEY_A, sut.contacts.value.single().publicKey)
         verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_A, profile.name, emptyList())
+            saveContact(VALID_CONTACT_KEY_A, profile.name, emptyList(), restorePrivateConnection = true)
         }
     }
 
@@ -1586,6 +1586,25 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals(1, contacts.size)
         assertEquals(existingContact.publicKey, contacts.first().publicKey)
         assertEquals(existingContact.name, contacts.first().name)
+    }
+
+    @Test
+    fun `contact deleted during a load stays deleted when the stale snapshot returns`() = test {
+        authenticateForTesting()
+        val snapshotReady = CompletableDeferred<Unit>()
+        val resumeLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            snapshotReady.complete(Unit)
+            resumeLoad.await()
+            listOf(createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("Deleted")))
+        }
+        val load = launch { sut.loadContacts() }
+        snapshotReady.await()
+        assertTrue(sut.removeContact(VALID_CONTACT_KEY_B).isSuccess)
+        resumeLoad.complete(Unit)
+        load.join()
+        assertTrue(sut.contacts.value.isEmpty())
+        assertFalse(sut.isLoadingContacts.value)
     }
 
     @Test

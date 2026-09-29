@@ -1,5 +1,8 @@
 package to.bitkit.services
 
+import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.LinkedPeerRecord
+import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
 import com.synonym.paykit.PaykitSdk
@@ -14,6 +17,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -96,6 +100,78 @@ class PaykitSdkServiceTest {
             }
         }
     }
+
+    @Test
+    fun `deletion blocks all known receivers before removing the contact`() = runTest {
+        for (failBlock in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val contact = mock<ContactRecord> { on { receiverPaths } doReturn listOf(PaykitReceiverPaths.WALLET) }
+            whenever(sdk.contactRecord(RING_PUBKY)).thenReturn(contact)
+            val peer = contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.LINKED)
+            whenever(sdk.linkedPeers()).thenReturn(listOf(peer))
+            if (failBlock) whenever(sdk.blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER))
+                .thenThrow(IllegalStateException("storage failure"))
+            val service = PaykitSdkService(mock(), mock()) { sdk }
+            if (failBlock) {
+                assertFailsWith<IllegalStateException> { service.removeContact(RING_PUBKY) }
+                verify(sdk, never()).removeContact(any())
+            } else {
+                service.removeContact(RING_PUBKY)
+                inOrder(sdk) {
+                    verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.WALLET)
+                    verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
+                    verify(sdk).removeContact(RING_PUBKY)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `only explicit readd unblocks every saved private receiver`() = runTest {
+        for (restoreConnection in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.saveContact(any())).thenReturn(mock())
+            whenever(sdk.linkedPeers()).thenReturn(
+                listOf(
+                    contactPeer(PaykitReceiverPaths.WALLET, LinkedPeerState.BLOCKED),
+                    contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED),
+                ),
+            )
+            val service = PaykitSdkService(mock(), mock()) { sdk }
+            if (restoreConnection) {
+                service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+                verify(sdk).unblockPeer(RING_PUBKY, PaykitReceiverPaths.WALLET)
+                verify(sdk).unblockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
+            } else {
+                assertFailsWith<IllegalStateException> { service.saveContact(RING_PUBKY, "Contact") }
+                verify(sdk, never()).saveContact(any())
+                verify(sdk, never()).unblockPeer(any(), any())
+            }
+        }
+    }
+
+    @Test
+    fun `blocked peer cleanup does not attempt network delivery`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED)))
+        val service = PaykitSdkService(mock(), mock()) { sdk }
+        assertNull(service.clearPrivatePaymentList(RING_PUBKY, PaykitReceiverPaths.SERVER))
+        verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any(), any())
+    }
+
+    private fun contactPeer(path: String, state: LinkedPeerState) = LinkedPeerRecord(
+        counterparty = RING_PUBKY,
+        counterpartyReceiverPath = path,
+        state = state,
+        lastSyncAt = null,
+        lastPrivateReceiveAt = null,
+        failureCount = 0u,
+        localRecoveryAttemptId = null,
+        localRecoveryMarkerCreatedAt = null,
+        localRecoveryMarkerLastError = null,
+        remoteRecoveryAttemptId = null,
+        remoteRecoveryMarkerObservedAt = null,
+    )
 
     private val basePubkyClientConfig = PubkyClientConfig(
         requestTimeoutSecs = 30uL,
