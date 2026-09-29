@@ -13,9 +13,12 @@ An actionable request must satisfy all of these requirements:
 - The amount is a positive decimal Bitcoin value with at most eight significant fractional digits and no more than `18,446,744,073,709,551` satoshis.
 - The request is a one-time proposal: the local role is payer, lifecycle state is proposed, and recurrence is absent.
 - The proposal expiration is absent or is a valid future ISO 8601 timestamp.
+- `paymentDeadline` is absent. Bitkit does not yet enforce actual-payment deadlines.
 - `acceptedPaymentEndpointIdentifiers` retains at least one identifier supported on the wallet's current network.
 
 Bitkit filters `acceptedPaymentEndpointIdentifiers` in issuer order, removes duplicates after their first occurrence, and drops unknown or wrong-network identifiers. The request remains actionable when at least one identifier survives.
+
+Requests with a payment deadline remain visible in history but are unavailable for payment. This restriction is separate from proposal expiration, which controls acceptance.
 
 ### Endpoint identifiers
 

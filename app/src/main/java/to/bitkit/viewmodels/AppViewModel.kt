@@ -793,6 +793,7 @@ class AppViewModel @Inject constructor(
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
                 .collect {
+                    pubkyRepo.restoreSessionIfNeeded()
                     if (paykitPaymentRequestPollingJob?.isActive == true) {
                         paykitPaymentRequestPollingJob?.cancel()
                         paykitPaymentRequestPollingJob = null
@@ -2371,7 +2372,7 @@ class AppViewModel @Inject constructor(
         scheduledScan = nextScheduledScan
         nextJob.invokeOnCompletion {
             if (scheduledScan === nextScheduledScan) scheduledScan = null
-            if (nextJob.isCancelled) return@invokeOnCompletion
+            if (nextJob.isCancelled) return@invokeOnCompletion clearCancelledContactContext(contactPaymentContext)
             viewModelScope.launch { flushDeferredScan() }
         }
 
@@ -3233,6 +3234,15 @@ class AppViewModel @Inject constructor(
         }
         clearPaymentRequestPresentationRetry(request.id)
         paykitPaymentRequestRepo.markPresented(request)
+    }
+
+    private fun clearCancelledContactContext(context: ContactPaymentContext?) {
+        if (context == null) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext !== context) return
+            activeContactPaymentContext = null
+            preparedContactPaymentContext = null
+        }
     }
 
     private fun setActiveContactPaymentContext(context: ContactPaymentContext?) {
@@ -5790,6 +5800,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
+
+    fun onAppResumed() {
+        viewModelScope.launch {
+            if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.restoreSessionIfNeeded()
+        }
+    }
 
     fun onHomeResumed() {
         checkTimedSheets()

@@ -10,6 +10,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,12 +24,16 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
+import to.bitkit.ext.nowMs
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PaykitPaymentRequestRepo
+import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyContactError
@@ -33,17 +42,28 @@ import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class ContactDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
+    private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
+    private val clock: Clock,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "ContactDetailViewModel"
+
+        /** How long a Pay tap waits for the payment request check before falling back to paying. */
+        private val PAYMENT_REQUEST_TARGET_WAIT = 2.seconds
+
+        /** How long a finished payment request check is reused before Pay checks again. */
+        private val PAYMENT_REQUEST_TARGET_REUSE = 30.seconds
     }
 
     private val publicKey: String = checkNotNull(
@@ -59,9 +79,16 @@ class ContactDetailViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<ContactDetailEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    private var payJob: Job? = null
+    private var paymentScanJob: Job? = null
+    private var paymentRequestTargetRefresh: Deferred<PaykitPaymentRequestTarget?>? = null
+    private var paymentRequestTargetCheckedAt: Long? = null
+
     init {
         loadContact()
         observeContactUpdates()
+        observePaymentRequestTarget()
+        refreshPaymentRequestTarget()
     }
 
     fun loadContact() {
@@ -101,32 +128,131 @@ class ContactDetailViewModel @Inject constructor(
         }
     }
 
-    fun payContact() {
-        viewModelScope.launch {
-            privatePaykitRepo.beginSavedContactPayment(publicKey)
-                .onSuccess { result ->
-                    when (result) {
-                        is PublicPaykitPaymentResult.Opened ->
-                            _effects.emit(
-                                ContactDetailEffect.OpenPayment(
-                                    result.paymentRequest,
-                                    publicKey,
-                                    result.privatePaymentContext,
-                                )
-                            )
-                        PublicPaykitPaymentResult.NoEndpoint ->
-                            showPayError(R.string.slashtags__error_pay_empty_msg)
-                        PublicPaykitPaymentResult.NotOpened ->
-                            showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
-                            showPayError(R.string.slashtags__error_pay_waiting_msg)
-                    }
+    fun onClickPay() {
+        if (payJob?.isActive == true || _uiState.value.isPayLoading) return
+        payJob = viewModelScope.launch {
+            _uiState.update { it.copy(isPayLoading = true) }
+            val target = _uiState.value.paymentRequestTarget ?: awaitPaymentRequestTarget()
+            if (target != null) {
+                _uiState.update {
+                    it.copy(isPayLoading = false, paymentRequestTarget = target, showRequestOrPaySheet = true)
                 }
-                .onFailure {
-                    Logger.warn("Failed to begin Paykit payment for '$redactedPublicKey'", it, context = TAG)
-                    showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                }
+                return@launch
+            }
+            if (!openPayment()) _uiState.update { it.copy(isPayLoading = false) }
         }
+    }
+
+    fun dismissRequestOrPaySheet() {
+        if (_uiState.value.isPayLoading) cancelPendingPayment()
+        _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
+    }
+
+    override fun onCleared() {
+        paymentScanJob?.cancel()
+        super.onCleared()
+    }
+
+    private fun cancelPendingPayment() {
+        payJob?.cancel()
+        paymentScanJob?.cancel()
+        paymentScanJob = null
+    }
+
+    fun payContact() {
+        if (payJob?.isActive == true || _uiState.value.isPayLoading) return
+        payJob = viewModelScope.launch {
+            _uiState.update { it.copy(isPayLoading = true) }
+            if (!openPayment()) _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
+        }
+    }
+
+    fun onPaymentOpening(scanJob: Job?) {
+        paymentScanJob = scanJob
+        viewModelScope.launch {
+            scanJob?.join()
+            if (paymentScanJob !== scanJob) return@launch
+            paymentScanJob = null
+            _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
+        }
+    }
+
+    private fun observePaymentRequestTarget() {
+        viewModelScope.launch {
+            paykitPaymentRequestRepo.eligibleTargets.collect { targets ->
+                val target = targets.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
+                if (target == null) discardCheckedPaymentRequestTarget()
+                _uiState.update {
+                    it.copy(
+                        paymentRequestTarget = target,
+                        showRequestOrPaySheet = it.showRequestOrPaySheet && (target != null || it.isPayLoading),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun awaitPaymentRequestTarget(): PaykitPaymentRequestTarget? {
+        val refresh = refreshPaymentRequestTarget()
+        val target = withTimeoutOrNull(PAYMENT_REQUEST_TARGET_WAIT) { refresh.await() }
+        if (refresh.isActive) refresh.cancelAndJoin()
+        return target
+    }
+
+    private fun refreshPaymentRequestTarget(): Deferred<PaykitPaymentRequestTarget?> {
+        paymentRequestTargetRefresh?.takeIf { it.isActive || isPaymentRequestTargetCheckRecent() }?.let { return it }
+        paymentRequestTargetCheckedAt = null
+        return viewModelScope.async {
+            val isSaved = pubkyRepo.contacts.value.any { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
+            if (!isSaved) return@async null
+            val check = paykitPaymentRequestRepo.refreshEligibleTarget(publicKey).getOrNull()
+                ?: return@async null
+            if (check.isComplete) paymentRequestTargetCheckedAt = clock.nowMs()
+            check.target
+        }.also { paymentRequestTargetRefresh = it }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun discardCheckedPaymentRequestTarget() {
+        val refresh = paymentRequestTargetRefresh ?: return
+        if (!refresh.isCompleted || refresh.isCancelled || refresh.getCompleted() == null) return
+        paymentRequestTargetRefresh = null
+        paymentRequestTargetCheckedAt = null
+    }
+
+    private fun isPaymentRequestTargetCheckRecent(): Boolean {
+        val checkedAt = paymentRequestTargetCheckedAt ?: return false
+        return clock.nowMs() - checkedAt < PAYMENT_REQUEST_TARGET_REUSE.inWholeMilliseconds
+    }
+
+    private suspend fun openPayment(): Boolean {
+        var isOpened = false
+        privatePaykitRepo.beginSavedContactPayment(publicKey)
+            .onSuccess {
+                when (it) {
+                    is PublicPaykitPaymentResult.Opened -> {
+                        isOpened = true
+                        _effects.emit(
+                            ContactDetailEffect.OpenPayment(
+                                it.paymentRequest,
+                                publicKey,
+                                it.privatePaymentContext,
+                            )
+                        )
+                    }
+                    PublicPaykitPaymentResult.NoEndpoint ->
+                        showPayError(R.string.slashtags__error_pay_empty_msg)
+                    PublicPaykitPaymentResult.NotOpened ->
+                        showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                    PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
+                        showPayError(R.string.slashtags__error_pay_waiting_msg)
+                }
+            }
+            .onFailure {
+                Logger.warn("Failed to begin Paykit payment for '$redactedPublicKey'", it, context = TAG)
+                showPayError(R.string.slashtags__error_pay_not_opened_msg)
+            }
+        return isOpened
     }
 
     private suspend fun showPayError(messageRes: Int) {
@@ -260,6 +386,9 @@ data class ContactDetailUiState(
     val tags: ImmutableList<String> = persistentListOf(),
     val isLoading: Boolean = false,
     val showPayButton: Boolean = false,
+    val isPayLoading: Boolean = false,
+    val paymentRequestTarget: PaykitPaymentRequestTarget? = null,
+    val showRequestOrPaySheet: Boolean = false,
     val showAddTagSheet: Boolean = false,
     val showDeleteDialog: Boolean = false,
 )

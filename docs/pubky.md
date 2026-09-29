@@ -41,13 +41,13 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 - `PubkyRepo` self-initializes via `init {}` block — no external trigger needed
 - `AppViewModel` injects `PubkyRepo` to ensure Hilt creates it at app startup
 - `initialize()` attempts to restore any saved session via `importSession()`
-- If restoration fails, the stale keychain entry is deleted to allow a clean retry
-- Session secret is only persisted **after** `importSession()` succeeds to avoid stale entries on failure
+- If restoration fails, saved credentials and cached profile data remain available for retry
+- Recovery retries on connectivity restoration and app resume, and an adopted Ring credential can re-sign in the same identity
 
 ### Profile Loading
 
 - `loadProfile()` fetches the profile for the authenticated public key
-- Uses a `Mutex` with `tryLock()` to prevent concurrent loads (skips if already loading)
+- Uses a `Mutex` to serialize loads, then re-checks the captured identity before fetching
 - Re-checks `_publicKey` after the network call to guard against a concurrent `signOut()`
 - Profile name and image URI are cached in `PubkyStore` (DataStore) for instant display on launch before the full profile loads
 

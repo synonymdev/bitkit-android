@@ -30,6 +30,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -533,6 +534,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onHomeResumed()
 
         verify(hwWalletRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `app resume and connectivity restoration retry the saved Pubky session`() = test {
+        clearInvocations(pubkyRepo)
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        sut.onAppResumed()
+        verify(pubkyRepo, never()).restoreSessionIfNeeded()
+
+        connectivityState.value = ConnectivityState.CONNECTED
+        verify(pubkyRepo).restoreSessionIfNeeded()
+        clearInvocations(pubkyRepo)
+
+        sut.onAppResumed()
+        verify(pubkyRepo).restoreSessionIfNeeded()
     }
 
     @Test
@@ -3569,6 +3585,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(pubkyRepo, never()).hasSecretKey()
         verify(coreService, never()).decode(any())
         verify(toastManager).enqueue(any())
+    }
+
+    @Test
+    fun `cancelled contact scan clears its payment context`() = test {
+        sut.setIsAuthenticated(true)
+        val bolt11 = "lnbcrt1cancelledcontactscan"
+        val scanStarted = CompletableDeferred<Unit>()
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+            scanStarted.complete(Unit)
+            awaitCancellation()
+        }
+
+        val scanJob = sut.openContactPayment(paymentRequest = bolt11, publicKey = testPublicKey)
+        scanStarted.await()
+        assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
+        scanJob?.cancelAndJoin()
+
+        assertNull(activeContactPaymentContext())
     }
 
     @Test
