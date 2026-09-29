@@ -3,19 +3,34 @@
     Requests with actual-payment deadlines are visible but cannot be paid by this version of Bitkit.
     Use a disposable Paykit test identity linked to a controlled rc56 peer. Prepare one-time BTC
     requests with deadlines in proposed, accepted, rejected, canceled and proof-submitted states,
-    plus an accepted monthly BTC subscription with a period-start deadline, one paid period and
-    one unpaid period. Acceptance and proof submission must be prepared through the controlled
+    plus an incoming, accepted monthly BTC subscription with no end date, a period-start deadline,
+    one paid period and one unpaid period. Acceptance and proof submission must be prepared through the controlled
     client because Bitkit intentionally cannot accept these terms. Use valid regtest payment proofs.
-    Do not reset or replace a funded wallet to prepare this fixture.
+    Do not reset or replace a funded wallet to prepare this fixture. Record the payment request id
+    for each one-time state because history rows show notes or dates instead of status labels.
   </description>
   <actions>
     <action>Open Subscriptions and select the Payments tab after the controlled peer's records have synchronized</action>
-    <action>Verify each one-time request remains visible with its lifecycle status, including the completed payment</action>
-    <action>Open the proposed and accepted one-time requests and verify neither offers a Pay action</action>
+    <action>Verify the proposed row (id "PaymentRequestRow-&lt;proposed-payment-request-id&gt;") is visible</action>
+    <action>Verify the accepted row (id "PaymentRequestRow-&lt;accepted-payment-request-id&gt;") is visible</action>
+    <action>Verify the rejected row (id "PaymentRequestRow-&lt;rejected-payment-request-id&gt;") is visible</action>
+    <action>Verify the canceled row (id "PaymentRequestRow-&lt;canceled-payment-request-id&gt;") is visible</action>
+    <action>Verify the completed row (id "PaymentRequestRow-&lt;completed-payment-request-id&gt;") is visible</action>
+    <action>Open proposed row (id "PaymentRequestRow-&lt;proposed-payment-request-id&gt;") and verify no Pay action appears</action>
+    <action>Return to Payments</action>
+    <action>Open accepted row (id "PaymentRequestRow-&lt;accepted-payment-request-id&gt;") and verify no Pay action appears</action>
+    <action>Return to Payments</action>
+    <action>Select the Overview tab</action>
     <action>Open the active subscription and verify its paid period remains visible and Cancel is available</action>
+    <action>Return to Subscriptions</action>
+    <action>Select the Payments tab</action>
     <action>Verify the unpaid period is not offered for payment in the Payments tab or pending-request sheet</action>
     <action>Have the controlled peer send a new subscription proposal with a period-start deadline</action>
-    <action>Open that proposal and verify it is visible but cannot be accepted</action>
+    <action>Select the Overview tab after the proposal has synchronized</action>
+    <action>Open that proposal and verify it explains that its payment details are not supported yet</action>
+    <action>Verify no Subscribe swipe control appears</action>
+    <action>Dismiss the proposal to return to Overview</action>
+    <action>Open the accepted subscription</action>
     <action>Cancel the accepted subscription and verify its paid-period history remains accessible</action>
     <action>Restart Bitkit and verify the one-time and subscription payment history is still visible</action>
   </actions>
