@@ -1223,8 +1223,8 @@ internal class PaykitSdkSessionProvider(
     override fun clearSessionAccess() {
         clearLiveSessionAccess()
         keychain.accessBlocking {
-            delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
             clearPubkySessionCredentials(::delete)
+            delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
         }
     }
 

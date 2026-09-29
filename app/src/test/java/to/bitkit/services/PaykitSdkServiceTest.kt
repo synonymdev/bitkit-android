@@ -290,6 +290,39 @@ class PaykitSdkServiceTest {
         )
     }
 
+    @Test
+    fun `session provider clears the session before the ring reference`() {
+        val blocking = mock<Keychain.BlockingAccess>()
+        val provider = sessionProvider(blocking)
+
+        provider.clearSessionAccess()
+
+        inOrder(blocking) {
+            verify(blocking).delete(Keychain.Key.PAYKIT_SESSION.name)
+            verify(blocking).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+            verify(blocking).delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        }
+    }
+
+    @Test
+    fun `session provider keeps the ring reference when the session cannot be cleared`() {
+        val blocking = mock<Keychain.BlockingAccess>()
+        val provider = sessionProvider(blocking)
+        whenever(blocking.delete(Keychain.Key.PAYKIT_SESSION.name)).doAnswer { throw AppError("Delete failed") }
+
+        assertFailsWith<AppError> { provider.clearSessionAccess() }
+
+        verify(blocking, never()).delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+    }
+
+    private fun sessionProvider(blocking: Keychain.BlockingAccess): PaykitSdkSessionProvider {
+        val keychain = mock<Keychain>()
+        whenever(keychain.accessBlocking<Any?>(any())).doAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Any?>(0).invoke(blocking)
+        }
+        return PaykitSdkSessionProvider(keychain, mock())
+    }
+
     private fun keyStore(
         loadBytes: () -> ByteArray?,
         upsertBytes: (ByteArray) -> Unit = {},
