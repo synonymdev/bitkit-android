@@ -1090,6 +1090,34 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adoptRingIdentity should finish a pick with a profile when cancelled during sign in`() = test {
+        stubRingPickKeychain()
+        val ringPubky = stubRingCredential()
+        val signInStarted = CompletableDeferred<Unit>()
+        val finishSignIn = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("ring_secret")).doSuspendableAnswer {
+            ServiceQueue.CORE.background {
+                signInStarted.complete(Unit)
+                finishSignIn.await()
+                saveRingSession()
+            }
+        }
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice")))
+
+        val pick = async { sut.adoptRingIdentity(ringPubky) }
+        val signInStartedInTime = signInStarted.awaitStarted()
+        pick.cancel()
+        finishSignIn.complete(Unit)
+        pick.join()
+
+        assertTrue(signInStartedInTime, "Timed out waiting for sign in to start")
+        assertTrue(pick.isCancelled)
+        assertRingPickCommitted(hasProfile = true)
+        assertEquals("Alice", sut.profile.value?.name)
+    }
+
+    @Test
     fun `adoptRingIdentity should finish the pick when cancelled during the profile lookup`() = test {
         stubRingPickKeychain()
         val ringPubky = stubRingCredential()
@@ -1116,7 +1144,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `adoptRingIdentity should keep the finished pick when cancelled during the contact load`() = test {
+    fun `adoptRingIdentity should finish the contact load when cancelled during it`() = test {
         stubRingPickKeychain()
         val ringPubky = stubRingCredential()
         stubRingSignInSavesSession()
@@ -1147,16 +1175,22 @@ class PubkyRepoTest : BaseUnitTest() {
         stubRingPickKeychain()
         val ringPubky = stubRingCredential()
         val derivationStarted = CompletableDeferred<Unit>()
+        val finishDerivation = CompletableDeferred<Unit>()
         whenever(pubkyService.publicKeyFromSecret("ring_secret")).doSuspendableAnswer {
-            derivationStarted.complete(Unit)
-            awaitCancellation()
+            ServiceQueue.CORE.background {
+                derivationStarted.complete(Unit)
+                finishDerivation.await()
+                ringPubky
+            }
         }
 
         val pick = async { sut.adoptRingIdentity(ringPubky) }
-        val derivationStartedFirst = derivationStarted.isCompleted
-        pick.cancelAndJoin()
+        val derivationStartedInTime = derivationStarted.awaitStarted()
+        pick.cancel()
+        finishDerivation.complete(Unit)
+        pick.join()
 
-        assertTrue(derivationStartedFirst)
+        assertTrue(derivationStartedInTime, "Timed out waiting for key derivation to start")
         assertTrue(pick.isCancelled)
         assertTrue(ringPickEvents.isEmpty())
         assertTrue(ringKeychain.isEmpty())
@@ -1422,6 +1456,23 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals("Relay unavailable", result.exceptionOrNull()?.message)
         assertEquals(listOf("save reference", "delete reference"), ringPickEvents)
         assertRingPickSignedOut()
+    }
+
+    @Test
+    fun `adoptRingIdentity should mark pubky ring reachable when a pick commits`() = test {
+        stubAdoptedRingSource()
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.failure(TestAppError("Unavailable")))
+        sut.checkAdoptedSource()
+        assertTrue(sut.adoptedSourceUnreachable.value)
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertFalse(sut.adoptedSourceUnreachable.value)
     }
 
     @Test
@@ -2296,7 +2347,7 @@ class PubkyRepoTest : BaseUnitTest() {
         status = status,
     )
 
-    private suspend fun stubRingPickKeychain(vararg saved: Pair<Keychain.Key, String>) {
+    private fun stubRingPickKeychain(vararg saved: Pair<Keychain.Key, String>) {
         saved.forEach { (key, value) -> ringKeychain[key.name] = value }
         mapOf(
             Keychain.Key.PAYKIT_SESSION.name to "session",
@@ -2304,22 +2355,22 @@ class PubkyRepoTest : BaseUnitTest() {
         ).forEach { (key, label) ->
             whenever(keychain.loadString(key)).thenAnswer { ringKeychain[key] }
             whenever(keychain.exists(key)).thenAnswer { ringKeychain.containsKey(key) }
-            whenever(keychain.upsertString(eq(key), any())).doSuspendableAnswer {
+            whenever { keychain.upsertString(eq(key), any()) }.doSuspendableAnswer {
                 currentCoroutineContext().ensureActive()
                 ringKeychain[key] = it.getArgument(1)
                 ringPickEvents += "save $label"
                 Unit
             }
-            whenever(keychain.delete(key)).doSuspendableAnswer {
+            whenever { keychain.delete(key) }.doSuspendableAnswer {
                 currentCoroutineContext().ensureActive()
                 ringKeychain.remove(key)
                 ringPickEvents += "delete $label"
                 Unit
             }
         }
-        whenever(pubkyService.signOut()).doSuspendableAnswer(ringTeardown("sign out"))
-        whenever(pubkyService.forgetSessionAccess()).doSuspendableAnswer(ringTeardown("forget session"))
-        whenever(pubkyService.clearSessionAccess()).doSuspendableAnswer(ringTeardown("clear session access"))
+        whenever { pubkyService.signOut() }.doSuspendableAnswer(ringTeardown("sign out"))
+        whenever { pubkyService.forgetSessionAccess() }.doSuspendableAnswer(ringTeardown("forget session"))
+        whenever { pubkyService.clearSessionAccess() }.doSuspendableAnswer(ringTeardown("clear session access"))
     }
 
     private fun ringTeardown(event: String): suspend (InvocationOnMock) -> Unit = {
@@ -2338,12 +2389,12 @@ class PubkyRepoTest : BaseUnitTest() {
         ringPickEvents += "save session"
     }
 
-    private suspend fun stubRingSignInSavesSession() {
-        whenever(pubkyService.signIn("ring_secret")).thenAnswer { saveRingSession() }
+    private fun stubRingSignInSavesSession() {
+        whenever { pubkyService.signIn("ring_secret") }.thenAnswer { saveRingSession() }
     }
 
-    private suspend fun stubRingActivationFailure() {
-        whenever(pubkyService.signIn("ring_secret")).thenAnswer {
+    private fun stubRingActivationFailure() {
+        whenever { pubkyService.signIn("ring_secret") }.thenAnswer {
             saveRingSession()
             throw TestAppError("Initialize failed")
         }
@@ -2352,12 +2403,14 @@ class PubkyRepoTest : BaseUnitTest() {
     private suspend fun CompletableDeferred<Unit>.awaitStarted(): Boolean =
         withContext(Dispatchers.Default) { withTimeoutOrNull(STEP_TIMEOUT) { await() } } != null
 
-    private fun assertRingPickCommitted() {
+    private fun assertRingPickCommitted(hasProfile: Boolean = false) {
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertEquals("ring_session", ringKeychain[Keychain.Key.PAYKIT_SESSION.name])
         assertEquals(RING_REFERENCE, ringKeychain[Keychain.Key.SHARED_PUBKY_SOURCE.name])
-        assertTrue(profileSetupPending.value)
+        assertEquals(!hasProfile, profileSetupPending.value)
         assertEquals(listOf("save reference", "save session"), ringPickEvents)
+        verifyBlocking(pubkyService) { contactRecords() }
+        assertTrue(sut.contactsLoadCompletionVersion.value > 0)
     }
 
     private fun assertRingPickSignedOut() {

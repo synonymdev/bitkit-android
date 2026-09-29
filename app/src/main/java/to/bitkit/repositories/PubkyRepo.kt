@@ -300,7 +300,10 @@ class PubkyRepo @Inject constructor(
     private suspend fun checkAdoptedSourcePresent() {
         if (!adoptedSourceCheckMutex.tryLock()) return
         try {
-            val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: return
+            val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: run {
+                _adoptedSourceUnreachable.update { false }
+                return
+            }
             val ringPubkys = sharedPubkyClient.listRingIdentities().getOrElse {
                 Logger.warn("Failed to list ring identities", it, context = TAG)
                 _adoptedSourceUnreachable.update { true }
@@ -334,13 +337,16 @@ class PubkyRepo @Inject constructor(
                 }
                 withContext(NonCancellable) { commitRingIdentity(pubky, publicKey, secretKeyHex) }
             }
-            loadContacts()
+            withContext(NonCancellable) { loadContacts() }
             hasProfile
+        }.onFailure {
+            if (it !is PubkyAlreadySignedInError) Logger.error("Failed to adopt ring identity", it, context = TAG)
         }
     }
 
     private suspend fun commitRingIdentity(pubky: String, publicKey: String, secretKeyHex: String): Boolean {
         val previousReference = runSuspendCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+            .getOrNull()
         val previousSession = runSuspendCatching { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }
         var committed = false
         val profile = try {
@@ -364,6 +370,7 @@ class PubkyRepo @Inject constructor(
             runSuspendCatching { cacheMetadata(adoptedProfile) }
                 .onFailure { Logger.warn("Failed to cache adopted ring profile", it, context = TAG) }
         }
+        _adoptedSourceUnreachable.update { false }
         _publicKey.update { publicKey.ensurePubkyPrefix() }
         notifyBackupStateChanged()
         Logger.info("Adopted ring identity for '${redacted(publicKey)}'", context = TAG)
@@ -394,7 +401,7 @@ class PubkyRepo @Inject constructor(
     }
 
     private suspend fun rollBackRingIdentity(
-        previousReference: Result<String?>,
+        previousReference: String?,
         previousSession: Result<String?>,
     ) {
         if (hasSessionChangedSince(previousSession)) {
@@ -404,7 +411,7 @@ class PubkyRepo @Inject constructor(
             return
         }
         val hadSession = !previousSession.getOrNull().isNullOrEmpty()
-        restoreRingReference(previousReference.getOrNull()?.takeIf { hadSession })
+        restoreRingReference(previousReference?.takeIf { hadSession })
     }
 
     private suspend fun discardRingSession() {

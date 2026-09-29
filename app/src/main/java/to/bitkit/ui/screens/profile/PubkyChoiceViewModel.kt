@@ -78,7 +78,6 @@ class PubkyChoiceViewModel @Inject constructor(
                         _uiState.update { state -> state.copy(adoptingPubky = null, navigateToProfile = true) }
                         return@onFailure
                     }
-                    Logger.error("Failed to adopt ring identity", it, context = TAG)
                     _uiState.update { state -> state.copy(adoptingPubky = null) }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
