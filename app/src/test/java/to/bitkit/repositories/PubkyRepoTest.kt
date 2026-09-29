@@ -1589,21 +1589,25 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `contact deleted during a load stays deleted when the stale snapshot returns`() = test {
+    fun `deletion during initial load preserves other saved contacts`() = test {
         authenticateForTesting()
         val snapshotReady = CompletableDeferred<Unit>()
         val resumeLoad = CompletableDeferred<Unit>()
+        val survivor = createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Survivor"))
+        var firstRead = true
         whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            if (!firstRead) return@doSuspendableAnswer listOf(survivor)
+            firstRead = false
             snapshotReady.complete(Unit)
             resumeLoad.await()
-            listOf(createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("Deleted")))
+            listOf(survivor, createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("Deleted")))
         }
         val load = launch { sut.loadContacts() }
         snapshotReady.await()
         assertTrue(sut.removeContact(VALID_CONTACT_KEY_B).isSuccess)
         resumeLoad.complete(Unit)
         load.join()
-        assertTrue(sut.contacts.value.isEmpty())
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
         assertFalse(sut.isLoadingContacts.value)
     }
 

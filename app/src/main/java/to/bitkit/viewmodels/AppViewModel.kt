@@ -4042,6 +4042,7 @@ class AppViewModel @Inject constructor(
             SendMethod.LIGHTNING -> proceedWithLightningPayment(
                 incomingPaymentRequest,
                 preparedPaymentProofRequest,
+                contactPaymentContext,
                 amount,
             )
         }
@@ -4064,8 +4065,13 @@ class AppViewModel @Inject constructor(
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
-                    onchainPaymentStarted = true
                 }
+                incomingPaymentRequest?.let { request ->
+                    paykitPaymentRequestRepo.ensurePaymentAllowed(request).onFailure {
+                        paykitPaymentProofRepo.failOnchainPayment(request)
+                    }.getOrThrow()
+                }
+                onchainPaymentStarted = preparedPaymentProofRequest != null
             },
             onBroadcast = { txId ->
                 proofRequest = null
@@ -4137,9 +4143,11 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun proceedWithLightningPayment(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
         amount: ULong,
     ) {
         val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
@@ -4168,7 +4176,22 @@ class AppViewModel @Inject constructor(
 
         val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
 
-        sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
+        var authorizationError: Throwable? = null
+        val result = sendLightning(decodedInvoice.bolt11, paymentAmount) {
+            authorizationError = incomingPaymentRequest?.let {
+                paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
+            }
+            authorizationError == null
+        }
+        authorizationError?.let {
+            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            cancelPaymentProofPreparation(proofRequest)
+            createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+        result.onSuccess { actualPaymentHash ->
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
             onSendSuccess(
@@ -4507,8 +4530,9 @@ class AppViewModel @Inject constructor(
     private suspend fun sendLightning(
         bolt11: String,
         amount: ULong? = null,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
-        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
+        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount, onBeforeSend = onBeforeSend).onSuccess { hash ->
             // Wait until matching payment event is received (with timeout for hold invoices)
             val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
                 when (it) {
@@ -5146,26 +5170,36 @@ class AppViewModel @Inject constructor(
 
     suspend fun prepareHardwareContactPayment(): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-        if (isPreparedContactPayment(contactPaymentContext)) return true
-
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        val proofPreparation = preparePaymentProof(incomingPaymentRequest)
-        if (proofPreparation.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress) {
-            handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
-            return false
+        if (!isPreparedContactPayment(contactPaymentContext)) {
+            val proofPreparation = preparePaymentProof(incomingPaymentRequest)
+            if (proofPreparation.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress) {
+                handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
+                return false
+            }
+            val preparedPaymentProofRequest = proofPreparation.getOrNull()
+            if (!prepareContactPayment(contactPaymentContext)) {
+                cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                return false
+            }
+            if (preparedPaymentProofRequest != null) {
+                val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
+                markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
+                    synchronized(contactPaymentContextLock) {
+                        if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
+                    }
+                    cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                    handlePaymentPreparationFailure(it, contactPaymentContext)
+                    return false
+                }
+            }
         }
-        val preparedPaymentProofRequest = proofPreparation.getOrNull()
-        if (!prepareContactPayment(contactPaymentContext)) {
-            cancelPaymentProofPreparation(preparedPaymentProofRequest)
-            return false
-        }
-        if (preparedPaymentProofRequest != null) {
-            val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
-            markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
+        incomingPaymentRequest?.let { request ->
+            paykitPaymentRequestRepo.ensurePaymentAllowed(request).onFailure {
+                paykitPaymentProofRepo.failOnchainPayment(request)
                 synchronized(contactPaymentContextLock) {
                     if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
                 }
-                cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 handlePaymentPreparationFailure(it, contactPaymentContext)
                 return false
             }

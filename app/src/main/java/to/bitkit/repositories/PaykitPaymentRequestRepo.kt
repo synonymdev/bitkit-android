@@ -700,22 +700,32 @@ class PaykitPaymentRequestRepo @Inject constructor(
         return PaykitPaymentRequestCreation(request, creatorIdentity, wasPublishedToActiveState)
     }
 
-    suspend fun accept(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun ensurePaymentAllowed(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            if (paykitSdkService.linkedPeers().any {
-                it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty) &&
-                    it.counterpartyReceiverPath == request.counterpartyReceiverPath
-            }) {
+            if (
+                paykitSdkService.linkedPeers().any {
+                    it.state == LinkedPeerState.BLOCKED &&
+                        PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty) &&
+                        it.counterpartyReceiverPath == request.counterpartyReceiverPath
+                }
+            ) {
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
+        }
+    }
+
+    suspend fun accept(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
             if (!request.requiresAcceptance) {
                 operationMutex.withLock {
+                    ensurePaymentAllowed(request).getOrThrow()
                     if (_pendingRequests.value.none { it.id == request.id }) {
                         throw PaykitPaymentRequestError.RequestUnavailable
                     }
                 }
             } else {
                 updateRequest(request, PaymentRequestLifecycleState.ACCEPTED) {
+                    ensurePaymentAllowed(it).getOrThrow()
                     paykitSdkService.acceptPaymentRequest(
                         counterparty = it.counterparty,
                         counterpartyReceiverPath = it.counterpartyReceiverPath,

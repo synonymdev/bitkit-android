@@ -131,7 +131,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         sut.refresh().getOrThrow()
         assertTrue(sut.pendingRequests.value.isEmpty())
-        assertEquals(listOf(record.paymentRequestId), sut.paymentRequestHistory.value.map { it.paymentRequestId })
+        whenever(paykitSdkService.paymentRequests()).thenReturn(emptyList())
+        sut.refresh().getOrThrow()
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
     }
 
     @Test
@@ -144,6 +146,38 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED, record.counterpartyReceiverPath)),
         )
         assertEquals(PaykitPaymentRequestError.RequestUnavailable, sut.accept(request).exceptionOrNull())
+    }
+
+    @Test
+    fun `accepted request checks blocking after waiting for synchronization`() = test {
+        val record = paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val refreshPaused = CompletableDeferred<Unit>()
+        val resumeRefresh = CompletableDeferred<Unit>()
+        var blocked = false
+        var readCount = 0
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            if (readCount++ == 0) {
+                refreshPaused.complete(Unit)
+                resumeRefresh.await()
+                emptyList()
+            } else if (blocked) {
+                listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED, record.counterpartyReceiverPath))
+            } else {
+                emptyList()
+            }
+        }
+        val refresh = async { sut.refresh() }
+        runCurrent()
+        refreshPaused.await()
+        val acceptance = async { sut.accept(request) }
+        runCurrent()
+        blocked = true
+        resumeRefresh.complete(Unit)
+        refresh.await().getOrThrow()
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, acceptance.await().exceptionOrNull())
     }
 
     @Test

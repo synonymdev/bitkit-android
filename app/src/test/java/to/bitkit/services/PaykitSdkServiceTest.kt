@@ -1,11 +1,17 @@
 package to.bitkit.services
 
 import com.synonym.paykit.ContactRecord
-import com.synonym.paykit.LinkedPeerRecord
-import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
+import com.synonym.paykit.LinkedPeerRecord
+import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PaymentRequestLifecycleState
+import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PaymentRequestRecurrence
+import com.synonym.paykit.PaymentRequestTerms
+import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkySessionAccess
@@ -28,6 +34,7 @@ import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyAuthRequestError
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.utils.AppError
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertContentEquals
@@ -105,12 +112,15 @@ class PaykitSdkServiceTest {
     fun `deletion blocks all known receivers before removing the contact`() = runTest {
         for (failBlock in listOf(false, true)) {
             val sdk = mock<PaykitSdk>()
+            whenever(sdk.paymentRequests()).thenReturn(emptyList())
             val contact = mock<ContactRecord> { on { receiverPaths } doReturn listOf(PaykitReceiverPaths.WALLET) }
             whenever(sdk.contactRecord(RING_PUBKY)).thenReturn(contact)
             val peer = contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.LINKED)
             whenever(sdk.linkedPeers()).thenReturn(listOf(peer))
-            if (failBlock) whenever(sdk.blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER))
-                .thenThrow(IllegalStateException("storage failure"))
+            if (failBlock) {
+                whenever(sdk.blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER))
+                    .thenThrow(IllegalStateException("storage failure"))
+            }
             val service = PaykitSdkService(mock(), mock()) { sdk }
             if (failBlock) {
                 assertFailsWith<IllegalStateException> { service.removeContact(RING_PUBKY) }
@@ -122,6 +132,66 @@ class PaykitSdkServiceTest {
                     verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
                     verify(sdk).removeContact(RING_PUBKY)
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `active subscription prevents deletion until it ends`() = runTest {
+        for ((role, endsNaturally) in listOf(
+            PaymentRequestLocalRole.PAYER to false,
+            PaymentRequestLocalRole.PAYER to true,
+            PaymentRequestLocalRole.PAYEE to false,
+        )) {
+            val sdk = mock<PaykitSdk>()
+            val recurrence = mock<PaymentRequestRecurrence>()
+            val requestTerms = mock<PaymentRequestTerms> { on { this.recurrence } doReturn recurrence }
+            val request = mock<PaymentRequestRecord> {
+                on { counterparty } doReturn RING_PUBKY
+                on { localRole } doReturn role
+                on { state } doReturn PaymentRequestLifecycleState.ACTIVE_RECURRING
+                on { terms } doReturn requestTerms
+            }
+            whenever(sdk.linkedPeers()).thenReturn(emptyList())
+            whenever(sdk.paymentRequests()).thenReturn(listOf(request))
+            val service = PaykitSdkService(mock(), mock()) { sdk }
+            assertFailsWith<PubkyContactError.ActiveSubscription> { service.removeContact(RING_PUBKY) }
+            verify(sdk, never()).blockPeer(any(), any())
+            verify(sdk, never()).removeContact(any())
+            if (endsNaturally) {
+                whenever(recurrence.endsAt).thenReturn("2026-02-01T00:00:00Z")
+            } else {
+                whenever(request.state).thenReturn(PaymentRequestLifecycleState.CANCELED)
+            }
+            service.removeContact(RING_PUBKY)
+            verify(sdk).removeContact(RING_PUBKY)
+        }
+    }
+
+    @Test
+    fun `deletion withdraws private endpoints before blocking even when withdrawal fails`() = runTest {
+        for (failWithdrawal in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.paymentRequests()).thenReturn(emptyList())
+            whenever(sdk.linkedPeers()).thenReturn(
+                listOf(contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.LINKED)),
+            )
+            val withdrawal = whenever(
+                sdk.clearPrivatePaymentListAndProcessOutbound(RING_PUBKY, PaykitReceiverPaths.SERVER),
+            )
+            if (failWithdrawal) {
+                withdrawal.thenThrow(IllegalStateException("network unavailable"))
+            } else {
+                withdrawal.thenReturn(
+                    PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList()),
+                )
+            }
+            val service = PaykitSdkService(mock(), mock()) { sdk }
+            service.removeContact(RING_PUBKY)
+            inOrder(sdk) {
+                verify(sdk).clearPrivatePaymentListAndProcessOutbound(RING_PUBKY, PaykitReceiverPaths.SERVER)
+                verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
+                verify(sdk).removeContact(RING_PUBKY)
             }
         }
     }
@@ -147,6 +217,33 @@ class PaykitSdkServiceTest {
                 verify(sdk, never()).saveContact(any())
                 verify(sdk, never()).unblockPeer(any(), any())
             }
+        }
+    }
+
+    @Test
+    fun `failed private connection restoration leaves contact creation retryable`() = runTest {
+        for (failPeerLookup in listOf(true, false)) {
+            val sdk = mock<PaykitSdk>()
+            val peers = listOf(
+                contactPeer(PaykitReceiverPaths.WALLET, LinkedPeerState.BLOCKED),
+                contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED),
+            )
+            val failure = IllegalStateException("storage failure")
+            if (failPeerLookup) {
+                whenever(sdk.linkedPeers()).thenThrow(failure).thenReturn(peers)
+            } else {
+                whenever(sdk.linkedPeers()).thenReturn(peers)
+                whenever(sdk.unblockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER))
+                    .thenThrow(failure).thenReturn(peers.last().copy(state = LinkedPeerState.NOT_LINKED))
+            }
+            whenever(sdk.saveContact(any())).thenReturn(mock())
+            val service = PaykitSdkService(mock(), mock()) { sdk }
+            assertFailsWith<IllegalStateException> {
+                service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+            }
+            verify(sdk, never()).saveContact(any())
+            service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+            verify(sdk).saveContact(any())
         }
     }
 
