@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.ChannelLiquidityOptions
+import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOptions
@@ -153,6 +154,7 @@ class TransferViewModelTest : BaseUnitTest() {
         // Default: no mining-fee reserve so existing limit tests keep their balances.
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(0uL))
+        whenever { lightningRepo.getFeeRates() }.thenReturn(Result.success(FeeRates(fast = 2u, mid = 2u, slow = 2u)))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2uL))
         whenever {
@@ -1532,6 +1534,45 @@ class TransferViewModelTest : BaseUnitTest() {
         assertEquals(
             FEES_CHANGED_NETWORK.replace("{amount}", "$BITCOIN_SYMBOL 0.00001500"),
             toasts.single().description,
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm pays with the fee rates of the plan it held`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val heldRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
+        val laterRates = FeeRates(fast = 50u, mid = 30u, slow = 10u)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        whenever { lightningRepo.getFeeRates() }.thenReturn(Result.success(heldRates))
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        assertFeesChangedToast(toasts, FEES_CHANGED_NETWORK, delta = 1_500uL)
+        whenever { lightningRepo.getFeeRates() }.thenReturn(Result.success(laterRates))
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verify(lightningRepo, atLeastOnce()).calculateTotalFee(any(), any(), any(), anyOrNull(), eq(heldRates))
+        verify(lightningRepo, never()).calculateTotalFee(any(), any(), any(), anyOrNull(), eq(laterRates))
+        verify(lightningRepo).sendOnChain(
+            address = any(),
+            sats = eq(order.feeSat),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = eq(heldRates),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
         )
     }
 

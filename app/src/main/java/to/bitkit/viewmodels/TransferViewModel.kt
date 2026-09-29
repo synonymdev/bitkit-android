@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -369,18 +370,7 @@ class TransferViewModel @Inject constructor(
         walletRepo.getAddresses(count = 1).onFailure { ToastEventBus.send(it) }.getOrNull()?.firstOrNull()?.address
 
     private suspend fun paySpendingConfirmOrder(order: IBtOrder, shown: TransferToSpendingUiState): Boolean {
-        val plan = spendingConfirmFundingPlan?.takeIf { it.orderId == order.id }
-            ?: buildSpendingConfirmFundingPlan(order).getOrElse {
-                Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
-                ToastEventBus.send(it)
-                return false
-            }
-        if (plan.miningFeeSats == 0uL) {
-            Logger.warn("Skipped paying order '${order.id}' without a mining fee estimate", context = TAG)
-            ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__try_again))
-            return false
-        }
-        spendingConfirmFundingPlan = plan
+        val plan = resolveSpendingConfirmPlan(order, shown) ?: return false
 
         Logger.debug(
             "BT confirm: spendable=${plan.spendableBalance}, feeSat=${order.feeSat}, " +
@@ -389,9 +379,7 @@ class TransferViewModel @Inject constructor(
             context = TAG,
         )
 
-        if (holdForFeesChange(order, shown, plan)) return false
-
-        if (isSendAllBelowOrderFee(order, plan)) return false
+        if (holdForFeesChange(order, shown, plan) || isSendAllBelowOrderFee(order, plan)) return false
 
         val address = order.payment?.onchain?.address.orEmpty()
         return lightningRepo
@@ -400,6 +388,7 @@ class TransferViewModel @Inject constructor(
                 sats = order.feeSat,
                 speed = TransactionSpeed.Fast,
                 utxosToSpend = if (plan.shouldUseSendAll) null else plan.selectedUtxos,
+                feeRates = plan.feeRates,
                 isTransfer = true,
                 channelId = order.channel?.shortChannelId,
                 isMaxAmount = plan.shouldUseSendAll,
@@ -421,6 +410,25 @@ class TransferViewModel @Inject constructor(
             }
             .onFailure { ToastEventBus.send(it) }
             .isSuccess
+    }
+
+    private suspend fun resolveSpendingConfirmPlan(
+        order: IBtOrder,
+        shown: TransferToSpendingUiState,
+    ): SpendingConfirmFundingPlan? {
+        val plan = spendingConfirmFundingPlan?.takeIf { it.orderId == order.id }
+            ?: buildSpendingConfirmFundingPlan(order).getOrElse {
+                Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
+                ToastEventBus.send(it)
+                return null
+            }
+        if (plan.miningFeeSats == 0uL) {
+            Logger.warn("Skipped paying order '${order.id}' without a mining fee estimate", context = TAG)
+            ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__try_again))
+            return null
+        }
+        spendingConfirmFundingPlan = plan
+        return plan
     }
 
     private suspend fun isSendAllBelowOrderFee(order: IBtOrder, plan: SpendingConfirmFundingPlan): Boolean {
@@ -496,17 +504,20 @@ class TransferViewModel @Inject constructor(
         val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
         val spendableBalance = balanceDetails.spendableOnchainBalanceSats
         val totalOnchainBalance = balanceDetails.totalOnchainBalanceSats
-        val satsPerVByte = lightningRepo.getFeeRateForSpeed(speed).getOrThrow()
+        val feeRates = lightningRepo.getFeeRates().getOrThrow()
+        val satsPerVByte = lightningRepo.getFeeRateForSpeed(speed, feeRates).getOrThrow()
 
         resolveNormalSpendingConfirmFunding(
             target = target,
             speed = speed,
+            feeRates = feeRates,
             satsPerVByte = satsPerVByte,
             spendableBalance = spendableBalance,
             totalOnchainBalance = totalOnchainBalance,
         ) ?: resolveSendAllSpendingConfirmFunding(
             target = target,
             speed = speed,
+            feeRates = feeRates,
             spendableBalance = spendableBalance,
             totalOnchainBalance = totalOnchainBalance,
         )
@@ -515,6 +526,7 @@ class TransferViewModel @Inject constructor(
     private suspend fun resolveNormalSpendingConfirmFunding(
         target: SpendingFundingTarget,
         speed: TransactionSpeed,
+        feeRates: FeeRates,
         satsPerVByte: ULong,
         spendableBalance: ULong,
         totalOnchainBalance: ULong,
@@ -533,6 +545,7 @@ class TransferViewModel @Inject constructor(
             address = target.address,
             speed = speed,
             utxosToSpend = utxos,
+            feeRates = feeRates,
         ).getOrElse {
             Logger.warn("Failed to estimate transfer funding fee", it, context = TAG)
             0uL
@@ -544,6 +557,7 @@ class TransferViewModel @Inject constructor(
 
         return SpendingConfirmFundingPlan(
             orderId = target.orderId,
+            feeRates = feeRates,
             miningFeeSats = normalFee,
             shouldUseSendAll = false,
             selectedUtxos = utxos,
@@ -556,12 +570,14 @@ class TransferViewModel @Inject constructor(
     private suspend fun resolveSendAllSpendingConfirmFunding(
         target: SpendingFundingTarget,
         speed: TransactionSpeed,
+        feeRates: FeeRates,
         spendableBalance: ULong,
         totalOnchainBalance: ULong,
     ): SpendingConfirmFundingPlan {
         val sendAllFee = lightningRepo.estimateSendAllFee(
             address = target.address,
             speed = speed,
+            feeRates = feeRates,
         ).getOrThrow()
         val maxSendable = spendableBalance.safe() - sendAllFee.safe()
         if (maxSendable < target.feeSat) {
@@ -570,6 +586,7 @@ class TransferViewModel @Inject constructor(
 
         return SpendingConfirmFundingPlan(
             orderId = target.orderId,
+            feeRates = feeRates,
             miningFeeSats = sendAllFee,
             shouldUseSendAll = true,
             selectedUtxos = null,
@@ -2012,6 +2029,7 @@ private data class SpendingFundingTarget(
 
 private data class SpendingConfirmFundingPlan(
     val orderId: String?,
+    val feeRates: FeeRates,
     val miningFeeSats: ULong,
     val shouldUseSendAll: Boolean,
     val selectedUtxos: List<SpendableUtxo>?,
