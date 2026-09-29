@@ -588,6 +588,64 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `createIdentity returns cache failure after profile loading`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        profileSetupPending.value = true
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        var cacheUpdateCount = 0
+        whenever { pubkyStore.update(any()) }.thenAnswer {
+            cacheUpdateCount += 1
+            if (cacheUpdateCount == 2) throw TestAppError("cache failed")
+            Unit
+        }
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertEquals("cache failed", result.exceptionOrNull()?.message)
+        assertEquals(2, cacheUpdateCount)
+    }
+
+    @Test
+    fun `wipe completes while identity creation waits for contact loading`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        profileSetupPending.value = true
+        val contactLoadStarted = CompletableDeferred<Unit>()
+        val finishContactLoad = CompletableDeferred<Unit>()
+        val profilePublished = CompletableDeferred<Unit>()
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            if (!contactLoadStarted.isCompleted) {
+                contactLoadStarted.complete(Unit)
+                finishContactLoad.await()
+            }
+            emptyList()
+        }
+        whenever(pubkyService.publishPaykitProfile(any())).doSuspendableAnswer {
+            profilePublished.complete(Unit)
+            mock()
+        }
+        val activeContactLoad = async { sut.loadContacts() }
+        contactLoadStarted.await()
+
+        val creation = async {
+            sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+        }
+        profilePublished.await()
+
+        try {
+            sut.wipeLocalState()
+
+            assertFalse(creation.isCompleted)
+            assertNull(sut.publicKey.value)
+        } finally {
+            finishContactLoad.complete(Unit)
+        }
+
+        activeContactLoad.await()
+        assertTrue(creation.await().isSuccess)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
     fun `loadProfile should update profile on success`() = test {
         authenticateForTesting()
 

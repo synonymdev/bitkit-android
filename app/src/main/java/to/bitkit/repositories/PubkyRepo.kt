@@ -508,35 +508,44 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         avatarBytes: ByteArray?,
-    ): Result<Unit> = initializeMutex.withLock {
-        if (settingsStore.isPubkyProfileSetupPending.first() && _publicKey.value != null) {
-            return@withLock runSuspendCatching {
-                withContext(ioDispatcher) {
-                    val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
-                    val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
-                    finishIdentityCreation(publicKey, name, bio, links, tags, imageUrl)
+    ): Result<Unit> {
+        val result = initializeMutex.withLock {
+            if (settingsStore.isPubkyProfileSetupPending.first() && _publicKey.value != null) {
+                return@withLock runSuspendCatching {
+                    withContext(ioDispatcher) {
+                        val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
+                        val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
+                        finishIdentityCreation(publicKey, name, bio, links, tags, imageUrl)
+                    }
                 }
+            }
+
+            var shouldRevokeSessionOnFailure = false
+            try {
+                val creationResult = runSuspendCatching {
+                    withContext(ioDispatcher) {
+                        settingsStore.setPubkyProfileSetupPending(false)
+                        val publicKeyZ32 = _publicKey.value
+                            ?: createLocalIdentitySession { shouldRevokeSessionOnFailure = true }
+
+                        val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
+                        shouldRevokeSessionOnFailure = false
+                        finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
+                    }
+                }
+                if (creationResult.isFailure) revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
+                creationResult
+            } catch (error: CancellationException) {
+                revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
+                throw error
             }
         }
 
-        var shouldRevokeSessionOnFailure = false
-        try {
-            val result = runSuspendCatching {
-                withContext(ioDispatcher) {
-                    settingsStore.setPubkyProfileSetupPending(false)
-                    val publicKeyZ32 = _publicKey.value
-                        ?: createLocalIdentitySession { shouldRevokeSessionOnFailure = true }
-
-                    val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
-                    shouldRevokeSessionOnFailure = false
-                    finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
-                }
-            }
-            if (result.isFailure) revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
-            result
-        } catch (error: CancellationException) {
-            revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
-            throw error
+        val publicKey = result.getOrElse { return Result.failure(it) }
+        return runSuspendCatching {
+            if (_publicKey.value != publicKey) return@runSuspendCatching
+            loadProfile()
+            loadContacts()
         }
     }
 
@@ -581,7 +590,7 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         imageUrl: String?,
-    ) {
+    ): String {
         val createdProfile = PubkyProfile(
             publicKey = publicKey,
             name = name,
@@ -597,8 +606,7 @@ class PubkyRepo @Inject constructor(
         settingsStore.setPubkyProfileSetupPending(false)
         notifyBackupStateChanged()
         Logger.info("Created identity for '${redacted(publicKey)}'", context = TAG)
-        loadProfile()
-        loadContacts()
+        return publicKey
     }
 
     private suspend fun revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSession: Boolean) {
