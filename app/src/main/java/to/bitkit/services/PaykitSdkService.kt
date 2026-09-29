@@ -77,6 +77,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -85,6 +86,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.async.BaseCoroutineScope
+import to.bitkit.data.PubkyStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.data.sharedpubky.SharedPubkyContract
@@ -170,6 +172,7 @@ internal object PaykitReceiverPaths {
 class PaykitSdkService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
+    private val pubkyStore: PubkyStore,
     sharedPubky: SharedPubkyClient,
     @IoDispatcher ioDispatcher: CoroutineDispatcher,
 ) : BaseCoroutineScope(ioDispatcher, TAG) {
@@ -187,6 +190,7 @@ class PaykitSdkService @Inject constructor(
     private val identityRepublishMutex = Mutex()
     private var republishPublicKey: String? = null
     private var nextIdentityRepublishAt = 0L
+    private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationMutex = Mutex()
     private val setupMutex = Mutex()
@@ -205,14 +209,16 @@ class PaykitSdkService @Inject constructor(
         )
     }
 
+    @Suppress("LongParameterList")
     internal constructor(
         context: Context,
         keychain: Keychain,
+        pubkyStore: PubkyStore,
         bootstrapFactory: (() -> PubkySessionBootstrap)? = null,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
         sharedPubky: SharedPubkyClient = SharedPubkyClient(context, ioDispatcher),
         sdkFactory: () -> PaykitSdk,
-    ) : this(context, keychain, sharedPubky, ioDispatcher) {
+    ) : this(context, keychain, pubkyStore, sharedPubky, ioDispatcher) {
         this.sdkFactory = sdkFactory
         if (bootstrapFactory != null) this.bootstrapFactory = bootstrapFactory
         isSetup.complete(Unit)
@@ -272,9 +278,16 @@ class PaykitSdkService @Inject constructor(
                         if (!isSetup.isCompleted) PaykitAndroid.initializeOrThrow(context)
                         val key = publicKey ?: sessionProvider.loadLocalSecretKey()?.let(::pubkyPublicKeyFromSecret)
                         val identity = key?.let(PubkyPublicKeyFormat::normalized) ?: return@runSuspendCatching
-                        if (identity == republishPublicKey && now < nextIdentityRepublishAt) return@runSuspendCatching
+                        if (
+                            identity == republishPublicKey &&
+                            now >= lastIdentityRepublishAt &&
+                            now < nextIdentityRepublishAt
+                        ) {
+                            return@runSuspendCatching
+                        }
 
                         republishPublicKey = identity
+                        lastIdentityRepublishAt = now
                         nextIdentityRepublishAt = now + IDENTITY_REPUBLISH_RETRY_INTERVAL.inWholeMilliseconds
                         if (bootstrap().republishIdentity(identity)) {
                             nextIdentityRepublishAt = now + IDENTITY_REPUBLISH_INTERVAL.inWholeMilliseconds
@@ -737,6 +750,8 @@ class PaykitSdkService @Inject constructor(
                         )
                     },
                     acceptedPaymentEndpointIdentifiers = proposal.acceptedPaymentEndpointIdentifiers,
+                    conversion = null,
+                    paymentDeadline = null,
                     metadata = PrivateJsonObject(proposal.metadataJson),
                 )
                 handle.proposePaymentRequest(counterparty, counterpartyReceiverPath, terms)
@@ -776,6 +791,8 @@ class PaykitSdkService @Inject constructor(
                     PaymentProofSubmission(
                         billingPeriod = billingPeriod?.sdkValue,
                         paymentEndpointIdentifier = paymentEndpointIdentifier,
+                        allowanceId = null,
+                        conversionQuoteId = null,
                         proof = PrivateJsonObject(proofJson),
                     ),
                 )
@@ -938,7 +955,12 @@ class PaykitSdkService @Inject constructor(
     }
 
     private suspend fun currentSdkStatePublicKeyLocked(): String? {
-        return handle().identityStatus()?.publicKey
+        sessionProvider.suspendStoredSessionAccess()
+        return try {
+            handle().identityStatus()?.publicKey
+        } finally {
+            sessionProvider.resumeStoredSessionAccess()
+        }
     }
 
     private suspend fun persistSessionAccess(access: PubkySessionAccess) {
@@ -958,6 +980,11 @@ class PaykitSdkService @Inject constructor(
     ) {
         persistSessionAccess(result.sessionAccess)
         sessionProvider.setLiveSessionAccess(result.sessionAccess)
+        val cachedOwner = pubkyStore.data.first().ownerPublicKey
+        val previousOwner = cachedOwner ?: previousPublicKey
+        if (previousOwner != null && !PubkyPublicKeyFormat.matches(previousOwner, result.publicKey)) {
+            pubkyStore.reset()
+        }
         if (!PubkyPublicKeyFormat.matches(previousPublicKey, result.publicKey)) {
             keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
         }

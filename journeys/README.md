@@ -153,7 +153,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
-| `payment-requests/safe-retry-after-failed-send.xml` | not ported — the iOS retry fix is pending in synonymdev/bitkit-ios#826 |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
@@ -176,6 +175,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
+| `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; iOS has no app-log step, and closing the received sheet re-sizes its Spending Confirm, so the lower amounts can show before the swipe |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
@@ -223,3 +223,5 @@ One asymmetry worth knowing when comparing: Android builds `Tab-*` from the enum
 (`CustomTabRowWithSpacing`), so `Tab-all` is stable in any locale, while iOS derives it from the
 tab's display name and becomes `Tab-todas` in Spanish. Journeys naming a `Tab-*` identifier assume an
 English device for iOS's sake.
+
+Device-clock fault injection requires a separate manual run: [Paykit clock changes](paykit-clock-changes.md).

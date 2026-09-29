@@ -30,6 +30,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,6 +90,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.BalanceState
@@ -526,6 +528,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onHomeResumed()
 
         verify(hwWalletRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `app resume and connectivity restoration retry the saved Pubky session`() = test {
+        clearInvocations(pubkyRepo)
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        sut.onAppResumed()
+        verify(pubkyRepo, never()).restoreSessionIfNeeded()
+
+        connectivityState.value = ConnectivityState.CONNECTED
+        verify(pubkyRepo).restoreSessionIfNeeded()
+        clearInvocations(pubkyRepo)
+
+        sut.onAppResumed()
+        verify(pubkyRepo).restoreSessionIfNeeded()
     }
 
     @Test
@@ -3603,6 +3620,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cancelled contact scan clears its payment context`() = test {
+        sut.setIsAuthenticated(true)
+        val bolt11 = "lnbcrt1cancelledcontactscan"
+        val scanStarted = CompletableDeferred<Unit>()
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+            scanStarted.complete(Unit)
+            awaitCancellation()
+        }
+
+        val scanJob = sut.openContactPayment(paymentRequest = bolt11, publicKey = testPublicKey)
+        scanStarted.await()
+        assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
+        scanJob?.cancelAndJoin()
+
+        assertNull(activeContactPaymentContext())
+    }
+
+    @Test
     fun `contact payment rejects pubky auth without blocking later incoming requests`() = test {
         val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
         setSendState(paymentState)
@@ -6520,6 +6555,71 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
             verify(paykitPaymentProofRepo).cancelPreparation(request)
         }
+    }
+
+    @Test
+    fun `failed LNURL request callback releases preparation and retry reopens request`() = test {
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        val lnurl = LnurlPayData(
+            uri = "lnurl1failedrequest",
+            callback = "https://example.com/callback",
+            minSendable = 1_000uL,
+            maxSendable = 100_000_000uL,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(context.getString(R.string.wallet__error_lnurl_invoice_fetch)).thenReturn("Invoice unavailable")
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever { lightningRepo.fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(request.amountSats), null) }
+            .thenReturn(Result.failure(IllegalStateException("callback failed")))
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        advanceUntilIdle()
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = lnurl.uri,
+                amount = request.amountSats,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(lnurl),
+                isPaymentRequest = true,
+                incomingPaymentRequestId = request.id,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        verify(toastManager, never()).enqueue(any())
+
+        pendingPaykitPaymentRequests.value = emptyList()
+        stubOpenedPaymentRequest(request, lnurl.uri)
+        whenever { coreService.decode(lnurl.uri) }.thenReturn(Scanner.LnurlPay(lnurl))
+        whenever(paykitPaymentRequestRepo.refresh()).doSuspendableAnswer {
+            pendingPaykitPaymentRequests.value = listOf(request)
+            Result.success(Unit)
+        }
+
+        sut.retryIncomingPaymentRequest(request.id)
+        advanceUntilIdle()
+
+        verify(paykitPaymentRequestRepo).refresh()
+        verify(privatePaykitRepo, atLeast(1)).beginPaymentRequest(request)
+        assertEquals(request.id, sut.sendUiState.value.incomingPaymentRequestId)
+        assertTrue(sut.currentSheet.value is Sheet.Send)
     }
 
     @Test

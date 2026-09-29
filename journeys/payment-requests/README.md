@@ -20,7 +20,9 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 
 `request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked on receiver path `bitkit/wallet`, and the payer holds enough balance to pay 21,000 sats.
 
-`safe-retry-after-failed-send.xml` uses a second Bitkit instance restored from the payer's seed to reduce the shared wallet balance after the first instance has opened the 100,000 sat request. Keep Paykit disabled on the second instance. Mine the balance-reduction transaction and wait for the first instance to sync before swiping, so the request passes initial validation but fails before broadcast. Then add regtest funds through `./lsp`, mine blocks, and wait for the payer to sync before retrying the same request.
+`contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
+
+`definite-pre-broadcast-retry.xml` uses the linked fixture issuer and the local regtest LNURL server. Configure its LNURL-pay metadata endpoint normally, but make its invoice callback fail the first request and succeed after it is switched back to the healthy response. Do not republish the Paykit payment list between attempts. This makes the first send fail before Lightning dispatch and proves that the same private payment details can be opened and paid on retry.
 
 ## Reference evidence
 
@@ -41,6 +43,24 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Confirmation invoice note: `PaymentRequestInvoiceNote`
 - Confirmation details: `SendConfirmToggleDetails`
 - Saved-contact recipient: `ReviewContactRecipient`
+- Send failure: `SendFailure` and retry action `Retry`
 - Swipe confirmation control: `GRAB`
+- Contact Detail pay action: `ContactPay`
+- Request or Pay sheet: `RequestOrPaySheet` (its Pay and Request buttons carry no tag; find them by text)
+- Payment Request amount screen: `PaymentRequestAmount`
 
 `android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI Automator hierarchy when a documented container tag is not present in the formatted layout output.
+
+## Payment deadline history
+
+`payment-deadline-history.xml` covers rc56 requests with actual-payment deadlines.
+Bitkit keeps their lifecycle and paid-period history, and subscription cancellation,
+but does not accept them, offer payments, or schedule payment reminders. The journey
+requires a controlled rc56 peer to prepare the accepted and paid records; repository
+tests cover these states without sending funds. On Android, unpaid history rows show
+lifecycle labels, while paid rows show subscription names, notes, or dates. Active
+subscriptions are opened from Overview. The journeys record each fixture's payment
+request id, check its full row identifier, and include the required back and tab
+transitions. The accepted
+subscription must have no end date so cancellation is available. The proposal review
+must explain that its payment details are unsupported and offer no Subscribe control.

@@ -49,6 +49,7 @@ import to.bitkit.services.PubkyService
 import to.bitkit.utils.Logger
 import java.security.MessageDigest
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -99,6 +100,7 @@ class PrivatePaykitRepo @Inject constructor(
     private val publicationMutex = Mutex()
     private val serializedDispatcher = ioDispatcher.limitedParallelism(1)
     private val retryScope = appScope(serializedDispatcher, TAG)
+    private val paymentPublishJobs = ConcurrentHashMap<String, Job>()
     private val knownSavedContactKeys = mutableSetOf<String>()
     private var state: PrivatePaykitState? = null
     private val pendingMessageDrainRetryLock = Any()
@@ -618,7 +620,9 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
     private suspend fun beginSavedContactPaymentWithRetry(publicKey: String): PublicPaykitPaymentResult {
-        refreshPrivateEndpointsBeforePayment(publicKey)
+        paymentPublishJobs.compute(publicKey) { _, job ->
+            job?.takeIf { it.isActive } ?: retryScope.launch { refreshPrivateEndpointsBeforePayment(publicKey) }
+        }
         var result = beginContactPayment(publicKey, paymentRequest = null).getOrThrow()
         for (retryDelay in privatePaymentResolutionRetryDelays) {
             if (result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList) return result

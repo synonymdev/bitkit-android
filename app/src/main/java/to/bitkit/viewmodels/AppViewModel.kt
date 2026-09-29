@@ -793,6 +793,7 @@ class AppViewModel @Inject constructor(
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
                 .collect {
+                    pubkyRepo.restoreSessionIfNeeded()
                     if (paykitPaymentRequestPollingJob?.isActive == true) {
                         paykitPaymentRequestPollingJob?.cancel()
                         paykitPaymentRequestPollingJob = null
@@ -2396,7 +2397,7 @@ class AppViewModel @Inject constructor(
         scheduledScan = nextScheduledScan
         nextJob.invokeOnCompletion {
             if (scheduledScan === nextScheduledScan) scheduledScan = null
-            if (nextJob.isCancelled) return@invokeOnCompletion
+            if (nextJob.isCancelled) return@invokeOnCompletion clearCancelledContactContext(contactPaymentContext)
             viewModelScope.launch { flushDeferredScan() }
         }
 
@@ -3260,6 +3261,15 @@ class AppViewModel @Inject constructor(
         paykitPaymentRequestRepo.markPresented(request)
     }
 
+    private fun clearCancelledContactContext(context: ContactPaymentContext?) {
+        if (context == null) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext !== context) return
+            activeContactPaymentContext = null
+            preparedContactPaymentContext = null
+        }
+    }
+
     private fun setActiveContactPaymentContext(context: ContactPaymentContext?) {
         synchronized(contactPaymentContextLock) {
             if (activeContactPaymentContext != context) preparedContactPaymentContext = null
@@ -4053,7 +4063,19 @@ class AppViewModel @Inject constructor(
                 releasePrivatePaymentListIfNeeded(contactPaymentContext)
                 cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 val message = getLnurlInvoiceFetchErrorMessage(it)
-                handlePaymentPreparationFailure(AppError(message, it), contactPaymentContext)
+                val error = AppError(message, it)
+                if (incomingPaymentRequest != null) {
+                    setSendEffect(
+                        SendEffect.NavigateToError(
+                            error.toSendFailureDetails(
+                                context,
+                                _sendUiState.value.currentLightningPaymentRequest(),
+                            ),
+                        ),
+                    )
+                } else {
+                    handlePaymentPreparationFailure(error, contactPaymentContext)
+                }
                 return
             }
         }
@@ -5804,6 +5826,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
+
+    fun onAppResumed() {
+        viewModelScope.launch {
+            if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.restoreSessionIfNeeded()
+        }
+    }
 
     fun onHomeResumed() {
         checkTimedSheets()

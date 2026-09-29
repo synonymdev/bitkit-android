@@ -21,7 +21,7 @@ parse successfully but cannot be opened.
 
 The parse reasons are `missing_local_role`, `outgoing_request`, `unsupported_local_role`,
 `non_actionable_state`, `missing_terms`, `recurring_request`, `unsupported_recurrence`,
-`unsupported_asset`, `invalid_amount`, `amount_out_of_range`, `no_supported_endpoint`,
+`unsupported_payment_deadline`, `unsupported_asset`, `invalid_amount`, `amount_out_of_range`, `no_supported_endpoint`,
 `invalid_expiration`, and `expired`.
 
 The resolution reasons are `no_supported_endpoint`, `endpoint_not_payable`,
@@ -35,6 +35,10 @@ incoming-rejection warnings.
 and emits a privacy-safe warning with only the redacted counterparty.
 `unsupported_local_role` identifies an unknown role and emits a privacy-safe warning with only the
 redacted counterparty.
+
+`unsupported_payment_deadline` excludes requests with an actual-payment deadline from payment
+actions. Their history remains visible. Deadline-bearing subscriptions also retain paid periods
+and existing cancellation controls, but cannot be accepted, paid, or scheduled for payment reminders.
 
 ## Accessibility identifiers
 

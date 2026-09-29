@@ -330,11 +330,14 @@ internal fun PaymentRequestsContent(
                             PaymentRequestCard(
                                 request = request,
                                 contact = contacts.contactFor(request),
-                                compactSubtitle = subscriptions.nameFor(request)
-                                    ?: request.note?.takeIf(String::isNotBlank)
-                                    ?: paymentRequestDate(request),
+                                compactSubtitle = if (request.hasPaymentEvidence) {
+                                    subscriptions.nameFor(request)
+                                        ?: request.note?.takeIf(String::isNotBlank)
+                                        ?: paymentRequestDate(request)
+                                } else {
+                                    paymentRequestStatus(request)
+                                },
                                 showSignedAmount = request.hasPaymentEvidence,
-                                fiatStatus = paymentRequestStatus(request),
                                 onClick = { onDetails(request.id) },
                             )
                         }

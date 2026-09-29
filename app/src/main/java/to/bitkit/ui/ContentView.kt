@@ -61,7 +61,6 @@ import to.bitkit.env.Env
 import to.bitkit.ext.rawId
 import to.bitkit.ext.walletId
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.PaykitPaymentRequestId
@@ -1416,10 +1415,6 @@ private fun NavGraphBuilder.contacts(
         PaykitRouteGuard(settingsViewModel, navController) {
             val route = backStackEntry.toRoute<Routes.ContactDetail>()
             val viewModel: ContactDetailViewModel = hiltViewModel()
-            val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
-            val paymentRequestTarget = paymentRequestTargets.firstOrNull {
-                PubkyPublicKeyFormat.matches(it.publicKey, route.publicKey)
-            }
             ContactDetailScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
@@ -1427,18 +1422,15 @@ private fun NavGraphBuilder.contacts(
                     appViewModel.openContactPayment(paymentRequest, publicKey, privatePaymentContext)
                 },
                 onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
-                canRequestPayment = paymentRequestTarget != null,
                 onRequestPayment = {
-                    paymentRequestTarget?.let {
-                        appViewModel.showSheet(
-                            Sheet.Receive(
-                                route = ReceiveRoute.PaymentRequestAmount(
-                                    publicKey = it.publicKey,
-                                    receiverPath = it.receiverPath,
-                                )
+                    appViewModel.showSheet(
+                        Sheet.Receive(
+                            route = ReceiveRoute.PaymentRequestAmount(
+                                publicKey = it.publicKey,
+                                receiverPath = it.receiverPath,
                             )
                         )
-                    }
+                    )
                 },
                 showDeleteAction = route.showDeleteAction,
                 onContactDeleted = {
