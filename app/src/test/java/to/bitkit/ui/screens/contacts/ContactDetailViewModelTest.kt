@@ -23,6 +23,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitPaymentRequestTargetCheck
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
@@ -226,7 +227,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `pay tap shows request or pay sheet for an eligible contact`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
             .thenReturn(Result.success(openedPayment))
         eligibleTargets.value = listOf(target)
@@ -246,7 +248,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `pay tap refreshes eligibility when the contact is not a known target`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
             .thenReturn(Result.success(openedPayment))
         val sut = createSut()
@@ -262,7 +265,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `pay tap reuses a recent check that found no request support`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(null))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
             .thenReturn(Result.success(openedPayment))
         val sut = createSut()
@@ -282,7 +286,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     fun `pay tap rechecks eligibility once an earlier empty check is stale`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
         whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
-            .thenReturn(Result.success(null), Result.success(target))
+            .thenReturn(Result.success(targetCheck(null)), Result.success(targetCheck(target)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
             .thenReturn(Result.success(openedPayment))
         val sut = createSut()
@@ -298,9 +302,65 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay tap rechecks eligibility after an incomplete check`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null, isComplete = false)), Result.success(targetCheck(target)))
+        val sut = createSut()
+        advanceUntilIdle()
+        now += 10.seconds
+
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        verify(paykitPaymentRequestRepo, times(2)).refreshEligibleTarget(TEST_PUBLIC_KEY)
+        assertTrue(sut.uiState.value.showRequestOrPaySheet)
+    }
+
+    @Test
+    fun `pay tap rechecks eligibility after a failed check`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.failure(AppError("linked peers unavailable")), Result.success(targetCheck(target)))
+        val sut = createSut()
+        advanceUntilIdle()
+        now += 10.seconds
+
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        verify(paykitPaymentRequestRepo, times(2)).refreshEligibleTarget(TEST_PUBLIC_KEY)
+        assertTrue(sut.uiState.value.showRequestOrPaySheet)
+    }
+
+    @Test
+    fun `pay tap rechecks eligibility once a checked target leaves the eligible list`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)), Result.success(targetCheck(null)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+        eligibleTargets.value = emptyList()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+
+            assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            verify(paykitPaymentRequestRepo, times(2)).refreshEligibleTarget(TEST_PUBLIC_KEY)
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+        }
+    }
+
+    @Test
     fun `request or pay sheet closes when the contact stops being eligible`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
         eligibleTargets.value = listOf(target)
         val sut = createSut()
         advanceUntilIdle()
@@ -319,7 +379,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val paymentStarted = CompletableDeferred<Unit>()
         val paymentResult = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
             paymentStarted.complete(Unit)
             paymentResult.await()
@@ -355,7 +416,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `dismissing the sheet while the amount screen opens cancels the scan`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
             .thenReturn(Result.success(openedPayment))
         eligibleTargets.value = listOf(target)
@@ -384,7 +446,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     fun `dismissing the sheet while paying cancels the payment`() = test {
         val paymentStarted = CompletableDeferred<Unit>()
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
             paymentStarted.complete(Unit)
             awaitCancellation()
@@ -440,7 +503,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `pay tap opens payment when the contact cannot receive requests`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(null))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
             .thenReturn(Result.success(openedPayment))
         val sut = createSut()
@@ -466,7 +530,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `paying from the request or pay sheet opens the payment`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).thenReturn(Result.success(target))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
         whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
             .thenReturn(Result.success(openedPayment))
         val sut = createSut()
@@ -510,6 +575,11 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         verify(paykitPaymentRequestRepo, never()).refreshEligibleTarget(any())
         assertFalse(sut.uiState.value.showRequestOrPaySheet)
     }
+
+    private fun targetCheck(
+        target: PaykitPaymentRequestTarget?,
+        isComplete: Boolean = true,
+    ) = PaykitPaymentRequestTargetCheck(target, isComplete)
 
     private fun createSut() = ContactDetailViewModel(
         context = context,

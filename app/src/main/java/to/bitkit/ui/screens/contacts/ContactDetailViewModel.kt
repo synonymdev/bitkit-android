@@ -11,6 +11,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -172,6 +173,7 @@ class ContactDetailViewModel @Inject constructor(
         viewModelScope.launch {
             paykitPaymentRequestRepo.eligibleTargets.collect { targets ->
                 val target = targets.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
+                if (target == null) discardCheckedPaymentRequestTarget()
                 _uiState.update {
                     it.copy(
                         paymentRequestTarget = target,
@@ -195,9 +197,19 @@ class ContactDetailViewModel @Inject constructor(
         return viewModelScope.async {
             val isSaved = pubkyRepo.contacts.value.any { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
             if (!isSaved) return@async null
-            paykitPaymentRequestRepo.refreshEligibleTarget(publicKey).getOrNull()
-                .also { paymentRequestTargetCheckedAt = clock.nowMs() }
+            val check = paykitPaymentRequestRepo.refreshEligibleTarget(publicKey).getOrNull()
+                ?: return@async null
+            if (check.isComplete) paymentRequestTargetCheckedAt = clock.nowMs()
+            check.target
         }.also { paymentRequestTargetRefresh = it }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun discardCheckedPaymentRequestTarget() {
+        val refresh = paymentRequestTargetRefresh ?: return
+        if (!refresh.isCompleted || refresh.isCancelled || refresh.getCompleted() == null) return
+        paymentRequestTargetRefresh = null
+        paymentRequestTargetCheckedAt = null
     }
 
     private fun isPaymentRequestTargetCheckRecent(): Boolean {

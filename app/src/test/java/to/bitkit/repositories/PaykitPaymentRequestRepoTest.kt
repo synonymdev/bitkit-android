@@ -687,7 +687,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(PaykitReceiverPaths.SERVER),
         )
 
-        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow().target
 
         val expected = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
         assertEquals(expected, target)
@@ -706,7 +706,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
 
-        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow().target
 
         assertNull(target)
         assertTrue(sut.eligibleTargets.value.isEmpty())
@@ -722,7 +722,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(listOf(PaykitReceiverPaths.SERVER), emptyList())
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
 
-        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow().target
 
         assertNull(target)
         assertTrue(sut.eligibleTargets.value.isEmpty())
@@ -739,11 +739,77 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenThrow(IllegalStateException("marker unavailable"))
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
 
-        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        val check = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
 
         val expected = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
-        assertEquals(expected, target)
+        assertEquals(expected, check.target)
+        assertFalse(check.isComplete)
         assertEquals(listOf(expected), sut.eligibleTargets.value)
+    }
+
+    @Test
+    fun `failed single recipient refresh does not overwrite an older full refresh`() = test {
+        val fullLookupStarted = CompletableDeferred<Unit>()
+        val releaseFullLookup = CompletableDeferred<Unit>()
+        var lookups = 0
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+            lookups += 1
+            when (lookups) {
+                1 -> listOf(PaykitReceiverPaths.SERVER)
+                2 -> {
+                    fullLookupStarted.complete(Unit)
+                    releaseFullLookup.await()
+                    emptyList()
+                }
+                else -> error("marker unavailable")
+            }
+        }
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+
+        val fullRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY), force = true) }
+        fullLookupStarted.await()
+        val check = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        releaseFullLookup.complete(Unit)
+        fullRefresh.await().getOrThrow()
+
+        assertFalse(check.isComplete)
+        assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
+    fun `failed full refresh keeps a newer single recipient result`() = test {
+        val fullLinkLookupStarted = CompletableDeferred<Unit>()
+        val releaseFullLinkLookup = CompletableDeferred<Unit>()
+        var linkLookups = 0
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            linkLookups += 1
+            if (linkLookups > 1) {
+                return@doSuspendableAnswer listOf(
+                    linkedPeer(SECOND_IDENTITY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER),
+                )
+            }
+            fullLinkLookupStarted.complete(Unit)
+            releaseFullLinkLookup.await()
+            error("linked peers unavailable")
+        }
+        whenever(paykitSdkService.paymentRequestReceiverPaths(SECOND_IDENTITY))
+            .thenReturn(listOf(PaykitReceiverPaths.SERVER))
+
+        val fullRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
+        fullLinkLookupStarted.await()
+        sut.refreshEligibleTarget(SECOND_IDENTITY).getOrThrow()
+        releaseFullLinkLookup.complete(Unit)
+
+        assertTrue(fullRefresh.await().isFailure)
+        assertEquals(
+            listOf(PaykitPaymentRequestTarget(SECOND_IDENTITY, PaykitReceiverPaths.SERVER)),
+            sut.eligibleTargets.value,
+        )
     }
 
     @Test
@@ -765,7 +831,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val fullRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
         fullLookupStarted.await()
-        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        val target = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow().target
         releaseFullLookup.complete(Unit)
         fullRefresh.await().getOrThrow()
 
@@ -794,7 +860,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         singleLookupStarted.await()
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
         releaseSingleLookup.complete(Unit)
-        val target = singleRefresh.await().getOrThrow()
+        val target = singleRefresh.await().getOrThrow().target
 
         val expected = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
         assertEquals(expected, target)
