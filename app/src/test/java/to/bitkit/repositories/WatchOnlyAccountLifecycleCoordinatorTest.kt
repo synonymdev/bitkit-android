@@ -46,8 +46,8 @@ class WatchOnlyAccountLifecycleCoordinatorTest : BaseUnitTest() {
         var storedAccounts = listOf(account)
         val tracked = AtomicBoolean(false)
         val loadCount = AtomicInteger(0)
-        val authorizationSyncStarted = CountDownLatch(1)
-        val allowAuthorizationSync = CountDownLatch(1)
+        val authorizationTrackingStarted = CountDownLatch(1)
+        val allowAuthorizationTracking = CountDownLatch(1)
         val store = mock<WatchOnlyAccountStore>()
         val node = mock<Node>()
         val onchainPayment = mock<OnchainPayment>()
@@ -74,16 +74,15 @@ class WatchOnlyAccountLifecycleCoordinatorTest : BaseUnitTest() {
             .addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
         doAnswer { tracked.set(false) }.whenever(node)
             .removeOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u)
-        whenever(node.syncWallets()).thenAnswer {
-            authorizationSyncStarted.countDown()
-            check(allowAuthorizationSync.await(5, TimeUnit.SECONDS))
-            Unit
-        }
+        doAnswer {
+            authorizationTrackingStarted.countDown()
+            check(allowAuthorizationTracking.await(5, TimeUnit.SECONDS))
+        }.whenever(onchainPayment).revealReceiveAddressesToAccount(any(), any(), any())
         val lightningService = lightningService(store, node, coordinator)
         val sut = repository(store, lightningService, coordinator)
 
         val authorization = launch { sut.beginAuthorization(account.id) }
-        assertTrue(authorizationSyncStarted.await(5, TimeUnit.SECONDS))
+        assertTrue(authorizationTrackingStarted.await(5, TimeUnit.SECONDS))
 
         val reconciliation = launch {
             lightningService.reconcileWatchOnlyAccounts(syncAfterReconcile = false)
@@ -93,7 +92,7 @@ class WatchOnlyAccountLifecycleCoordinatorTest : BaseUnitTest() {
         assertEquals(1, loadCount.get())
         assertTrue(reconciliation.isActive)
 
-        allowAuthorizationSync.countDown()
+        allowAuthorizationTracking.countDown()
         authorization.join()
         reconciliation.join()
 
