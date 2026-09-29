@@ -69,6 +69,7 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
             .filter {
                 it.isPayer &&
                     it.isActive(now) &&
+                    !it.hasPaymentDeadline &&
                     it.recurrence.unit.isSupported &&
                     acceptedAt(it) != null
             }

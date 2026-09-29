@@ -11,10 +11,12 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -108,6 +110,19 @@ class PaykitSubscriptionNotificationSchedulerTest {
         )
 
         verify(workClient).cancelUniqueWork(WORK_NAME)
+    }
+
+    @Test
+    fun `deadline subscriptions do not schedule payment reminders`() {
+        sut.synchronize(
+            subscriptions = listOf(subscription().copy(hasPaymentDeadline = true)),
+            acceptedAt = { NOW },
+            pendingRequestIds = emptySet(),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+
+        verify(workClient, never()).enqueueUniqueWork(any(), any(), any())
     }
 
     @Test

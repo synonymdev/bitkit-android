@@ -301,14 +301,30 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 paymentRequestRecord(id = "outgoing", role = PaymentRequestLocalRole.PAYEE),
                 paymentRequestRecord(id = "unsupported", endpoints = listOf("btc-unsupported-method")),
                 paymentRequestRecord(id = "recurring", state = PaymentRequestLifecycleState.ACTIVE_RECURRING),
-            ),
+            ) + listOf(
+                PaymentRequestLifecycleState.PROPOSED,
+                PaymentRequestLifecycleState.ACCEPTED,
+                PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                PaymentRequestLifecycleState.CANCELED,
+                PaymentRequestLifecycleState.REJECTED,
+            ).map { state ->
+                paymentRequestRecord(
+                    id = "deadline-$state",
+                    state = state,
+                    paymentDeadline = PaymentDeadline.At(clock.now().toString()),
+                )
+            },
         )
 
         sut.refresh().getOrThrow()
 
         assertEquals(listOf("incoming", "accepted"), sut.pendingRequests.value.map { it.paymentRequestId })
         assertEquals(
-            setOf("incoming", "accepted", "rejected", "expired", "outgoing", "unsupported"),
+            setOf(
+                "incoming", "accepted", "rejected", "expired", "outgoing", "unsupported",
+                "deadline-PROPOSED", "deadline-ACCEPTED", "deadline-PROOF_SUBMITTED",
+                "deadline-CANCELED", "deadline-REJECTED",
+            ),
             sut.paymentRequestHistory.value.map { it.paymentRequestId }.toSet(),
         )
         assertEquals(

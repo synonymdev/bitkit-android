@@ -1,0 +1,22 @@
+<journey name="Payment Deadline History">
+  <description>
+    Requests with actual-payment deadlines are visible but cannot be paid by this version of Bitkit.
+    Use a disposable Paykit test identity linked to a controlled rc56 peer. Prepare one-time BTC
+    requests with deadlines in proposed, accepted, rejected, canceled and proof-submitted states,
+    plus an accepted monthly BTC subscription with a period-start deadline, one paid period and
+    one unpaid period. Acceptance and proof submission must be prepared through the controlled
+    client because Bitkit intentionally cannot accept these terms. Use valid regtest payment proofs.
+    Do not reset or replace a funded wallet to prepare this fixture.
+  </description>
+  <actions>
+    <action>Open Subscriptions and select the Payments tab after the controlled peer's records have synchronized</action>
+    <action>Verify each one-time request remains visible with its lifecycle status, including the completed payment</action>
+    <action>Open the proposed and accepted one-time requests and verify neither offers a Pay action</action>
+    <action>Open the active subscription and verify its paid period remains visible and Cancel is available</action>
+    <action>Verify the unpaid period is not offered for payment in the Payments tab or pending-request sheet</action>
+    <action>Have the controlled peer send a new subscription proposal with a period-start deadline</action>
+    <action>Open that proposal and verify it is visible but cannot be accepted</action>
+    <action>Cancel the accepted subscription and verify its paid-period history remains accessible</action>
+    <action>Restart Bitkit and verify the one-time and subscription payment history is still visible</action>
+  </actions>
+</journey>

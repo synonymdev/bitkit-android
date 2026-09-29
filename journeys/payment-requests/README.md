@@ -41,3 +41,11 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Saved-contact recipient: `ReviewContactRecipient`
 
 `android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI Automator hierarchy when a documented container tag is not present in the formatted layout output.
+
+## Payment deadline history
+
+`payment-deadline-history.xml` covers rc56 requests with actual-payment deadlines.
+Bitkit keeps their lifecycle and paid-period history, and subscription cancellation,
+but does not accept them, offer payments, or schedule payment reminders. The journey
+requires a controlled rc56 peer to prepare the accepted and paid records; repository
+tests cover these states without sending funds.
