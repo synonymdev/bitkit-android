@@ -30,6 +30,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -3560,6 +3561,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(pubkyRepo, never()).hasSecretKey()
         verify(coreService, never()).decode(any())
         verify(toastManager).enqueue(any())
+    }
+
+    @Test
+    fun `cancelled contact scan clears its payment context`() = test {
+        sut.setIsAuthenticated(true)
+        val bolt11 = "lnbcrt1cancelledcontactscan"
+        val scanStarted = CompletableDeferred<Unit>()
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+            scanStarted.complete(Unit)
+            awaitCancellation()
+        }
+
+        val scanJob = sut.openContactPayment(paymentRequest = bolt11, publicKey = testPublicKey)
+        scanStarted.await()
+        assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
+        scanJob?.cancelAndJoin()
+
+        assertNull(activeContactPaymentContext())
     }
 
     @Test

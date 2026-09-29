@@ -2371,7 +2371,7 @@ class AppViewModel @Inject constructor(
         scheduledScan = nextScheduledScan
         nextJob.invokeOnCompletion {
             if (scheduledScan === nextScheduledScan) scheduledScan = null
-            if (nextJob.isCancelled) return@invokeOnCompletion
+            if (nextJob.isCancelled) return@invokeOnCompletion clearCancelledContactContext(contactPaymentContext)
             viewModelScope.launch { flushDeferredScan() }
         }
 
@@ -3233,6 +3233,15 @@ class AppViewModel @Inject constructor(
         }
         clearPaymentRequestPresentationRetry(request.id)
         paykitPaymentRequestRepo.markPresented(request)
+    }
+
+    private fun clearCancelledContactContext(context: ContactPaymentContext?) {
+        if (context == null) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext !== context) return
+            activeContactPaymentContext = null
+            preparedContactPaymentContext = null
+        }
     }
 
     private fun setActiveContactPaymentContext(context: ContactPaymentContext?) {

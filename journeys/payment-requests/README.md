@@ -20,6 +20,8 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 
 `request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked on receiver path `bitkit/wallet`, and the payer holds enough balance to pay 21,000 sats.
 
+`contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
+
 ## Reference evidence
 
 The source wallet-leg run completed this path on regtest on 2026-08-22: Bitkit presented the incoming request, opened the on-chain payment, broadcast it, and confirmed transaction
@@ -39,5 +41,8 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Confirmation invoice note: `PaymentRequestInvoiceNote`
 - Confirmation details: `SendConfirmToggleDetails`
 - Saved-contact recipient: `ReviewContactRecipient`
+- Contact Detail pay action: `ContactPay`
+- Request or Pay sheet: `RequestOrPaySheet` (its Pay and Request buttons carry no tag; find them by text)
+- Payment Request amount screen: `PaymentRequestAmount`
 
 `android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI Automator hierarchy when a documented container tag is not present in the formatted layout output.
