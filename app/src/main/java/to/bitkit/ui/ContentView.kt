@@ -397,6 +397,7 @@ fun ContentView(
         isRestoringFromRNRemoteBackup,
     )
 
+    // React to nodeLifecycleState changes
     LaunchedEffect(nodeLifecycleState) {
         if (nodeLifecycleState == NodeLifecycleState.Initializing) {
             walletIsInitializing = true
