@@ -391,6 +391,9 @@
     <string name="lightning__spending_amount__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
     <string name="lightning__spending_confirm__amount">To spending</string>
     <string name="lightning__spending_confirm__default">Use Defaults</string>
+    <string name="lightning__spending_confirm__fees_changed_network">Fees are {amount} higher because fee rates or your savings balance changed while you were on this screen. Swipe again to confirm.</string>
+    <string name="lightning__spending_confirm__fees_changed_service">Fees are {amount} higher now that your order is created. Swipe again to confirm.</string>
+    <string name="lightning__spending_confirm__fees_changed_title">Fees changed</string>
     <string name="lightning__spending_confirm__lsp_fee">Service fees</string>
     <string name="lightning__spending_confirm__network_fee">Network fees</string>
     <string name="lightning__spending_confirm__total">Total</string>
@@ -1320,6 +1323,7 @@
     <string name="wallet__payment_request_expiry_week">1 week</string>
     <string name="wallet__payment_request_for">For</string>
     <string name="wallet__payment_request_mismatch">The payment details did not match the request. Payment cancelled.</string>
+    <string name="wallet__payment_request_not_specified">Not specified</string>
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">What is this payment for?</string>
     <string name="wallet__payment_request_or_pay">Request Or Pay</string>
