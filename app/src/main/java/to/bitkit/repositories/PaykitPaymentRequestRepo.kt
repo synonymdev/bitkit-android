@@ -97,6 +97,7 @@ data class PaykitPaymentRequest(
         RecurringRequest("recurring_request", shouldLogIncomingRejection = false),
         UnsupportedRecurrence("unsupported_recurrence"),
         UnsupportedAsset("unsupported_asset"),
+        UnsupportedPaymentDeadline("unsupported_payment_deadline"),
         InvalidAmount("invalid_amount"),
         AmountOutOfRange("amount_out_of_range"),
         NoSupportedEndpoint("no_supported_endpoint"),
@@ -932,7 +933,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .mapTo(mutableSetOf()) { it.id }
         val updatedDismissedPaymentIds = dismissedSubscriptionPaymentIds.intersect(activeRecurringRequestIds)
         val dueRequests = recurringRequestsBySubscription
-            .filterKeys { it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING }
+            .filterKeys { it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING && !it.hasPaymentDeadline }
             .values
             .flatten()
             .filter {
@@ -1175,7 +1176,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
 
         val recurringRequests = requestsThroughAcceptance(subscription, now)
-        val unpaidRequests = if (subscription.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING) {
+        val unpaidRequests = if (
+            subscription.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING &&
+            !subscription.hasPaymentDeadline
+        ) {
             recurringRequests.filter { it.lifecycleState != PaymentRequestLifecycleState.PROOF_SUBMITTED }
         } else {
             emptyList()
@@ -1388,6 +1392,9 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
                 PaykitPaymentRequest.ParseFailure.UnsupportedRecurrence
             },
         )
+    }
+    if (requiresActionableRequest && requestTerms.paymentDeadline != null) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline)
     }
     if (requestTerms.amount.asset != PaykitIssuerInterop.BITCOIN_ASSET) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)

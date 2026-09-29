@@ -750,6 +750,8 @@ class PaykitSdkService @Inject constructor(
                         )
                     },
                     acceptedPaymentEndpointIdentifiers = proposal.acceptedPaymentEndpointIdentifiers,
+                    conversion = null,
+                    paymentDeadline = null,
                     metadata = PrivateJsonObject(proposal.metadataJson),
                 )
                 handle.proposePaymentRequest(counterparty, counterpartyReceiverPath, terms)
@@ -789,6 +791,8 @@ class PaykitSdkService @Inject constructor(
                     PaymentProofSubmission(
                         billingPeriod = billingPeriod?.sdkValue,
                         paymentEndpointIdentifier = paymentEndpointIdentifier,
+                        allowanceId = null,
+                        conversionQuoteId = null,
                         proof = PrivateJsonObject(proofJson),
                     ),
                 )

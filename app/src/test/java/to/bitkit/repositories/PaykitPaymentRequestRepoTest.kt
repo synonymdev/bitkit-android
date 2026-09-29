@@ -5,6 +5,7 @@ package to.bitkit.repositories
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
@@ -166,6 +167,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 PaykitPaymentRequest.ParseFailure.NonActionableState,
             paymentRequestRecord().copy(terms = null) to PaykitPaymentRequest.ParseFailure.MissingTerms,
             paymentRequestRecord(asset = "BTC") to PaykitPaymentRequest.ParseFailure.UnsupportedAsset,
+            paymentRequestRecord(paymentDeadline = PaymentDeadline.At(clock.now().plus(1.seconds).toString())) to
+                PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline,
             paymentRequestRecord(amount = "not-bitcoin") to PaykitPaymentRequest.ParseFailure.InvalidAmount,
             paymentRequestRecord(amount = "184467440737.09551615") to
                 PaykitPaymentRequest.ParseFailure.AmountOutOfRange,
@@ -299,14 +302,30 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 paymentRequestRecord(id = "outgoing", role = PaymentRequestLocalRole.PAYEE),
                 paymentRequestRecord(id = "unsupported", endpoints = listOf("btc-unsupported-method")),
                 paymentRequestRecord(id = "recurring", state = PaymentRequestLifecycleState.ACTIVE_RECURRING),
-            ),
+            ) + listOf(
+                PaymentRequestLifecycleState.PROPOSED,
+                PaymentRequestLifecycleState.ACCEPTED,
+                PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                PaymentRequestLifecycleState.CANCELED,
+                PaymentRequestLifecycleState.REJECTED,
+            ).map { state ->
+                paymentRequestRecord(
+                    id = "deadline-$state",
+                    state = state,
+                    paymentDeadline = PaymentDeadline.At(clock.now().toString()),
+                )
+            },
         )
 
         sut.refresh().getOrThrow()
 
         assertEquals(listOf("incoming", "accepted"), sut.pendingRequests.value.map { it.paymentRequestId })
         assertEquals(
-            setOf("incoming", "accepted", "rejected", "expired", "outgoing", "unsupported"),
+            setOf(
+                "incoming", "accepted", "rejected", "expired", "outgoing", "unsupported",
+                "deadline-PROPOSED", "deadline-ACCEPTED", "deadline-PROOF_SUBMITTED",
+                "deadline-CANCELED", "deadline-REJECTED",
+            ),
             sut.paymentRequestHistory.value.map { it.paymentRequestId }.toSet(),
         )
         assertEquals(
@@ -1063,6 +1082,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         amount: String = "0.001",
         asset: String = "btc",
         expiresAt: String? = null,
+        paymentDeadline: PaymentDeadline? = null,
         endpoints: List<String> = listOf(MethodId.Bolt11.rawValue),
         counterparty: String = COUNTERPARTY,
         receiverPath: String = PaykitReceiverPaths.SERVER,
@@ -1085,6 +1105,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proposalExpiresAt = expiresAt,
             recurrence = recurrence,
             acceptedPaymentEndpointIdentifiers = endpoints,
+            conversion = null,
+            paymentDeadline = paymentDeadline,
             metadata = metadata,
         ),
         acceptedEventId = null,
@@ -1093,6 +1115,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         rejectedOutboundStatus = null,
         canceledEventId = null,
         canceledOutboundStatus = null,
+        conversionQuotes = emptyList(),
         paymentProofs = paymentProofs,
         lastStreamItemId = 1uL,
         lastOutboundMessageId = null,
