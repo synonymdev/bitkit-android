@@ -192,10 +192,8 @@ class SettingsViewModel @Inject constructor(
     val isDevModeEnabled = settingsStore.data.map { it.isDevModeEnabled }
         .asStateFlow(initialValue = false)
 
-    fun setIsDevModeEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isDevModeEnabled = value) }
-        }
+    suspend fun setIsDevModeEnabled(value: Boolean) {
+        settingsStore.update { it.copy(isDevModeEnabled = value) }
     }
 
     val disableAllToasts = settingsStore.data.map { it.disableAllToasts }
