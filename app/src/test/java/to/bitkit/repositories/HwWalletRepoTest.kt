@@ -1264,6 +1264,18 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ensureConnected reports a mismatch when the jade opened another paired wallet`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(jadeDevice))
+        whenever(jadeRepo.ensureConnected("jade1", JADE_WALLET_ID))
+            .thenReturn(Result.success(connectedJade(walletId = "other-jade-wallet")))
+        val sut = createRepo()
+
+        val result = sut.ensureConnected(JADE_WALLET_ID)
+
+        assertTrue(result.exceptionOrNull() is HwWalletMismatchError)
+    }
+
+    @Test
     fun `signFunding refuses a session that belongs to another identity`() = test {
         val funding = HwFundingTransaction(
             psbt = "psbt",

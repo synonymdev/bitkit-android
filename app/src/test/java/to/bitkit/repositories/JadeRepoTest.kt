@@ -88,6 +88,12 @@ class JadeRepoTest : BaseUnitTest() {
         jadeDeviceId = EFUSE_MAC,
     )
 
+    /** A passphrase wallet on the same Jade as [knownUsb]: same entry id, its own keys and wallet. */
+    private val passphraseUsb = knownUsb.copy(
+        xpubs = mapOf(HwFundingAddressType.NATIVE_SEGWIT.settingsKey to "zpubPass"),
+        walletId = PASSPHRASE_WALLET_ID,
+    )
+
     @Before
     fun setUp() {
         whenever(jadeTransport.externalDisconnect).thenReturn(externalDisconnect)
@@ -522,6 +528,42 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ensureConnected follows a locked session into another paired wallet on the same jade`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }
+            .thenReturn(listOf(knownUsb, passphraseUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.LOCKED))
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport(xpub = "zpubPass"))
+        val sut = createRepo()
+        assertEquals(WALLET_ID, sut.autoReconnect(preferredTransport = TransportType.USB).getOrThrow().walletId)
+        whenever { jadeService.isConnected() }.thenReturn(true)
+
+        val result = sut.ensureConnected(knownUsb.id, PASSPHRASE_WALLET_ID)
+
+        assertEquals(PASSPHRASE_WALLET_ID, result.getOrThrow().walletId)
+        assertEquals(PASSPHRASE_WALLET_ID, sut.state.value.connectedWalletId())
+        verify(jadeService, never()).disconnect()
+    }
+
+    @Test
+    fun `reconnecting opens each paired wallet sharing one jade`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }
+            .thenReturn(listOf(knownUsb, passphraseUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        val sut = createRepo()
+
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport(xpub = "zpubPass"))
+        val passphrase = sut.connectKnownDevice(knownUsb.id, PASSPHRASE_WALLET_ID).getOrThrow()
+        sut.disconnectStaleSession(knownUsb.id).getOrThrow()
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport())
+        val standard = sut.connectKnownDevice(knownUsb.id, WALLET_ID).getOrThrow()
+
+        assertEquals(PASSPHRASE_WALLET_ID, passphrase.walletId)
+        assertEquals(WALLET_ID, standard.walletId)
+    }
+
+    @Test
     fun `a bluetooth link is released after the app stays in the background`() = test {
         val knownBle = knownUsb.copy(
             id = "jade:bluetooth:$EFUSE_MAC",
@@ -725,6 +767,7 @@ class JadeRepoTest : BaseUnitTest() {
         const val EFUSE_MAC = "246F288F6B64"
         const val OTHER_EFUSE_MAC = "246F28A1B2C3"
         const val WALLET_ID = "jade:wallet"
+        const val PASSPHRASE_WALLET_ID = "jade:passphrase-wallet"
         val ALL_ACCOUNT_TYPES = listOf(
             AccountType.LEGACY,
             AccountType.WRAPPED_SEGWIT,

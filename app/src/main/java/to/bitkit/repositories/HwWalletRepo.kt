@@ -226,7 +226,7 @@ class HwWalletRepo @Inject constructor(
                 if (isOtherVendorActive(vendor)) return@withLock
                 when (vendor) {
                     HwWalletVendor.TREZOR -> trezorRepo.warmUpKnownDevice(deviceId)
-                    HwWalletVendor.BLOCKSTREAM -> jadeRepo.warmUpKnownDevice(deviceId)
+                    HwWalletVendor.BLOCKSTREAM -> jadeRepo.warmUpKnownDevice(deviceId, walletId)
                 }
             }
         }
@@ -433,8 +433,9 @@ class HwWalletRepo @Inject constructor(
                     HwWalletVendor.TREZOR -> trezorRepo.connectKnownDevice(deviceId, forceSession = forceSession)
                         .getOrThrow()
                         .toHwConnectedDevice(deviceId)
-                    HwWalletVendor.BLOCKSTREAM -> jadeRepo.connectKnownDevice(deviceId, forceSession = forceSession)
+                    HwWalletVendor.BLOCKSTREAM -> jadeRepo.connectKnownDevice(deviceId, walletId, forceSession)
                         .getOrThrow()
+                        .requireWallet(walletId)
                         .toHwConnectedDevice()
                 }
             }
@@ -454,12 +455,10 @@ class HwWalletRepo @Inject constructor(
                 val vendor = vendorOf(walletId)
                 disconnectOtherVendor(vendor).getOrThrow()
                 if (vendor == HwWalletVendor.BLOCKSTREAM) {
-                    val connected = jadeRepo.ensureConnected(deviceId).getOrThrow()
-                    val opened = connected.walletId
-                    if (opened != null && opened != walletId) {
-                        throw AppError("Device '$deviceId' is not holding wallet '$walletId'")
-                    }
-                    return@runSuspendCatching connected.toHwConnectedDevice()
+                    return@runSuspendCatching jadeRepo.ensureConnected(deviceId, walletId)
+                        .getOrThrow()
+                        .requireWallet(walletId)
+                        .toHwConnectedDevice()
                 }
                 val features = trezorRepo.ensureConnected(deviceId).getOrThrow().toHwConnectedDevice(deviceId)
                 if (trezorRepo.state.value.connectedWalletId().isIdentityOf(walletId)) {
@@ -836,6 +835,10 @@ class HwWalletRepo @Inject constructor(
             }
             throw it
         }.serializedTx
+    }
+
+    private fun ConnectedJadeDevice.requireWallet(walletId: String) = apply {
+        if (this.walletId != null && this.walletId != walletId) throw HwWalletMismatchError()
     }
 
     private suspend fun signJadeFunding(walletId: String, funding: HwFundingTransaction): String {

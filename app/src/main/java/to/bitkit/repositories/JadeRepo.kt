@@ -234,9 +234,11 @@ class JadeRepo @Inject constructor(
      * Reconnects a paired Jade. Bluetooth entries reconnect by their stored address; a USB entry is
      * found among the plugged-in Jades and confirmed by its hardware id, since its path changes on
      * every replug. With [unlock] off the session stays locked, which is what silent reconnects want.
+     * Several paired wallets can share one Jade, so [walletId] names the one the caller wants.
      */
     suspend fun connectKnownDevice(
         deviceId: String,
+        walletId: String? = null,
         forceSession: Boolean = false,
         unlock: Boolean = true,
         requestUsbPermission: Boolean = true,
@@ -244,11 +246,12 @@ class JadeRepo @Inject constructor(
         if (isConnectInProgress()) {
             return@withContext Result.failure(AppError("Connection already in progress"))
         }
-        connectKnownDeviceUnguarded(deviceId, forceSession, unlock, requestUsbPermission)
+        connectKnownDeviceUnguarded(deviceId, walletId, forceSession, unlock, requestUsbPermission)
     }
 
     private suspend fun connectKnownDeviceUnguarded(
         deviceId: String,
+        walletId: String?,
         forceSession: Boolean,
         unlock: Boolean,
         requestUsbPermission: Boolean,
@@ -260,7 +263,7 @@ class JadeRepo @Inject constructor(
                 _state.update { it.copy(isConnecting = true, error = null) }
                 awaitSetup()
                 if (forceSession) disconnectStaleSession(deviceId)
-                val entry = knownDevice(deviceId) ?: throw AppError("Unknown Jade '$deviceId'")
+                val entry = knownDevice(deviceId, walletId) ?: throw AppError("Unknown Jade '$deviceId'")
                 val devices = findKnownDeviceCandidates(entry, requestUsbPermission = requestUsbPermission)
                 val connected = connectExpectedDevice(
                     devices = devices,
@@ -282,22 +285,28 @@ class JadeRepo @Inject constructor(
         }
     }
 
-    /** A live, unlocked session for [deviceId]: reuses the current one, else reconnects and unlocks. */
-    suspend fun ensureConnected(deviceId: String): Result<ConnectedJadeDevice> = withContext(ioDispatcher) {
+    /**
+     * A live, unlocked session for [deviceId]: reuses the current one, else reconnects and unlocks.
+     * The session reports the paired wallet the Jade opened, which may not be [walletId].
+     */
+    suspend fun ensureConnected(
+        deviceId: String,
+        walletId: String? = null,
+    ): Result<ConnectedJadeDevice> = withContext(ioDispatcher) {
         runSuspendCatching {
             awaitSetup()
             val current = awaitConnectedOrNull(deviceId)
-                ?: return@runSuspendCatching connectKnownDevice(deviceId, forceSession = true).getOrThrow()
+                ?: return@runSuspendCatching connectKnownDevice(deviceId, walletId, forceSession = true).getOrThrow()
             if (!current.isLocked) return@runSuspendCatching current
             val version = unlockConnected()
             // A locked reconnect trusted the stored entry without reading keys, so the unlocked seed is
             // checked now: a Jade restored with another seed must not pass as the paired wallet.
-            val entry = knownDevices().firstOrNull { it.matches(deviceId) && it.walletId == current.walletId }
-                ?: knownDevice(deviceId)
-            runSuspendCatching { rejectOtherWallet(exportAccounts(), entry) }
+            val entry = knownDevice(deviceId, current.walletId)
+            val opened = runSuspendCatching { openedWallet(exportAccounts(), entry) }
                 .onFailure { cleanupFailedConnection(current.path) }
                 .getOrThrow()
-            current.copy(versionInfo = version).also { unlocked ->
+            val openedWalletId = opened?.walletId?.takeIf { it.isNotBlank() } ?: current.walletId
+            current.copy(versionInfo = version, walletId = openedWalletId).also { unlocked ->
                 _state.update { it.copy(connected = unlocked) }
             }
         }
@@ -324,6 +333,7 @@ class JadeRepo @Inject constructor(
                         ?: throw AppError("No known device found nearby")
                     connectKnownDeviceUnguarded(
                         deviceId = entry.id,
+                        walletId = entry.walletId,
                         forceSession = false,
                         unlock = false,
                         requestUsbPermission = false,
@@ -541,13 +551,13 @@ class JadeRepo @Inject constructor(
     }
 
     /** Pre-connects a known Bluetooth Jade before a sign screen asks for it, without unlocking. */
-    fun warmUpKnownDevice(deviceId: String) {
+    fun warmUpKnownDevice(deviceId: String, walletId: String? = null) {
         scope.launch {
             if (awaitConnectedOrNull(deviceId) != null) return@launch
             if (isConnectInProgress()) return@launch
             if (!isKnownBluetoothDevice(deviceId)) return@launch
             Logger.info("Warming up known Jade '$deviceId'", context = TAG)
-            connectKnownDevice(deviceId, unlock = false).onFailure {
+            connectKnownDevice(deviceId, walletId, unlock = false).onFailure {
                 Logger.debug("Warm up connect failed for '$deviceId'", context = TAG)
             }
         }
@@ -661,7 +671,7 @@ class JadeRepo @Inject constructor(
             }
             val known = if (version.jadeState.isUnlocked()) {
                 val xpubs = exportAccounts()
-                rejectOtherWallet(xpubs, expected)
+                openedWallet(xpubs, expected)
                 addOrUpdateKnownDevice(device, version, xpubs)
             } else {
                 // Still locked, so its keys cannot be read: only an entry already holding them is usable.
@@ -693,11 +703,15 @@ class JadeRepo @Inject constructor(
         }
     }
 
-    private fun rejectOtherWallet(fetchedXpubs: Map<String, String>, expected: KnownDevice?) {
+    private suspend fun openedWallet(fetchedXpubs: Map<String, String>, expected: KnownDevice?): KnownDevice? {
         // The efuse MAC survives a wipe, so a re-seeded Jade passes the hardware check. A reconnect must
-        // not quietly add its new seed as another wallet: pairing that stays an explicit Add.
-        val expectedXpubs = expected?.xpubs?.values?.toSet()?.takeIf { it.isNotEmpty() } ?: return
-        if (fetchedXpubs.values.none { it in expectedXpubs }) rejectDevice(HwWalletMismatchError())
+        // not quietly add its new seed as another wallet: pairing that stays an explicit Add. A passphrase
+        // typed on the device opens another paired wallet on the same Jade, and the session follows it.
+        if (expected == null || expected.xpubs.isEmpty()) return null
+        val fetched = fetchedXpubs.values.toSet()
+        val sameDevice = listOf(expected) + knownDevices().filter { it.id == expected.id }
+        return sameDevice.firstOrNull { it.xpubs.values.any { xpub -> xpub in fetched } }
+            ?: rejectDevice(HwWalletMismatchError())
     }
 
     private fun rejectDevice(error: Throwable): Nothing = throw error
@@ -801,8 +815,10 @@ class JadeRepo @Inject constructor(
     private suspend fun knownDevices(): List<KnownDevice> =
         (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id to it.walletKey }
 
-    private suspend fun knownDevice(deviceId: String): KnownDevice? =
-        knownDevices().firstOrNull { it.matches(deviceId) }
+    private suspend fun knownDevice(deviceId: String, walletId: String? = null): KnownDevice? {
+        val matching = knownDevices().filter { it.matches(deviceId) }
+        return matching.firstOrNull { walletId != null && it.walletId == walletId } ?: matching.firstOrNull()
+    }
 
     private suspend fun awaitConnectedOrNull(deviceId: String): ConnectedJadeDevice? {
         connectedDevice(deviceId)?.let { return it }
