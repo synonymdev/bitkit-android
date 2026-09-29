@@ -17,6 +17,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import to.bitkit.App
 import to.bitkit.R
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH
@@ -152,8 +153,13 @@ class PaykitSubscriptionWorkClient @Inject constructor(
 class PaykitSubscriptionNotificationWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
+    private val clock: Clock,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
+        val startsAt = inputData.getString(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT)
+            ?.let { runSuspendCatching { Instant.parse(it) }.getOrNull() }
+            ?: return Result.failure()
+        if (startsAt > clock.now()) return Result.retry()
         if (App.currentActivity?.value != null) return Result.success()
         applicationContext.pushNotification(
             title = applicationContext.getString(R.string.subscriptions__payment_due_title),
