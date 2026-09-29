@@ -243,6 +243,15 @@ import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
+internal fun shouldFinishWalletInitialization(
+    nodeLifecycleState: NodeLifecycleState,
+    restoreState: RestoreState,
+    isRestoringFromRNRemoteBackup: Boolean,
+): Boolean = nodeLifecycleState == NodeLifecycleState.Running &&
+    restoreState !is RestoreState.InProgress &&
+    restoreState !is RestoreState.BackupFailed &&
+    !isRestoringFromRNRemoteBackup
+
 @Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -380,29 +389,17 @@ fun ContentView(
     }
 
     var walletIsInitializing by remember { mutableStateOf(nodeLifecycleState == NodeLifecycleState.Initializing) }
-    var walletInitShouldFinish by remember { mutableStateOf(false) }
-
     val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
     val isRestoringFromRNRemoteBackup by walletViewModel.isRestoringFromRNRemoteBackup.collectAsStateWithLifecycle()
+    val walletInitShouldFinish = shouldFinishWalletInitialization(
+        nodeLifecycleState,
+        restoreState,
+        isRestoringFromRNRemoteBackup,
+    )
 
-    // React to nodeLifecycleState changes
-    LaunchedEffect(nodeLifecycleState, restoreState, isRestoringFromRNRemoteBackup) {
-        when (nodeLifecycleState) {
-            NodeLifecycleState.Initializing -> {
-                walletIsInitializing = true
-            }
-
-            NodeLifecycleState.Running -> {
-                val restoreComplete = restoreState !is RestoreState.InProgress
-                val metadataComplete = !isRestoringFromRNRemoteBackup
-                walletInitShouldFinish = restoreComplete && metadataComplete
-            }
-
-            is NodeLifecycleState.ErrorStarting -> {
-                walletInitShouldFinish = true
-            }
-
-            else -> Unit
+    LaunchedEffect(nodeLifecycleState) {
+        if (nodeLifecycleState == NodeLifecycleState.Initializing) {
+            walletIsInitializing = true
         }
     }
 
@@ -417,7 +414,6 @@ fun ContentView(
                 onRetry = {
                     if (backupRestoreFailed) {
                         walletIsInitializing = true
-                        walletInitShouldFinish = false
                         walletViewModel.onBackupRestoreRetry()
                     } else {
                         walletViewModel.onRestoreRetry()
