@@ -379,7 +379,7 @@ class TransferViewModel @Inject constructor(
             context = TAG,
         )
 
-        if (holdForFeesChange(order, shown, plan) || isSendAllBelowOrderFee(order, plan)) return false
+        if (holdForFeesChange(order, shown, plan) || isSendAllBelowOrderFee(order, shown, plan)) return false
 
         val address = order.payment?.onchain?.address.orEmpty()
         return lightningRepo
@@ -418,6 +418,7 @@ class TransferViewModel @Inject constructor(
     ): SpendingConfirmFundingPlan? {
         val plan = spendingConfirmFundingPlan?.takeIf { it.orderId == order.id }
             ?: buildSpendingConfirmFundingPlan(order).getOrElse {
+                if (holdForOrderFeeIncrease(order, shown)) return null
                 Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
                 ToastEventBus.send(it)
                 return null
@@ -431,8 +432,13 @@ class TransferViewModel @Inject constructor(
         return plan
     }
 
-    private suspend fun isSendAllBelowOrderFee(order: IBtOrder, plan: SpendingConfirmFundingPlan): Boolean {
+    private suspend fun isSendAllBelowOrderFee(
+        order: IBtOrder,
+        shown: TransferToSpendingUiState,
+        plan: SpendingConfirmFundingPlan,
+    ): Boolean {
         if (!plan.shouldUseSendAll || plan.maxSendable >= order.feeSat) return false
+        if (holdForOrderFeeIncrease(order, shown)) return true
 
         Logger.error(
             "Insufficient balance for transfer: maxSendable=${plan.maxSendable}, " +
@@ -443,6 +449,15 @@ class TransferViewModel @Inject constructor(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.other__pay_insufficient_savings),
         )
+        return true
+    }
+
+    private suspend fun holdForOrderFeeIncrease(order: IBtOrder, shown: TransferToSpendingUiState): Boolean {
+        if (order.feeSat <= shown.feeSat) return false
+        Logger.info("Waiting for another swipe, order fee rose to '${order.feeSat}'", context = TAG)
+        spendingConfirmFundingPlan = null
+        _spendingUiState.update { it.copy(feeSat = order.feeSat) }
+        sendFeesChangedToast(isServiceFee = true, delta = order.feeSat.safe() - shown.feeSat.safe())
         return true
     }
 

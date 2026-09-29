@@ -1577,6 +1577,36 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingConfirm shows the order fee when the wallet cannot fund a pricier order`() = test {
+        val estimate = spendingOrder(feeSat = 98_000uL)
+        val createdOrder = estimate.copy(
+            feeSat = 99_000uL,
+            serviceFeeSat = estimate.serviceFeeSat + 1_000uL,
+        )
+        stubSpendableBalances(spendable = 98_500uL)
+        stubSingleUtxoFunding(miningFee = 500uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(estimate)
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(createdOrder))
+        prepareConfirm()
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.failure(AppError("no funding utxos")))
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull())).thenReturn(Result.success(500uL))
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        val shown = sut.spendingUiState.value
+        assertEquals(createdOrder.feeSat, shown.feeSat)
+        assertFalse(shown.isConfirmPaying)
+        verifySendOnChain(sats = createdOrder.feeSat, count = 0)
+        assertFeesChangedToast(toasts, FEES_CHANGED_SERVICE, delta = 1_000uL)
+    }
+
+    @Test
     fun `onTransferToSpendingConfirm keeps the shown plan when the rebuilt fee estimate fails`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
         stubSpendableBalances(spendable = 110_000uL)
