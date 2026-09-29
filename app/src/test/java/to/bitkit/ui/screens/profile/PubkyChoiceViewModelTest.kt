@@ -2,17 +2,22 @@ package to.bitkit.ui.screens.profile
 
 import android.content.Context
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -175,6 +180,46 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.navigateToProfile)
         assertEquals(1, toasts.size)
         toastJob.cancel()
+    }
+
+    @Test
+    fun `onIdentityClick opens the profile when another pick already signed in`() = test {
+        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.failure(PubkyAlreadySignedInError))
+        createSut()
+        val effects = mutableListOf<PubkyChoiceEffect>()
+        val toasts = mutableListOf<Toast>()
+        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.onIdentityClick(RING_PUBKY)
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.navigateToProfile)
+        assertNull(sut.uiState.value.adoptingPubky)
+        assertTrue(effects.isEmpty())
+        assertTrue(toasts.isEmpty())
+        effectsJob.cancel()
+        toastJob.cancel()
+    }
+
+    @Test
+    fun `onIdentityClick ignores another click while a pick is in progress`() = test {
+        val finishPick = CompletableDeferred<Result<Boolean>>()
+        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).doSuspendableAnswer { finishPick.await() }
+        createSut()
+        val effects = mutableListOf<PubkyChoiceEffect>()
+        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
+
+        sut.onIdentityClick(RING_PUBKY)
+        sut.onIdentityClick(RING_PUBKY)
+        finishPick.complete(Result.success(false))
+        advanceUntilIdle()
+
+        verifyBlocking(pubkyRepo, times(1)) { adoptRingIdentity(RING_PUBKY) }
+        assertEquals(PubkyChoiceEffect.NavigateToCreateProfile, effects.single())
+        assertFalse(sut.uiState.value.navigateToProfile)
+        assertNull(sut.uiState.value.adoptingPubky)
+        effectsJob.cancel()
     }
 
     @Test

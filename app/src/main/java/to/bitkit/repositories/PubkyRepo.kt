@@ -304,7 +304,8 @@ class PubkyRepo @Inject constructor(
             }
             if (ringPubkys.any { "${SharedPubkyContract.RING_SOURCE_PREFIX}$it" == reference }) return
 
-            Logger.warn("Adopted ring identity '${redacted(reference)}' is gone, clearing session", context = TAG)
+            val adoptedPubky = reference.removePrefix(SharedPubkyContract.RING_SOURCE_PREFIX)
+            Logger.warn("Adopted ring identity '${redacted(adoptedPubky)}' is gone, clearing session", context = TAG)
             runSuspendCatching { pubkyService.clearSessionAccess() }
                 .onFailure { Logger.warn("Failed to clear adopted session access", it, context = TAG) }
             clearLocalState()
@@ -317,38 +318,108 @@ class PubkyRepo @Inject constructor(
     suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {
             ensureServiceInitialized()
-            val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
-            val publicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
-            require(PubkyPublicKeyFormat.matches(publicKey, pubky)) {
-                "Ring credential does not match '${redacted(pubky)}'"
+            val hasProfile = initializeMutex.withLock {
+                if (_publicKey.value != null) throw PubkyAlreadySignedInError
+                val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
+                val publicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
+                require(PubkyPublicKeyFormat.matches(publicKey, pubky)) {
+                    "Ring credential does not match '${redacted(pubky)}'"
+                }
+                withContext(NonCancellable) { commitRingIdentity(pubky, publicKey, secretKeyHex) }
             }
+            loadContacts()
+            hasProfile
+        }
+    }
+
+    private suspend fun commitRingIdentity(pubky: String, publicKey: String, secretKeyHex: String): Boolean {
+        val previousReference = runSuspendCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+        val previousSession = runSuspendCatching { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }
+        var committed = false
+        val profile = try {
             keychain.upsertString(
                 Keychain.Key.SHARED_PUBKY_SOURCE.name,
                 "${SharedPubkyContract.RING_SOURCE_PREFIX}$pubky",
             )
-
-            runSuspendCatching { pubkyService.signIn(secretKeyHex) }.getOrElse {
-                val hasIdentityRecord = runSuspendCatching { pubkyService.hasIdentityRecord(publicKey) }
-                    .onFailure { Logger.warn("Failed to check ring identity record", it, context = TAG) }
-                    .getOrNull()
-                if (hasIdentityRecord != false) throw it
-                Logger.warn("Signing up ring identity without a published record", it, context = TAG)
-                val homegate = fetchHomegateSignupCode()
-                pubkyService.signUp(secretKeyHex, homegate.homeserverPubky, homegate.signupCode)
-            }
-
-            _publicKey.update { publicKey.ensurePubkyPrefix() }
-            notifyBackupStateChanged()
-            Logger.info("Adopted ring identity for '${redacted(publicKey)}'", context = TAG)
-            loadProfile()
-            loadContacts()
-            val hasProfile = _profile.value != null
-            runSuspendCatching { settingsStore.setPubkyProfileSetupPending(!hasProfile) }
-                .onFailure { Logger.warn("Failed to save pending profile setup", it, context = TAG) }
-            hasProfile
-        }.onFailure {
-            runCatching { keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+            signInRingIdentity(publicKey, secretKeyHex, previousSession)
+            val remoteProfile = fetchRemoteProfile(publicKey)
+                .onFailure { Logger.warn("Failed to look up adopted ring profile", it, context = TAG) }
+                .getOrNull()
+            settingsStore.setPubkyProfileSetupPending(remoteProfile == null)
+            committed = true
+            remoteProfile
+        } finally {
+            if (!committed) rollBackRingIdentity(previousReference, previousSession)
         }
+
+        profile?.let { adoptedProfile ->
+            _profile.update { adoptedProfile }
+            runSuspendCatching { cacheMetadata(adoptedProfile) }
+                .onFailure { Logger.warn("Failed to cache adopted ring profile", it, context = TAG) }
+        }
+        _publicKey.update { publicKey.ensurePubkyPrefix() }
+        notifyBackupStateChanged()
+        Logger.info("Adopted ring identity for '${redacted(publicKey)}'", context = TAG)
+        return profile != null
+    }
+
+    private suspend fun signInRingIdentity(
+        publicKey: String,
+        secretKeyHex: String,
+        previousSession: Result<String?>,
+    ) {
+        runSuspendCatching { pubkyService.signIn(secretKeyHex) }.getOrElse {
+            if (hasSessionChangedSince(previousSession)) throw it
+            val hasIdentityRecord = runSuspendCatching { pubkyService.hasIdentityRecord(publicKey) }
+                .onFailure { Logger.warn("Failed to check ring identity record", it, context = TAG) }
+                .getOrNull()
+            if (hasIdentityRecord != false) throw it
+            Logger.warn("Signing up ring identity without a published record", it, context = TAG)
+            val homegate = fetchHomegateSignupCode()
+            pubkyService.signUp(secretKeyHex, homegate.homeserverPubky, homegate.signupCode)
+        }
+    }
+
+    private suspend fun hasSessionChangedSince(previousSession: Result<String?>): Boolean {
+        val currentSession = runSuspendCatching { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }
+        if (previousSession.isFailure || currentSession.isFailure) return true
+        return previousSession.getOrNull() != currentSession.getOrNull()
+    }
+
+    private suspend fun rollBackRingIdentity(
+        previousReference: Result<String?>,
+        previousSession: Result<String?>,
+    ) {
+        if (hasSessionChangedSince(previousSession)) {
+            Logger.info("Discarding session saved by a failed ring identity adoption", context = TAG)
+            discardRingSession()
+            restoreRingReference(null)
+            return
+        }
+        val hadSession = !previousSession.getOrNull().isNullOrEmpty()
+        restoreRingReference(previousReference.getOrNull()?.takeIf { hadSession })
+    }
+
+    private suspend fun discardRingSession() {
+        val revocationError = runSuspendCatching { pubkyService.signOut() }.exceptionOrNull() ?: return
+        Logger.warn("Failed to revoke abandoned ring session", revocationError, context = TAG)
+        val forgetError = runSuspendCatching { pubkyService.forgetSessionAccess() }.exceptionOrNull() ?: return
+        Logger.warn("Failed to forget abandoned ring session access", forgetError, context = TAG)
+        runSuspendCatching { pubkyService.clearSessionAccess() }
+            .onFailure { Logger.warn("Failed to clear abandoned ring session access", it, context = TAG) }
+        runSuspendCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+            .onFailure { Logger.warn("Failed to delete abandoned ring session", it, context = TAG) }
+    }
+
+    private suspend fun restoreRingReference(reference: String?) {
+        runSuspendCatching {
+            if (reference == null) {
+                keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+            } else {
+                keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)
+            }
+        }.onFailure { Logger.warn("Failed to restore ring identity reference", it, context = TAG) }
+        notifyBackupStateChanged()
     }
 
     // endregion

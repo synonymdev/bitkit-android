@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -49,8 +50,9 @@ class PubkyChoiceViewModel @Inject constructor(
     }
 
     fun onIdentityClick(pubky: String) {
+        if (_uiState.value.adoptingPubky != null) return
+        _uiState.update { it.copy(adoptingPubky = pubky) }
         viewModelScope.launch {
-            _uiState.update { it.copy(adoptingPubky = pubky) }
             pubkyRepo.adoptRingIdentity(pubky)
                 .onSuccess { hasProfile ->
                     if (hasProfile) {
@@ -72,6 +74,10 @@ class PubkyChoiceViewModel @Inject constructor(
                     _effects.emit(effect)
                 }
                 .onFailure {
+                    if (it is PubkyAlreadySignedInError) {
+                        _uiState.update { state -> state.copy(adoptingPubky = null, navigateToProfile = true) }
+                        return@onFailure
+                    }
                     Logger.error("Failed to adopt ring identity", it, context = TAG)
                     _uiState.update { state -> state.copy(adoptingPubky = null) }
                     ToastEventBus.send(
