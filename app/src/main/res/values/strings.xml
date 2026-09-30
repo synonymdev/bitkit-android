@@ -1092,6 +1092,8 @@
     <string name="subscriptions__allowance_monthly_allowance">Monthly allowance</string>
     <string name="subscriptions__allowance_monthly_limit">Monthly limit</string>
     <string name="subscriptions__allowance_no_contacts">Add a contact first. Allowances cover payment requests from your contacts.</string>
+    <string name="subscriptions__allowance_offer_accepted_description">{name} set up an allowance for you</string>
+    <string name="subscriptions__allowance_offer_accepted_title">Allowance Added</string>
     <string name="subscriptions__allowance_offer_explanation">{name}\'s wallet will pay your requests within these limits without asking each time. Either of you can end it.</string>
     <string name="subscriptions__allowance_offer_headline"><![CDATA[{name} offers\n<accent>an allowance</accent>]]></string>
     <string name="subscriptions__allowance_paid_automatically">{amount} paid automatically</string>

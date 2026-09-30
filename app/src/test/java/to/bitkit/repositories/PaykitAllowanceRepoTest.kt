@@ -354,8 +354,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `received proposal is presented once and accepting answers it`() = test {
-        val proposalRecord = receivedProposal()
+    fun `received ask is presented once and accepting answers it`() = test {
+        val proposalRecord = receivedAsk()
         records = listOf(proposalRecord)
         whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(proposalRecord)
         sut.activate(identity)
@@ -370,6 +370,100 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         verify(sdk).acceptAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET, WALLET_ALLOWANCE_ID)
         verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET)
+    }
+
+    @Test
+    fun `offer from the allower is accepted without the review sheet and not announced twice`() = test {
+        // The proposer took the allower role, so this wallet is the allowee.
+        val offer = receivedProposal()
+        records = listOf(offer)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+            records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
+            records.single()
+        }
+        sut.activate(identity)
+        assertNull(sut.proposalForPresentation(), "An offer from the allower never opens the review sheet")
+
+        val accepted = sut.acceptOffersFromAllowers()
+
+        assertEquals(listOf(fixtures.counterpartyKey), accepted.map { it.counterparty })
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET, WALLET_ALLOWANCE_ID)
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET)
+        val entry = sut.entries.value.single()
+        assertEquals(PaykitAllowance.Status.ACTIVE, entry.status(fixtures.now))
+        assertEquals(PaykitAllowance.Role.ALLOWEE, entry.role)
+        assertTrue(entry.canEnd, "The allowee can still end it")
+        assertNull(sut.proposalForPresentation())
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An accepted offer is not accepted or announced twice")
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `failed offer accept stays unanswered and is retried on the next refresh`() = test {
+        val offer = receivedProposal()
+        records = listOf(offer)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenThrow(RuntimeException("offline"))
+        sut.activate(identity)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+        assertNull(sut.proposalForPresentation())
+
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(offer)
+        assertEquals(1, sut.acceptOffersFromAllowers().size)
+        verify(sdk, times(2)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `ask from the allowee is left for the review sheet`() = test {
+        // The proposer took the allowee role, so this wallet is the allower and pays: the user decides.
+        records = listOf(receivedAsk())
+        sut.activate(identity)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        assertEquals(WALLET_ALLOWANCE_ID, sut.proposalForPresentation()?.id)
+        assertEquals(PaykitAllowance.Status.AWAITING_MY_ANSWER, sut.entries.value.single().status(fixtures.now))
+    }
+
+    @Test
+    fun `proposal sent or already answered is never accepted`() = test {
+        records = listOf(
+            fixtures.record(allowanceId = "sent", state = AllowanceLifecycleState.PROPOSED, proposedByMe = true),
+            fixtures.record(
+                allowanceId = "declined",
+                localRole = AllowanceLocalRole.ALLOWEE,
+                state = AllowanceLifecycleState.REJECTED,
+                proposedByMe = false,
+            ),
+            fixtures.record(
+                allowanceId = "ended",
+                localRole = AllowanceLocalRole.ALLOWEE,
+                state = AllowanceLifecycleState.ENDED,
+                proposedByMe = false,
+            ),
+            fixtures.record(
+                allowanceId = "active",
+                localRole = AllowanceLocalRole.ALLOWEE,
+                state = AllowanceLifecycleState.ACCEPTED,
+                proposedByMe = false,
+            ),
+        )
+        sut.activate(identity)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `offers are not accepted without an identity`() = test {
+        records = listOf(receivedProposal())
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
     }
 
     @Test
@@ -534,6 +628,12 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
     private fun receivedProposal() = fixtures.record(
         localRole = AllowanceLocalRole.ALLOWEE,
+        state = AllowanceLifecycleState.PROPOSED,
+        proposedByMe = false,
+    )
+
+    private fun receivedAsk() = fixtures.record(
+        localRole = AllowanceLocalRole.ALLOWER,
         state = AllowanceLifecycleState.PROPOSED,
         proposedByMe = false,
     )
