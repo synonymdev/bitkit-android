@@ -484,7 +484,7 @@ class PubkyRepo @Inject constructor(
         try {
             runSuspendCatching {
                 withContext(ioDispatcher) {
-                    resolveContactProfile(pk).getOrThrow()
+                    resolveContactProfile(pk, retry = true).getOrThrow()
                         ?: throw AppError("Profile not found")
                 }
             }.onSuccess { loadedProfile ->
@@ -507,21 +507,15 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun fetchRemoteProfile(publicKey: String): Result<PubkyProfile?> = runSuspendCatching {
-        withContext(ioDispatcher) {
-            resolveContactProfile(publicKey).getOrThrow()
-        }
-    }
+    suspend fun fetchRemoteProfile(publicKey: String): Result<PubkyProfile?> =
+        resolveContactProfile(publicKey, retry = true)
 
     /**
      * Resolves [publicKey]'s profile once, without retrying, for display only. A null or failed result is not proof
      * that the profile does not exist.
      */
-    suspend fun fetchDisplayProfile(publicKey: String): Result<PubkyProfile?> = runSuspendCatching {
-        withContext(ioDispatcher) {
-            resolveProfileOnce(publicKey.ensurePubkyPrefix())
-        }
-    }
+    suspend fun fetchDisplayProfile(publicKey: String): Result<PubkyProfile?> =
+        resolveContactProfile(publicKey, retry = false)
 
     // endregion
 
@@ -859,7 +853,7 @@ class PubkyRepo @Inject constructor(
     suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
         val prefixedKey = runCatching { requireCanonicalAddableContactPublicKey(publicKey) }
             .getOrElse { return Result.failure(it) }
-        return resolveContactProfile(prefixedKey)
+        return resolveContactProfile(prefixedKey, retry = true)
             .map { it ?: PubkyProfile.placeholder(prefixedKey) }
             .recoverCatching {
                 if (it is CancellationException) {
@@ -880,7 +874,7 @@ class PubkyRepo @Inject constructor(
                 allowExisting = existingProfile != null,
             )
             val profile = existingProfile?.copy(publicKey = prefixedKey)
-                ?: resolveContactProfile(prefixedKey).getOrThrow()
+                ?: resolveContactProfile(prefixedKey, retry = true).getOrThrow()
                 ?: PubkyProfile.placeholder(prefixedKey)
             pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
             _contacts.update { current ->
@@ -951,7 +945,7 @@ class PubkyRepo @Inject constructor(
                     val prefixedKey = contactPk.ensurePubkyPrefix()
                     async {
                         runSuspendCatching {
-                            val profile = resolveContactProfile(prefixedKey).getOrThrow()
+                            val profile = resolveContactProfile(prefixedKey, retry = true).getOrThrow()
                                 ?: PubkyProfile.placeholder(prefixedKey)
                             pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
                             profile
@@ -982,15 +976,17 @@ class PubkyRepo @Inject constructor(
                 contactKeys.map { contactPk ->
                     val prefixedKey = contactPk.ensurePubkyPrefix()
                     async {
-                        runSuspendCatching {
-                            resolveContactProfile(prefixedKey).getOrThrow() ?: PubkyProfile.placeholder(prefixedKey)
-                        }.getOrElse { PubkyProfile.placeholder(prefixedKey) }
+                        resolveContactProfile(prefixedKey, retry = false)
+                            .onFailure {
+                                Logger.warn("Failed to resolve follow '${redacted(prefixedKey)}'", it, context = TAG)
+                            }
+                            .getOrNull() ?: PubkyProfile.placeholder(prefixedKey)
                     }
                 }.awaitAll().sortedBy { it.name.lowercase() }
             }
 
             val ownProfile = _profile.value?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, pk) }
-                ?: resolveContactProfile(pk).getOrNull()
+                ?: resolveContactProfile(pk, retry = true).getOrNull()
             check(_publicKey.value == pk) { "Pubky identity changed while preparing import" }
 
             _pendingImportProfile.update { ownProfile }
@@ -1281,9 +1277,10 @@ class PubkyRepo @Inject constructor(
         paykitProfile?.let {
             return PubkyProfile.fromPaykitProfile(prefixedKey, it).withNameFallback(label)
         }
-        resolveContactProfile(prefixedKey).getOrNull()?.let {
-            return it.withNameFallback(label)
-        }
+        resolveContactProfile(prefixedKey, retry = false)
+            .onFailure { Logger.warn("Failed to resolve contact '${redacted(prefixedKey)}'", it, context = TAG) }
+            .getOrNull()
+            ?.let { return it.withNameFallback(label) }
         return PubkyProfile.forDisplay(
             publicKey = prefixedKey,
             name = label,
@@ -1291,9 +1288,13 @@ class PubkyRepo @Inject constructor(
         )
     }
 
-    private suspend fun resolveContactProfile(publicKey: String): Result<PubkyProfile?> = runSuspendCatching {
+    private suspend fun resolveContactProfile(
+        publicKey: String,
+        retry: Boolean,
+    ): Result<PubkyProfile?> = runSuspendCatching {
         withContext(ioDispatcher) {
             val prefixedKey = publicKey.ensurePubkyPrefix()
+            if (!retry) return@withContext resolveProfileOnce(prefixedKey)
             var lastError: Throwable? = null
 
             repeat(2) { attempt ->

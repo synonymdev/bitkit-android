@@ -608,6 +608,23 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `createIdentity retries a profile that is not yet readable after publishing`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        profileSetupPending.value = true
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(null)
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Published")))
+        clearInvocations(pubkyService)
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isSuccess)
+        assertEquals("Published", sut.profile.value?.name)
+        verify(pubkyService, times(2)).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
     fun `wipe completes while identity creation waits for contact loading`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         profileSetupPending.value = true
@@ -684,6 +701,18 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals(existingProfile, sut.profile.value)
         assertFalse(sut.isLoadingProfile.value)
+    }
+
+    @Test
+    fun `loadProfile retries a failed own profile resolution once`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenAnswer { throw TestAppError("Network error") }
+        clearInvocations(pubkyService)
+
+        sut.loadProfile()
+
+        verify(pubkyService, times(2)).resolveContactProfile(VALID_SELF_KEY, true)
     }
 
     @Test
@@ -1068,6 +1097,25 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals("Alice", sut.pendingImportProfile.value?.name)
         assertEquals(sut.profile.value, sut.pendingImportProfile.value)
         verify(pubkyService, never()).resolveContactProfile(any(), any())
+    }
+
+    @Test
+    fun `prepareImport resolves each follow once without retrying a missing profile or an error`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true)).thenReturn(null)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+            .thenAnswer { throw TestAppError("Unreachable") }
+
+        val result = sut.prepareImport()
+
+        assertTrue(result.isSuccess)
+        assertEquals(
+            setOf(PubkyProfile.placeholder(VALID_CONTACT_KEY_A), PubkyProfile.placeholder(VALID_CONTACT_KEY_B)),
+            sut.pendingImportContacts.value.toSet(),
+        )
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true)
     }
 
     @Test
@@ -2230,6 +2278,43 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals(1, contacts.size)
         assertEquals(contactKey, contacts.first().publicKey)
         assertFalse(sut.isLoadingContacts.value)
+    }
+
+    @Test
+    fun `loadContacts resolves each contact once without retrying a missing profile or an error`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords())
+            .thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A), createContactRecord(VALID_CONTACT_KEY_B)))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true)).thenReturn(null)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+            .thenAnswer { throw TestAppError("Unreachable") }
+
+        sut.loadContacts()
+
+        assertEquals(
+            setOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B),
+            sut.contacts.value.map { it.publicKey }.toSet(),
+        )
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true)
+    }
+
+    @Test
+    fun `addContact and importContacts retry a failed contact resolution once`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true))
+            .thenAnswer { throw TestAppError("Network error") }
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+            .thenAnswer { throw TestAppError("Network error") }
+            .thenReturn(createResolution(VALID_CONTACT_KEY_B, paykitProfile = createPaykitProfile("Bob")))
+
+        assertTrue(sut.addContact(VALID_CONTACT_KEY_A).isSuccess)
+        assertTrue(sut.importContacts(listOf(VALID_CONTACT_KEY_B)).isSuccess)
+
+        assertEquals(listOf("Alice", "Bob"), sut.contacts.value.map { it.name })
+        verify(pubkyService, times(2)).resolveContactProfile(VALID_CONTACT_KEY_A, true)
+        verify(pubkyService, times(2)).resolveContactProfile(VALID_CONTACT_KEY_B, true)
     }
 
     @Test
