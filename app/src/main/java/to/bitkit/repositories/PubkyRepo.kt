@@ -65,7 +65,11 @@ sealed class PubkyContactError(message: String) : AppError(message) {
     data object AlreadyExists : PubkyContactError("Contact already exists")
     data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
+    data object ActiveSubscription : PubkyContactError("Contact has an active subscription")
 }
+
+private fun Throwable.containsActiveSubscriptionError(): Boolean =
+    generateSequence(this) { it.cause }.any { it is PubkyContactError.ActiveSubscription }
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
 
@@ -94,6 +98,8 @@ class PubkyRepo @Inject constructor(
     private val initializeMutex = Mutex()
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
+    private val contactsLock = Any()
+    private var contactsRevision = 0L
     private val adoptedSourceCheckMutex = Mutex()
     private var isServiceInitialized = false
 
@@ -717,7 +723,7 @@ class PubkyRepo @Inject constructor(
         }
         pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
         notifyBackupStateChanged()
-        _contacts.update { emptyList() }
+        updateContacts { emptyList() }
         markContactsLoaded()
         Logger.info("Deleted all contacts", context = TAG)
     }
@@ -776,41 +782,52 @@ class PubkyRepo @Inject constructor(
         _isLoadingContacts.update { true }
         var shouldMarkLoadCompleted = false
         try {
-            runSuspendCatching {
-                withContext(ioDispatcher) {
-                    val records = pubkyService.contactRecords()
-                    val overrides = pubkyStore.data.first().contactProfileOverrides
+            var reload: Boolean
+            do {
+                val revision = synchronized(contactsLock) { contactsRevision }
+                reload = false
+                runSuspendCatching {
+                    withContext(ioDispatcher) {
+                        val records = pubkyService.contactRecords()
+                        val overrides = pubkyStore.data.first().contactProfileOverrides
 
-                    coroutineScope {
-                        records.map { record ->
-                            async {
-                                runSuspendCatching {
-                                    contactProfile(record.publicKey, record.label, record.profile, overrides)
-                                }.onFailure {
-                                    Logger.warn(
-                                        "Failed to load contact '${redacted(record.publicKey)}'",
-                                        it,
-                                        context = TAG,
-                                    )
-                                }.getOrElse {
-                                    PubkyProfile.placeholder(record.publicKey.ensurePubkyPrefix())
+                        coroutineScope {
+                            records.map { record ->
+                                async {
+                                    runSuspendCatching {
+                                        contactProfile(record.publicKey, record.label, record.profile, overrides)
+                                    }.onFailure {
+                                        Logger.warn(
+                                            "Failed to load contact '${redacted(record.publicKey)}'",
+                                            it,
+                                            context = TAG,
+                                        )
+                                    }.getOrElse {
+                                        PubkyProfile.placeholder(record.publicKey.ensurePubkyPrefix())
+                                    }
                                 }
-                            }
-                        }.awaitAll().sortedBy { it.name.lowercase() }
+                            }.awaitAll().sortedBy { it.name.lowercase() }
+                        }
                     }
+                }.onSuccess { loadedContacts ->
+                    if (_publicKey.value != pk) {
+                        Logger.debug("Skipped stale contacts load for '${redacted(pk)}'", context = TAG)
+                        return@onSuccess
+                    }
+                    synchronized(contactsLock) {
+                        if (contactsRevision != revision) {
+                            reload = true
+                            return@onSuccess
+                        }
+                        _contacts.update { loadedContacts }
+                    }
+                    markContactsLoaded()
+                    shouldMarkLoadCompleted = true
+                }.onFailure {
+                    shouldMarkLoadCompleted = _publicKey.value == pk
+                    Logger.error("Failed to load contacts", it, context = TAG)
                 }
-            }.onSuccess { loadedContacts ->
-                if (_publicKey.value != pk) {
-                    Logger.debug("Skipped stale contacts load for '${redacted(pk)}'", context = TAG)
-                    return@onSuccess
-                }
-                _contacts.update { loadedContacts }
-                markContactsLoaded()
-                shouldMarkLoadCompleted = true
-            }.onFailure {
-                shouldMarkLoadCompleted = _publicKey.value == pk
-                Logger.error("Failed to load contacts", it, context = TAG)
-            }
+            } while (reload && _publicKey.value == pk)
         } finally {
             _isLoadingContacts.update { false }
             loadContactsMutex.unlock()
@@ -844,8 +861,13 @@ class PubkyRepo @Inject constructor(
             val profile = existingProfile?.copy(publicKey = prefixedKey)
                 ?: resolveContactProfile(prefixedKey).getOrThrow()
                 ?: PubkyProfile.placeholder(prefixedKey)
-            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
-            _contacts.update { current ->
+            pubkyService.saveContact(
+                prefixedKey,
+                profile.name,
+                relevantReceiverPaths(prefixedKey),
+                restorePrivateConnection = true,
+            )
+            updateContacts { current ->
                 (current.filter { it.publicKey != prefixedKey } + profile)
                     .sortedBy { it.name.lowercase() }
             }
@@ -886,7 +908,7 @@ class PubkyRepo @Inject constructor(
             )
             pubkyService.saveContact(prefixedKey, name)
             upsertContactProfileOverride(updatedProfile)
-            _contacts.update { current ->
+            updateContacts { current ->
                 current.map { if (it.publicKey == prefixedKey) updatedProfile else it }
                     .sortedBy { it.name.lowercase() }
             }
@@ -900,10 +922,13 @@ class PubkyRepo @Inject constructor(
             val prefixedKey = publicKey.ensurePubkyPrefix()
             pubkyService.removeContact(prefixedKey)
             removeContactProfileOverride(prefixedKey)
-            _contacts.update { current -> current.filter { it.publicKey != prefixedKey } }
+            updateContacts { current -> current.filter { it.publicKey != prefixedKey } }
             markContactsLoaded()
             Logger.info("Removed contact '${redacted(prefixedKey)}'", context = TAG)
         }
+    }.recoverCatching {
+        if (it.containsActiveSubscriptionError()) throw PubkyContactError.ActiveSubscription
+        throw it
     }
 
     suspend fun importContacts(profiles: List<PubkyProfile>): Result<Unit> = runSuspendCatching {
@@ -915,7 +940,7 @@ class PubkyRepo @Inject constructor(
                 if (profile.publicKey in existing) continue
                 runSuspendCatching {
                     // The preview already resolved this profile. Receiver discovery runs during contact refresh.
-                    pubkyService.saveContact(profile.publicKey, profile.name)
+                    pubkyService.saveContact(profile.publicKey, profile.name, restorePrivateConnection = true)
                     imported.add(profile)
                     existing.add(profile.publicKey)
                 }.onFailure {
@@ -923,7 +948,7 @@ class PubkyRepo @Inject constructor(
                     Logger.warn("Failed to import contact '${redacted(profile.publicKey)}'", it, context = TAG)
                 }
             }
-            _contacts.update { current ->
+            updateContacts { current ->
                 val currentKeys = current.map { it.publicKey }.toSet()
                 (current + imported.filter { it.publicKey !in currentKeys })
                     .sortedBy { it.name.lowercase() }
@@ -1408,11 +1433,18 @@ class PubkyRepo @Inject constructor(
         }
         _publicKey.update { null }
         _profile.update { null }
-        _contacts.update { emptyList() }
+        updateContacts { emptyList() }
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
         if (clearRestorationFailure) _sessionRestorationFailed.update { false }
+    }
+
+    private fun updateContacts(transform: (List<PubkyProfile>) -> List<PubkyProfile>) {
+        synchronized(contactsLock) {
+            contactsRevision++
+            _contacts.update(transform)
+        }
     }
 
     private fun markContactsLoaded() {

@@ -1,0 +1,16 @@
+<journey name="Delete Contact With Active Subscription">
+  <description>
+    Verifies that an active subscription must end before its contact can be deleted. Requires two authenticated Bitkit instances saved as contacts, with an accepted open-ended subscription on the payer. No new payment needs to be sent.
+  </description>
+  <actions>
+    <action>On the payer, open Contacts, open the requester's contact, choose Delete Contact, and confirm deletion</action>
+    <action>Verify the error "End active subscriptions before deleting this contact." appears and the contact remains saved</action>
+    <action>Open Subscriptions and verify the active subscription is still visible</action>
+    <action>Cancel the subscription and verify it is no longer active</action>
+    <action>Return to the requester's contact, choose Delete Contact, and confirm deletion</action>
+    <action>Verify the deletion confirmation appears and the requester is absent from Contacts</action>
+    <action>Explicitly add the requester's Pubky key as a contact again and wait for the private connection to be established</action>
+    <action>Return Home and wait for two foreground request polling intervals</action>
+    <action>Verify the canceled subscription remains inactive and no missed subscription payment confirmation appears</action>
+  </actions>
+</journey>

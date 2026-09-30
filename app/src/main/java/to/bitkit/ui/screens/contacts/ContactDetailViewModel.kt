@@ -36,6 +36,7 @@ import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -317,6 +318,12 @@ class ContactDetailViewModel @Inject constructor(
                     _effects.emit(ContactDetailEffect.ContactDeleted)
                 }
                 .onFailure {
+                    if (it == PubkyContactError.ActiveSubscription) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.contacts__delete_active_subscription),
+                        )
+                    }
                     Logger.error("Failed to delete contact '$redactedPublicKey'", it, context = TAG)
                     _uiState.update { state -> state.copy(isLoading = false) }
                 }
