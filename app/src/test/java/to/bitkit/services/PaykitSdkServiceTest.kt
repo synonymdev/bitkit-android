@@ -107,6 +107,70 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `sign in for an adopted ring identity clears its session and ring reference when activation fails`() = runTest {
+        val keychain = mock<Keychain>()
+        val blocking = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Any?>(any())).doAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Any?>(0).invoke(blocking)
+        }
+        whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name)).thenReturn(ByteArray(32) { 1 })
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn("app.pubkyring:$RING_PUBKY")
+        val sdk = mock<PaykitSdk>()
+        val activationError = IllegalStateException("activation failed")
+        whenever(sdk.initialize()).thenThrow(activationError)
+        val access = mock<PubkySessionAccess>()
+        val noise = mock<ReceiverNoiseSecretKey>()
+        whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+        whenever(access.exportSessionSecret()).thenReturn("new-session")
+        whenever(access.exportLocalSecretKey()).thenReturn(mock<PubkyLocalSecretKey>())
+        whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+        val store = mock<PubkyStore>()
+        whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+        val service = PaykitSdkService(mock(), keychain, store) { sdk }
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            service.activateSignedIn(PubkySessionBootstrapResult(access, "pubky_test"), previousPublicKey = null)
+        }
+
+        assertEquals(activationError, thrown)
+        verify(keychain).upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session")
+        verify(blocking).delete(Keychain.Key.PAYKIT_SESSION.name)
+        verify(blocking).delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+    }
+
+    @Test
+    fun `sign in for a local identity keeps its credentials when activation fails`() = runTest {
+        val keychain = mock<Keychain>()
+        val blocking = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Any?>(any())).doAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Any?>(0).invoke(blocking)
+        }
+        whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name)).thenReturn(ByteArray(32) { 1 })
+        val sdk = mock<PaykitSdk>()
+        val activationError = IllegalStateException("activation failed")
+        whenever(sdk.initialize()).thenThrow(activationError)
+        val access = mock<PubkySessionAccess>()
+        val noise = mock<ReceiverNoiseSecretKey>()
+        whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+        whenever(access.exportSessionSecret()).thenReturn("new-session")
+        val secret = mock<PubkyLocalSecretKey>()
+        whenever(secret.exportBytes()).thenReturn(ByteArray(32) { 1 })
+        whenever(access.exportLocalSecretKey()).thenReturn(secret)
+        whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+        val store = mock<PubkyStore>()
+        whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+        val service = PaykitSdkService(mock(), keychain, store) { sdk }
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            service.activateSignedIn(PubkySessionBootstrapResult(access, "pubky_test"), previousPublicKey = null)
+        }
+
+        assertEquals(activationError, thrown)
+        verify(keychain).upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session")
+        verify(blocking, never()).delete(any())
+    }
+
+    @Test
     fun `identity lookup failure preserves stored state and stops activation`() = runTest {
         for (error in listOf(
             PaykitException.Identity("identity_error", "restore Pubky grant session from platform provider"),

@@ -344,7 +344,8 @@ class PubkyRepo @Inject constructor(
 
     suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {
         val reference = "${SharedPubkyContract.RING_SOURCE_PREFIX}$pubky"
-        var identityInstalled = false
+        var sessionInstalled = false
+        var completed = false
         try {
             runSuspendCatching {
                 val publicKey = initializeMutex.withLock {
@@ -356,11 +357,11 @@ class PubkyRepo @Inject constructor(
                     }
                     keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)
                     signInOrSignUpAdoptedIdentity(secretKeyHex, rawPublicKey)
+                    sessionInstalled = true
 
                     val prefixedPublicKey = rawPublicKey.ensurePubkyPrefix()
                     clearProfileIfIdentityChanged(prefixedPublicKey)
                     _publicKey.update { prefixedPublicKey }
-                    identityInstalled = true
                     notifyBackupStateChanged()
                     Logger.info("Adopted ring identity for '${redacted(rawPublicKey)}'", context = TAG)
                     prefixedPublicKey
@@ -374,12 +375,27 @@ class PubkyRepo @Inject constructor(
                     val hasProfile = _profile.value?.publicKey == publicKey
                     runSuspendCatching { settingsStore.setPubkyProfileSetupPending(!hasProfile) }
                         .onFailure { Logger.warn("Failed to save pending profile setup", it, context = TAG) }
+                    completed = true
                     hasProfile
                 }
             }.onFailure { clearAdoptedSourceIfMatches(reference) }
         } catch (error: CancellationException) {
-            if (!identityInstalled) clearAdoptedSourceIfMatches(reference)
+            if (!completed) rollBackInterruptedAdoption(reference, sessionInstalled)
             throw error
+        }
+    }
+
+    /** An interrupted pick ends signed out, with no session and no Ring reference left behind. */
+    private suspend fun rollBackInterruptedAdoption(reference: String, sessionInstalled: Boolean) {
+        withContext(NonCancellable + ioDispatcher) {
+            initializeMutex.withLock {
+                if (keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) != reference) return@withLock
+                if (sessionInstalled) {
+                    discardAbandonedSession()
+                    clearLocalState()
+                }
+                clearAdoptedSourceIfMatches(reference)
+            }
         }
     }
 

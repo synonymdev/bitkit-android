@@ -360,13 +360,7 @@ class PaykitSdkService @Inject constructor(
             signupCode = signupCode,
             requiredCapabilities = requiredCapabilities(),
         )
-        operationMutex.withLock {
-            activateBootstrapResult(
-                result = result,
-                previousPublicKey = previousPublicKey,
-            )
-        }
-        notifyBackupStateChanged()
+        activateSignedIn(result, previousPublicKey)
         return result
     }
 
@@ -389,16 +383,14 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
         operationMutex.withLock {
-            var activated = false
-            try {
-                activateBootstrapResult(
-                    result = result,
-                    previousPublicKey = previousPublicKey,
-                )
-                activated = true
-            } finally {
-                if (!activated) clearRegisteredIdentityActivationLocked()
-            }
+            activateOrClearLocked(result, previousPublicKey, onlyAdoptedRingIdentity = false)
+        }
+        notifyBackupStateChanged()
+    }
+
+    internal suspend fun activateSignedIn(result: PubkySessionBootstrapResult, previousPublicKey: String?) {
+        operationMutex.withLock {
+            activateOrClearLocked(result, previousPublicKey, onlyAdoptedRingIdentity = true)
         }
         notifyBackupStateChanged()
     }
@@ -411,13 +403,7 @@ class PaykitSdkService @Inject constructor(
             receiverNoiseSecretKey = sessionProvider.loadOrDeriveReceiverNoiseSecretKey(),
             requiredCapabilities = requiredCapabilities(),
         )
-        operationMutex.withLock {
-            activateBootstrapResult(
-                result = result,
-                previousPublicKey = previousPublicKey,
-            )
-        }
-        notifyBackupStateChanged()
+        activateSignedIn(result, previousPublicKey)
         return result
     }
 
@@ -993,6 +979,30 @@ class PaykitSdkService @Inject constructor(
         handle.initialize()
         publishReceiverMarkerIfLiveSessionAvailable(handle)
         republishIdentityIfNeeded(publicKey = result.publicKey)
+    }
+
+    /**
+     * Activation saves the session before it initializes the SDK, so a failure leaves a session behind.
+     * An adopted Ring identity has no local secret key to sign in again with, so its session is cleared
+     * together with the Ring reference. Local identities keep their credentials for the sign-in retry.
+     */
+    private suspend fun activateOrClearLocked(
+        result: PubkySessionBootstrapResult,
+        previousPublicKey: String?,
+        onlyAdoptedRingIdentity: Boolean,
+    ) {
+        var activated = false
+        try {
+            activateBootstrapResult(
+                result = result,
+                previousPublicKey = previousPublicKey,
+            )
+            activated = true
+        } finally {
+            if (!activated && (!onlyAdoptedRingIdentity || sessionProvider.adoptedPubky() != null)) {
+                clearRegisteredIdentityActivationLocked()
+            }
+        }
     }
 
     private suspend fun clearRegisteredIdentityActivationLocked() = withContext(NonCancellable) {
