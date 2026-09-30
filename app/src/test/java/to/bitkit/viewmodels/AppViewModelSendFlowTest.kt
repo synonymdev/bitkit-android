@@ -164,6 +164,7 @@ import to.bitkit.services.ActivityService
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.PendingChannelMigration
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
@@ -4831,6 +4832,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
         assertTrue(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `pending channel migration is kept when the node stays running after stop`() = test {
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
+        whenever(activityRepo.markAllUnseenActivitiesAsSeen()).thenReturn(Result.success(Unit))
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(
+            PendingChannelMigration(byteArrayOf(1), listOf(byteArrayOf(2))),
+        )
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
+        verify(migrationService, never()).consumePendingChannelMigration()
     }
 
     @Test
