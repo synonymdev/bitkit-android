@@ -25,6 +25,7 @@ import com.synonym.paykit.PaymentProofSubmission
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestFilter
+import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
@@ -101,6 +102,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitIssuerInterop
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -110,8 +112,10 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 data class PaykitPreparedPrivateContactPayment(
     val resolution: PaykitPrivateContactPaymentResolution,
@@ -523,13 +527,21 @@ class PaykitSdkService @Inject constructor(
         publicKey: String,
         label: String?,
         receiverPaths: List<String>? = null,
+        restorePrivateConnection: Boolean = false,
     ): ContactRecord {
         isSetup.await()
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
-                val existingPaths = handle.contactRecord(publicKey)?.receiverPaths.orEmpty()
+                val existing = handle.contactRecord(publicKey)
+                check(restorePrivateConnection || existing != null) { "Contact no longer exists" }
+                val existingPaths = existing?.receiverPaths.orEmpty()
                 val contactPaths = mergedReceiverPaths(existingPaths + receiverPaths.orEmpty())
-                handle.saveContact(ContactUpdate(publicKey, contactPaths, label))
+                val update = ContactUpdate(publicKey, contactPaths, label)
+                if (!restorePrivateConnection) return@withStateRevisionTracking handle.saveContact(update)
+                val blockedPeers = handle.linkedPeers().filter {
+                    it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
+                }
+                restorePrivateContact(handle, blockedPeers, update)
             }
         }
     }
@@ -537,8 +549,38 @@ class PaykitSdkService @Inject constructor(
     suspend fun removeContact(publicKey: String): ContactRecord? {
         isSetup.await()
         return operationMutex.withLock {
-            handle().removeContact(publicKey).also {
-                notifyBackupStateChanged()
+            withStateRevisionTracking { handle ->
+                val record = handle.contactRecord(publicKey)
+                val peers = handle.linkedPeers().filter {
+                    PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
+                }
+                val receiverPaths =
+                    (record?.receiverPaths.orEmpty() + peers.map { it.counterpartyReceiverPath }).distinct()
+                val now = nowMillis()
+                val hasActiveSubscription = handle.paymentRequests().any {
+                    val endsAt = it.terms?.recurrence?.endsAt?.let { timestamp ->
+                        runSuspendCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
+                    }
+                    PubkyPublicKeyFormat.matches(it.counterparty, publicKey) &&
+                        it.state == PaymentRequestLifecycleState.ACTIVE_RECURRING &&
+                        (endsAt == null || endsAt > now)
+                }
+                if (hasActiveSubscription) throw PubkyContactError.ActiveSubscription
+                peers.filter { it.state == LinkedPeerState.LINKED }.forEach { peer ->
+                    runSuspendCatching {
+                        val report = handle.clearPrivatePaymentListAndProcessOutbound(
+                            publicKey,
+                            peer.counterpartyReceiverPath,
+                        )
+                        if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
+                            Logger.warn("Failed to withdraw private endpoints before contact deletion", context = TAG)
+                        }
+                    }.onFailure {
+                        Logger.warn("Failed to withdraw private endpoints before contact deletion", it, context = TAG)
+                    }
+                }
+                receiverPaths.forEach { handle.blockPeer(publicKey, it) }
+                handle.removeContact(publicKey)
             }
         }
     }
@@ -662,10 +704,19 @@ class PaykitSdkService @Inject constructor(
     suspend fun clearPrivatePaymentList(
         counterparty: String,
         receiverPath: String,
-    ): PrivatePaymentListDeliveryReport {
+    ): PrivatePaymentListDeliveryReport? {
         isSetup.await()
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
+                if (
+                    handle.linkedPeers().any {
+                        it.state == LinkedPeerState.BLOCKED &&
+                            PubkyPublicKeyFormat.matches(it.counterparty, counterparty) &&
+                            it.counterpartyReceiverPath == receiverPath
+                    }
+                ) {
+                    return@withStateRevisionTracking null
+                }
                 handle.clearPrivatePaymentListAndProcessOutbound(counterparty, receiverPath)
             }
         }
@@ -1027,6 +1078,33 @@ class PaykitSdkService @Inject constructor(
 
     private fun notifyBackupStateChanged() {
         _backupStateVersion.update { it + 1 }
+    }
+
+    private suspend fun restorePrivateContact(
+        handle: PaykitSdk,
+        blockedPeers: List<LinkedPeerRecord>,
+        update: ContactUpdate,
+    ): ContactRecord {
+        var failure: Throwable? = null
+        return try {
+            runSuspendCatching {
+                blockedPeers.forEach { handle.unblockPeer(it.counterparty, it.counterpartyReceiverPath) }
+                handle.saveContact(update)
+            }.onFailure { failure = it }.getOrThrow()
+        } catch (error: CancellationException) {
+            failure = error
+            throw error
+        } finally {
+            failure?.let { restorationError ->
+                withContext(NonCancellable) {
+                    blockedPeers.forEach { peer ->
+                        runSuspendCatching {
+                            handle.blockPeer(peer.counterparty, peer.counterpartyReceiverPath)
+                        }.onFailure(restorationError::addSuppressed)
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun <T> withStateRevisionTracking(block: suspend (PaykitSdk) -> T): T {

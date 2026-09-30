@@ -89,6 +89,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
         whenever(paykitSdkService.paymentRequests()).thenReturn(emptyList())
+        whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
         whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
@@ -606,6 +607,102 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         val request = sut.paymentRequestHistory.value.single()
         assertEquals(PaymentRequestLifecycleState.PROOF_SUBMITTED, request.lifecycleState)
         assertEquals(PaykitPaymentProofKind.Lightning, request.paymentProofKind)
+    }
+
+    @Test
+    fun `blocking a paid payer subscription keeps payment history`() = test {
+        val proof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod(
+                startsAt = "2027-01-01T08:00:00Z",
+                endsAt = "2027-02-01T08:00:00Z",
+            )
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    state = PaymentRequestLifecycleState.CANCELED,
+                    paymentProofs = listOf(proof),
+                ),
+            ),
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED, PaykitReceiverPaths.SERVER)),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        val retained = sut.subscriptions.value.single()
+        assertTrue(retained.isExpired(clock.now()))
+        assertFalse(retained.canCancel(clock.now()))
+        val paid = sut.paymentRequestHistory.value.single()
+        assertEquals(PaymentRequestLifecycleState.PROOF_SUBMITTED, paid.lifecycleState)
+        assertEquals(PaykitPaymentProofKind.Lightning, paid.paymentProofKind)
+    }
+
+    @Test
+    fun `blocking a paid creator subscription keeps received history accessible`() = test {
+        val proof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod(
+                startsAt = "2027-01-01T08:00:00Z",
+                endsAt = "2027-02-01T08:00:00Z",
+            )
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    role = PaymentRequestLocalRole.PAYEE,
+                    state = PaymentRequestLifecycleState.CANCELED,
+                    paymentProofs = listOf(proof),
+                ),
+            ),
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED, PaykitReceiverPaths.SERVER)),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
+        val retained = sut.subscriptions.value.single()
+        assertTrue(retained.isExpired(clock.now()))
+        assertFalse(retained.canCancel(clock.now()))
+        assertEquals(1, retained.receivedPaymentRequests().size)
+    }
+
+    @Test
+    fun `blocking ended paid subscription does not offer its unpaid period`() = test {
+        advanceTimeBy(46 * 24 * 60 * 60 * 1000L)
+        val proof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod(
+                startsAt = "2027-01-01T08:00:00Z",
+                endsAt = "2027-02-01T08:00:00Z",
+            )
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    state = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+                    recurrence = recurrence.copy(endsAt = "2027-03-01T08:00:00Z"),
+                    paymentProofs = listOf(proof),
+                ),
+            ),
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED, PaykitReceiverPaths.SERVER)),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        val retained = sut.subscriptions.value.single()
+        assertTrue(retained.isExpired(clock.now()))
+        assertFalse(retained.canCancel(clock.now()))
+        assertEquals(1, sut.paymentRequestHistory.value.size)
     }
 
     @Test
