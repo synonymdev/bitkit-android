@@ -349,12 +349,13 @@ class PubkyRepo @Inject constructor(
     }
 
     /**
-     * Adopts the Ring identity [pubky]. A [knownProfile] that matches the signed-in key is used instead of resolving
-     * the profile again; pass only a profile that was found, never the result of a failed or empty lookup.
+     * Adopts the Ring identity [pubky]. [knownProfile] is read once sign-in completes, and a profile it returns that
+     * matches the signed-in key is used instead of resolving the profile again; it must return only a profile that was
+     * found, never the result of a failed or empty lookup.
      */
     suspend fun adoptRingIdentity(
         pubky: String,
-        knownProfile: PubkyProfile? = null,
+        knownProfile: () -> PubkyProfile? = { null },
     ): Result<Boolean> = withContext(ioDispatcher) {
         val reference = "${SharedPubkyContract.RING_SOURCE_PREFIX}$pubky"
         var identityInstalled = false
@@ -379,7 +380,7 @@ class PubkyRepo @Inject constructor(
                     prefixedPublicKey
                 }
 
-                val handoffProfile = knownProfile
+                val handoffProfile = knownProfile()
                     ?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
                     ?.copy(publicKey = publicKey)
                 if (handoffProfile == null) loadProfile()

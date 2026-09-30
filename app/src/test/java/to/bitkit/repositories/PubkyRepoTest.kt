@@ -1351,7 +1351,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
         val knownProfile = PubkyProfile.forDisplay(ringPubky, name = "Ring Profile", imageUrl = "pubky://avatar")
 
-        val result = sut.adoptRingIdentity(ringPubky, knownProfile)
+        val result = sut.adoptRingIdentity(ringPubky) { knownProfile }
 
         assertEquals(true, result.getOrNull())
         assertEquals(knownProfile.copy(publicKey = VALID_SELF_KEY), sut.profile.value)
@@ -1362,13 +1362,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adoptRingIdentity reads the handed off profile once sign-in completes`() = test {
+        val ringPubky = stubRingCredential()
+        val knownProfile = PubkyProfile.forDisplay(ringPubky, name = "Ring Profile", imageUrl = null)
+        var rowProfile: PubkyProfile? = null
+        whenever(pubkyService.signIn("ring_secret")).doSuspendableAnswer { rowProfile = knownProfile }
+
+        val result = sut.adoptRingIdentity(ringPubky) { rowProfile }
+
+        assertEquals(true, result.getOrNull())
+        assertEquals("Ring Profile", sut.profile.value?.name)
+        verify(pubkyService, never()).resolveContactProfile(any(), any())
+    }
+
+    @Test
     fun `adoptRingIdentity resolves the profile when none is handed off`() = test {
         val ringPubky = stubRingCredential()
         whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
             .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Remote")))
 
-        val result = sut.adoptRingIdentity(ringPubky, knownProfile = null)
+        val result = sut.adoptRingIdentity(ringPubky, knownProfile = { null })
 
         assertEquals(true, result.getOrNull())
         assertEquals("Remote", sut.profile.value?.name)
@@ -1382,7 +1396,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
         val otherProfile = PubkyProfile.forDisplay(VALID_CONTACT_KEY_A, name = "Other", imageUrl = null)
 
-        val result = sut.adoptRingIdentity(ringPubky, otherProfile)
+        val result = sut.adoptRingIdentity(ringPubky) { otherProfile }
 
         assertEquals(false, result.getOrNull())
         assertNull(sut.profile.value)

@@ -9,7 +9,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,8 +40,6 @@ class PubkyChoiceViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<PubkyChoiceEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
-    private var profileLookupJob: Job? = null
-
     init {
         loadIdentities()
         viewModelScope.launch {
@@ -55,13 +52,10 @@ class PubkyChoiceViewModel @Inject constructor(
     }
 
     fun onIdentityClick(pubky: String) {
-        val state = _uiState.value
-        if (state.adoptingPubky != null) return
-        val knownProfile = state.identities.firstOrNull { it.pubky == pubky }?.profile
-        profileLookupJob?.cancel()
+        if (_uiState.value.adoptingPubky != null) return
         _uiState.update { it.copy(adoptingPubky = pubky) }
         viewModelScope.launch {
-            pubkyRepo.adoptRingIdentity(pubky, knownProfile)
+            pubkyRepo.adoptRingIdentity(pubky) { rowProfile(pubky) }
                 .onSuccess { hasProfile ->
                     if (hasProfile) {
                         pubkyRepo.prepareImport().onFailure {
@@ -104,9 +98,12 @@ class PubkyChoiceViewModel @Inject constructor(
                 persistentListOf()
             }
             _uiState.update { it.copy(isLoading = false, identities = pubkys.map(::RingIdentity).toImmutableList()) }
-            profileLookupJob = launch { pubkys.forEach { launch { lookUpProfile(it) } } }
+            pubkys.forEach { launch { lookUpProfile(it) } }
         }
     }
+
+    private fun rowProfile(pubky: String): PubkyProfile? =
+        _uiState.value.identities.firstOrNull { it.pubky == pubky }?.profile
 
     private suspend fun lookUpProfile(pubky: String) {
         val profile = pubkyRepo.fetchDisplayProfile(pubky)

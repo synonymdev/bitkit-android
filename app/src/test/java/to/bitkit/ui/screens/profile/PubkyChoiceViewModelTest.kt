@@ -4,15 +4,14 @@ import android.content.Context
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -99,7 +98,11 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
             .thenReturn(Result.failure(PubkyChoiceTestAppError("lookup failed")))
         whenever(pubkyRepo.fetchDisplayProfile(OTHER_RING_PUBKY))
             .thenReturn(Result.success(PubkyProfile.forDisplay(RING_PUBKY, name = "Satoshi", imageUrl = null)))
-        whenever(pubkyRepo.adoptRingIdentity(any(), anyOrNull())).thenReturn(Result.success(false))
+        val handoffs = mutableListOf<PubkyProfile?>()
+        whenever(pubkyRepo.adoptRingIdentity(any(), any())).doSuspendableAnswer {
+            handoffs += it.getArgument<() -> PubkyProfile?>(1)()
+            Result.success(false)
+        }
         createSut()
         advanceUntilIdle()
 
@@ -109,7 +112,8 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         sut.onIdentityClick(OTHER_RING_PUBKY)
         advanceUntilIdle()
 
-        verify(pubkyRepo).adoptRingIdentity(OTHER_RING_PUBKY, null)
+        verify(pubkyRepo).adoptRingIdentity(eq(OTHER_RING_PUBKY), any())
+        assertEquals(listOf<PubkyProfile?>(null), handoffs)
     }
 
     @Test
@@ -117,64 +121,93 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         val profile = PubkyProfile.forDisplay(RING_PUBKY, name = "Satoshi", imageUrl = null)
         whenever(pubkyRepo.ringIdentities()).thenReturn(Result.success(persistentListOf(RING_PUBKY)))
         whenever(pubkyRepo.fetchDisplayProfile(RING_PUBKY)).thenReturn(Result.success(profile))
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY, profile)).thenReturn(Result.success(true))
+        val handoffs = mutableListOf<PubkyProfile?>()
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).doSuspendableAnswer {
+            handoffs += it.getArgument<() -> PubkyProfile?>(1)()
+            Result.success(true)
+        }
         createSut()
         advanceUntilIdle()
 
         sut.onIdentityClick(RING_PUBKY)
         advanceUntilIdle()
 
-        verify(pubkyRepo).adoptRingIdentity(RING_PUBKY, profile)
+        assertEquals(listOf<PubkyProfile?>(profile), handoffs)
     }
 
     @Test
-    fun `onIdentityClick cancels pending profile lookups before adopting`() = test {
-        val lookupCancelled = CompletableDeferred<Unit>()
-        var lookupCancelledBeforeAdoption = false
-        whenever(pubkyRepo.ringIdentities())
-            .thenReturn(Result.success(persistentListOf(RING_PUBKY, OTHER_RING_PUBKY)))
-        whenever(pubkyRepo.fetchDisplayProfile(OTHER_RING_PUBKY)).doSuspendableAnswer {
-            try {
-                awaitCancellation()
-            } finally {
-                lookupCancelled.complete(Unit)
-            }
-        }
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY, null)).doSuspendableAnswer {
-            lookupCancelledBeforeAdoption = lookupCancelled.isCompleted
-            Result.success(false)
+    fun `onIdentityClick hands over a row profile that resolves during sign-in`() = test {
+        val lookup = CompletableDeferred<Result<PubkyProfile?>>()
+        val signIn = CompletableDeferred<Unit>()
+        val handoffs = mutableListOf<PubkyProfile?>()
+        whenever(pubkyRepo.ringIdentities()).thenReturn(Result.success(persistentListOf(RING_PUBKY)))
+        whenever(pubkyRepo.fetchDisplayProfile(RING_PUBKY)).doSuspendableAnswer { lookup.await() }
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).doSuspendableAnswer {
+            signIn.await()
+            handoffs += it.getArgument<() -> PubkyProfile?>(1)()
+            Result.success(true)
         }
         createSut()
         advanceUntilIdle()
-        assertFalse(lookupCancelled.isCompleted)
 
         sut.onIdentityClick(RING_PUBKY)
         advanceUntilIdle()
+        val profile = PubkyProfile.forDisplay(RING_PUBKY, name = "Satoshi", imageUrl = null)
+        lookup.complete(Result.success(profile))
+        advanceUntilIdle()
+        signIn.complete(Unit)
+        advanceUntilIdle()
 
-        assertTrue(lookupCancelledBeforeAdoption)
-        assertEquals(listOf("3rsd...w5xg", "1rsd...w5xy"), sut.uiState.value.identities.map { it.name })
+        assertEquals(listOf<PubkyProfile?>(profile), handoffs)
+    }
+
+    @Test
+    fun `other rows still resolve after a failed adoption`() = test {
+        val otherLookup = CompletableDeferred<Result<PubkyProfile?>>()
+        whenever(pubkyRepo.ringIdentities())
+            .thenReturn(Result.success(persistentListOf(RING_PUBKY, OTHER_RING_PUBKY)))
+        whenever(pubkyRepo.fetchDisplayProfile(OTHER_RING_PUBKY)).doSuspendableAnswer { otherLookup.await() }
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any()))
+            .thenReturn(Result.failure(PubkyChoiceTestAppError("adopt failed")))
+        createSut()
+        advanceUntilIdle()
+
+        sut.onIdentityClick(RING_PUBKY)
+        advanceUntilIdle()
+        assertNull(sut.uiState.value.adoptingPubky)
+
+        otherLookup.complete(Result.success(PubkyProfile.forDisplay(OTHER_RING_PUBKY, name = "Hal", imageUrl = null)))
+        advanceUntilIdle()
+
+        assertEquals(listOf("3rsd...w5xg", "Hal"), sut.uiState.value.identities.map { it.name })
     }
 
     @Test
     fun `onIdentityClick ignores further taps while an adoption is running`() = test {
         val finishAdoption = CompletableDeferred<Result<Boolean>>()
+        val otherLookup = CompletableDeferred<Result<PubkyProfile?>>()
         whenever(pubkyRepo.ringIdentities())
             .thenReturn(Result.success(persistentListOf(RING_PUBKY, OTHER_RING_PUBKY)))
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY, null)).doSuspendableAnswer { finishAdoption.await() }
+        whenever(pubkyRepo.fetchDisplayProfile(OTHER_RING_PUBKY)).doSuspendableAnswer { otherLookup.await() }
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).doSuspendableAnswer { finishAdoption.await() }
         createSut()
         advanceUntilIdle()
 
         sut.onIdentityClick(RING_PUBKY)
         sut.onIdentityClick(OTHER_RING_PUBKY)
+        advanceUntilIdle()
+        otherLookup.complete(Result.success(PubkyProfile.forDisplay(OTHER_RING_PUBKY, name = "Hal", imageUrl = null)))
+        advanceUntilIdle()
+        sut.onIdentityClick(OTHER_RING_PUBKY)
         sut.onIdentityClick(RING_PUBKY)
         advanceUntilIdle()
 
         assertEquals(RING_PUBKY, sut.uiState.value.adoptingPubky)
-        assertEquals(2, sut.uiState.value.identities.size)
+        assertEquals(listOf("3rsd...w5xg", "Hal"), sut.uiState.value.identities.map { it.name })
         finishAdoption.complete(Result.success(false))
         advanceUntilIdle()
 
-        verify(pubkyRepo, times(1)).adoptRingIdentity(any(), anyOrNull())
+        verify(pubkyRepo, times(1)).adoptRingIdentity(any(), any())
         assertNull(sut.uiState.value.adoptingPubky)
     }
 
@@ -191,7 +224,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onIdentityClick continues to contact import when the adopted identity has follows`() = test {
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.success(true))
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).thenReturn(Result.success(true))
         pendingImportContacts.value = listOf(PubkyProfile.placeholder("pubky$RING_PUBKY"))
         createSut()
         val effects = mutableListOf<PubkyChoiceEffect>()
@@ -208,7 +241,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onIdentityClick continues to pay contacts when the adopted identity has no follows`() = test {
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.success(true))
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).thenReturn(Result.success(true))
         createSut()
         val effects = mutableListOf<PubkyChoiceEffect>()
         val toasts = mutableListOf<Toast>()
@@ -228,7 +261,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onIdentityClick toasts and continues to pay contacts when the follows lookup fails`() = test {
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.success(true))
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).thenReturn(Result.success(true))
         whenever(pubkyRepo.prepareImport()).thenReturn(Result.failure(PubkyChoiceTestAppError("follows failed")))
         createSut()
         val effects = mutableListOf<PubkyChoiceEffect>()
@@ -251,7 +284,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onIdentityClick continues to profile creation when the adopted identity has no profile`() = test {
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY)).thenReturn(Result.success(false))
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any())).thenReturn(Result.success(false))
         createSut()
         val effects = mutableListOf<PubkyChoiceEffect>()
         val effectsJob = launch { sut.effects.collect { effects.add(it) } }
@@ -267,7 +300,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onIdentityClick clears the adopting identity and toasts when adoption fails`() = test {
-        whenever(pubkyRepo.adoptRingIdentity(RING_PUBKY))
+        whenever(pubkyRepo.adoptRingIdentity(eq(RING_PUBKY), any()))
             .thenReturn(Result.failure(PubkyChoiceTestAppError("adopt failed")))
         createSut()
         val toasts = mutableListOf<Toast>()
