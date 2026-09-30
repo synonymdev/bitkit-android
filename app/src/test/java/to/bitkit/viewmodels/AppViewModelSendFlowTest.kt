@@ -109,6 +109,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransportType
 import to.bitkit.models.USD
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -120,6 +121,11 @@ import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendEvidence
+import to.bitkit.repositories.OnchainSendNotDispatchedError
+import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
@@ -6190,6 +6196,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue)
     }
@@ -6291,7 +6299,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `proof preparation failure does not block incoming onchain payment`() = test {
+    fun `proof preparation failure blocks incoming onchain payment`() = test {
         val address = "bcrt1qpaymentrequest"
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
@@ -6315,9 +6323,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
-        verify(paykitPaymentRequestRepo).accept(request)
-        verify(lightningRepo).sendOnChain(
+        verify(privatePaykitRepo, never()).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentRequestRepo, never()).accept(request)
+        verify(lightningRepo, never()).sendOnChain(
             address = any(),
             sats = any(),
             speed = anyOrNull(),
@@ -6329,12 +6337,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
     }
 
     @Test
-    fun `proof association failure does not block incoming lightning payment`() = test {
+    fun `proof association failure blocks incoming lightning payment`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1paymentrequest"
         val paymentHash = "010203"
@@ -6367,7 +6377,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentProofRepo).prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
         verify(paykitPaymentProofRepo).associateLightningPayment(request, paymentHash, MethodId.Bolt11.rawValue)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
-        verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
+        verify(lightningRepo, never()).payInvoice(bolt11 = bolt11, sats = null)
     }
 
     @Test
@@ -6675,6 +6685,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .doSuspendableAnswer {
                 completionStarted.complete(Unit)
                 finishCompletion.await()
+                true
             }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
@@ -6937,7 +6948,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         stubOnchainSend(
             address = "bcrt1qpreflightfailure",
             sats = request.amountSats,
-            result = Result.failure(IllegalStateException("preflight failed")),
+            result = Result.failure(OnchainSendNotDispatchedError(IllegalStateException("preflight failed"))),
             invokeBeforeSendAttempt = false,
         )
         setActiveContactPaymentContext(
@@ -6979,7 +6990,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             stubOnchainSend(
                 address = "bcrt1qdefinitefailure",
                 sats = request.amountSats,
-                result = Result.failure(error),
+                result = Result.failure(OnchainSendNotDispatchedError(error)),
             )
             setActiveContactPaymentContext(
                 testPublicKey,
@@ -7042,9 +7053,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 request.paymentRequestId,
                 request.amountSats.toLong(),
                 observeResolution = false,
+                isOnchain = true,
             )
             assertEquals(
-                SendEffect.NavigateToPending(pendingRoute.paymentHash, pendingRoute.amount, false),
+                SendEffect.NavigateToPending(pendingRoute.paymentHash, pendingRoute.amount, false, isOnchain = true),
                 awaitItem(),
             )
             sut.showSheet(Sheet.Send(pendingRoute))
@@ -7209,6 +7221,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
     }
 
@@ -7269,6 +7283,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
     }
 
@@ -7328,6 +7344,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
     }
 
@@ -7346,6 +7364,81 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
 
         confirmCurrentPayment()
+    }
+
+    @Test
+    fun `rejected onchain send opens unresolved state without a success transaction`() = test {
+        val address = "bcrt1qrejected"
+        val txid = "ab".repeat(32)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        stubOnchainSend(address, 1_000u, Result.success(OnchainSendOutcome.Rejected(txid, "broadcast refused")))
+        setSendState(SendUiState(address = address, amount = 1_000u, payMethod = SendMethod.ONCHAIN))
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            assertEquals(SendEffect.NavigateToPending(txid, 1_000, false, isOnchain = true), awaitItem())
+        }
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `unknown onchain send opens unresolved state without a success transaction`() = test {
+        val address = "bcrt1qunknown"
+        val txid = "cd".repeat(32)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        stubOnchainSend(address, 1_000u, Result.success(OnchainSendOutcome.Unknown(txid)))
+        setSendState(SendUiState(address = address, amount = 1_000u, payMethod = SendMethod.ONCHAIN))
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            assertEquals(SendEffect.NavigateToPending(txid, 1_000, false, isOnchain = true), awaitItem())
+        }
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `generic outer error after ordinary send remains unresolved`() = test {
+        val address = "bcrt1qoutererror"
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        stubOnchainSend(address, 1_000u, Result.failure(IllegalStateException("outcome unknown")))
+        setSendState(SendUiState(address = address, amount = 1_000u, payMethod = SendMethod.ONCHAIN))
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            assertEquals(SendEffect.NavigateToPending("", 1_000, false, isOnchain = true), awaitItem())
+        }
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `reopened accepted ordinary send shows its recorded transaction instead of sending again`() = test {
+        val address = "bcrt1qreopened"
+        val txid = "ef".repeat(32)
+        val previous = OnchainSendAttempt(
+            walletId = WalletScope.default,
+            attemptId = "attempt-1",
+            requestId = null,
+            orderId = null,
+            address = address,
+            amountSats = 1_000uL,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL,
+            isTransfer = false,
+            channelId = null,
+            tags = emptyList(),
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        stubOnchainSend(address, 1_000u, Result.failure(OnchainSendBlockedError(previous)))
+        setSendState(SendUiState(address = address, amount = 1_000u, payMethod = SendMethod.ONCHAIN))
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+        assertEquals(txid, sut.successSendUiState.value.paymentHashOrTxId)
+        verify(lightningRepo).completeAcceptedOrdinaryFollowup(txid)
     }
 
     @Test
@@ -7864,13 +7957,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     private suspend fun stubSuccessfulOnchainSend(address: String, sats: ULong, txId: String = "txid") {
-        stubOnchainSend(address, sats, Result.success(txId), broadcastTxId = txId)
+        stubOnchainSend(address, sats, Result.success(OnchainSendOutcome.Accepted(txId)), broadcastTxId = txId)
     }
 
     private suspend fun stubOnchainSend(
         address: String,
         sats: ULong,
-        result: Result<String>,
+        result: Result<OnchainSendOutcome>,
         invokeBeforeSendAttempt: Boolean = true,
         broadcastTxId: String? = null,
     ) {
@@ -7887,6 +7980,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 tags = any(),
                 beforeSendAttempt = any(),
                 onBroadcast = any(),
+                requestId = anyOrNull(),
+                orderId = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)

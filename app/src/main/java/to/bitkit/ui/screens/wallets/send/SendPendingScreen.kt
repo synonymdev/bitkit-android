@@ -46,6 +46,7 @@ fun SendPendingScreen(
     paymentHash: String,
     amount: Long,
     observeResolution: Boolean = true,
+    isOnchain: Boolean = false,
     onPaymentSuccess: (String, Long) -> Unit,
     onPaymentError: (PendingPaymentResolution.Failure) -> Unit,
     onClose: () -> Unit,
@@ -71,8 +72,9 @@ fun SendPendingScreen(
         }
     }
 
-    Content(
+    SendPendingContent(
         amount = if (observeResolution) uiState.amount else amount,
+        isOnchain = isOnchain,
         activityId = uiState.activityId,
         onClose = onClose,
         onViewDetails = onViewDetails,
@@ -80,8 +82,9 @@ fun SendPendingScreen(
 }
 
 @Composable
-private fun Content(
+internal fun SendPendingContent(
     amount: Long,
+    isOnchain: Boolean,
     activityId: String?,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
@@ -104,7 +107,13 @@ private fun Content(
             BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
 
             VerticalSpacer(32.dp)
-            BodyM(stringResource(R.string.wallet__send_pending__description), color = Colors.White64)
+            BodyM(
+                stringResource(
+                    if (isOnchain) R.string.wallet__send_pending__onchain_description
+                    else R.string.wallet__send_pending__description,
+                ),
+                color = Colors.White64,
+            )
 
             FillHeight()
             HourglassAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -154,8 +163,9 @@ private fun HourglassAnimation(modifier: Modifier = Modifier) {
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendPendingContent(
                 amount = 50_000L,
+                isOnchain = false,
                 activityId = null,
                 onClose = {},
                 onViewDetails = {},

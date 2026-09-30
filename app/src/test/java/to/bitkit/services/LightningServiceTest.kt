@@ -16,6 +16,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.lightningdevkit.ldknode.AddressType
+import org.lightningdevkit.ldknode.FeeRate
+import org.lightningdevkit.ldknode.OnchainSendResult
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
@@ -39,6 +41,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
+import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.test.BaseUnitTest
@@ -48,6 +51,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -64,6 +68,8 @@ class LightningServiceTest : BaseUnitTest() {
     private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
     private val loggerLdk = mock<LoggerLdk>()
     private val node = mock<Node>()
+    private val onchainPayment = mock<OnchainPayment>()
+    private val sendFeeRate = mock<FeeRate>()
     private val watchOnlyAccountLifecycleCoordinator = WatchOnlyAccountLifecycleCoordinator()
 
     @get:Rule
@@ -83,6 +89,7 @@ class LightningServiceTest : BaseUnitTest() {
             loggerLdk = loggerLdk,
             watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
             ldkQueue = testDispatcher,
+            onchainFeeRateFactory = { sendFeeRate },
         )
         sut.node = node
     }
@@ -107,6 +114,49 @@ class LightningServiceTest : BaseUnitTest() {
         whenever(node.listChannels()).thenReturn(listOf(usableChannel))
 
         assertTrue(sut.canReceive())
+    }
+
+    @Test
+    fun `fixed send returns only the generated accepted rejected or unknown outcome`() = test {
+        val txid = "ab".repeat(32)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.sendToAddressWithBroadcastResult("address", 1_000uL, sendFeeRate, null))
+            .thenReturn(OnchainSendResult.Accepted(txid))
+            .thenReturn(OnchainSendResult.Rejected(txid, "non-final"))
+            .thenReturn(OnchainSendResult.Unknown(txid))
+
+        assertEquals(OnchainSendOutcome.Accepted(txid), sut.send("address", 1_000uL, 1uL))
+        assertEquals(OnchainSendOutcome.Rejected(txid, "non-final"), sut.send("address", 1_000uL, 1uL))
+        assertEquals(OnchainSendOutcome.Unknown(txid), sut.send("address", 1_000uL, 1uL))
+        verify(onchainPayment, times(3)).sendToAddressWithBroadcastResult("address", 1_000uL, sendFeeRate, null)
+        verify(onchainPayment, never()).sendToAddress("address", 1_000uL, sendFeeRate, null)
+    }
+
+    @Test
+    fun `send all retains reserves and uses the explicit outcome method once`() = test {
+        val txid = "ab".repeat(32)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.sendAllToAddressWithBroadcastResult("address", true, sendFeeRate))
+            .thenReturn(OnchainSendResult.Unknown(txid))
+
+        assertEquals(OnchainSendOutcome.Unknown(txid), sut.send("address", 1_000uL, 1uL, isMaxAmount = true))
+        verify(onchainPayment).sendAllToAddressWithBroadcastResult("address", true, sendFeeRate)
+        verify(onchainPayment, never()).sendAllToAddress("address", true, sendFeeRate)
+    }
+
+    @Test
+    fun `onchain send refuses a different wallet before invoking native payment`() = test {
+        assertFailsWith<ServiceError.NodeNotSetup> {
+            sut.send("bcrt1qrecipient", 1_000uL, 1uL, walletIndex = 9)
+        }
+        verify(node, never()).onchainPayment()
+    }
+
+    @Test
+    fun `generated node error stays direct across the service queue`() = test {
+        assertFailsWith<NodeException.InvalidAddress> {
+            sut.callOnchainSend { throw NodeException.InvalidAddress("invalid address") }
+        }
     }
 
     @Test

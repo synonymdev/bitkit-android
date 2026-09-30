@@ -37,6 +37,7 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
@@ -70,7 +71,6 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -152,6 +152,10 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendNotDispatchedError
+import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendPendingError
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
 import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentProofRepo
@@ -204,7 +208,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
-import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -3999,8 +4002,29 @@ class AppViewModel @Inject constructor(
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
         val proofPreparation = preparePaymentProof(incomingPaymentRequest)
-        if (proofPreparation.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress) {
-            handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
+        if (proofPreparation.isFailure) {
+            if (incomingPaymentRequest != null && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
+                val previous = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+                    ?.takeIf { it.requestId == incomingPaymentRequest.id }
+                if (previous != null) {
+                    val txid = previous.txid
+                    if (previous.hasPositiveEvidence && txid != null) {
+                        onSendSuccess(
+                            NewTransactionSheetDetails(
+                                type = NewTransactionSheetType.ONCHAIN,
+                                direction = NewTransactionSheetDirection.SENT,
+                                paymentHashOrTxId = txid,
+                                sats = previous.amountSats.toLong(),
+                                isLoadingDetails = false,
+                            )
+                        )
+                    } else {
+                        showUnresolvedOnchainSend(txid, previous.amountSats, requestId = previous.requestId)
+                    }
+                    return
+                }
+            }
+            handlePaymentPreparationFailure(requireNotNull(proofPreparation.exceptionOrNull()), contactPaymentContext)
             return
         }
         val preparedPaymentProofRequest = proofPreparation.getOrNull()
@@ -4070,6 +4094,7 @@ class AppViewModel @Inject constructor(
             address = address,
             amount = amount,
             tags = tags,
+            requestId = incomingPaymentRequest?.id,
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
@@ -4080,20 +4105,41 @@ class AppViewModel @Inject constructor(
                 proofRequest = null
                 completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
             },
-        ).onSuccess { txId ->
-            Logger.info("Onchain send result txid: $txId", context = TAG)
-            onSendSuccess(
-                NewTransactionSheetDetails(
-                    type = NewTransactionSheetType.ONCHAIN,
-                    direction = NewTransactionSheetDirection.SENT,
-                    paymentHashOrTxId = txId,
-                    sats = amount.toLong(),
-                    isLoadingDetails = true,
-                )
-            )
-            lightningRepo.sync()
-            activityRepo.syncActivities()
-            _successSendUiState.update { it.copy(isLoadingDetails = false) }
+        ).onSuccess { outcome ->
+            proofRequest = null
+            when (outcome) {
+                is OnchainSendOutcome.Accepted -> {
+                    Logger.info("Accepted on-chain send '${outcome.txid}'", context = TAG)
+                    onSendSuccess(
+                        NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.ONCHAIN,
+                            direction = NewTransactionSheetDirection.SENT,
+                            paymentHashOrTxId = outcome.txid,
+                            sats = amount.toLong(),
+                            isLoadingDetails = true,
+                        )
+                    )
+                    if (incomingPaymentRequest == null) {
+                        withContext(NonCancellable) {
+                            lightningRepo.completeAcceptedOrdinaryFollowup(outcome.txid)
+                        }
+                    }
+                    lightningRepo.sync()
+                    activityRepo.syncActivities()
+                    _successSendUiState.update { it.copy(isLoadingDetails = false) }
+                }
+
+                is OnchainSendOutcome.Rejected -> {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.wallet__error_sending_title),
+                        description = outcome.reason,
+                    )
+                    showUnresolvedOnchainSend(outcome.txid, amount, incomingPaymentRequest)
+                }
+
+                is OnchainSendOutcome.Unknown -> showUnresolvedOnchainSend(outcome.txid, amount, incomingPaymentRequest)
+            }
         }.onFailure { error ->
             handleOnchainPaymentFailure(
                 error = error,
@@ -4113,19 +4159,45 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
     ) {
         val amount = _sendUiState.value.amount
-        if (paymentStarted && !error.isDefiniteOnchainPreBroadcastFailure()) {
+        val unresolved = error !is OnchainSendNotDispatchedError
+        if (unresolved) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
-            uncertainOnchainPaymentRequestId = incomingPaymentRequest?.id
-            paykitPaymentProofRepo.onchainPaymentResolutions.value
-                .firstOrNull { it.requestId == incomingPaymentRequest?.id }
-                ?.let(::handlePaykitOnchainPaymentResolution)
-            if (uncertainOnchainPaymentRequestId == null) return
-            setSendEffect(
-                SendEffect.NavigateToPending(
-                    paymentHash = incomingPaymentRequest?.paymentRequestId.orEmpty(),
-                    amount = amount.toLong(),
-                    observeResolution = false,
+            if (!paymentStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            val previous = (error as? OnchainSendBlockedError)?.attempt
+            val priorAccepted = previous?.takeIf {
+                it.hasPositiveEvidence && it.txid != null && !it.isTransfer &&
+                    it.requestId == incomingPaymentRequest?.id
+            }
+            if (priorAccepted != null) {
+                val txid = requireNotNull(priorAccepted.txid)
+                onSendSuccess(
+                    NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.ONCHAIN,
+                        direction = NewTransactionSheetDirection.SENT,
+                        paymentHashOrTxId = txid,
+                        sats = priorAccepted.amountSats.toLong(),
+                        isLoadingDetails = false,
+                    )
                 )
+                if (priorAccepted.requestId == null) lightningRepo.completeAcceptedOrdinaryFollowup(txid)
+                return
+            }
+            previous?.refusalReason?.let {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__error_sending_title),
+                    description = it,
+                )
+            }
+            val unresolvedRequestId = previous?.requestId ?: incomingPaymentRequest?.id
+            uncertainOnchainPaymentRequestId = unresolvedRequestId
+            paykitPaymentProofRepo.onchainPaymentResolutions.value
+                .firstOrNull { it.requestId == unresolvedRequestId }
+                ?.let(::handlePaykitOnchainPaymentResolution)
+            showUnresolvedOnchainSend(
+                txid = (error as? OnchainSendPendingError)?.txid ?: previous?.txid,
+                amount = previous?.amountSats ?: amount,
+                requestId = unresolvedRequestId,
             )
             return
         }
@@ -4146,6 +4218,23 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun showUnresolvedOnchainSend(
+        txid: String?,
+        amount: ULong,
+        request: PaykitPaymentRequest? = null,
+        requestId: PaykitPaymentRequestId? = request?.id,
+    ) {
+        uncertainOnchainPaymentRequestId = requestId
+        setSendEffect(
+            SendEffect.NavigateToPending(
+                paymentHash = txid ?: requestId?.paymentRequestId.orEmpty(),
+                amount = amount.toLong(),
+                observeResolution = false,
+                isOnchain = true,
+            )
+        )
+    }
+
     private suspend fun proceedWithLightningPayment(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
@@ -4159,7 +4248,8 @@ class AppViewModel @Inject constructor(
         val paymentHash = decodedInvoice.paymentHash.toHex()
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
             cancelPaymentProofPreparation(proofRequest)
-            proofRequest = null
+            handlePaymentPreparationFailure(it, null)
+            return
         }
 
         val tags = _sendUiState.value.selectedTags
@@ -4493,11 +4583,10 @@ class AppViewModel @Inject constructor(
         address: String,
         amount: ULong,
         tags: List<String> = emptyList(),
+        requestId: PaykitPaymentRequestId? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
-    ): Result<Txid> {
-        var broadcastTxId: Txid? = null
-        return lightningRepo.sendOnChain(
+    ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
             address = address,
             sats = amount,
             speed = _sendUiState.value.speed,
@@ -4505,13 +4594,10 @@ class AppViewModel @Inject constructor(
             isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
                 amount == walletRepo.balanceState.value.maxSendOnchainSats,
             tags = tags,
+            requestId = requestId,
             beforeSendAttempt = beforeSendAttempt,
-            onBroadcast = {
-                broadcastTxId = it
-                onBroadcast(it)
-            },
-        ).recoverCatching { broadcastTxId ?: throw it }
-    }
+            onBroadcast = onBroadcast,
+        )
 
     private suspend fun sendLightning(
         bolt11: String,
@@ -5971,6 +6057,7 @@ sealed class SendEffect {
         val paymentHash: String,
         val amount: Long,
         val observeResolution: Boolean = true,
+        val isOnchain: Boolean = false,
     ) : SendEffect()
 }
 
@@ -6021,25 +6108,6 @@ private class LightningPaymentFailedError(
     val reason: PaymentFailureReason?,
     val paymentRequest: String?,
 ) : AppError(reason?.name)
-
-private fun Throwable.isDefiniteOnchainPreBroadcastFailure(): Boolean =
-    generateSequence(this as Throwable?) { it.cause }
-        .any {
-            it is ServiceError.NodeNotSetup ||
-                it is ServiceError.NodeNotStarted ||
-                it is NodeException.NotRunning ||
-                it is NodeException.OnchainTxCreationFailed ||
-                it is NodeException.OnchainTxSigningFailed ||
-                it is NodeException.WalletOperationFailed ||
-                it is NodeException.PersistenceFailed ||
-                it is NodeException.InvalidAddress ||
-                it is NodeException.InvalidAmount ||
-                it is NodeException.InvalidNetwork ||
-                it is NodeException.InvalidFeeRate ||
-                it is NodeException.InsufficientFunds ||
-                it is NodeException.CoinSelectionFailed ||
-                it is NodeException.NoSpendableOutputs
-        }
 
 sealed interface LnurlParams {
     data class LnurlPay(val data: LnurlPayData) : LnurlParams

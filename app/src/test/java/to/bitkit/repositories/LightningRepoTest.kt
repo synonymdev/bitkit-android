@@ -83,6 +83,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -111,6 +112,7 @@ class LightningRepoTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val cacheStore = mock<CacheStore>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
+    private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
     private val lnurlService = mock<LnurlService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
@@ -144,6 +146,7 @@ class LightningRepoTest : BaseUnitTest() {
             lnurlService = lnurlService,
             cacheStore = cacheStore,
             preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = onchainSendAttemptStore,
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = urlValidator,
@@ -1394,9 +1397,32 @@ class LightningRepoTest : BaseUnitTest() {
                 sats = any(),
                 satsPerVByte = any(),
                 utxosToSpend = anyOrNull(),
-                isMaxAmount = any()
+                isMaxAmount = any(),
+                walletIndex = any(),
             )
-        ).thenReturn("testPaymentId")
+        ).thenReturn(OnchainSendOutcome.Accepted("testPaymentId"))
+
+        val attempt = OnchainSendAttempt(
+            walletId = "test-wallet",
+            attemptId = "attempt-1",
+            requestId = null,
+            orderId = null,
+            address = "test_address",
+            amountSats = 1000uL,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 10uL,
+            isTransfer = true,
+            channelId = "test_channel_id",
+            tags = emptyList(),
+        )
+        whenever {
+            onchainSendAttemptStore.admit(
+                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), any(),
+            )
+        }
+            .thenReturn(attempt)
+        whenever { onchainSendAttemptStore.recordOutcome(any(), any(), any()) }
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = "testPaymentId"))
 
         startNodeForTesting()
 
@@ -1416,12 +1442,110 @@ class LightningRepoTest : BaseUnitTest() {
 
         // Verify the result is successful
         assertTrue(result.isSuccess)
-        assertEquals("testPaymentId", result.getOrNull())
+        assertEquals(OnchainSendOutcome.Accepted("testPaymentId"), result.getOrNull())
 
         // Verify pre-activity metadata was saved
         verifyBlocking(preActivityMetadataRepo) {
             addPreActivityMetadata(any())
         }
+
+        whenever { onchainSendAttemptStore.recordOutcome(any(), any(), any()) }
+            .thenThrow(IllegalStateException("encrypted attempt write failed"))
+        val acceptedDespiteStorageFailure = spySut.sendOnChain(
+            address = "test_address",
+            sats = 1000uL,
+            speed = TransactionSpeed.Fast,
+            isTransfer = true,
+            channelId = "test_channel_id",
+        )
+        assertEquals(OnchainSendOutcome.Accepted("testPaymentId"), acceptedDespiteStorageFailure.getOrThrow())
+    }
+
+    @Test
+    fun `only a direct undispatched node error releases an admitted send`() = test {
+        val attempt = pendingSendAttempt()
+        val repo = prepareGuardedSend(attempt)
+        var sendError: Throwable = NodeException.InvalidAddress("invalid address")
+        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { throw sendError }
+        assertTrue(repo.sendOnChain("address", 1_000uL).exceptionOrNull() is OnchainSendNotDispatchedError)
+        verify(onchainSendAttemptStore).releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+
+        sendError = LdkError(NodeException.PersistenceFailed("workflow storage failure"))
+        assertTrue(repo.sendOnChain("address", 1_000uL).exceptionOrNull() is OnchainSendPendingError)
+        verify(onchainSendAttemptStore, times(1)).releaseBeforeDispatch(any(), any())
+    }
+
+    @Test
+    fun `UI cancellation after admission never releases pending guard`() = test {
+        val attempt = pendingSendAttempt()
+        val repo = prepareGuardedSend(attempt)
+        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any()))
+            .thenThrow(CancellationException("screen closed"))
+        assertFailsWith<CancellationException> { repo.sendOnChain("address", 1_000uL) }
+        verify(onchainSendAttemptStore, never()).releaseBeforeDispatch(any(), any())
+    }
+
+    @Test
+    fun `accepted callback workflow error cannot turn a paid send into retry`() = test {
+        val attempt = pendingSendAttempt()
+        val repo = prepareGuardedSend(attempt)
+        val txid = "ab".repeat(32)
+        val accepted = OnchainSendOutcome.Accepted(txid)
+        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any())).thenReturn(accepted)
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = txid))
+        val result = repo.sendOnChain("address", 1_000uL, onBroadcast = {
+            throw NodeException.PersistenceFailed("callback storage failure")
+        })
+        assertEquals(accepted, result.getOrThrow())
+        verify(onchainSendAttemptStore, never()).releaseBeforeDispatch(any(), any())
+    }
+
+    private fun pendingSendAttempt() = OnchainSendAttempt(
+        walletId = "test-wallet", attemptId = "attempt-1", requestId = null, orderId = null,
+        address = "address", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
+        isTransfer = false, channelId = null, tags = emptyList(),
+    )
+
+    private suspend fun prepareGuardedSend(attempt: OnchainSendAttempt): LightningRepo {
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        whenever(onchainSendAttemptStore.admit(
+            any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), any(),
+        )).thenReturn(attempt)
+        startNodeForTesting()
+        return spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+    }
+
+    @Test
+    fun `accepted ordinary send stays guarded until its activity is durable`() = test {
+        val txid = "ab".repeat(32)
+        val attempt = OnchainSendAttempt(
+            walletId = "test-wallet",
+            attemptId = "attempt-1",
+            requestId = null,
+            orderId = null,
+            address = "bcrt1qrecipient",
+            amountSats = 1_000uL,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL,
+            isTransfer = false,
+            channelId = null,
+            tags = emptyList(),
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+
+        whenever { activityService.getOnchainActivityByTxId(txid, attempt.walletId) }.thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
     }
 
     @Test
@@ -1703,6 +1827,7 @@ class LightningRepoTest : BaseUnitTest() {
             lnurlService = lnurlService,
             cacheStore = cacheStore,
             preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = onchainSendAttemptStore,
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = failingValidator,

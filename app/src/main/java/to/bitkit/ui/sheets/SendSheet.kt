@@ -174,7 +174,12 @@ fun SendSheet(
                         is SendEffect.NavigateToComingSoon -> navController.navigateTo(SendRoute.ComingSoon)
                         is SendEffect.NavigateToContacts -> navController.navigateTo(SendRoute.ContactSelect)
                         is SendEffect.NavigateToPending -> navController.navigateTo(
-                            SendRoute.Pending(it.paymentHash, it.amount, observeResolution = it.observeResolution)
+                            SendRoute.Pending(
+                                it.paymentHash,
+                                it.amount,
+                                observeResolution = it.observeResolution,
+                                isOnchain = it.isOnchain,
+                            )
                         ) { popUpTo(startDestination) { inclusive = true } }
                         is SendEffect.NavigateToError -> navController.navigateTo(
                             SendRoute.errorFromFailure(
@@ -462,6 +467,7 @@ fun SendSheet(
                         paymentHash = route.paymentHash,
                         amount = route.amount,
                         observeResolution = route.observeResolution,
+                        isOnchain = route.isOnchain,
                         onPaymentSuccess = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
@@ -655,6 +661,7 @@ sealed interface SendRoute {
         val paymentHash: String,
         val amount: Long,
         val observeResolution: Boolean = true,
+        val isOnchain: Boolean = false,
         val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
         val paymentRequest: String? = null,
     ) : InternalOnly

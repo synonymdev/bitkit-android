@@ -55,7 +55,6 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     private val paykitSdkService = mock<PaykitSdkService>()
     private val lightningRepo = mock<LightningRepo>()
-    private val onchainPaymentLookup = mock<PaykitOnchainPaymentProofLookup>()
     private val store = mock<PaykitPaymentProofStore>()
     private var storedProofs = emptyList<PendingPaykitPaymentProof>()
     private var shouldFailNextLoad = false
@@ -71,7 +70,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(store.hasPendingProofs()).thenReturn(true)
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
-        whenever(onchainPaymentLookup.existingTransactionIds(any(), any(), any())).thenReturn(emptySet())
+        whenever(paykitSdkService.paymentRequests()).thenReturn(emptyList())
         whenever(store.load()).thenAnswer {
             if (shouldFailNextLoad) {
                 shouldFailNextLoad = false
@@ -91,6 +90,39 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             }
             storedProofs = proofs
         }
+    }
+
+    @Test
+    fun `lightning association cannot bypass a started onchain request`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue).copy(
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue, MethodId.Bolt11.rawValue),
+        )
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+
+        val result = repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue)
+
+        assertTrue(result.isFailure)
+        assertEquals(PaykitPaymentRequestError.OperationInProgress, result.exceptionOrNull())
+        assertEquals(1, storedProofs.size)
+        assertEquals(PaykitPaymentProofKind.Onchain, storedProofs.single().kind)
+    }
+
+    @Test
+    fun `onchain callback cannot bypass a started lightning request`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue).copy(
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue, MethodId.Bolt11.rawValue),
+        )
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
+
+        val result = repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS)
+
+        assertEquals(PaykitPaymentRequestError.OperationInProgress, result.exceptionOrNull())
+        assertEquals(1, storedProofs.count { it.paymentStarted })
+        assertEquals(PaykitPaymentProofKind.Lightning, storedProofs.single { it.paymentStarted }.kind)
     }
 
     @Test
@@ -252,13 +284,13 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `existing proof suppresses duplicate submission`() = test {
+    fun `queued onchain proof blocks same Shop request switched to Lightning`() = test {
         val existingProofJson = mock<PrivateJsonObject> {
-            on { exportText() } doReturn """{"type":"${PaykitPaymentProofKind.Lightning.type}","data":"$PREIMAGE"}"""
+            on { exportText() } doReturn """{"type":"${PaykitPaymentProofKind.Onchain.type}","data":"${"ab".repeat(32)}"}"""
         }
         val existingProof = mock<PaymentProofRecord> {
             on { billingPeriod } doReturn null
-            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+            on { paymentEndpointIdentifier } doReturn MethodId.P2wpkh.rawValue
             on { proof } doReturn existingProofJson
         }
         val record = paymentRequestRecord(listOf(existingProof))
@@ -266,12 +298,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         val repo = paymentProofRepo()
 
-        repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
-        repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
+        val result = repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
 
+        assertEquals(PaykitPaymentRequestError.OperationInProgress, result.exceptionOrNull())
         assertTrue(storedProofs.isEmpty())
         verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+    }
+
+    @Test
+    fun `accepted onchain attempt blocks Lightning before its proof is queued`() = test {
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        whenever(lightningRepo.currentOnchainSendAttempt())
+            .thenReturn(acceptedAttempt(request, "ab".repeat(32)))
+
+        val result = paymentProofRepo().prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
+
+        assertEquals(PaykitPaymentRequestError.OperationInProgress, result.exceptionOrNull())
+        assertTrue(storedProofs.isEmpty())
     }
 
     @Test
@@ -621,24 +664,17 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `uncertain onchain payment is reconciled from its private destination`() = test {
+    fun `accepted onchain payment is reconciled from its exact recorded transaction`() = test {
         val txid = "ab".repeat(32)
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(record)
-        whenever(
-            onchainPaymentLookup.transactionId(
-                ONCHAIN_ADDRESS,
-                request.amountSats,
-                emptySet(),
-                WalletScope.default,
-            )
-        ).thenReturn(txid)
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
         repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedAttempt(request, txid))
         repo.reconcile()
 
         assertTrue(storedProofs.isEmpty())
@@ -655,7 +691,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `reconcile publishes every onchain resolution`() = test {
+    fun `reconcile only resolves the request tied to exact transaction evidence`() = test {
         val secondPaymentRequestId = "550e8400-e29b-41d4-a716-446655440001"
         val firstRequest = paymentRequest(MethodId.P2wpkh.rawValue)
         val secondRequest = paymentRequest(MethodId.P2wpkh.rawValue, secondPaymentRequestId)
@@ -667,44 +703,34 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
             .thenReturn(paymentRequestRecord())
-        whenever(onchainPaymentLookup.transactionId(any(), any(), any(), any()))
-            .thenReturn("ab".repeat(32), "cd".repeat(32))
         val repo = paymentProofRepo()
         repo.prepare(firstRequest, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
         repo.markOnchainPaymentStarted(firstRequest, ONCHAIN_ADDRESS).getOrThrow()
         repo.prepare(secondRequest, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
         repo.markOnchainPaymentStarted(secondRequest, ONCHAIN_ADDRESS).getOrThrow()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedAttempt(firstRequest, "ab".repeat(32)))
 
         repo.reconcile()
 
         assertEquals(
-            listOf(PAYMENT_REQUEST_ID, secondPaymentRequestId),
+            listOf(PAYMENT_REQUEST_ID),
             repo.onchainPaymentResolutions.value.map { it.requestId.paymentRequestId },
         )
+        assertNull(storedProofs.single { it.requestId == secondRequest.id }.proofData)
     }
 
     @Test
-    fun `uncertain onchain payment ignores transaction from before attempt`() = test {
-        val oldTransactionId = "ab".repeat(32)
+    fun `uncertain onchain payment does not infer broadcast from destination or amount`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(onchainPaymentLookup.existingTransactionIds(any(), any(), any())).thenReturn(setOf(oldTransactionId))
-        whenever(
-            onchainPaymentLookup.transactionId(
-                ONCHAIN_ADDRESS,
-                request.amountSats,
-                setOf(oldTransactionId),
-                WalletScope.default,
-            )
-        ).thenReturn(null)
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
         repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
         repo.reconcile()
 
-        assertEquals(setOf(oldTransactionId), storedProofs.single().onchainMatchingTransactionIdsBeforeAttempt)
+        assertTrue(storedProofs.single().onchainMatchingTransactionIdsBeforeAttempt.isEmpty())
         assertNull(storedProofs.single().proofData)
         verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any())
     }
@@ -770,8 +796,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ioDispatcher = testDispatcher,
         paykitSdkService = paykitSdkService,
         lightningRepo = lightningRepo,
-        onchainPaymentLookup = onchainPaymentLookup,
         store = store,
+    )
+
+    private fun acceptedAttempt(request: PaykitPaymentRequest, txid: String) = OnchainSendAttempt(
+        walletId = WalletScope.default,
+        attemptId = "attempt-1",
+        requestId = request.id,
+        orderId = null,
+        address = ONCHAIN_ADDRESS,
+        amountSats = request.amountSats,
+        isMaxAmount = false,
+        feeRateSatsPerVByte = 1uL,
+        isTransfer = false,
+        channelId = null,
+        tags = emptyList(),
+        evidence = OnchainSendEvidence.Accepted,
+        txid = txid,
     )
 
     private fun paymentRequest(

@@ -1,0 +1,24 @@
+<journey name="onchain accepted result">
+  <description>
+    Verifies that fixed-amount and send-all sends show success only after the configured backend
+    acknowledges the transaction, and that an accepted send finishes its local activity before a new
+    send is admitted. Precondition: an onboarded dev wallet with confirmed savings funds sufficient
+    for both sends and fees, a running synced node, and a second regtest wallet's savings address.
+    The receiving wallet and backend must be test fixtures.
+    Rejected or missing-result cases need a controlled broadcast-refusal/response-loss fixture,
+    which the Capabilities table does not provide, and belong in Manual Tests.
+  </description>
+  <actions>
+    <action>Hand the receiving test wallet address to the app with adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;test recipient address&gt;?amount=0.00001" to.bitkit.dev</action>
+    <action>Verify the Send Amount screen is visible with 1 000 sats and Savings selected</action>
+    <action>Tap Continue (tag "ContinueAmount") and verify the Confirm screen shows the receiving test wallet address (tag "ReviewUri")</action>
+    <action>Swipe the send handle (tag "GRAB") fully to the right</action>
+    <action>Wait for the sent transaction sheet (tag "new_transaction_sheet") and verify it shows the accepted payment amount</action>
+    <action>Tap Details (tag "Details") and verify the outbound transaction has a transaction ID; record that exact ID without inferring a different transaction from address or amount</action>
+    <action>Close the transaction details and return to the wallet home screen</action>
+    <action>Hand the receiving test wallet address to the app again with adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;test recipient address&gt;" to.bitkit.dev</action>
+    <action>Choose Max on Send Amount, tap Continue (tag "ContinueAmount"), and verify the Confirm screen shows the receiving test wallet address</action>
+    <action>Swipe the send handle (tag "GRAB") fully to the right</action>
+    <action>Wait for the sent transaction sheet (tag "new_transaction_sheet"), tap Details (tag "Details"), and verify this send-all transaction has its own exact transaction ID</action>
+  </actions>
+</journey>

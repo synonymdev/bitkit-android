@@ -70,6 +70,7 @@ import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -370,6 +371,24 @@ class TransferViewModel @Inject constructor(
         walletRepo.getAddresses(count = 1).onFailure { ToastEventBus.send(it) }.getOrNull()?.firstOrNull()?.address
 
     private suspend fun paySpendingConfirmOrder(order: IBtOrder, shown: TransferToSpendingUiState): Boolean {
+        val previous = lightningRepo.currentOnchainSendAttempt()
+        if (previous?.orderId == order.id) {
+            val txid = previous.txid
+            if (previous.hasPositiveEvidence && txid != null) {
+                if (!previous.localFollowupComplete) {
+                    withContext(NonCancellable) {
+                        fundPaidOrder(order = order, txId = txid, requireTransferPersisted = true)
+                        lightningRepo.completeAcceptedTransferFollowup(order.id, txid)
+                    }
+                }
+                return true
+            }
+            ToastEventBus.send(
+                AppError(previous.refusalReason ?: "This funding payment is unresolved. Check its transaction before retrying.")
+            )
+            return false
+        }
+        if (cacheStore.data.first().paidOrders.containsKey(order.id)) return true
         val plan = resolveSpendingConfirmPlan(order, shown) ?: return false
 
         Logger.debug(
@@ -392,24 +411,38 @@ class TransferViewModel @Inject constructor(
                 isTransfer = true,
                 channelId = order.channel?.shortChannelId,
                 isMaxAmount = plan.shouldUseSendAll,
+                orderId = order.id,
             )
-            .onSuccess { txId ->
-                // Survive ViewModel clearance between broadcast and paid-order cache write.
-                withContext(NonCancellable) {
-                    fundPaidOrder(
-                        order = order,
-                        txId = txId,
-                        txTotalSats = if (plan.shouldUseSendAll) {
-                            plan.spendableBalance
-                        } else {
-                            order.feeSat.safe() + plan.miningFeeSats.safe()
-                        },
-                        preTransferOnchainSats = plan.totalOnchainBalance,
-                    )
+            .fold(
+                onSuccess = { outcome ->
+                    if (outcome !is OnchainSendOutcome.Accepted) {
+                        ToastEventBus.send(
+                            AppError("Funding transaction is unresolved. Check its transaction before retrying.")
+                        )
+                        return@fold false
+                    }
+                    // Survive ViewModel clearance between accepted broadcast and paid-order cache write.
+                    withContext(NonCancellable) {
+                        fundPaidOrder(
+                            order = order,
+                            txId = outcome.txid,
+                            txTotalSats = if (plan.shouldUseSendAll) {
+                                plan.spendableBalance
+                            } else {
+                                order.feeSat.safe() + plan.miningFeeSats.safe()
+                            },
+                            preTransferOnchainSats = plan.totalOnchainBalance,
+                            requireTransferPersisted = true,
+                        )
+                        lightningRepo.completeAcceptedTransferFollowup(order.id, outcome.txid)
+                    }
+                    true
+                },
+                onFailure = {
+                    ToastEventBus.send(it)
+                    false
                 }
-            }
-            .onFailure { ToastEventBus.send(it) }
-            .isSuccess
+            )
     }
 
     private suspend fun resolveSpendingConfirmPlan(
@@ -631,16 +664,28 @@ class TransferViewModel @Inject constructor(
         txTotalSats: ULong? = null,
         preTransferOnchainSats: ULong? = null,
         activityWalletId: String = WalletScope.default,
+        requireTransferPersisted: Boolean = false,
     ) {
         cacheStore.addPaidOrder(orderId = order.id, txId = txId)
-        transferRepo.createTransfer(
-            type = TransferType.TO_SPENDING,
-            amountSats = order.clientBalanceSat.toLong(),
-            fundingTxId = txId,
-            lspOrderId = order.id,
-            txTotalSats = txTotalSats?.toLong(),
-            preTransferOnchainSats = preTransferOnchainSats?.toLong(),
-        )
+        val existingOrderId = if (requireTransferPersisted) {
+            transferRepo.findLspOrderIdByFundingTxId(txId).getOrThrow()
+        } else {
+            null
+        }
+        if (existingOrderId != null && existingOrderId != order.id) {
+            throw AppError("Funding transaction is already assigned to another order")
+        }
+        if (existingOrderId == null) {
+            val transfer = transferRepo.createTransfer(
+                type = TransferType.TO_SPENDING,
+                amountSats = order.clientBalanceSat.toLong(),
+                fundingTxId = txId,
+                lspOrderId = order.id,
+                txTotalSats = txTotalSats?.toLong(),
+                preTransferOnchainSats = preTransferOnchainSats?.toLong(),
+            )
+            if (requireTransferPersisted) transfer.getOrThrow()
+        }
         if (createTransferActivity) {
             transferRepo.createPendingToSpendingActivity(
                 order = order,

@@ -56,6 +56,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -88,6 +89,9 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
+import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
 import to.bitkit.test.BaseUnitTest
@@ -139,6 +143,14 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.getOnchainAddress()).thenReturn(WALLET_ADDRESS)
         whenever(settingsStore.data).thenReturn(MutableStateFlow(SettingsData()))
+        whenever(cacheStore.data).thenReturn(MutableStateFlow(AppCacheData()))
+        whenever { transferRepo.findLspOrderIdByFundingTxId(any()) }.thenReturn(Result.success(null))
+        whenever {
+            transferRepo.createTransfer(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            )
+        }
+            .thenReturn(Result.success("transfer-id"))
         whenever { hwWalletRepo.needsPassphrase(any()) }.thenReturn(false)
         val nodeStatus = mock<NodeStatus>()
         whenever(nodeStatus.isRunning).thenReturn(true)
@@ -1144,6 +1156,8 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(blocktankRepo, times(1)).createOrder(eq(order.clientBalanceSat), eq(order.lspBalanceSat), any())
@@ -1182,6 +1196,8 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1195,6 +1211,8 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
     }
@@ -1225,6 +1243,8 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 any(),
+                anyOrNull(),
+                anyOrNull(),
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
 
@@ -1247,6 +1267,8 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1260,8 +1282,82 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    @Test
+    fun `accepted transfer resumes after transfer storage failure without another send`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val attempt = OnchainSendAttempt(
+            walletId = "wallet", attemptId = "attempt", requestId = null, orderId = order.id,
+            address = order.payment?.onchain?.address.orEmpty(), amountSats = order.feeSat,
+            isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
+            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Accepted, txid = TXID,
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        whenever(transferRepo.findLspOrderIdByFundingTxId(TXID)).thenReturn(Result.success(null))
+        whenever(transferRepo.createTransfer(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )).thenReturn(Result.failure(AppError("transfer storage unavailable")))
+        quoteOrder(order)
+        prepareConfirm()
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+
+        whenever(transferRepo.findLspOrderIdByFundingTxId(TXID)).thenReturn(Result.success(order.id))
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, TXID)
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
+            anyOrNull(), anyOrNull(),
+        )
+        verify(transferRepo, times(1)).createTransfer(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `unknown transfer funding does not mark order paid`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever { lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull()) }
+            .thenReturn(Result.success(listOf(stubUtxo(100_000u))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever(
+            lightningRepo.sendOnChain(
+                address = any(),
+                sats = any(),
+                speed = any(),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                isMaxAmount = any(),
+                tags = any(),
+                beforeSendAttempt = any(),
+                onBroadcast = any(),
+                requestId = anyOrNull(),
+                orderId = anyOrNull(),
+            ),
+        ).thenReturn(Result.success(OnchainSendOutcome.Unknown(TXID)))
+        quoteOrder(order)
+
+        prepareConfirm()
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+        verify(transferRepo, never()).createTransfer(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
     }
 
     @Test
@@ -1316,8 +1412,13 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 any(),
+                anyOrNull(),
+                anyOrNull(),
             ),
-        ).thenReturn(Result.failure(AppError("Coin selection failed")), Result.success(TXID))
+        ).thenReturn(
+            Result.failure(AppError("Coin selection failed")),
+            Result.success(OnchainSendOutcome.Accepted(TXID)),
+        )
         quoteOrder(order)
 
         prepareConfirm()
@@ -1573,6 +1674,8 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
     }
 
@@ -1754,6 +1857,8 @@ class TransferViewModelTest : BaseUnitTest() {
             any(),
             any(),
             any(),
+            anyOrNull(),
+            anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -1780,6 +1885,8 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 any(),
+                anyOrNull(),
+                anyOrNull(),
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
         quoteOrder(order)
@@ -1926,6 +2033,8 @@ class TransferViewModelTest : BaseUnitTest() {
             any(),
             any(),
             any(),
+            anyOrNull(),
+            anyOrNull(),
         )
         verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
     }
@@ -3167,6 +3276,8 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
         )
     }
 
@@ -3315,8 +3426,10 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 any(),
+                anyOrNull(),
+                anyOrNull(),
             ),
-        ).thenReturn(Result.success(TXID))
+        ).thenReturn(Result.success(OnchainSendOutcome.Accepted(TXID)))
     }
 
     private companion object {
