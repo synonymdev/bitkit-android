@@ -30,6 +30,7 @@ class PaymentRequestPresentationTest {
                 request.amountPrefix(isOutgoingPayment = false, showSignedAmount = request.hasPaymentEvidence),
             )
             assertEquals("", request.detailsAmountPrefix())
+            assertEquals("2,500 sats", request.detailsAmountText("2,500 sats"))
         }
     }
 
@@ -44,8 +45,10 @@ class PaymentRequestPresentationTest {
         assertTrue(incoming.hasPaymentEvidence)
         assertEquals("-", incoming.amountPrefix(isOutgoingPayment = false, showSignedAmount = true))
         assertEquals("-", incoming.detailsAmountPrefix())
+        assertEquals("- 2,500 sats", incoming.detailsAmountText("2,500 sats"))
         assertEquals("+", outgoing.amountPrefix(isOutgoingPayment = false, showSignedAmount = true))
         assertEquals("+", outgoing.detailsAmountPrefix())
+        assertEquals("+ 2,500 sats", outgoing.detailsAmountText("2,500 sats"))
     }
 
     @Test

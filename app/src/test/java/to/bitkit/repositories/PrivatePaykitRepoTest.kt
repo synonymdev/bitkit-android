@@ -1300,14 +1300,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `beginPaymentRequest waits for a linking peer before opening cached details`() = test {
         val request = paymentRequest()
-        whenever {
+        whenever(
             paykitSdkService.prepareAndResolvePrivateContactPayment(
                 eq(CONTACT_KEY),
                 eq(SERVER_RECEIVER_PATH),
                 eq(null),
                 any(),
             )
-        }.thenReturn(
+        ).thenReturn(
             resolution(
                 resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
                 version = 7uL,
@@ -1337,16 +1337,41 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginPaymentRequest keeps typed recovery failures pending`() = test {
+    fun `beginPaymentRequest rejects cached details when the peer is not linked`() = test {
         val request = paymentRequest()
-        whenever {
+        whenever(
             paykitSdkService.prepareAndResolvePrivateContactPayment(
                 eq(CONTACT_KEY),
                 eq(SERVER_RECEIVER_PATH),
                 eq(null),
                 any(),
             )
-        }.doSuspendableAnswer {
+        ).thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
+                version = 7uL,
+                linkState = null,
+            ),
+        )
+
+        val result = sut.beginPaymentRequest(request).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.NoEndpoint, result)
+        verify(coreService, never()).decode(any())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginPaymentRequest keeps typed recovery failures pending`() = test {
+        val request = paymentRequest()
+        whenever(
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        ).doSuspendableAnswer {
             throw PaykitException.RecoveryRequired("recovery_required", "Handshake is in progress")
         }
 

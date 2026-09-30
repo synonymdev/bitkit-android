@@ -1137,7 +1137,7 @@ class AppViewModel @Inject constructor(
         toast(
             type = Toast.ToastType.INFO,
             title = context.getString(R.string.wallet__payment_request),
-            description = context.getString(R.string.wallet__payment_request_waiting_for_details),
+            description = context.getString(R.string.slashtags__error_pay_waiting_msg),
         )
         if (restorePaymentRequestSheet && currentSheet.value == null) showSheet(Sheet.PaymentRequests)
     }

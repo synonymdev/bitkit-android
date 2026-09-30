@@ -152,7 +152,8 @@ private fun IncomingPaymentRequestDetailsContent(
             )?.let {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Display(
-                        text = "${request.detailsAmountPrefix()} $it".withAccent(accentColor = Colors.White64),
+                        text = request.detailsAmountText(it).withAccent(accentColor = Colors.White64),
+                        modifier = Modifier.testTag("PaymentRequestDetailsAmount")
                     )
                     FillWidth()
                     if (request.hasPaymentEvidence) {
@@ -305,6 +306,9 @@ internal fun PaykitPaymentRequest.detailsAmountPrefix(): String = when {
     direction == PaykitPaymentRequestDirection.Incoming -> "-"
     else -> "+"
 }
+
+internal fun PaykitPaymentRequest.detailsAmountText(amount: String): String =
+    "${detailsAmountPrefix()} $amount".trimStart()
 
 @Composable
 private fun PaymentRequestDetailsIcon(request: PaykitPaymentRequest) {

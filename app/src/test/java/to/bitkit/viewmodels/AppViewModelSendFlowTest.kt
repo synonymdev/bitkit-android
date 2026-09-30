@@ -969,11 +969,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
         whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
-        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.slashtags__error_pay_waiting_msg)).thenReturn("Try again")
         whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
             Result.success(PublicPaykitPaymentResult.PrivateLinkPending)
         )
-        whenever { paykitPaymentRequestRepo.dismiss(request) }.thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.dismiss(request)).thenReturn(Result.success(Unit))
         pendingPaykitPaymentRequests.value = listOf(request)
         surfacedPaykitPaymentRequestIds += request.id
         enablePaykitUi()
@@ -1000,6 +1000,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             request.counterparty,
             IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending,
         )
+        verify(toastManager, times(2)).enqueue(check { assertEquals("Try again", it.description) })
     }
 
     @Test
@@ -6578,7 +6579,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
-        whenever { lightningRepo.fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(request.amountSats), null) }
+        whenever(lightningRepo.fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(request.amountSats), null))
             .thenReturn(Result.failure(IllegalStateException("callback failed")))
         sut.showSheet(Sheet.Send(SendRoute.Confirm))
         advanceUntilIdle()
@@ -6607,7 +6608,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         pendingPaykitPaymentRequests.value = emptyList()
         stubOpenedPaymentRequest(request, lnurl.uri)
-        whenever { coreService.decode(lnurl.uri) }.thenReturn(Scanner.LnurlPay(lnurl))
+        whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
         whenever(paykitPaymentRequestRepo.refresh()).doSuspendableAnswer {
             pendingPaykitPaymentRequests.value = listOf(request)
             Result.success(Unit)
@@ -6706,6 +6707,65 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
+    }
+
+    @Test
+    fun `hardware payment request releases private details when acceptance fails`() = test {
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        whenever(paykitPaymentRequestRepo.accept(request))
+            .thenReturn(Result.failure(IllegalStateException("accept failed")))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = "bcrt1qpaymentrequest",
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+                hardwareWalletId = "hardware-wallet",
+            )
+        )
+
+        assertFalse(sut.prepareHardwareContactPayment())
+
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
+    }
+
+    @Test
+    fun `hardware payment request releases private details when proof start fails`() = test {
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(
+            paykitPaymentProofRepo.markOnchainPaymentStarted(
+                request,
+                "bcrt1qpaymentrequest",
+                "hardware-wallet",
+            )
+        ).thenReturn(Result.failure(IllegalStateException("proof start failed")))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = "bcrt1qpaymentrequest",
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+                hardwareWalletId = "hardware-wallet",
+            )
+        )
+
+        assertFalse(sut.prepareHardwareContactPayment())
+
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
     }
 
     @Test
@@ -7396,6 +7456,46 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(lightningRepo, never()).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = anyOrNull(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+        )
+    }
+
+    @Test
+    fun `incoming payment request releases private details when acceptance fails`() = test {
+        val address = "bcrt1qpaymentrequest"
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.accept(request))
+            .thenReturn(Result.failure(IllegalStateException("accept failed")))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
             sats = any(),

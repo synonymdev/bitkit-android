@@ -35,6 +35,8 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 
 - Pending-request bell: `PaymentRequestsBell`
 - Incoming sheet: `PaymentRequestsSheet`
+- Detail screen: `PaymentRequestDetailsScreen`
+- Detail amount and status: `PaymentRequestDetailsAmount`, `PaymentRequestDetailsStatus`
 - Request row: `PaymentRequestRow-<paymentRequestId>`
 - Pay action: `PaymentRequestPay-<paymentRequestId>`
 - Dismiss action: `PaymentRequestDismiss-<paymentRequestId>`
