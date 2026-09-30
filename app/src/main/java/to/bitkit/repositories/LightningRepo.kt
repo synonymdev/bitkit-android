@@ -1619,6 +1619,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    suspend fun getFeeRates(): Result<FeeRates> = withContext(bgDispatcher) {
+        coreService.blocktank.getFees()
+    }
+
     suspend fun getFeeRateForSpeed(
         speed: TransactionSpeed,
         feeRates: FeeRates? = null,

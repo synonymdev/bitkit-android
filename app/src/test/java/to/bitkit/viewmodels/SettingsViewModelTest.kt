@@ -192,6 +192,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         assertEquals("", settings.publicPaykitBolt11)
         verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
+        verify(settingsStore, never()).setIsPaykitEnabled(any())
     }
 
     @Test

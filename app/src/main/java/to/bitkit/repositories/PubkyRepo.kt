@@ -57,6 +57,7 @@ import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
@@ -95,6 +96,7 @@ class PubkyRepo @Inject constructor(
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
     private val adoptedSourceCheckMutex = Mutex()
+    private val waitingRingPicks = AtomicInteger(0)
     private var isServiceInitialized = false
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
@@ -136,6 +138,9 @@ class PubkyRepo @Inject constructor(
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
 
+    private val _identityRefreshVersion = MutableStateFlow(0L)
+    val identityRefreshVersion: StateFlow<Long> = _identityRefreshVersion.asStateFlow()
+
     val isAuthenticated: StateFlow<Boolean> = _publicKey.map { it != null }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
@@ -172,55 +177,87 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun initialize() = withContext(ioDispatcher) {
+        val restored = initializeMutex.withLock { initializeSession() }
+        if (restored) {
+            loadProfile()
+            loadContacts()
+        }
+        checkAdoptedSource()
+    }
+
+    suspend fun restoreSessionIfNeeded() = withContext(ioDispatcher) {
+        awaitInitialization()
+        val restored = initializeMutex.withLock {
+            if (_publicKey.value != null || hasWaitingRingPick()) return@withLock false
+            runSuspendCatching {
+                val hasIdentity = hasIdentity()
+                _identityRefreshVersion.update { it + 1 }
+                hasIdentity && initializeSession(notifyFailure = false)
+            }.onFailure { Logger.warn("Failed to retry paykit session restoration", it, context = TAG) }
+                .getOrDefault(false)
+        }
+        if (restored) {
+            loadProfile()
+            loadContacts()
+        }
+    }
+
+    private suspend fun initializeSession(notifyFailure: Boolean = true): Boolean {
         runSuspendCatching {
             ensureServiceInitialized()
         }.onFailure {
             Logger.error("Failed to initialize paykit", it, context = TAG)
-            if (it.isPaykitIdentityError() && hasSavedSession()) _sessionRestorationFailed.update { true }
-        }.getOrNull() ?: return@withContext
-
-        initializeMutex.withLock {
-            _sessionRestorationFailed.update { false }
-            val result = runSuspendCatching {
-                val savedSessionSecret = runCatching {
-                    keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
-                }.getOrNull()
-                val storedSecretKeyHex = runCatching {
-                    keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-                }.getOrNull()
-
-                resolveSessionInitialization(
-                    savedSessionSecret = savedSessionSecret,
-                    storedSecretKeyHex = storedSecretKeyHex,
-                )
-            }.onFailure {
-                Logger.error("Failed to initialize paykit", it, context = TAG)
-            }.getOrNull() ?: return@withLock
-
-            when (result) {
-                is InitResult.NoSession -> {
-                    clearAuthenticatedState()
-                    Logger.debug("Found no saved paykit session", context = TAG)
-                }
-                is InitResult.Restored -> {
-                    _publicKey.update { result.publicKey }
-                    Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
-                }
-                is InitResult.RestorationFailed -> {
-                    clearAuthenticatedState()
-                    _sessionRestorationFailed.update { true }
-                }
+            if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
+                _sessionRestorationFailed.update { true }
             }
-            initializationReady.complete(Unit)
+        }.getOrNull() ?: return false
 
-            if (result is InitResult.Restored) {
-                loadProfile()
-                loadContacts()
+        if (notifyFailure) _sessionRestorationFailed.update { false }
+        val result = runSuspendCatching {
+            val savedSessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+            val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+
+            resolveSessionInitialization(
+                savedSessionSecret = savedSessionSecret,
+                storedSecretKeyHex = storedSecretKeyHex,
+            )
+        }.onFailure {
+            Logger.error("Failed to initialize paykit", it, context = TAG)
+        }.getOrElse { InitResult.RestorationFailed }
+
+        val restored = when (result) {
+            is InitResult.NoSession -> {
+                clearAuthenticatedState()
+                Logger.debug("Found no saved paykit session", context = TAG)
+                false
+            }
+            is InitResult.Restored if !notifyFailure && hasWaitingRingPick() -> {
+                Logger.info(
+                    "Deferred restored paykit session for '${redacted(result.publicKey)}' to a ring pick",
+                    context = TAG,
+                )
+                false
+            }
+            is InitResult.Restored -> {
+                _sessionRestorationFailed.update { false }
+                _publicKey.update { result.publicKey }
+                Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
+                true
+            }
+            is InitResult.RestorationFailed -> {
+                clearAuthenticatedState(
+                    clearCachedProfile = false,
+                    clearRestorationFailure = notifyFailure,
+                )
+                if (notifyFailure) _sessionRestorationFailed.update { true }
+                false
             }
         }
-
-        checkAdoptedSourcePresent()
+        initializationReady.complete(Unit)
+        return restored
     }
+
+    private fun hasWaitingRingPick(): Boolean = waitingRingPicks.get() > 0
 
     private fun hasSavedSession(): Boolean = runCatching {
         keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
@@ -306,7 +343,10 @@ class PubkyRepo @Inject constructor(
             }
             val ringPubkys = sharedPubkyClient.listRingIdentities().getOrElse {
                 Logger.warn("Failed to list ring identities", it, context = TAG)
-                _adoptedSourceUnreachable.update { true }
+                initializeMutex.withLock {
+                    if (keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) != reference) return@withLock
+                    _adoptedSourceUnreachable.update { true }
+                }
                 return
             }
             if (ringPubkys.any { "${SharedPubkyContract.RING_SOURCE_PREFIX}$it" == reference }) {
@@ -314,12 +354,22 @@ class PubkyRepo @Inject constructor(
                 return
             }
 
-            val adoptedPubky = reference.removePrefix(SharedPubkyContract.RING_SOURCE_PREFIX)
-            Logger.warn("Adopted ring identity '${redacted(adoptedPubky)}' is gone, clearing session", context = TAG)
-            runSuspendCatching { pubkyService.clearSessionAccess() }
-                .onFailure { Logger.warn("Failed to clear adopted session access", it, context = TAG) }
-            clearLocalState()
-            _adoptedSourceLost.update { true }
+            initializeMutex.withLock {
+                val currentReference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+                if (currentReference != reference) return@withLock
+
+                val adoptedPubky = reference.removePrefix(SharedPubkyContract.RING_SOURCE_PREFIX)
+                Logger.warn(
+                    "Adopted ring identity '${redacted(adoptedPubky)}' is gone, clearing session",
+                    context = TAG,
+                )
+                withContext(NonCancellable) {
+                    runSuspendCatching { pubkyService.clearSessionAccess() }
+                        .onFailure { Logger.warn("Failed to clear adopted session access", it, context = TAG) }
+                    clearLocalState()
+                    _adoptedSourceLost.update { true }
+                }
+            }
         } finally {
             adoptedSourceCheckMutex.unlock()
         }
@@ -327,9 +377,9 @@ class PubkyRepo @Inject constructor(
 
     suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {
-            ensureServiceInitialized()
-            val hasProfile = initializeMutex.withLock {
+            val hasProfile = withRingPickLock {
                 if (_publicKey.value != null) throw PubkyAlreadySignedInError
+                ensureServiceInitialized()
                 val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
                 val publicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
                 require(PubkyPublicKeyFormat.matches(publicKey, pubky)) {
@@ -344,16 +394,31 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    private suspend fun <T> withRingPickLock(block: suspend () -> T): T {
+        waitingRingPicks.incrementAndGet()
+        try {
+            initializeMutex.lock()
+        } finally {
+            waitingRingPicks.decrementAndGet()
+        }
+        return try {
+            block()
+        } finally {
+            initializeMutex.unlock()
+        }
+    }
+
     private suspend fun commitRingIdentity(pubky: String, publicKey: String, secretKeyHex: String): Boolean {
-        val previousReference = runSuspendCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
-            .getOrNull()
-        val previousSession = runSuspendCatching { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }
+        val previousReference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        val previousSession = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+        var signInAttempted = false
         var committed = false
         val profile = try {
             keychain.upsertString(
                 Keychain.Key.SHARED_PUBKY_SOURCE.name,
                 "${SharedPubkyContract.RING_SOURCE_PREFIX}$pubky",
             )
+            signInAttempted = true
             signInRingIdentity(publicKey, secretKeyHex, previousSession)
             val remoteProfile = fetchRemoteProfile(publicKey)
                 .onFailure { Logger.warn("Failed to look up adopted ring profile", it, context = TAG) }
@@ -362,16 +427,18 @@ class PubkyRepo @Inject constructor(
             committed = true
             remoteProfile
         } finally {
-            if (!committed) rollBackRingIdentity(previousReference, previousSession)
+            if (!committed) rollBackRingIdentity(previousReference, previousSession, signInAttempted)
         }
 
+        val prefixedPublicKey = publicKey.ensurePubkyPrefix()
+        clearProfileIfIdentityChanged(prefixedPublicKey)
         profile?.let { adoptedProfile ->
             _profile.update { adoptedProfile }
             runSuspendCatching { cacheMetadata(adoptedProfile) }
                 .onFailure { Logger.warn("Failed to cache adopted ring profile", it, context = TAG) }
         }
         _adoptedSourceUnreachable.update { false }
-        _publicKey.update { publicKey.ensurePubkyPrefix() }
+        _publicKey.update { prefixedPublicKey }
         notifyBackupStateChanged()
         Logger.info("Adopted ring identity for '${redacted(publicKey)}'", context = TAG)
         return profile != null
@@ -380,7 +447,7 @@ class PubkyRepo @Inject constructor(
     private suspend fun signInRingIdentity(
         publicKey: String,
         secretKeyHex: String,
-        previousSession: Result<String?>,
+        previousSession: String?,
     ) {
         runSuspendCatching { pubkyService.signIn(secretKeyHex) }.getOrElse {
             if (hasSessionChangedSince(previousSession)) throw it
@@ -394,24 +461,23 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun hasSessionChangedSince(previousSession: Result<String?>): Boolean {
-        val currentSession = runSuspendCatching { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }
-        if (previousSession.isFailure || currentSession.isFailure) return true
-        return previousSession.getOrNull() != currentSession.getOrNull()
+    private fun hasSessionChangedSince(previousSession: String?): Boolean {
+        val currentSession = runCatching { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }
+        return currentSession.isFailure || currentSession.getOrNull() != previousSession
     }
 
     private suspend fun rollBackRingIdentity(
         previousReference: String?,
-        previousSession: Result<String?>,
+        previousSession: String?,
+        signInAttempted: Boolean,
     ) {
-        if (hasSessionChangedSince(previousSession)) {
+        if (signInAttempted && hasSessionChangedSince(previousSession)) {
             Logger.info("Discarding session saved by a failed ring identity adoption", context = TAG)
             discardRingSession()
             restoreRingReference(null)
             return
         }
-        val hadSession = !previousSession.getOrNull().isNullOrEmpty()
-        restoreRingReference(previousReference?.takeIf { hadSession })
+        restoreRingReference(previousReference?.takeIf { !previousSession.isNullOrEmpty() })
     }
 
     private suspend fun discardRingSession() {
@@ -434,6 +500,14 @@ class PubkyRepo @Inject constructor(
             }
         }.onFailure { Logger.warn("Failed to restore ring identity reference", it, context = TAG) }
         notifyBackupStateChanged()
+    }
+
+    private suspend fun clearProfileIfIdentityChanged(publicKey: String) {
+        if (_publicKey.value == publicKey) return
+        _contactsLoadVersion.update { 0L }
+        _profile.update { null }
+        _contacts.update { emptyList() }
+        clearPendingImport()
     }
 
     // endregion
@@ -459,7 +533,11 @@ class PubkyRepo @Inject constructor(
 
     suspend fun loadProfile() {
         val pk = _publicKey.value ?: return
-        if (!loadProfileMutex.tryLock()) return
+        loadProfileMutex.lock()
+        if (_publicKey.value != pk) {
+            loadProfileMutex.unlock()
+            return
+        }
 
         _isLoadingProfile.update { true }
         try {
@@ -513,34 +591,43 @@ class PubkyRepo @Inject constructor(
         tags: List<String>,
         avatarBytes: ByteArray?,
     ): Result<Unit> {
-        if (settingsStore.isPubkyProfileSetupPending.first() && _publicKey.value != null) {
-            return runSuspendCatching {
-                withContext(ioDispatcher) {
-                    val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
-                    val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
-                    finishIdentityCreation(publicKey, name, bio, links, tags, imageUrl)
+        val result = initializeMutex.withLock {
+            if (settingsStore.isPubkyProfileSetupPending.first() && _publicKey.value != null) {
+                return@withLock runSuspendCatching {
+                    withContext(ioDispatcher) {
+                        val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
+                        val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
+                        finishIdentityCreation(publicKey, name, bio, links, tags, imageUrl)
+                    }
                 }
+            }
+
+            var shouldRevokeSessionOnFailure = false
+            try {
+                val creationResult = runSuspendCatching {
+                    withContext(ioDispatcher) {
+                        settingsStore.setPubkyProfileSetupPending(false)
+                        val publicKeyZ32 = _publicKey.value
+                            ?: createLocalIdentitySession { shouldRevokeSessionOnFailure = true }
+
+                        val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
+                        shouldRevokeSessionOnFailure = false
+                        finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
+                    }
+                }
+                if (creationResult.isFailure) revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
+                creationResult
+            } catch (error: CancellationException) {
+                revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
+                throw error
             }
         }
 
-        var shouldRevokeSessionOnFailure = false
-        return try {
-            val result = runSuspendCatching {
-                withContext(ioDispatcher) {
-                    settingsStore.setPubkyProfileSetupPending(false)
-                    val publicKeyZ32 = _publicKey.value
-                        ?: createLocalIdentitySession { shouldRevokeSessionOnFailure = true }
-
-                    val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
-                    shouldRevokeSessionOnFailure = false
-                    finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
-                }
-            }
-            if (result.isFailure) revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
-            result
-        } catch (error: CancellationException) {
-            revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
-            throw error
+        val publicKey = result.getOrElse { return Result.failure(it) }
+        return runSuspendCatching {
+            if (_publicKey.value != publicKey) return@runSuspendCatching
+            loadProfile()
+            loadContacts()
         }
     }
 
@@ -585,7 +672,7 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         imageUrl: String?,
-    ) {
+    ): String {
         val createdProfile = PubkyProfile(
             publicKey = publicKey,
             name = name,
@@ -601,8 +688,7 @@ class PubkyRepo @Inject constructor(
         settingsStore.setPubkyProfileSetupPending(false)
         notifyBackupStateChanged()
         Logger.info("Created identity for '${redacted(publicKey)}'", context = TAG)
-        loadProfile()
-        loadContacts()
+        return publicKey
     }
 
     private suspend fun revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSession: Boolean) {
@@ -763,7 +849,11 @@ class PubkyRepo @Inject constructor(
 
     suspend fun loadContacts() {
         val pk = _publicKey.value ?: return
-        if (!loadContactsMutex.tryLock()) return
+        loadContactsMutex.lock()
+        if (_publicKey.value != pk) {
+            loadContactsMutex.unlock()
+            return
+        }
 
         _isLoadingContacts.update { true }
         var shouldMarkLoadCompleted = false
@@ -1140,8 +1230,12 @@ class PubkyRepo @Inject constructor(
         overrides: Map<String, PubkyProfileData>?,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
+            val ownerPublicKey = _publicKey.value
             pubkyStore.update {
-                it.copy(contactProfileOverrides = overrides ?: emptyMap())
+                it.copy(
+                    ownerPublicKey = ownerPublicKey,
+                    contactProfileOverrides = overrides ?: emptyMap(),
+                )
             }
             notifyBackupStateChanged()
         }
@@ -1166,30 +1260,32 @@ class PubkyRepo @Inject constructor(
     // region Sign out
 
     suspend fun signOut(): Result<Unit> = withContext(NonCancellable + ioDispatcher) {
-        val hadPaykitState = settingsStore.data.first().hasPaykitState()
-        val endpointCleanupResult = removeBitkitPaymentEndpoints()
-            .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
+        initializeMutex.withLock {
+            val hadPaykitState = settingsStore.data.first().hasPaykitState()
+            val endpointCleanupResult = removeBitkitPaymentEndpoints()
+                .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
 
-        val result = runSuspendCatching {
-            pubkyService.signOut()
-        }.onFailure { Logger.error("Failed to revoke Pubky session during sign out", it, context = TAG) }
+            val result = runSuspendCatching {
+                pubkyService.signOut()
+            }.onFailure { Logger.error("Failed to revoke Pubky session during sign out", it, context = TAG) }
 
-        if (result.isFailure) {
-            if (hadPaykitState) {
-                runSuspendCatching {
-                    settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
-                }.onFailure {
-                    Logger.warn("Failed to mark Paykit state for reconciliation", it, context = TAG)
+            if (result.isFailure) {
+                if (hadPaykitState) {
+                    runSuspendCatching {
+                        settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
+                    }.onFailure {
+                        Logger.warn("Failed to mark Paykit state for reconciliation", it, context = TAG)
+                    }
                 }
+                return@withLock result
             }
-            return@withContext result
-        }
 
-        clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState)
-        result
+            clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState)
+            result
+        }
     }
 
-    suspend fun wipeLocalState() {
+    suspend fun wipeLocalState() = initializeMutex.withLock {
         runSuspendCatching {
             withContext(ioDispatcher) { pubkyService.forgetSessionAccess() }
         }.onFailure {
@@ -1297,23 +1393,35 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun upsertContactProfileOverride(profile: PubkyProfile) {
         val prefixedKey = profile.publicKey.ensurePubkyPrefix()
+        val ownerPublicKey = requireNotNull(_publicKey.value) { "Pubky identity unavailable" }
         pubkyStore.update { data ->
-            data.copy(contactProfileOverrides = data.contactProfileOverrides + (prefixedKey to profile.toProfileData()))
+            data.copy(
+                ownerPublicKey = ownerPublicKey,
+                contactProfileOverrides = data.contactProfileOverrides + (prefixedKey to profile.toProfileData()),
+            )
         }
         notifyBackupStateChanged()
     }
 
     private suspend fun removeContactProfileOverride(publicKey: String) {
         val prefixedKey = publicKey.ensurePubkyPrefix()
+        val ownerPublicKey = requireNotNull(_publicKey.value) { "Pubky identity unavailable" }
         pubkyStore.update { data ->
-            data.copy(contactProfileOverrides = data.contactProfileOverrides - prefixedKey)
+            data.copy(
+                ownerPublicKey = ownerPublicKey,
+                contactProfileOverrides = data.contactProfileOverrides - prefixedKey,
+            )
         }
         notifyBackupStateChanged()
     }
 
     private suspend fun cacheMetadata(profile: PubkyProfile) {
         pubkyStore.update {
-            it.copy(cachedName = profile.name, cachedImageUri = profile.imageUrl)
+            it.copy(
+                ownerPublicKey = profile.publicKey,
+                cachedName = profile.name,
+                cachedImageUri = profile.imageUrl,
+            )
         }
     }
 
@@ -1371,17 +1479,22 @@ class PubkyRepo @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
-    private suspend fun clearAuthenticatedState() = withContext(ioDispatcher) {
-        evictPubkyImages()
-        runSuspendCatching { pubkyStore.reset() }
+    private suspend fun clearAuthenticatedState(
+        clearCachedProfile: Boolean = true,
+        clearRestorationFailure: Boolean = true,
+    ) = withContext(ioDispatcher) {
+        if (clearCachedProfile) {
+            evictPubkyImages()
+            runSuspendCatching { pubkyStore.reset() }
+        }
         _publicKey.update { null }
         _profile.update { null }
         _contacts.update { emptyList() }
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
-        _sessionRestorationFailed.update { false }
-        _adoptedSourceUnreachable.update { false }
+        if (clearRestorationFailure) _sessionRestorationFailed.update { false }
+        if (clearCachedProfile) _adoptedSourceUnreachable.update { false }
     }
 
     private fun markContactsLoaded() {

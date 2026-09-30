@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Before
@@ -110,9 +111,11 @@ class PubkyRepoTest : BaseUnitTest() {
     private val ringKeychain = ConcurrentHashMap<String, String>()
     private val ringPickEvents = CopyOnWriteArrayList<String>()
     private val failingRingTeardowns = CopyOnWriteArraySet<String>()
+    private var adoptedSource: String? = null
 
     @Before
     fun setUp() = runBlocking {
+        adoptedSource = null
         settingsFlow.value = SettingsData()
         whenever(pubkyStore.data).thenReturn(flowOf(PubkyStoreData()))
         whenever(settingsStore.data).thenReturn(settingsFlow)
@@ -125,6 +128,15 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
+            Unit
+        }
+        whenever { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.thenAnswer { adoptedSource }
+        whenever { keychain.upsertString(eq(Keychain.Key.SHARED_PUBKY_SOURCE.name), any()) }.thenAnswer {
+            adoptedSource = it.getArgument(1)
+            Unit
+        }
+        whenever { keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.thenAnswer {
+            adoptedSource = null
             Unit
         }
         sut = createSut()
@@ -142,8 +154,7 @@ class PubkyRepoTest : BaseUnitTest() {
     )
 
     private fun stubAdoptedRingSource() {
-        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name))
-            .thenReturn(SharedPubkyContract.RING_SOURCE_PREFIX + VALID_SELF_KEY.removePrefix("pubky"))
+        adoptedSource = SharedPubkyContract.RING_SOURCE_PREFIX + VALID_SELF_KEY.removePrefix("pubky")
     }
 
     @Test
@@ -598,6 +609,64 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `createIdentity returns cache failure after profile loading`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        profileSetupPending.value = true
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+        var cacheUpdateCount = 0
+        whenever { pubkyStore.update(any()) }.thenAnswer {
+            cacheUpdateCount += 1
+            if (cacheUpdateCount == 2) throw TestAppError("cache failed")
+            Unit
+        }
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertEquals("cache failed", result.exceptionOrNull()?.message)
+        assertEquals(2, cacheUpdateCount)
+    }
+
+    @Test
+    fun `wipe completes while identity creation waits for contact loading`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        profileSetupPending.value = true
+        val contactLoadStarted = CompletableDeferred<Unit>()
+        val finishContactLoad = CompletableDeferred<Unit>()
+        val profilePublished = CompletableDeferred<Unit>()
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            if (!contactLoadStarted.isCompleted) {
+                contactLoadStarted.complete(Unit)
+                finishContactLoad.await()
+            }
+            emptyList()
+        }
+        whenever(pubkyService.publishPaykitProfile(any())).doSuspendableAnswer {
+            profilePublished.complete(Unit)
+            mock()
+        }
+        val activeContactLoad = async { sut.loadContacts() }
+        contactLoadStarted.await()
+
+        val creation = async {
+            sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+        }
+        profilePublished.await()
+
+        try {
+            sut.wipeLocalState()
+
+            assertFalse(creation.isCompleted)
+            assertNull(sut.publicKey.value)
+        } finally {
+            finishContactLoad.complete(Unit)
+        }
+
+        activeContactLoad.await()
+        assertTrue(creation.await().isSuccess)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
     fun `loadProfile should update profile on success`() = test {
         authenticateForTesting()
 
@@ -954,6 +1023,19 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `profile cache records the authenticated identity owner`() = test {
+        var cached = PubkyStoreData()
+        whenever { pubkyStore.update(any()) }.thenAnswer {
+            cached = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(cached)
+            Unit
+        }
+
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+
+        assertEquals(VALID_SELF_KEY, cached.ownerPublicKey)
+    }
+
+    @Test
     fun `snapshotSessionBackupState should prefer local seed over session secret`() = test {
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session_secret")
@@ -977,7 +1059,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `adoptRingIdentity should reject a mismatching credential without touching the reference`() = test {
+    fun `adoptRingIdentity should reject a mismatching credential without changing the source`() = test {
         val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
         whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("ring_secret"))
         whenever(pubkyService.publicKeyFromSecret("ring_secret"))
@@ -1280,26 +1362,41 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `adoptRingIdentity should discard the session when the saved session cannot be read`() = test {
-        val httpClient = identityHttpClient()
-        sut = createSut(httpClient)
-        stubRingPickKeychain()
+    fun `adoptRingIdentity should abort the pick when the saved session cannot be read`() = test {
+        val keptReference = SharedPubkyContract.RING_SOURCE_PREFIX + VALID_CONTACT_KEY_A.removePrefix("pubky")
+        stubRingPickKeychain(
+            Keychain.Key.PAYKIT_SESSION to "kept_session",
+            Keychain.Key.SHARED_PUBKY_SOURCE to keptReference,
+        )
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name))
             .thenAnswer { throw TestAppError("Locked") }
             .thenAnswer { ringKeychain[Keychain.Key.PAYKIT_SESSION.name] }
         val ringPubky = stubRingCredential()
-        whenever(pubkyService.signIn("ring_secret")).thenAnswer { throw TestAppError("Relay unavailable") }
-        whenever(pubkyService.hasIdentityRecord(ringPubky)).thenReturn(false)
-        whenever(pubkyService.signUp("ring_secret", "test-homeserver", "test-code")).thenReturn(Unit)
+        stubRingSignInSavesSession()
 
         val result = sut.adoptRingIdentity(ringPubky)
-        httpClient.close()
 
-        assertEquals("Relay unavailable", result.exceptionOrNull()?.message)
-        assertEquals(listOf("save reference", "sign out", "delete reference"), ringPickEvents)
-        assertRingPickSignedOut()
-        verifyBlocking(pubkyService, never()) { hasIdentityRecord(any()) }
-        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        assertEquals("Locked", result.exceptionOrNull()?.message)
+        assertRingPickAborted(keptReference)
+    }
+
+    @Test
+    fun `adoptRingIdentity should abort the pick when the saved reference cannot be read`() = test {
+        val keptReference = SharedPubkyContract.RING_SOURCE_PREFIX + VALID_CONTACT_KEY_A.removePrefix("pubky")
+        stubRingPickKeychain(
+            Keychain.Key.PAYKIT_SESSION to "kept_session",
+            Keychain.Key.SHARED_PUBKY_SOURCE to keptReference,
+        )
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name))
+            .thenAnswer { throw TestAppError("Locked") }
+            .thenAnswer { ringKeychain[Keychain.Key.SHARED_PUBKY_SOURCE.name] }
+        val ringPubky = stubRingCredential()
+        stubRingSignInSavesSession()
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertEquals("Locked", result.exceptionOrNull()?.message)
+        assertRingPickAborted(keptReference)
     }
 
     @Test
@@ -1476,6 +1573,174 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adoptRingIdentity clears the previous identity while the new profile is unavailable`() = test {
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A, profileName = "Previous")
+        sut.wipeLocalState()
+        sut.addContact(VALID_CONTACT_KEY_B, existingProfile = PubkyProfile.placeholder(VALID_CONTACT_KEY_B))
+        assertEquals(1, sut.contacts.value.size)
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+        whenever(pubkyService.contactRecords()).thenAnswer { throw TestAppError("Offline") }
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertEquals(false, result.getOrNull())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertNull(sut.profile.value)
+        assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
+    fun `adoptRingIdentity revokes a session installed by a failed attempt`() = test {
+        val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
+        var session: String? = null
+        var source: String? = null
+        whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("ring_secret"))
+        whenever(pubkyService.publicKeyFromSecret("ring_secret")).thenReturn(ringPubky)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenAnswer { source }
+        whenever(keychain.upsertString(eq(Keychain.Key.SHARED_PUBKY_SOURCE.name), any())).thenAnswer {
+            source = it.getArgument(1)
+            Unit
+        }
+        whenever(keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenAnswer {
+            source = null
+            Unit
+        }
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer {
+            session = "installed_session"
+            throw TestAppError("Cache reset failed")
+        }
+        whenever(pubkyService.hasIdentityRecord(ringPubky)).thenReturn(true)
+        whenever(pubkyService.signOut()).thenAnswer {
+            session = null
+            Unit
+        }
+
+        val result = sut.adoptRingIdentity(ringPubky)
+
+        assertTrue(result.isFailure)
+        assertNull(session)
+        assertNull(source)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService) { signOut() }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+    }
+
+    @Test
+    fun `wipe waits for the adopted identity profile lookup and then clears the identity`() = test {
+        sut.awaitInitialization()
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        val finishProfileLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            finishProfileLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+        clearInvocations(pubkyStore)
+        val adoption = async { sut.adoptRingIdentity(ringPubky) }
+        profileLoadStarted.await()
+
+        val wipe = async { sut.wipeLocalState() }
+        runCurrent()
+        val wipedDuringLookup = wipe.isCompleted
+        finishProfileLoad.complete(Unit)
+        wipe.await()
+
+        assertFalse(wipedDuringLookup)
+        assertEquals(true, adoption.await().getOrNull())
+        assertNull(sut.publicKey.value)
+        assertNull(sut.profile.value)
+        assertTrue(sut.contacts.value.isEmpty())
+        verify(pubkyStore).reset()
+    }
+
+    @Test
+    fun `canceling adopted identity profile loading keeps the committed identity`() = test {
+        sut.awaitInitialization()
+        val ringPubky = stubRingCredential()
+        val reference = SharedPubkyContract.RING_SOURCE_PREFIX + ringPubky
+        var source: String? = null
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenAnswer { source }
+        whenever(keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)).thenAnswer {
+            source = reference
+            Unit
+        }
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        val finishProfileLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            finishProfileLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+        val adoption = async { sut.adoptRingIdentity(ringPubky) }
+        profileLoadStarted.await()
+
+        adoption.cancel()
+        finishProfileLoad.complete(Unit)
+        adoption.join()
+
+        assertTrue(adoption.isCancelled)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals(reference, source)
+        assertFalse(profileSetupPending.value)
+        verifyBlocking(pubkyService, never()) { signOut() }
+    }
+
+    @Test
+    fun `adopted identity loads after previous identity loads finish`() = test {
+        val oldPublicKey = VALID_SELF_KEY
+        val newPublicKey = VALID_CONTACT_KEY_A
+        authenticateForTesting(publicKey = oldPublicKey)
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        val contactsLoadStarted = CompletableDeferred<Unit>()
+        val finishOldProfileLoad = CompletableDeferred<Unit>()
+        val finishOldContactsLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(oldPublicKey, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            finishOldProfileLoad.await()
+            createResolution(oldPublicKey, pubkyProfile = createPubkyProfile(name = "Old Profile"))
+        }
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            if (sut.publicKey.value == oldPublicKey) {
+                contactsLoadStarted.complete(Unit)
+                finishOldContactsLoad.await()
+                emptyList()
+            } else {
+                listOf(createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("New Contact")))
+            }
+        }
+        val oldProfileLoad = async { sut.loadProfile() }
+        val oldContactsLoad = async { sut.loadContacts() }
+        profileLoadStarted.await()
+        contactsLoadStarted.await()
+
+        sut.wipeLocalState()
+        val ringPubky = newPublicKey.removePrefix("pubky")
+        whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("new_ring_secret"))
+        whenever(pubkyService.publicKeyFromSecret("new_ring_secret")).thenReturn(ringPubky)
+        whenever(pubkyService.signIn("new_ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(newPublicKey, true))
+            .thenReturn(createResolution(newPublicKey, pubkyProfile = createPubkyProfile(name = "New Profile")))
+        val adoption = async { sut.adoptRingIdentity(ringPubky) }
+
+        assertFalse(adoption.isCompleted)
+        finishOldProfileLoad.complete(Unit)
+        finishOldContactsLoad.complete(Unit)
+        oldProfileLoad.await()
+        oldContactsLoad.await()
+        assertTrue(adoption.await().isSuccess)
+
+        assertEquals(newPublicKey, sut.publicKey.value)
+        assertEquals("New Profile", sut.profile.value?.name)
+        assertEquals(listOf("New Contact"), sut.contacts.value.map { it.name })
+    }
+
+    @Test
     fun `initialize should clear an adopted identity that is gone from pubky ring`() = test {
         stubAdoptedRingSource()
         whenever(sharedPubkyClient.listRingIdentities())
@@ -1555,6 +1820,102 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertTrue(sut.adoptedSourceLost.value)
         verifyBlocking(pubkyService) { clearSessionAccess() }
+    }
+
+    @Test
+    fun `stale adopted source check does not clear a newly adopted identity`() = test {
+        sut.awaitInitialization()
+        val oldReference = SharedPubkyContract.RING_SOURCE_PREFIX + VALID_CONTACT_KEY_B.removePrefix("pubky")
+        var source: String? = oldReference
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenAnswer { source }
+        whenever(keychain.upsertString(eq(Keychain.Key.SHARED_PUBKY_SOURCE.name), any())).thenAnswer {
+            source = it.getArgument(1)
+            Unit
+        }
+        whenever(keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenAnswer {
+            source = null
+            Unit
+        }
+        val listingStarted = CompletableDeferred<Unit>()
+        val finishListing = CompletableDeferred<Unit>()
+        whenever(sharedPubkyClient.listRingIdentities()).doSuspendableAnswer {
+            listingStarted.complete(Unit)
+            finishListing.await()
+            Result.success(persistentListOf())
+        }
+        val sourceCheck = async { sut.checkAdoptedSource() }
+        listingStarted.await()
+
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile()))
+        val adoption = sut.adoptRingIdentity(ringPubky)
+        finishListing.complete(Unit)
+        sourceCheck.await()
+
+        assertTrue(adoption.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertFalse(sut.adoptedSourceLost.value)
+        verifyBlocking(pubkyService, never()) { clearSessionAccess() }
+    }
+
+    @Test
+    fun `stale ring listing failure does not mark a newly picked identity unreachable`() = test {
+        sut.awaitInitialization()
+        adoptedSource = SharedPubkyContract.RING_SOURCE_PREFIX + VALID_CONTACT_KEY_B.removePrefix("pubky")
+        val listingStarted = CompletableDeferred<Unit>()
+        val finishListing = CompletableDeferred<Unit>()
+        whenever(sharedPubkyClient.listRingIdentities()).doSuspendableAnswer {
+            listingStarted.complete(Unit)
+            finishListing.await()
+            Result.failure<Nothing>(TestAppError("Unavailable"))
+        }
+        val sourceCheck = async { sut.checkAdoptedSource() }
+        listingStarted.await()
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+
+        val adoption = sut.adoptRingIdentity(ringPubky)
+        finishListing.complete(Unit)
+        sourceCheck.await()
+
+        assertTrue(adoption.isSuccess)
+        assertEquals(RING_REFERENCE, adoptedSource)
+        assertFalse(sut.adoptedSourceUnreachable.value)
+    }
+
+    @Test
+    fun `checkAdoptedSource should finish clearing a gone identity after caller cancellation`() = test {
+        val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
+        stubAdoptedRingSource()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).thenReturn(ringPubky)
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.success(persistentListOf(ringPubky)))
+        sut.initialize()
+        val publicKeyBeforeCheck = sut.publicKey.value
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.success(persistentListOf()))
+        val clearStarted = CompletableDeferred<Unit>()
+        val finishClear = CompletableDeferred<Unit>()
+        whenever(pubkyService.clearSessionAccess()).doSuspendableAnswer {
+            withContext(NonCancellable) {
+                clearStarted.complete(Unit)
+                finishClear.await()
+            }
+            currentCoroutineContext().ensureActive()
+        }
+
+        val sourceCheck = async { sut.checkAdoptedSource() }
+        clearStarted.await()
+        sourceCheck.cancel()
+        finishClear.complete(Unit)
+        sourceCheck.join()
+
+        assertEquals(VALID_SELF_KEY, publicKeyBeforeCheck)
+        assertTrue(sourceCheck.isCancelled)
+        assertNull(sut.publicKey.value)
+        assertTrue(sut.adoptedSourceLost.value)
     }
 
     @Test
@@ -1787,6 +2148,316 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed restoration preserves profile data and credentials for retry`() = test {
+        val session = "saved_session"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        var canRestore = false
+        whenever(pubkyService.importSession(session)).thenAnswer {
+            if (canRestore) VALID_SELF_KEY else throw TestAppError("Clock skew")
+        }
+        whenever(pubkyService.signIn("local_secret")).thenAnswer { throw TestAppError("Clock skew") }
+        clearInvocations(pubkyStore, keychain)
+
+        sut.initialize()
+
+        assertTrue(sut.sessionRestorationFailed.value)
+        assertFalse(sut.isAuthenticated.value)
+        verify(pubkyStore, never()).reset()
+        verifyBlocking(keychain, never()) { delete(any()) }
+
+        sut.restoreSessionIfNeeded()
+        assertTrue(sut.sessionRestorationFailed.value)
+
+        canRestore = true
+        sut.restoreSessionIfNeeded()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        assertFalse(sut.sessionRestorationFailed.value)
+    }
+
+    @Test
+    fun `restoration retry recovers service startup failure and skips an active session`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        var isOnline = false
+        whenever(pubkyService.initialize()).thenAnswer {
+            if (!isOnline) throw TestAppError("Offline")
+            Unit
+        }
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        val repo = createSut()
+        repo.awaitInitialization()
+        assertNull(repo.publicKey.value)
+
+        isOnline = true
+        repo.restoreSessionIfNeeded()
+        assertEquals(VALID_SELF_KEY, repo.publicKey.value)
+        clearInvocations(pubkyService)
+
+        repo.restoreSessionIfNeeded()
+        verify(pubkyService, never()).importSession(any())
+        verify(pubkyService, never()).signIn(any())
+    }
+
+    @Test
+    fun `unreadable credentials preserve cached profile and remain retryable`() = test {
+        var readable = false
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer {
+            if (!readable) throw TestAppError("Keychain unavailable")
+            "saved_session"
+        }
+        clearInvocations(pubkyStore)
+
+        sut.initialize()
+
+        assertTrue(sut.sessionRestorationFailed.value)
+        verify(pubkyStore, never()).reset()
+        readable = true
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+
+        sut.restoreSessionIfNeeded()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `restoration retry publishes a readable empty identity check`() = test {
+        var readable = false
+        whenever(keychain.loadString(any())).thenAnswer {
+            if (!readable) throw TestAppError("Keychain unavailable")
+            null
+        }
+        sut.initialize()
+        val previousVersion = sut.identityRefreshVersion.value
+
+        readable = true
+        sut.restoreSessionIfNeeded()
+
+        assertEquals(previousVersion + 1, sut.identityRefreshVersion.value)
+        assertFalse(sut.hasIdentity())
+    }
+
+    @Test
+    fun `failed restoration retry keeps pubky ring unreachable until a check reaches it`() = test {
+        val session = "saved_session"
+        val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
+        stubAdoptedRingSource()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        var canRestore = false
+        whenever(pubkyService.importSession(session)).thenAnswer {
+            if (canRestore) ringPubky else throw TestAppError("Offline")
+        }
+        whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.failure(TestAppError("Unavailable")))
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.failure(TestAppError("Unavailable")))
+        sut.initialize()
+        assertTrue(sut.adoptedSourceUnreachable.value)
+
+        sut.restoreSessionIfNeeded()
+        val unreachableAfterFailedRetry = sut.adoptedSourceUnreachable.value
+        canRestore = true
+        sut.restoreSessionIfNeeded()
+        val unreachableAfterRestore = sut.adoptedSourceUnreachable.value
+        whenever(sharedPubkyClient.listRingIdentities()).thenReturn(Result.success(persistentListOf(ringPubky)))
+        sut.checkAdoptedSource()
+
+        assertTrue(unreachableAfterFailedRetry)
+        assertTrue(unreachableAfterRestore)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertFalse(sut.adoptedSourceUnreachable.value)
+    }
+
+    @Test
+    fun `adoption excludes a queued restoration retry`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        val ringPubky = stubRingCredential()
+        val signInStarted = CompletableDeferred<Unit>()
+        val finishSignIn = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("ring_secret")).doSuspendableAnswer {
+            signInStarted.complete(Unit)
+            finishSignIn.await()
+        }
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile()))
+
+        val adoption = async { sut.adoptRingIdentity(ringPubky) }
+        signInStarted.await()
+        val retry = async { sut.restoreSessionIfNeeded() }
+        assertFalse(retry.isCompleted)
+
+        finishSignIn.complete(Unit)
+
+        assertTrue(adoption.await().isSuccess)
+        retry.await()
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
+    fun `restoration retry does not publish over a ring pick started while it runs`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        val restoreStarted = CompletableDeferred<Unit>()
+        val finishRestore = CompletableDeferred<Unit>()
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer {
+            restoreStarted.complete(Unit)
+            finishRestore.await()
+            VALID_CONTACT_KEY_A
+        }
+        val ringPubky = stubRingCredential()
+        val finishSignIn = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("ring_secret")).doSuspendableAnswer { finishSignIn.await() }
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+
+        val retry = async { sut.restoreSessionIfNeeded() }
+        restoreStarted.await()
+        val adoption = async { sut.adoptRingIdentity(ringPubky) }
+        runCurrent()
+        val adoptedDuringRestore = adoption.isCompleted
+        finishRestore.complete(Unit)
+        retry.await()
+        val publicKeyAfterRetry = sut.publicKey.value
+        finishSignIn.complete(Unit)
+
+        assertFalse(adoptedDuringRestore)
+        assertNull(publicKeyAfterRetry)
+        assertEquals(false, adoption.await().getOrNull())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals(RING_REFERENCE, adoptedSource)
+    }
+
+    @Test
+    fun `restoration retry skips while a ring pick waits for the lock`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        val ringPubky = stubRingCredential()
+        val firstSignInStarted = CompletableDeferred<Unit>()
+        val failFirstSignIn = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("ring_secret")).doSuspendableAnswer {
+            if (firstSignInStarted.isCompleted) return@doSuspendableAnswer
+            firstSignInStarted.complete(Unit)
+            failFirstSignIn.await()
+            throw TestAppError("Relay unavailable")
+        }
+        whenever(pubkyService.hasIdentityRecord(ringPubky)).thenReturn(true)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+
+        val failedPick = async { sut.adoptRingIdentity(ringPubky) }
+        firstSignInStarted.await()
+        val retry = async { sut.restoreSessionIfNeeded() }
+        val retriedPick = async { sut.adoptRingIdentity(ringPubky) }
+        failFirstSignIn.complete(Unit)
+        retry.await()
+
+        assertEquals("Relay unavailable", failedPick.await().exceptionOrNull()?.message)
+        assertTrue(retriedPick.await().isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
+    fun `cold start publishes a restored identity over a ring pick queued behind it`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        val restoreStarted = CompletableDeferred<Unit>()
+        val finishRestore = CompletableDeferred<Unit>()
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer {
+            ServiceQueue.CORE.background {
+                restoreStarted.complete(Unit)
+                finishRestore.await()
+                VALID_CONTACT_KEY_A
+            }
+        }
+        val ringPubky = stubRingCredential()
+
+        val initialization = async { sut.initialize() }
+        val restoreStartedInTime = restoreStarted.awaitStarted()
+        val pick = async { sut.adoptRingIdentity(ringPubky) }
+        runCurrent()
+        val pickQueued = !pick.isCompleted && !initialization.isCompleted
+        verifyBlocking(sharedPubkyClient, never()) { ringCredential(any()) }
+        finishRestore.complete(Unit)
+        initialization.await()
+
+        assertTrue(restoreStartedInTime, "Timed out waiting for the restoration to start")
+        assertTrue(pickQueued, "Expected the ring pick to wait for the lock held by initialize")
+        assertEquals(PubkyAlreadySignedInError, pick.await().exceptionOrNull())
+        assertEquals(VALID_CONTACT_KEY_A, sut.publicKey.value)
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(keychain, never()) { upsertString(eq(Keychain.Key.SHARED_PUBKY_SOURCE.name), any()) }
+        assertNull(adoptedSource)
+    }
+
+    @Test
+    fun `wipe waits for restoration then prevents a queued retry from resurrecting identity`() = test {
+        val credentials = mutableMapOf(Keychain.Key.PAYKIT_SESSION.name to "saved_session")
+        whenever(keychain.loadString(any())).thenAnswer { credentials[it.getArgument<String>(0)] }
+        whenever(keychain.delete(any())).thenAnswer {
+            credentials.remove(it.getArgument<String>(0))
+            Unit
+        }
+        val restoreStarted = CompletableDeferred<Unit>()
+        val finishRestore = CompletableDeferred<Unit>()
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer {
+            restoreStarted.complete(Unit)
+            finishRestore.await()
+            VALID_SELF_KEY
+        }
+        val restore = async { sut.restoreSessionIfNeeded() }
+        restoreStarted.await()
+        val wipe = async { sut.wipeLocalState() }
+        assertFalse(wipe.isCompleted)
+        finishRestore.complete(Unit)
+        restore.await()
+        wipe.await()
+        clearInvocations(pubkyService)
+
+        sut.restoreSessionIfNeeded()
+
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.hasIdentity())
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
+    fun `wipe completes while restoration profile loading remains in flight`() = test {
+        sut.awaitInitialization()
+        val credentials = mutableMapOf(Keychain.Key.PAYKIT_SESSION.name to "saved_session")
+        whenever(keychain.loadString(any())).thenAnswer { credentials[it.getArgument<String>(0)] }
+        whenever(keychain.delete(any())).thenAnswer {
+            credentials.remove(it.getArgument<String>(0))
+            Unit
+        }
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        val finishProfileLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            finishProfileLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+        clearInvocations(pubkyStore)
+        val restore = async { sut.restoreSessionIfNeeded() }
+        profileLoadStarted.await()
+
+        try {
+            val wipe = async { sut.wipeLocalState() }
+            wipe.await()
+
+            assertFalse(restore.isCompleted)
+            assertNull(sut.publicKey.value)
+        } finally {
+            finishProfileLoad.complete(Unit)
+        }
+        restore.await()
+
+        assertNull(sut.profile.value)
+        assertTrue(sut.contacts.value.isEmpty())
+        verify(pubkyStore).reset()
+    }
+
+    @Test
     fun `refreshSessionIfPossible should refresh session when local secret key exists`() = test {
         val secretKey = "local_secret"
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
@@ -1997,75 +2668,6 @@ class PubkyRepoTest : BaseUnitTest() {
                 listOf("bitkit/wallet", "bitkit/server"),
             )
         }
-    }
-
-    @Test
-    fun `loadProfile should ignore stale result when authenticated key changes`() = test {
-        val oldSecret = "old_secret"
-        val oldPublicKey = "old_public_key"
-        val newSecret = "new_secret"
-        val newPublicKey = "new_public_key"
-        authenticateForTesting(
-            publicKey = oldPublicKey,
-            secret = oldSecret,
-            profileName = "Initial Old",
-        )
-        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(newSecret)
-        whenever(pubkyService.importSession(newSecret)).thenReturn(newPublicKey)
-        whenever(pubkyService.contactRecords()).thenReturn(emptyList())
-        val staleProfile = createPubkyProfile(name = "Stale Old")
-        whenever(pubkyService.resolveContactProfile(oldPublicKey.ensurePubkyPrefixForTest(), true)).thenAnswer {
-            runBlocking { sut.initialize() }
-            createResolution(oldPublicKey.ensurePubkyPrefixForTest(), pubkyProfile = staleProfile)
-        }
-
-        sut.loadProfile()
-
-        assertEquals(newPublicKey.ensurePubkyPrefixForTest(), sut.publicKey.value)
-        assertEquals("Initial Old", sut.profile.value?.name)
-    }
-
-    @Test
-    fun `loadContacts should ignore stale result when authenticated key changes`() = test {
-        val oldSecret = "old_secret"
-        val oldPublicKey = "old_public_key"
-        val newSecret = "new_secret"
-        val newPublicKey = "new_public_key"
-        val existingContact = PubkyProfile(
-            publicKey = VALID_CONTACT_KEY_B,
-            name = "Existing Contact",
-            bio = "",
-            imageUrl = null,
-            links = emptyList(),
-            tags = emptyList(),
-            status = null,
-        )
-        val staleContactKey = "pubkystale-contact"
-
-        authenticateForTesting(
-            publicKey = oldPublicKey,
-            secret = oldSecret,
-            profileName = "Initial Old",
-        )
-        sut.addContact(existingContact.publicKey, existingProfile = existingContact)
-
-        val newProfile = createPubkyProfile(name = "New User")
-        whenever(pubkyService.resolveContactProfile(newPublicKey.ensurePubkyPrefixForTest(), true))
-            .thenReturn(createResolution(newPublicKey.ensurePubkyPrefixForTest(), pubkyProfile = newProfile))
-        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(newSecret)
-        whenever(pubkyService.importSession(newSecret)).thenReturn(newPublicKey)
-        whenever(pubkyService.contactRecords()).thenAnswer {
-            runBlocking { sut.initialize() }
-            listOf(createContactRecord(staleContactKey, profile = createPaykitProfile("Stale Contact")))
-        }
-
-        sut.loadContacts()
-
-        val contacts = sut.contacts.value
-        assertEquals(newPublicKey.ensurePubkyPrefixForTest(), sut.publicKey.value)
-        assertEquals(1, contacts.size)
-        assertEquals(existingContact.publicKey, contacts.first().publicKey)
-        assertEquals(existingContact.name, contacts.first().name)
     }
 
     @Test
@@ -2417,6 +3019,21 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(sut.publicKey.value)
         assertTrue(ringKeychain.isEmpty(), "Expected no saved session or reference, found '$ringKeychain'")
         assertFalse(profileSetupPending.value)
+    }
+
+    private fun assertRingPickAborted(keptReference: String) {
+        assertNull(sut.publicKey.value)
+        assertEquals("kept_session", ringKeychain[Keychain.Key.PAYKIT_SESSION.name])
+        assertEquals(keptReference, ringKeychain[Keychain.Key.SHARED_PUBKY_SOURCE.name])
+        assertTrue(ringPickEvents.isEmpty())
+        verifyBlocking(keychain, never()) { upsertString(eq(Keychain.Key.SHARED_PUBKY_SOURCE.name), any()) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.SHARED_PUBKY_SOURCE.name) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { hasIdentityRecord(any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verifyBlocking(pubkyService, never()) { clearSessionAccess() }
     }
 
     private suspend fun stubRingCredential(): String {

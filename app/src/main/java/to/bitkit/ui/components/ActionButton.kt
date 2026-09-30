@@ -23,11 +23,12 @@ fun ActionButton(
     @DrawableRes iconRes: Int? = null,
     imageVector: ImageVector? = null,
     enabled: Boolean = true,
+    isLoading: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     IconButton(
         onClick = rememberDebouncedClick(onClick = onClick),
-        enabled = enabled,
+        enabled = enabled && !isLoading,
         modifier = modifier
             .size(48.dp)
             .clip(CircleShape)
@@ -39,6 +40,7 @@ fun ActionButton(
     ) {
         val tint = if (enabled) Colors.White else Colors.White32
         when {
+            isLoading -> GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
             iconRes != null -> Icon(
                 painter = painterResource(iconRes),
                 contentDescription = null,

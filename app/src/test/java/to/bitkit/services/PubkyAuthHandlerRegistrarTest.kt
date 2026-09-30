@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
@@ -43,15 +44,20 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     private val settingsStore: SettingsStore = mock()
     private val isPaykitEnabled = MutableStateFlow(false)
     private val publicKey = MutableStateFlow<String?>(null)
+    private val backupStateVersion = MutableStateFlow(0L)
+    private val identityRefreshVersion = MutableStateFlow(0L)
     private val adoptedSourceUnreachable = MutableStateFlow(false)
 
     @Before
-    fun setUp() {
+    fun setUp() = runBlocking<Unit> {
         whenever(context.packageName).thenReturn(PACKAGE_NAME)
         whenever(context.packageManager).thenReturn(packageManager)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
+        whenever(pubkyRepo.backupStateVersion).thenReturn(backupStateVersion)
+        whenever(pubkyRepo.identityRefreshVersion).thenReturn(identityRefreshVersion)
         whenever(pubkyRepo.adoptedSourceUnreachable).thenReturn(adoptedSourceUnreachable)
+        whenever(pubkyRepo.hasIdentity()).thenAnswer { publicKey.value != null }
     }
 
     @Test
@@ -178,6 +184,42 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         clearInvocations(packageManager)
 
         publicKey.value = null
+        runCurrent()
+
+        verifyComponentStates(authEnabled = false, signupEnabled = true)
+    }
+
+    @Test
+    fun `saved identity suppresses signup during restoration failure until explicitly removed`() = test {
+        isPaykitEnabled.value = true
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        createSut().start(backgroundScope)
+        runCurrent()
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
+        clearInvocations(packageManager)
+
+        whenever(pubkyRepo.hasIdentity()).thenReturn(false)
+        backupStateVersion.value += 1
+        runCurrent()
+
+        verifyComponentStates(authEnabled = false, signupEnabled = true)
+    }
+
+    @Test
+    fun `signup becomes available when unreadable credentials recover empty`() = test {
+        isPaykitEnabled.value = true
+        var readable = false
+        whenever(pubkyRepo.hasIdentity()).thenAnswer {
+            check(readable) { "Keychain unavailable" }
+            false
+        }
+        createSut().start(backgroundScope)
+        runCurrent()
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
+        clearInvocations(packageManager)
+
+        readable = true
+        identityRefreshVersion.value += 1
         runCurrent()
 
         verifyComponentStates(authEnabled = false, signupEnabled = true)

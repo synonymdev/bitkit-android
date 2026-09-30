@@ -12,8 +12,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
+import to.bitkit.utils.AppError
+import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.TransferEffect
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -23,6 +26,39 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class ContentViewTest {
+    @Test
+    fun `wallet initialization waits for successful startup after each failure`() {
+        val states = listOf(
+            NodeLifecycleState.Initializing,
+            NodeLifecycleState.ErrorStarting(AppError("offline")),
+            NodeLifecycleState.Initializing,
+            NodeLifecycleState.Starting,
+            NodeLifecycleState.Running,
+            NodeLifecycleState.ErrorStarting(AppError("offline")),
+            NodeLifecycleState.Initializing,
+            NodeLifecycleState.Running,
+        )
+        val completion = states.map {
+            shouldFinishWalletInitialization(it, RestoreState.Retry(1), false)
+        }
+
+        assertEquals(listOf(false, false, false, false, true, false, false, true), completion)
+    }
+
+    @Test
+    fun `running wallet waits for backup and metadata restoration`() {
+        val pendingRestores = listOf(
+            RestoreState.InProgress.Wallet,
+            RestoreState.InProgress.Metadata,
+            RestoreState.BackupFailed(1),
+        )
+        for (restore in pendingRestores) {
+            assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, restore, false))
+        }
+        assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed, true))
+        assertTrue(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed, false))
+    }
+
     @Test
     fun `pending profile opens once and rearms after completion or cold start`() {
         val navigation = PubkyProfileSetupNavigation()

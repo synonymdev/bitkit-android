@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.async.appScope
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.utils.Logger
@@ -23,8 +24,9 @@ import javax.inject.Singleton
 /**
  * Advertises Pubky signup and authorization handlers when their required identity state is available.
  *
- * The authorization handler is re-checked when the identity, the Paykit flag or the reachability of an adopted
- * Pubky Ring pubky changes, so it follows Pubky Ring going away and coming back without a restart.
+ * Both handlers are re-checked when the identity, the Paykit flag, the saved identity state or the reachability of
+ * an adopted Pubky Ring pubky changes, so the authorization handler follows Pubky Ring going away and coming back
+ * without a restart.
  */
 @Singleton
 internal class PubkyAuthHandlerRegistrar @Inject constructor(
@@ -56,25 +58,22 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
             combine(
                 settingsStore.isPaykitEnabled,
                 pubkyRepo.publicKey,
+                pubkyRepo.backupStateVersion,
+                pubkyRepo.identityRefreshVersion,
                 pubkyRepo.adoptedSourceUnreachable,
-            ) { localFlagEnabled, publicKey, adoptedSourceUnreachable ->
-                Triple(localFlagEnabled, publicKey, adoptedSourceUnreachable)
+            ) { localFlagEnabled, publicKey, _, _, _ ->
+                val hasIdentity = runSuspendCatching { pubkyRepo.hasIdentity() }
+                    .onFailure { Logger.warn("Failed to read saved Pubky identity", it, context = TAG) }
+                    .getOrDefault(true)
+                val isPaykitUiEnabled = PaykitFeatureFlags.isUiEnabled(localFlagEnabled)
+                val hasSecretKey = isPaykitUiEnabled && publicKey != null && pubkyRepo.hasSecretKey()
+                val authEnabled = canHandlePubkyAuth(isPaykitUiEnabled, hasIdentity, hasSecretKey)
+                authEnabled to (isPaykitUiEnabled && !hasIdentity)
             }
                 .distinctUntilChanged()
-                .collectLatest { (localFlagEnabled, publicKey) ->
-                    val isPaykitUiEnabled = PaykitFeatureFlags.isUiEnabled(localFlagEnabled)
-                    val hasIdentity = publicKey != null
-                    val hasSecretKey = isPaykitUiEnabled && hasIdentity && pubkyRepo.hasSecretKey()
-
-                    setAliasEnabled(
-                        aliasComponent,
-                        canHandlePubkyAuth(
-                            isPaykitUiEnabled = isPaykitUiEnabled,
-                            hasIdentity = hasIdentity,
-                            hasSecretKey = hasSecretKey,
-                        ),
-                    )
-                    setAliasEnabled(signupAliasComponent, isPaykitUiEnabled && !hasIdentity)
+                .collectLatest { (authEnabled, signupEnabled) ->
+                    setAliasEnabled(aliasComponent, authEnabled)
+                    setAliasEnabled(signupAliasComponent, signupEnabled)
                 }
         }
     }
