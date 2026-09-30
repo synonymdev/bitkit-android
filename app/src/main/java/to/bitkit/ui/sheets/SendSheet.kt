@@ -348,6 +348,11 @@ fun SendSheet(
                                 walletId, uiState.address, uiState.incomingPaymentRequestId, paymentIdentity,
                             )
                         },
+                        authorizeContactPayment = { hasAttemptedBroadcast ->
+                            appViewModel.authorizeHardwareContactPayment(
+                                hasAttemptedBroadcast, uiState.incomingPaymentRequestId, paymentIdentity,
+                            )
+                        },
                         onBack = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle

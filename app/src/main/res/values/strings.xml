@@ -118,6 +118,7 @@
     <string name="contacts__add_scan_qr">Scan QR</string>
     <string name="contacts__add_sheet_title">Add Contact</string>
     <string name="contacts__contacts_header">CONTACTS</string>
+    <string name="contacts__delete_active_subscription">End active subscriptions before deleting this contact.</string>
     <string name="contacts__delete_confirm_text">Are you sure you want to delete %1$s from your contacts?</string>
     <string name="contacts__delete_confirm_title">Delete %1$s?</string>
     <string name="contacts__delete_contact">Delete Contact</string>

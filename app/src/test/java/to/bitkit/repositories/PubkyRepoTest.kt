@@ -66,6 +66,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
@@ -1925,7 +1926,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(VALID_CONTACT_KEY_A, sut.contacts.value.single().publicKey)
         verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_A, profile.name, emptyList())
+            saveContact(VALID_CONTACT_KEY_A, profile.name, emptyList(), restorePrivateConnection = true)
         }
     }
 
@@ -1984,6 +1985,54 @@ class PubkyRepoTest : BaseUnitTest() {
                 listOf("bitkit/wallet", "bitkit/server"),
             )
         }
+    }
+
+    @Test
+    fun `deletion during initial load preserves other saved contacts`() = test {
+        authenticateForTesting()
+        val snapshotReady = CompletableDeferred<Unit>()
+        val resumeLoad = CompletableDeferred<Unit>()
+        val survivor = createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Survivor"))
+        var firstRead = true
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            if (!firstRead) return@doSuspendableAnswer listOf(survivor)
+            firstRead = false
+            snapshotReady.complete(Unit)
+            resumeLoad.await()
+            listOf(survivor, createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("Deleted")))
+        }
+        val load = launch { sut.loadContacts() }
+        snapshotReady.await()
+        assertTrue(sut.removeContact(VALID_CONTACT_KEY_B).isSuccess)
+        resumeLoad.complete(Unit)
+        load.join()
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        assertFalse(sut.isLoadingContacts.value)
+    }
+
+    @Test
+    fun `removeContact normalizes only wrapped active subscription errors`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Contact"))),
+        )
+        sut.loadContacts()
+        val activeSubscriptionError = AppError(PubkyContactError.ActiveSubscription)
+        var serviceError = activeSubscriptionError
+        whenever(pubkyService.removeContact(VALID_CONTACT_KEY_A)).thenAnswer { throw serviceError }
+
+        val activeResult = sut.removeContact(VALID_CONTACT_KEY_A)
+
+        assertSame(PubkyContactError.ActiveSubscription, activeResult.exceptionOrNull())
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+
+        val unrelatedError = AppError(TestAppError("remove failed"))
+        serviceError = unrelatedError
+
+        val unrelatedResult = sut.removeContact(VALID_CONTACT_KEY_A)
+
+        assertSame(unrelatedError, unrelatedResult.exceptionOrNull())
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
     }
 
     @Test

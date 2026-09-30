@@ -119,7 +119,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `contact preparation runs after signing and only once across broadcast retry`() = test {
+    fun `contact payment is prepared once and authorized before each broadcast attempt`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
@@ -133,21 +133,74 @@ class HwSendViewModelTest : BaseUnitTest() {
             preparationCalls += 1
             true
         }
+        val authorizationAttempts = mutableListOf<Boolean>()
+        val authorizeContactPayment: suspend (Boolean) -> Boolean = {
+            authorizationAttempts += it
+            true
+        }
 
-        sut.signAndBroadcast(request(), prepareContactPayment)
+        sut.signAndBroadcast(request(), prepareContactPayment, authorizeContactPayment)
         advanceUntilIdle()
 
         assertEquals(1, preparationCalls)
+        assertEquals(listOf(false), authorizationAttempts)
         assertTrue(sut.uiState.value.hasPendingBroadcast)
 
-        sut.signAndBroadcast(request(), prepareContactPayment)
+        sut.signAndBroadcast(request(), prepareContactPayment, authorizeContactPayment)
         advanceUntilIdle()
 
         assertEquals(1, preparationCalls)
+        assertEquals(listOf(false, true), authorizationAttempts)
         verify(hwWalletRepo).signFunding(WALLET_ID, fixture.funding)
         verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
         sut.completeBroadcast()
         assertFalse(sut.uiState.value.hasPendingBroadcast)
+    }
+
+    @Test
+    fun `denied retry keeps the signed transaction after a failed broadcast`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
+        var isAuthorized = true
+        var preparationCalls = 0
+        val authorizationAttempts = mutableListOf<Boolean>()
+
+        sut.signAndBroadcast(
+            request = request(),
+            prepareContactPayment = {
+                preparationCalls += 1
+                true
+            },
+            authorizeContactPayment = {
+                authorizationAttempts += it
+                isAuthorized
+            },
+        )
+        advanceUntilIdle()
+
+        isAuthorized = false
+        sut.signAndBroadcast(
+            request = request(),
+            prepareContactPayment = {
+                preparationCalls += 1
+                true
+            },
+            authorizeContactPayment = {
+                authorizationAttempts += it
+                isAuthorized
+            },
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, preparationCalls)
+        assertEquals(listOf(false, true), authorizationAttempts)
+        verify(hwWalletRepo).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+        assertFalse(sut.uiState.value.isSigning)
     }
 
     @Test
@@ -161,15 +214,21 @@ class HwSendViewModelTest : BaseUnitTest() {
             preparationCalls += 1
             true
         }
+        val authorizationAttempts = mutableListOf<Boolean>()
+        val authorizeContactPayment: suspend (Boolean) -> Boolean = {
+            authorizationAttempts += it
+            true
+        }
 
-        sut.signAndBroadcast(request(), prepareContactPayment)
+        sut.signAndBroadcast(request(), prepareContactPayment, authorizeContactPayment)
         advanceUntilIdle()
         assertTrue(sut.uiState.value.isPassphraseRequired)
 
-        sut.submitPassphrase(request(), "hidden wallet", prepareContactPayment)
+        sut.submitPassphrase(request(), "hidden wallet", prepareContactPayment, authorizeContactPayment)
         advanceUntilIdle()
 
         assertEquals(1, preparationCalls)
+        assertEquals(listOf(false), authorizationAttempts)
         verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
         assertFalse(sut.uiState.value.isPassphraseRequired)
     }
