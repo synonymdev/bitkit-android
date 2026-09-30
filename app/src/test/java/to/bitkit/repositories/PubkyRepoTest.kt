@@ -1177,6 +1177,39 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adoptRingIdentity should not sign up when sign in saved a session before failing`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        val ringPubky = stubRingCredential()
+        val reference = SharedPubkyContract.RING_SOURCE_PREFIX + ringPubky
+        var session: String? = null
+        var sourceAtSignOut: String? = null
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer {
+            session = "installed_session"
+            throw TestAppError("Activation failed")
+        }
+        whenever(pubkyService.hasIdentityRecord(ringPubky)).thenReturn(false)
+        whenever(pubkyService.signUp("ring_secret", "test-homeserver", "test-code")).thenReturn(Unit)
+        whenever(pubkyService.signOut()).thenAnswer {
+            sourceAtSignOut = adoptedSource
+            session = null
+            Unit
+        }
+
+        val result = sut.adoptRingIdentity(ringPubky)
+        httpClient.close()
+
+        assertTrue(result.isFailure)
+        assertNull(session)
+        assertNull(adoptedSource)
+        assertEquals(reference, sourceAtSignOut)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService) { signOut() }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+    }
+
+    @Test
     fun `wipe completes while adopted identity profile loading remains in flight`() = test {
         sut.awaitInitialization()
         val ringPubky = stubRingCredential()
@@ -1278,6 +1311,44 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(adoptedSource)
         assertNull(sut.publicKey.value)
         verifyBlocking(pubkyService) { forgetSessionAccess() }
+    }
+
+    @Test
+    fun `canceling an older pick keeps a newer pick of the same pubky`() = test {
+        sut.awaitInitialization()
+        val ringPubky = stubRingCredential()
+        val reference = SharedPubkyContract.RING_SOURCE_PREFIX + ringPubky
+        var session: String? = null
+        var signIns = 0
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        val secondSignedIn = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer {
+            session = "session_${++signIns}"
+            if (signIns == 2) secondSignedIn.complete(Unit)
+            Unit
+        }
+        val firstProfileLoadStarted = CompletableDeferred<Unit>()
+        var profileLoads = 0
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            if (++profileLoads == 1) {
+                firstProfileLoadStarted.complete(Unit)
+                awaitCancellation()
+            }
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+        val firstPick = async { sut.adoptRingIdentity(ringPubky) }
+        firstProfileLoadStarted.await()
+
+        val secondPick = async { sut.adoptRingIdentity(ringPubky) }
+        secondSignedIn.await()
+
+        firstPick.cancelAndJoin()
+
+        assertTrue(secondPick.await().isSuccess)
+        assertEquals("session_2", session)
+        assertEquals(reference, adoptedSource)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(pubkyService, never()) { signOut() }
     }
 
     @Test
