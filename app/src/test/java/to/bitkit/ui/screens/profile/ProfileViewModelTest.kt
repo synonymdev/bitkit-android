@@ -24,6 +24,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -87,6 +88,40 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `first state shows the cached profile for the load started in init`() = test {
+        val isLoadingFlow = MutableStateFlow(false)
+        val cachedProfile = createCachedProfile(publicKey = "pubkyalice")
+        val sut = createSut(
+            isLoadingFlow = isLoadingFlow,
+            cachedProfile = cachedProfile,
+            onLoadProfile = { isLoadingFlow.value = true },
+        )
+
+        assertTrue(sut.uiState.value.isLoading)
+        assertEquals(cachedProfile, sut.uiState.value.cachedProfile)
+    }
+
+    @Test
+    fun `failed load hides the cached profile so the retry state shows`() = test {
+        val isLoadingFlow = MutableStateFlow(true)
+        val sut = createSut(
+            isLoadingFlow = isLoadingFlow,
+            cachedProfile = createCachedProfile(publicKey = "pubkyalice"),
+        )
+
+        sut.uiState.test {
+            assertNotNull(awaitItem().cachedProfile)
+
+            isLoadingFlow.value = false
+
+            val state = awaitItem()
+            assertNull(state.profile)
+            assertFalse(state.isLoading)
+            assertNull(state.cachedProfile)
+        }
+    }
+
+    @Test
     fun `cached profile is hidden when its owner differs from the public key`() = test {
         val sut = createSut(isLoading = true, cachedProfile = createCachedProfile(publicKey = "pubkybob"))
 
@@ -95,7 +130,11 @@ class ProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `cached profile is hidden without a public key`() = test {
-        val sut = createSut(publicKey = null, cachedProfile = createCachedProfile(publicKey = "pubkyalice"))
+        val sut = createSut(
+            publicKey = null,
+            isLoading = true,
+            cachedProfile = createCachedProfile(publicKey = "pubkyalice"),
+        )
 
         assertNull(sut.uiState.value.cachedProfile)
     }
@@ -282,19 +321,22 @@ class ProfileViewModelTest : BaseUnitTest() {
         }
     }
 
+    @Suppress("LongParameterList")
     private fun createSut(
         profile: PubkyProfile? = null,
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),
         publicKey: String? = "pubkyalice",
         isLoading: Boolean = false,
+        isLoadingFlow: MutableStateFlow<Boolean> = MutableStateFlow(isLoading),
         cachedProfile: PubkyCachedProfile? = null,
+        onLoadProfile: () -> Unit = {},
     ): ProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(publicKey))
-        whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(isLoading))
+        whenever(pubkyRepo.isLoadingProfile).thenReturn(isLoadingFlow)
         whenever(pubkyRepo.cachedProfile).thenReturn(MutableStateFlow(cachedProfile))
-        whenever { pubkyRepo.loadProfile() }.thenReturn(Unit)
+        whenever { pubkyRepo.loadProfile() }.thenAnswer { onLoadProfile() }
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }

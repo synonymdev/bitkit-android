@@ -49,7 +49,8 @@ class PubkyImageFetcherTest : BaseUnitTest() {
     val tempFolder = TemporaryFolder()
 
     private val pubkyService = mock<PubkyService>()
-    private val factory = PubkyImageFetcher.Factory(pubkyService)
+    private val cacheEpoch = PubkyImageCacheEpoch()
+    private val factory = PubkyImageFetcher.Factory(pubkyService, cacheEpoch)
     private val options = Options(ApplicationProvider.getApplicationContext(), size = Size.ORIGINAL)
 
     @Test
@@ -208,6 +209,22 @@ class PubkyImageFetcherTest : BaseUnitTest() {
     }
 
     @Test
+    fun `fetch should not write to the disk cache when it is cleared during the fetch`() = test {
+        val diskCache = createDiskCache()
+        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenAnswer {
+            cacheEpoch.advance()
+            diskCache.clear()
+            IMAGE_BYTES
+        }
+
+        val result = createFetcher(diskCache).fetch()
+
+        assertEquals(DataSource.NETWORK, result.dataSource())
+        assertContentEquals(IMAGE_BYTES, result.bytes())
+        assertNull(diskCache.read(IMAGE_URI))
+    }
+
+    @Test
     fun `fetch should not write to the disk cache when the write policy is disabled`() = test {
         val diskCache = createDiskCache()
         whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
@@ -249,7 +266,7 @@ class PubkyImageFetcherTest : BaseUnitTest() {
     private fun createFetcher(
         diskCache: DiskCache? = null,
         options: Options = this.options,
-    ) = PubkyImageFetcher(IMAGE_URI, options, pubkyService, diskCache)
+    ) = PubkyImageFetcher(IMAGE_URI, options, pubkyService, diskCache, cacheEpoch)
 
     private fun createDiskCache() = DiskCache.Builder()
         .directory(tempFolder.newFolder("pubky-images"))

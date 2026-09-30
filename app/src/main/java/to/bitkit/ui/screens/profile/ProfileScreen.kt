@@ -156,7 +156,7 @@ private fun Content(
             )
         }
 
-        uiState.isLoading && cachedProfile != null -> Box(modifier = Modifier.screen()) {
+        cachedProfile != null -> Box(modifier = Modifier.screen()) {
             CachedProfileBody(profile = cachedProfile)
             topBar(Modifier.background(TopBarGradient))
         }

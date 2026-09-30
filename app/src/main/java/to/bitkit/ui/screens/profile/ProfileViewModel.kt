@@ -174,7 +174,7 @@ class ProfileViewModel @Inject constructor(
         controls: ProfileControls,
     ) = ProfileUiState(
         profile = profile,
-        cachedProfile = cachedProfile?.takeIf { it.publicKey == publicKey },
+        cachedProfile = cachedProfile?.takeIf { isLoading && it.publicKey == publicKey },
         publicKey = publicKey,
         isLoading = isLoading,
         showSignOutDialog = controls.showSignOutDialog,

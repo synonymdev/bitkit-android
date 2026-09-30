@@ -51,7 +51,7 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 - Re-checks `_publicKey` after the network call to guard against a concurrent `signOut()`
 - Profile name and image URI are cached in `PubkyStore` (DataStore) for instant display on launch before the full profile loads
 - The cache also records the public key it was taken from (`cachedProfileOwner`). Only the profile cache writes that field, and it is cleared together with the cached name and image URI
-- `ProfileScreen` shows the cached name and avatar with an inline loading indicator while a load is in flight, but only when the cached owner matches the current public key. Editing, tags and the other profile actions wait for the loaded profile, and a failed load still shows the retry state
+- `ProfileScreen` shows the cached name and avatar with an inline loading indicator while a load is in flight, but only when the cached owner matches the current public key. `ProfileViewModel` makes this decision and exposes the cached profile only under those conditions. Editing, tags and the other profile actions wait for the loaded profile, and a failed load still shows the retry state
 - Opening `ProfileScreen` does not reload a profile that is already loaded for the current public key; Retry always reloads
 
 ### Exposed State
@@ -111,6 +111,7 @@ Disk cache rules:
 - Only a fully successful fetch is written: a raw image, or a descriptor whose blob was fetched. A descriptor whose blob fetch failed, and JSON without a Pubky `src`, are never written
 - A failed write discards the entry, and the fetched image is still displayed
 - Sign-out and a switch to another identity clear the whole directory, because only this fetcher uses it. Sign-out also removes `pubky://` entries from the memory cache
+- Each clear first advances `PubkyImageCacheEpoch`. The fetcher reads it before going to the network and commits its write only while it is unchanged, so a fetch in flight across a clear does not re-populate the cleared directory
 - Avatars are public data, and the directory is app-private
 
 ### Loading Flow
@@ -119,7 +120,7 @@ Disk cache rules:
 2. `PubkyImageFetcher.fetch()` checks the disk cache → return if hit, without waiting for Paykit setup or using the network
 3. On a miss, the fetcher limits the successful response body to 1 MiB
 4. If the response is a JSON file descriptor with a Pubky `src`, follow the indirection with the same limit
-5. The fetcher writes a fully successful result to the disk cache, then Coil decodes it and caches it in memory
+5. The fetcher writes a fully successful result to the disk cache unless the directory was cleared during the fetch, then Coil decodes it and caches it in memory
 
 The bound is enforced while successful response bodies are read, before the bytes cross the FFI boundary. HTTP error
 bodies can still be buffered by the Pubky client before Paykit regains control.
@@ -152,6 +153,7 @@ bodies can still be buffered by the Pubky client before Paykit regains control.
 | `repositories/PubkyRepo.kt` | Session management and identity adoption |
 | `data/sharedpubky/SharedPubkyClient.kt` | Reads Pubky Ring's shared pubky provider |
 | `data/PubkyImageFetcher.kt` | Coil fetcher for pubky:// URIs |
+| `data/PubkyImageCacheEpoch.kt` | Clear counter that keeps in-flight fetches out of a cleared disk cache |
 | `di/ImageModule.kt` | Hilt module providing ImageLoader |
 | `data/PubkyStore.kt` | DataStore for cached profile metadata |
 | `models/PubkyProfile.kt` | Domain model |

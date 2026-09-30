@@ -11,6 +11,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import to.bitkit.data.PubkyImageCacheEpoch
 import to.bitkit.data.PubkyImageFetcher
 import to.bitkit.services.PubkyService
 import javax.inject.Singleton
@@ -24,9 +25,10 @@ object ImageModule {
     fun provideImageLoader(
         @ApplicationContext context: Context,
         pubkyService: PubkyService,
+        cacheEpoch: PubkyImageCacheEpoch,
     ): ImageLoader = ImageLoader.Builder(context)
         .crossfade(true)
-        .components { add(PubkyImageFetcher.Factory(pubkyService)) }
+        .components { add(PubkyImageFetcher.Factory(pubkyService, cacheEpoch)) }
         .memoryCache {
             MemoryCache.Builder()
                 .maxSizePercent(context, percent = 0.15)

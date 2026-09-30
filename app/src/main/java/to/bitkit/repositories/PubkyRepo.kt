@@ -33,6 +33,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
 import to.bitkit.data.PubkyCachedProfile
+import to.bitkit.data.PubkyImageCacheEpoch
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.hasPaykitState
@@ -79,6 +80,7 @@ class PubkyRepo @Inject constructor(
     private val keychain: Keychain,
     private val sharedPubkyClient: SharedPubkyClient,
     private val imageLoader: ImageLoader,
+    private val imageCacheEpoch: PubkyImageCacheEpoch,
     private val pubkyStore: PubkyStore,
     private val settingsStore: SettingsStore,
     private val httpClient: HttpClient,
@@ -1261,6 +1263,7 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun clearPubkyImageDiskCache() {
+        imageCacheEpoch.advance()
         runCatching { imageLoader.diskCache?.clear() }
             .onFailure { Logger.warn("Failed to clear pubky image disk cache", it, context = TAG) }
     }

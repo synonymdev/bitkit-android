@@ -37,6 +37,7 @@ import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
@@ -47,6 +48,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.PubkyCachedProfile
+import to.bitkit.data.PubkyImageCacheEpoch
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
@@ -88,6 +90,7 @@ class PubkyRepoTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val sharedPubkyClient = mock<SharedPubkyClient>()
     private val imageLoader = mock<ImageLoader>()
+    private val imageCacheEpoch = PubkyImageCacheEpoch()
     private val pubkyStore = mock<PubkyStore>()
     private val settingsStore = mock<SettingsStore>()
     private val settingsFlow = MutableStateFlow(SettingsData())
@@ -129,6 +132,7 @@ class PubkyRepoTest : BaseUnitTest() {
         keychain = keychain,
         sharedPubkyClient = sharedPubkyClient,
         imageLoader = imageLoader,
+        imageCacheEpoch = imageCacheEpoch,
         pubkyStore = pubkyStore,
         settingsStore = settingsStore,
         httpClient = httpClient,
@@ -919,6 +923,20 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(memoryCache).remove(memoryCacheKey)
         verify(diskCache).clear()
         verify(diskCache, never()).remove(any())
+    }
+
+    @Test
+    fun `signOut advances the pubky image cache epoch before clearing the disk cache`() = test {
+        authenticateForTesting()
+        val diskCache = mock<DiskCache>()
+        whenever(imageLoader.diskCache).thenReturn(diskCache)
+        val epochBeforeSignOut = imageCacheEpoch.current()
+        var epochAtClear: Long? = null
+        doAnswer { epochAtClear = imageCacheEpoch.current() }.whenever(diskCache).clear()
+
+        sut.signOut()
+
+        assertEquals(epochBeforeSignOut + 1, epochAtClear)
     }
 
     @Test

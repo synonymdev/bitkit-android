@@ -27,14 +27,16 @@ class PubkyImageFetcher(
     private val options: Options,
     private val pubkyService: PubkyService,
     private val diskCache: DiskCache?,
+    private val cacheEpoch: PubkyImageCacheEpoch,
 ) : Fetcher {
     private val diskCacheKey = options.diskCacheKey ?: uri
 
     override suspend fun fetch(): FetchResult {
         readFromDiskCache()?.let { return it }
 
+        val epoch = cacheEpoch.current()
         val image = resolveImageData(pubkyService.fetchFile(uri, PUBKY_IMAGE_MAX_BYTES))
-        if (image.isCacheable) writeToDiskCache(image.bytes)
+        if (image.isCacheable) writeToDiskCache(image.bytes, epoch)
         val source = ImageSource(Buffer().apply { write(image.bytes) }, options.fileSystem)
         return SourceFetchResult(source, null, dataSource = DataSource.NETWORK)
     }
@@ -47,13 +49,13 @@ class PubkyImageFetcher(
         return SourceFetchResult(source, null, dataSource = DataSource.DISK)
     }
 
-    private fun writeToDiskCache(bytes: ByteArray) {
+    private fun writeToDiskCache(bytes: ByteArray, epoch: Long) {
         if (!options.diskCachePolicy.writeEnabled) return
         val cache = diskCache ?: return
         val editor = cache.openEditor(diskCacheKey) ?: return
         runCatching {
             cache.fileSystem.write(editor.data) { write(bytes) }
-            editor.commit()
+            if (cacheEpoch.current() == epoch) editor.commit() else editor.abort()
         }.onFailure {
             runCatching { editor.abort() }
             Logger.warn("Failed to cache pubky image", it, context = TAG)
@@ -73,11 +75,14 @@ class PubkyImageFetcher(
             .getOrDefault(PubkyImageData(data, isCacheable = false))
     }
 
-    class Factory(private val pubkyService: PubkyService) : Fetcher.Factory<Uri> {
+    class Factory(
+        private val pubkyService: PubkyService,
+        private val cacheEpoch: PubkyImageCacheEpoch,
+    ) : Fetcher.Factory<Uri> {
         override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
             val uri = data.toString()
             if (!uri.startsWith(PUBKY_SCHEME)) return null
-            return PubkyImageFetcher(uri, options, pubkyService, imageLoader.diskCache)
+            return PubkyImageFetcher(uri, options, pubkyService, imageLoader.diskCache, cacheEpoch)
         }
     }
 }
