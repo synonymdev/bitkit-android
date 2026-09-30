@@ -211,10 +211,11 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
 | Payment Request detail screen | `PaymentRequestDetailsScreen` | `PaymentRequestDetailScreen` |
+| Pubky Ring choice row | `PubkyChoiceIdentity` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRing_<pubky>` |
 
-Two of those are unreconciled rather than intentional: the Send screen emitting both
-`AvailableAmount` and `available_balance`, and the background-payments row name. Settling either is a
-code change on one side, not a journey change.
+Three of those are unreconciled rather than intentional: the Send screen emitting both
+`AvailableAmount` and `available_balance`, the background-payments row name, and the Pubky Ring choice
+row. Settling any of them is a code change on one side, not a journey change.
 
 `SubscriptionRow-<id>` matches on both platforms. iOS appends the billing period to
 `PaymentRequestRow` because every recurring payment of one subscription shares the same id, so a

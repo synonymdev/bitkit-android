@@ -332,6 +332,7 @@ private fun CachedProfileBody(profile: PubkyCachedProfile) {
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
+            .testTag("ProfileCachedHeader")
     ) {
         TopBarSpacer()
         VerticalSpacer(24.dp)
@@ -341,6 +342,7 @@ private fun CachedProfileBody(profile: PubkyCachedProfile) {
             name = profile.name,
             bio = "",
             imageUrl = profile.imageUri,
+            nameTestTag = "ProfileCachedName",
         )
 
         VerticalSpacer(32.dp)
