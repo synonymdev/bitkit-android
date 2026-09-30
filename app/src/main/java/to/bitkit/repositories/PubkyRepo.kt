@@ -32,6 +32,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
+import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.hasPaykitState
@@ -148,6 +149,9 @@ class PubkyRepo @Inject constructor(
     val displayImageUri: StateFlow<String?> = combine(_profile, pubkyStore.data) { profile, cached ->
         profile?.imageUrl ?: cached.cachedImageUri
     }.stateIn(scope, SharingStarted.Eagerly, null)
+
+    val cachedProfile: StateFlow<PubkyCachedProfile?> = pubkyStore.data.map { it.cachedProfile() }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     private sealed interface InitResult {
         data object NoSession : InitResult
@@ -439,6 +443,7 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun clearProfileIfIdentityChanged(publicKey: String) {
         if (_publicKey.value == publicKey) return
+        clearPubkyImageDiskCache()
         _contactsLoadVersion.update { 0L }
         setProfile(null)
         _contacts.update { emptyList() }
@@ -1255,13 +1260,12 @@ class PubkyRepo @Inject constructor(
         imageLoader.memoryCache?.let { cache ->
             cache.keys.filter { it.key.startsWith(PUBKY_SCHEME) }.forEach { cache.remove(it) }
         }
-        val imageUris = buildList {
-            _profile.value?.imageUrl?.let { add(it) }
-            addAll(_contacts.value.mapNotNull { it.imageUrl })
-        }
-        imageLoader.diskCache?.let { cache ->
-            imageUris.forEach { cache.remove(it) }
-        }
+        clearPubkyImageDiskCache()
+    }
+
+    private fun clearPubkyImageDiskCache() {
+        runCatching { imageLoader.diskCache?.clear() }
+            .onFailure { Logger.warn("Failed to clear pubky image disk cache", it, context = TAG) }
     }
 
     private suspend fun contactProfile(
@@ -1373,6 +1377,7 @@ class PubkyRepo @Inject constructor(
         pubkyStore.update {
             it.copy(
                 ownerPublicKey = profile.publicKey,
+                cachedProfileOwner = profile.publicKey,
                 cachedName = profile.name,
                 cachedImageUri = profile.imageUrl,
             )

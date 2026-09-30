@@ -38,6 +38,7 @@ import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -45,6 +46,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
+import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
@@ -876,12 +878,6 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `signOut should evict pubky images from caches`() = test {
         authenticateForTesting()
-        val pk = checkNotNull(sut.publicKey.value)
-        val pubkyProfile = createPubkyProfile(name = "Test", image = "pubky://image_uri")
-        whenever(pubkyService.resolveContactProfile(pk, true))
-            .thenReturn(createResolution(pk, pubkyProfile = pubkyProfile))
-        sut.loadProfile()
-
         val memoryCache = mock<MemoryCache>()
         val diskCache = mock<DiskCache>()
         val memoryCacheKey = MemoryCache.Key("pubky://image_uri")
@@ -892,7 +888,47 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.signOut()
 
         verify(memoryCache).remove(memoryCacheKey)
-        verify(diskCache).remove("pubky://image_uri")
+        verify(diskCache).clear()
+        verify(diskCache, never()).remove(any())
+    }
+
+    @Test
+    fun `signOut completes when clearing the pubky image disk cache fails`() = test {
+        authenticateForTesting()
+        val diskCache = mock<DiskCache>()
+        doThrow(IllegalStateException("disk cache unavailable")).whenever(diskCache).clear()
+        whenever(imageLoader.diskCache).thenReturn(diskCache)
+
+        val result = sut.signOut()
+
+        assertTrue(result.isSuccess)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `adoptRingIdentity clears the pubky image disk cache when the identity changes`() = test {
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A, profileName = "Previous")
+        val diskCache = mock<DiskCache>()
+        whenever(imageLoader.diskCache).thenReturn(diskCache)
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+
+        sut.adoptRingIdentity(ringPubky)
+
+        verify(diskCache).clear()
+    }
+
+    @Test
+    fun `adoptRingIdentity keeps the pubky image disk cache for the same identity`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val diskCache = mock<DiskCache>()
+        whenever(imageLoader.diskCache).thenReturn(diskCache)
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+
+        sut.adoptRingIdentity(ringPubky)
+
+        verify(diskCache, never()).clear()
     }
 
     @Test
@@ -1092,6 +1128,42 @@ class PubkyRepoTest : BaseUnitTest() {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
 
         assertEquals(VALID_SELF_KEY, cached.ownerPublicKey)
+        assertEquals(VALID_SELF_KEY, cached.cachedProfileOwner)
+    }
+
+    @Test
+    fun `contact profile overrides keep the cached profile owner of the previous identity`() = test {
+        var cached = PubkyStoreData()
+        whenever { pubkyStore.update(any()) }.thenAnswer {
+            cached = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(cached)
+            Unit
+        }
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A, profileName = "Previous")
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+        sut.adoptRingIdentity(ringPubky)
+
+        sut.restoreContactProfileOverrides(emptyMap())
+
+        assertEquals(VALID_SELF_KEY, cached.ownerPublicKey)
+        assertEquals(VALID_CONTACT_KEY_A, cached.cachedProfileOwner)
+        assertEquals("Previous", cached.cachedName)
+    }
+
+    @Test
+    fun `cachedProfile exposes the cached profile with its owner`() = test {
+        val data = PubkyStoreData(
+            cachedProfileOwner = VALID_SELF_KEY,
+            cachedName = "Cached",
+            cachedImageUri = "pubky://a",
+        )
+        whenever(pubkyStore.data).thenReturn(flowOf(data))
+        sut = createSut()
+
+        sut.cachedProfile.test(timeout = 500.milliseconds) {
+            assertEquals(PubkyCachedProfile(VALID_SELF_KEY, "Cached", "pubky://a"), awaitItem())
+        }
     }
 
     @Test

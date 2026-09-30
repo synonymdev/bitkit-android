@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.bitkit.R
+import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
@@ -56,29 +57,33 @@ class ProfileViewModel @Inject constructor(
         ProfileControls(showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey)
     }
 
+    init {
+        val profile = pubkyRepo.profile.value
+        if (profile == null || profile.publicKey != pubkyRepo.publicKey.value) loadProfile()
+    }
+
     val uiState: StateFlow<ProfileUiState> = combine(
         pubkyRepo.profile,
         pubkyRepo.publicKey,
         pubkyRepo.isLoadingProfile,
+        pubkyRepo.cachedProfile,
         controls,
-    ) { profile, publicKey, isLoading, controls ->
-        ProfileUiState(
-            profile = profile,
-            publicKey = publicKey,
-            isLoading = isLoading,
-            showSignOutDialog = controls.showSignOutDialog,
-            isSigningOut = controls.isSigningOut,
-            showAddTagSheet = controls.showAddTagSheet,
-            copiedPublicKey = controls.copiedPublicKey,
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState())
+    ) { profile, publicKey, isLoading, cachedProfile, controls ->
+        profileUiState(profile, publicKey, isLoading, cachedProfile, controls)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        profileUiState(
+            profile = pubkyRepo.profile.value,
+            publicKey = pubkyRepo.publicKey.value,
+            isLoading = pubkyRepo.isLoadingProfile.value,
+            cachedProfile = pubkyRepo.cachedProfile.value,
+            controls = ProfileControls(),
+        ),
+    )
 
     private val _effects = MutableSharedFlow<ProfileEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
-
-    init {
-        loadProfile()
-    }
 
     fun loadProfile() {
         viewModelScope.launch { pubkyRepo.loadProfile() }
@@ -161,6 +166,23 @@ class ProfileViewModel @Inject constructor(
         _copiedPublicKey.update { null }
     }
 
+    private fun profileUiState(
+        profile: PubkyProfile?,
+        publicKey: String?,
+        isLoading: Boolean,
+        cachedProfile: PubkyCachedProfile?,
+        controls: ProfileControls,
+    ) = ProfileUiState(
+        profile = profile,
+        cachedProfile = cachedProfile?.takeIf { it.publicKey == publicKey },
+        publicKey = publicKey,
+        isLoading = isLoading,
+        showSignOutDialog = controls.showSignOutDialog,
+        isSigningOut = controls.isSigningOut,
+        showAddTagSheet = controls.showAddTagSheet,
+        copiedPublicKey = controls.copiedPublicKey,
+    )
+
     private fun updateTags(
         transform: (List<String>) -> List<String>,
         onSuccess: () -> Unit = {},
@@ -198,6 +220,7 @@ class ProfileViewModel @Inject constructor(
 @Stable
 data class ProfileUiState(
     val profile: PubkyProfile? = null,
+    val cachedProfile: PubkyCachedProfile? = null,
     val publicKey: String? = null,
     val isLoading: Boolean = false,
     val showSignOutDialog: Boolean = false,
@@ -207,10 +230,10 @@ data class ProfileUiState(
 )
 
 private data class ProfileControls(
-    val showSignOutDialog: Boolean,
-    val isSigningOut: Boolean,
-    val showAddTagSheet: Boolean,
-    val copiedPublicKey: String?,
+    val showSignOutDialog: Boolean = false,
+    val isSigningOut: Boolean = false,
+    val showAddTagSheet: Boolean = false,
+    val copiedPublicKey: String? = null,
 )
 
 sealed interface ProfileEffect {

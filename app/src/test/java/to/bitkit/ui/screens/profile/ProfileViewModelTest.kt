@@ -15,6 +15,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -23,6 +24,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -30,6 +32,86 @@ class ProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `init loads the profile when none is loaded`() = test {
+        createSut()
+        advanceUntilIdle()
+
+        verify(pubkyRepo).loadProfile()
+    }
+
+    @Test
+    fun `init skips loading a profile already loaded for the current key`() = test {
+        createSut(createProfile())
+        advanceUntilIdle()
+
+        verify(pubkyRepo, never()).loadProfile()
+    }
+
+    @Test
+    fun `init loads the profile when the loaded one belongs to another key`() = test {
+        createSut(createProfile().copy(publicKey = "pubkybob"))
+        advanceUntilIdle()
+
+        verify(pubkyRepo).loadProfile()
+    }
+
+    @Test
+    fun `retry loads the profile even when it is already loaded`() = test {
+        val sut = createSut(createProfile())
+        advanceUntilIdle()
+
+        sut.loadProfile()
+        advanceUntilIdle()
+
+        verify(pubkyRepo, times(1)).loadProfile()
+    }
+
+    @Test
+    fun `initial state is seeded from the repository`() = test {
+        val profile = createProfile()
+        val sut = createSut(profile = profile, isLoading = true)
+
+        assertEquals(profile, sut.uiState.value.profile)
+        assertEquals("pubkyalice", sut.uiState.value.publicKey)
+        assertTrue(sut.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `cached profile is exposed while loading when its owner matches the public key`() = test {
+        val cachedProfile = createCachedProfile(publicKey = "pubkyalice")
+        val sut = createSut(isLoading = true, cachedProfile = cachedProfile)
+
+        assertEquals(cachedProfile, sut.uiState.value.cachedProfile)
+    }
+
+    @Test
+    fun `cached profile is hidden when its owner differs from the public key`() = test {
+        val sut = createSut(isLoading = true, cachedProfile = createCachedProfile(publicKey = "pubkybob"))
+
+        assertNull(sut.uiState.value.cachedProfile)
+    }
+
+    @Test
+    fun `cached profile is hidden without a public key`() = test {
+        val sut = createSut(publicKey = null, cachedProfile = createCachedProfile(publicKey = "pubkyalice"))
+
+        assertNull(sut.uiState.value.cachedProfile)
+    }
+
+    @Test
+    fun `cached profile keeps profile edits disabled until the profile loads`() = test {
+        val sut = createSut(isLoading = true, cachedProfile = createCachedProfile(publicKey = "pubkyalice"))
+        advanceUntilIdle()
+
+        sut.addTag("Bitcoin")
+        sut.removeTag("Founder")
+        advanceUntilIdle()
+
+        assertNull(sut.uiState.value.profile)
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+    }
 
     @Test
     fun `signOut marks profile recovery before signing out`() = test {
@@ -203,11 +285,15 @@ class ProfileViewModelTest : BaseUnitTest() {
     private fun createSut(
         profile: PubkyProfile? = null,
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),
+        publicKey: String? = "pubkyalice",
+        isLoading: Boolean = false,
+        cachedProfile: PubkyCachedProfile? = null,
     ): ProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
-        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
-        whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(publicKey))
+        whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(isLoading))
+        whenever(pubkyRepo.cachedProfile).thenReturn(MutableStateFlow(cachedProfile))
         whenever { pubkyRepo.loadProfile() }.thenReturn(Unit)
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
@@ -221,6 +307,12 @@ class ProfileViewModelTest : BaseUnitTest() {
             privatePaykitRepo = privatePaykitRepo,
         )
     }
+
+    private fun createCachedProfile(publicKey: String) = PubkyCachedProfile(
+        publicKey = publicKey,
+        name = "Alice",
+        imageUri = "pubky://avatar",
+    )
 
     private fun createProfile(tags: List<String> = listOf("Founder")) = PubkyProfile(
         publicKey = "pubkyalice",

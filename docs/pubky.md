@@ -50,6 +50,9 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 - Uses a `Mutex` to serialize loads, then re-checks the captured identity before fetching
 - Re-checks `_publicKey` after the network call to guard against a concurrent `signOut()`
 - Profile name and image URI are cached in `PubkyStore` (DataStore) for instant display on launch before the full profile loads
+- The cache also records the public key it was taken from (`cachedProfileOwner`). Only the profile cache writes that field, and it is cleared together with the cached name and image URI
+- `ProfileScreen` shows the cached name and avatar with an inline loading indicator while a load is in flight, but only when the cached owner matches the current public key. Editing, tags and the other profile actions wait for the loaded profile, and a failed load still shows the retry state
+- Opening `ProfileScreen` does not reload a profile that is already loaded for the current public key; Retry always reloads
 
 ### Exposed State
 
@@ -60,6 +63,7 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 | `isAuthenticated` | True while a public key is set |
 | `displayName` | Profile name with cached fallback |
 | `displayImageUri` | Profile image URI with cached fallback |
+| `cachedProfile` | Cached profile name and image URI with the public key they belong to |
 | `isLoadingProfile` | Loading indicator |
 | `contacts` | List of followed `PubkyProfile` contacts |
 | `isLoadingContacts` | Contacts loading indicator |
@@ -95,18 +99,27 @@ Composable for loading and displaying images from `pubky://` URIs, backed by Coi
 
 ### Caching Strategy (Coil)
 
-Coil manages a two-tier cache automatically:
+Avatars use a two-tier cache:
 
-1. **Memory** — Coil's `MemoryCache` (15% of app memory)
-2. **Disk** — Coil's `DiskCache` in `cacheDir/pubky-images/`
+1. **Memory** — Coil's `MemoryCache` (15% of app memory), managed by Coil
+2. **Disk** — Coil's `DiskCache` in `cacheDir/pubky-images/`, read and written by `PubkyImageFetcher`. Coil only fills the disk cache from its own network fetcher, so the Pubky fetcher manages this directory itself
+
+Disk cache rules:
+
+- Entries are keyed by the request's disk cache key, or by the original `pubky://` URI when none is set. For a file descriptor this is the descriptor URI, not the blob `src`
+- Reads and writes follow the request's disk cache policy
+- Only a fully successful fetch is written: a raw image, or a descriptor whose blob was fetched. A descriptor whose blob fetch failed, and JSON without a Pubky `src`, are never written
+- A failed write discards the entry, and the fetched image is still displayed
+- Sign-out and a switch to another identity clear the whole directory, because only this fetcher uses it. Sign-out also removes `pubky://` entries from the memory cache
+- Avatars are public data, and the directory is app-private
 
 ### Loading Flow
 
 1. Coil checks memory cache → return if hit
-2. Coil checks disk cache → return if hit
-3. `PubkyImageFetcher.fetch()` limits the successful response body to 1 MiB
+2. `PubkyImageFetcher.fetch()` checks the disk cache → return if hit, without waiting for Paykit setup or using the network
+3. On a miss, the fetcher limits the successful response body to 1 MiB
 4. If the response is a JSON file descriptor with a Pubky `src`, follow the indirection with the same limit
-5. Coil decodes and caches the result
+5. The fetcher writes a fully successful result to the disk cache, then Coil decodes it and caches it in memory
 
 The bound is enforced while successful response bodies are read, before the bytes cross the FFI boundary. HTTP error
 bodies can still be buffered by the Pubky client before Paykit regains control.
