@@ -462,6 +462,12 @@ class AppViewModel @Inject constructor(
 
     private val toastManager = toastManagerProvider(viewModelScope)
 
+    // Toasts are hidden only while dev mode and the "Disable All Toasts" dev setting are both on
+    private val areToastsDisabled = settingsStore.data
+        .map { it.isDevModeEnabled && it.disableAllToasts }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     init {
         viewModelScope.launch {
             ToastEventBus.events.collect {
@@ -5039,7 +5045,10 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    val currentToast: StateFlow<Toast?> = toastManager.currentToast
+    // Hidden at display time, not enqueue time, so a toast raised together with a dev mode change follows the new state
+    val currentToast: StateFlow<Toast?> = combine(toastManager.currentToast, areToastsDisabled) { toast, disabled ->
+        toast.takeUnless { disabled }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun toast(
         type: Toast.ToastType,
