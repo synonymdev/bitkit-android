@@ -706,6 +706,49 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `loadProfile drops a result that a profile save overtook`() = test {
+        var cached = PubkyStoreData()
+        whenever(pubkyStore.update(any())).thenAnswer {
+            cached = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(cached)
+            Unit
+        }
+        authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Old")
+        val loadStarted = CompletableDeferred<Unit>()
+        val finishLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            loadStarted.complete(Unit)
+            finishLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Old"))
+        }
+        val load = async { sut.loadProfile() }
+        loadStarted.await()
+
+        val save = sut.saveProfile(name = "New", bio = "", links = emptyList(), tags = emptyList(), imageUrl = null)
+        finishLoad.complete(Unit)
+        load.await()
+
+        assertTrue(save.isSuccess)
+        assertEquals("New", sut.profile.value?.name)
+        assertEquals("New", cached.cachedName)
+    }
+
+    @Test
+    fun `fetchDisplayProfile resolves once without retrying a missing profile or an error`() = test {
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true)).thenReturn(null)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+            .thenAnswer { throw TestAppError("Unreachable") }
+
+        val missing = sut.fetchDisplayProfile(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+        val failed = sut.fetchDisplayProfile(VALID_CONTACT_KEY_B)
+
+        assertTrue(missing.isSuccess)
+        assertNull(missing.getOrNull())
+        assertTrue(failed.isFailure)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true)
+    }
+
+    @Test
     fun `saveProfile should mark backup state changed`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY, secret = "test_session", profileName = "Alice")
         val backupVersion = sut.backupStateVersion.value
@@ -978,6 +1021,43 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `prepareImport reuses the loaded profile of the active identity`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Alice")
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(emptyList())
+        clearInvocations(pubkyService)
+
+        val result = sut.prepareImport()
+
+        assertTrue(result.isSuccess)
+        assertEquals("Alice", sut.pendingImportProfile.value?.name)
+        assertEquals(sut.profile.value, sut.pendingImportProfile.value)
+        verify(pubkyService, never()).resolveContactProfile(any(), any())
+    }
+
+    @Test
+    fun `prepareImport discards its results when the identity changes meanwhile`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val followsStarted = CompletableDeferred<Unit>()
+        val finishFollows = CompletableDeferred<Unit>()
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).doSuspendableAnswer {
+            followsStarted.complete(Unit)
+            finishFollows.await()
+            listOf(VALID_CONTACT_KEY_A)
+        }
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Bob")))
+        val preparation = async { sut.prepareImport() }
+        followsStarted.await()
+
+        sut.wipeLocalState()
+        finishFollows.complete(Unit)
+
+        assertTrue(preparation.await().isFailure)
+        assertNull(sut.pendingImportProfile.value)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
+    }
+
+    @Test
     fun `displayName should return null when no profile and no cache`() = test {
         sut.displayName.test(timeout = 500.milliseconds) {
             assertNull(awaitItem())
@@ -1137,6 +1217,57 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertNull(sut.profile.value)
         assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
+    fun `adoptRingIdentity seeds the handed off profile without resolving it again`() = test {
+        var cached = PubkyStoreData()
+        whenever(pubkyStore.update(any())).thenAnswer {
+            cached = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(cached)
+            Unit
+        }
+        profileSetupPending.value = true
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        val knownProfile = PubkyProfile.forDisplay(ringPubky, name = "Ring Profile", imageUrl = "pubky://avatar")
+
+        val result = sut.adoptRingIdentity(ringPubky, knownProfile)
+
+        assertEquals(true, result.getOrNull())
+        assertEquals(knownProfile.copy(publicKey = VALID_SELF_KEY), sut.profile.value)
+        assertFalse(profileSetupPending.value)
+        assertEquals(VALID_SELF_KEY, cached.ownerPublicKey)
+        assertEquals("Ring Profile", cached.cachedName)
+        verify(pubkyService, never()).resolveContactProfile(any(), any())
+    }
+
+    @Test
+    fun `adoptRingIdentity resolves the profile when none is handed off`() = test {
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Remote")))
+
+        val result = sut.adoptRingIdentity(ringPubky, knownProfile = null)
+
+        assertEquals(true, result.getOrNull())
+        assertEquals("Remote", sut.profile.value?.name)
+        verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
+    fun `adoptRingIdentity ignores a handed off profile for another key`() = test {
+        val ringPubky = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+        val otherProfile = PubkyProfile.forDisplay(VALID_CONTACT_KEY_A, name = "Other", imageUrl = null)
+
+        val result = sut.adoptRingIdentity(ringPubky, otherProfile)
+
+        assertEquals(false, result.getOrNull())
+        assertNull(sut.profile.value)
+        assertTrue(profileSetupPending.value)
+        verify(pubkyService, atLeastOnce()).resolveContactProfile(VALID_SELF_KEY, true)
     }
 
     @Test

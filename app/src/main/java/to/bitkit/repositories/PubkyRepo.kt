@@ -57,6 +57,7 @@ import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
@@ -95,6 +96,7 @@ class PubkyRepo @Inject constructor(
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
     private val adoptedSourceCheckMutex = Mutex()
+    private val profileWriteGeneration = AtomicLong(0L)
     private var isServiceInitialized = false
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
@@ -342,7 +344,14 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {
+    /**
+     * Adopts the Ring identity [pubky]. A [knownProfile] that matches the signed-in key is used instead of resolving
+     * the profile again; pass only a profile that was found, never the result of a failed or empty lookup.
+     */
+    suspend fun adoptRingIdentity(
+        pubky: String,
+        knownProfile: PubkyProfile? = null,
+    ): Result<Boolean> = withContext(ioDispatcher) {
         val reference = "${SharedPubkyContract.RING_SOURCE_PREFIX}$pubky"
         var identityInstalled = false
         try {
@@ -366,12 +375,20 @@ class PubkyRepo @Inject constructor(
                     prefixedPublicKey
                 }
 
-                loadProfile()
+                val handoffProfile = knownProfile
+                    ?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, publicKey) }
+                    ?.copy(publicKey = publicKey)
+                if (handoffProfile == null) loadProfile()
                 loadContacts()
 
                 initializeMutex.withLock {
                     check(_publicKey.value == publicKey) { "Adopted Pubky identity changed before setup completed" }
-                    val hasProfile = _profile.value?.publicKey == publicKey
+                    handoffProfile?.let { profile ->
+                        setProfile(profile)
+                        runSuspendCatching { cacheMetadata(profile) }
+                            .onFailure { Logger.warn("Failed to cache adopted profile", it, context = TAG) }
+                    }
+                    val hasProfile = handoffProfile != null || _profile.value?.publicKey == publicKey
                     runSuspendCatching { settingsStore.setPubkyProfileSetupPending(!hasProfile) }
                         .onFailure { Logger.warn("Failed to save pending profile setup", it, context = TAG) }
                     hasProfile
@@ -423,7 +440,7 @@ class PubkyRepo @Inject constructor(
     private suspend fun clearProfileIfIdentityChanged(publicKey: String) {
         if (_publicKey.value == publicKey) return
         _contactsLoadVersion.update { 0L }
-        _profile.update { null }
+        setProfile(null)
         _contacts.update { emptyList() }
         clearPendingImport()
     }
@@ -456,6 +473,7 @@ class PubkyRepo @Inject constructor(
             loadProfileMutex.unlock()
             return
         }
+        val writeGeneration = profileWriteGeneration.get()
 
         _isLoadingProfile.update { true }
         try {
@@ -465,11 +483,15 @@ class PubkyRepo @Inject constructor(
                         ?: throw AppError("Profile not found")
                 }
             }.onSuccess { loadedProfile ->
-                if (_publicKey.value != pk) {
+                var isCurrent = false
+                _profile.update {
+                    isCurrent = _publicKey.value == pk && profileWriteGeneration.get() == writeGeneration
+                    if (isCurrent) loadedProfile else it
+                }
+                if (!isCurrent) {
                     Logger.debug("Skipped stale profile load for '${redacted(pk)}'", context = TAG)
                     return@onSuccess
                 }
-                _profile.update { loadedProfile }
                 cacheMetadata(loadedProfile)
             }.onFailure {
                 Logger.error("Failed to load profile", it, context = TAG)
@@ -483,6 +505,16 @@ class PubkyRepo @Inject constructor(
     suspend fun fetchRemoteProfile(publicKey: String): Result<PubkyProfile?> = runSuspendCatching {
         withContext(ioDispatcher) {
             resolveContactProfile(publicKey).getOrThrow()
+        }
+    }
+
+    /**
+     * Resolves [publicKey]'s profile once, without retrying, for display only. A null or failed result is not proof
+     * that the profile does not exist.
+     */
+    suspend fun fetchDisplayProfile(publicKey: String): Result<PubkyProfile?> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            resolveProfileOnce(publicKey.ensurePubkyPrefix())
         }
     }
 
@@ -601,7 +633,7 @@ class PubkyRepo @Inject constructor(
             status = null,
         )
         _publicKey.update { publicKey }
-        _profile.update { createdProfile }
+        setProfile(createdProfile)
         cacheMetadata(createdProfile)
         settingsStore.setPubkyProfileSetupPending(false)
         notifyBackupStateChanged()
@@ -666,7 +698,7 @@ class PubkyRepo @Inject constructor(
                 tags = tags,
                 status = _profile.value?.status,
             )
-            _profile.update { profile }
+            setProfile(profile)
             cacheMetadata(profile)
             notifyBackupStateChanged()
         }
@@ -696,6 +728,7 @@ class PubkyRepo @Inject constructor(
                 }
                 Logger.info("Continuing sign out, bitkit profile storage already missing", context = TAG)
             }
+            profileWriteGeneration.incrementAndGet()
         }
         settingsStore.update { it.paykitDisabled(markPublicCleanupPending = it.hasPaykitState()) }
         signOut().getOrThrow()
@@ -951,7 +984,9 @@ class PubkyRepo @Inject constructor(
                 }.awaitAll().sortedBy { it.name.lowercase() }
             }
 
-            val ownProfile = resolveContactProfile(pk).getOrNull()
+            val ownProfile = _profile.value?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, pk) }
+                ?: resolveContactProfile(pk).getOrNull()
+            check(_publicKey.value == pk) { "Pubky identity changed while preparing import" }
 
             _pendingImportProfile.update { ownProfile }
             _pendingImportContacts.update { contacts }
@@ -1258,12 +1293,7 @@ class PubkyRepo @Inject constructor(
             var lastError: Throwable? = null
 
             repeat(2) { attempt ->
-                val result = runSuspendCatching {
-                    pubkyService.resolveContactProfile(
-                        publicKey = prefixedKey,
-                        allowPubkyProfileFallback = true,
-                    )?.let(::profileFromResolution)
-                }
+                val result = runSuspendCatching { resolveProfileOnce(prefixedKey) }
                 if (result.isSuccess && (result.getOrNull() != null || attempt == 1)) {
                     return@withContext result.getOrNull()
                 }
@@ -1285,6 +1315,12 @@ class PubkyRepo @Inject constructor(
             null
         }
     }
+
+    private suspend fun resolveProfileOnce(prefixedKey: String): PubkyProfile? =
+        pubkyService.resolveContactProfile(
+            publicKey = prefixedKey,
+            allowPubkyProfileFallback = true,
+        )?.let(::profileFromResolution)
 
     private fun profileFromResolution(resolution: ContactProfileResolution): PubkyProfile {
         val prefixedKey = resolution.publicKey.ensurePubkyPrefix()
@@ -1397,6 +1433,11 @@ class PubkyRepo @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
+    private fun setProfile(profile: PubkyProfile?) {
+        profileWriteGeneration.incrementAndGet()
+        _profile.update { profile }
+    }
+
     private suspend fun clearAuthenticatedState(
         clearCachedProfile: Boolean = true,
         clearRestorationFailure: Boolean = true,
@@ -1406,7 +1447,7 @@ class PubkyRepo @Inject constructor(
             runSuspendCatching { pubkyStore.reset() }
         }
         _publicKey.update { null }
-        _profile.update { null }
+        setProfile(null)
         _contacts.update { emptyList() }
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
