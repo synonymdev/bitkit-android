@@ -1558,6 +1558,10 @@ class AppViewModel @Inject constructor(
         lightningRepo.stop().onFailure {
             Logger.error("Failed to stop node during remote restore restart", it, context = TAG)
         }
+        if (lightningRepo.lightningState.value.nodeLifecycleState.isRunningOrStarting()) {
+            Logger.error("Node still running, pending channel migration was not applied", context = TAG)
+            return false
+        }
         delay(REMOTE_RESTORE_NODE_RESTART_DELAY_MS)
         var applied = false
         lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
