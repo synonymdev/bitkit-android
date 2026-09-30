@@ -4,6 +4,7 @@ package to.bitkit.repositories
 
 import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
+import java.util.TimeZone
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -11,6 +12,33 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 class PaykitSubscriptionTest {
+    @Test
+    fun `travel and daylight saving changes preserve UTC billing boundaries`() {
+        val original = TimeZone.getDefault()
+        try {
+            for (zone in listOf("America/New_York", "Pacific/Kiritimati", "Pacific/Pago_Pago")) {
+                TimeZone.setDefault(TimeZone.getTimeZone(zone))
+                val recurrence = PaykitSubscriptionRecurrence(
+                    every = 1,
+                    unit = PaykitRecurrenceUnit.Day,
+                    startsAt = Instant.parse("2027-03-13T08:00:00Z"),
+                    anchor = Instant.parse("2027-03-13T08:00:00Z"),
+                    endsAt = null,
+                )
+
+                val periods = recurrence.upcomingPeriodsAfter(Instant.parse("2027-03-13T09:00:00Z"), 2)
+
+                assertEquals(
+                    listOf(Instant.parse("2027-03-14T08:00:00Z"), Instant.parse("2027-03-15T08:00:00Z")),
+                    periods.map { it.startsAt },
+                    zone,
+                )
+            }
+        } finally {
+            TimeZone.setDefault(original)
+        }
+    }
+
     @Test
     fun `monthly recurrence returns to anchor day after a short month`() {
         val recurrence = PaykitSubscriptionRecurrence(

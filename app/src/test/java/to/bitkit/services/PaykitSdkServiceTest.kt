@@ -2,13 +2,17 @@ package to.bitkit.services
 
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
+import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkySessionAccess
+import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicContactSharingPolicy
 import com.synonym.paykit.ReceiverNoiseSecretKey
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -19,11 +23,14 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.PubkyStore
+import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyAuthRequestError
+import to.bitkit.models.PubkyProfileData
 import to.bitkit.utils.AppError
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertContentEquals
@@ -70,7 +77,9 @@ class PaykitSdkServiceTest {
                 "initialize", "cancel" -> whenever(sdk.initialize()).thenThrow(error)
             }
             var handlesCreated = 0
-            val service = PaykitSdkService(mock(), keychain) {
+            val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+            val service = PaykitSdkService(mock(), keychain, store) {
                 handlesCreated++
                 sdk
             }
@@ -93,6 +102,81 @@ class PaykitSdkServiceTest {
                 val handlesBeforeReload = handlesCreated
                 service.contactRecords()
                 assertEquals(handlesBeforeReload + 1, handlesCreated)
+            }
+        }
+    }
+
+    @Test
+    fun `identity lookup failure preserves stored state and stops activation`() = runTest {
+        for (error in listOf(
+            PaykitException.Identity("identity_error", "restore Pubky grant session from platform provider"),
+            PaykitException.Storage("storage_error", "unavailable"),
+        )) {
+            val keychain = mock<Keychain>()
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.identityStatus()).thenThrow(error)
+            val service = PaykitSdkService(mock(), keychain, mock()) { sdk }
+
+            val thrown = assertFailsWith<PaykitException> {
+                service.activateRegisteredIdentity(PubkySessionBootstrapResult(mock(), "pubky_test"))
+            }
+
+            assertEquals(error, thrown)
+            verify(keychain, never()).delete(any())
+            verify(keychain, never()).upsertString(any(), any())
+        }
+    }
+
+    @Test
+    fun `activation isolates cached identity data by sdk or cache owner`() = runTest {
+        val originalKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val differentKey = "5" + originalKey.drop(1)
+        for ((previousKey, cachedOwner, resetFails) in identityCacheCases(originalKey, differentKey)) {
+            val keychain = mock<Keychain>()
+            stubReceiverNoiseSecret(keychain)
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.identityStatus()).thenReturn(IdentityStatus(previousKey, false))
+            val originalCache = PubkyStoreData(
+                ownerPublicKey = cachedOwner,
+                cachedName = "Original profile",
+                cachedImageUri = "pubky://original/avatar",
+                contactProfileOverrides = mapOf(originalKey to PubkyProfileData("Private label", "")),
+            )
+            var cache = originalCache
+            val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(cache))
+            val resetError = AppError("Cache unavailable")
+            whenever(store.reset()).thenAnswer {
+                if (resetFails) throw resetError
+                cache = PubkyStoreData()
+            }
+            val bootstrap = mock<PubkySessionBootstrap>()
+            whenever(bootstrap.republishIdentity(any())).thenReturn(true)
+            val access = mock<PubkySessionAccess>()
+            val noise = mock<ReceiverNoiseSecretKey>()
+            whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+            whenever(access.exportSessionSecret()).thenReturn("new-session")
+            whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+            val service = PaykitSdkService(mock(), keychain, store, { bootstrap }) { sdk }
+
+            val result = PubkySessionBootstrapResult(access, "pubky$originalKey")
+            if (resetFails) {
+                assertEquals(resetError, assertFailsWith<AppError> { service.activateRegisteredIdentity(result) })
+                verify(sdk, never()).initialize()
+                assertEquals(originalCache, cache)
+                continue
+            }
+            service.activateRegisteredIdentity(result)
+
+            if (previousKey == differentKey || cachedOwner == differentKey) {
+                assertEquals(PubkyStoreData(), cache)
+                inOrder(store, sdk) {
+                    verify(store).reset()
+                    verify(sdk).initialize()
+                }
+            } else {
+                assertEquals(originalCache, cache)
+                verify(store, never()).reset()
             }
         }
     }
@@ -295,4 +379,24 @@ class PaykitSdkServiceTest {
         upsertBytes: (ByteArray) -> Unit = {},
         deriveBytes: () -> ByteArray,
     ) = PaykitReceiverNoiseKeyStore(loadBytes, upsertBytes, deriveBytes)
+
+    private fun stubReceiverNoiseSecret(keychain: Keychain) {
+        val blocking = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Any?>(any())).doAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Any?>(0).invoke(blocking)
+        }
+        whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name))
+            .thenReturn(ByteArray(32) { 1 })
+    }
+
+    private fun identityCacheCases(originalKey: String, differentKey: String) = listOf(
+        Triple(originalKey, null, false),
+        Triple("pubky$originalKey", null, false),
+        Triple(differentKey, null, false),
+        Triple(null, null, false),
+        Triple(null, originalKey, false),
+        Triple(null, differentKey, false),
+        Triple(originalKey, differentKey, false),
+        Triple(differentKey, null, true),
+    )
 }
