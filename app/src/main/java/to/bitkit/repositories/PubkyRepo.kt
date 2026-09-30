@@ -95,7 +95,7 @@ class PubkyRepo @Inject constructor(
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
     private val adoptedSourceCheckMutex = Mutex()
-    private var adoptionGeneration = 0L
+    private val adoptionMutex = Mutex()
     private var isServiceInitialized = false
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
@@ -345,53 +345,52 @@ class PubkyRepo @Inject constructor(
 
     suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {
         val reference = "${SharedPubkyContract.RING_SOURCE_PREFIX}$pubky"
-        var generation = 0L
-        var sessionInstalled = false
-        var completed = false
-        try {
-            runSuspendCatching {
-                val publicKey = initializeMutex.withLock {
-                    ensureServiceInitialized()
-                    val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
-                    val rawPublicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
-                    require(PubkyPublicKeyFormat.matches(rawPublicKey, pubky)) {
-                        "Ring credential does not match '${redacted(pubky)}'"
+        adoptionMutex.withLock {
+            var sessionInstalled = false
+            var completed = false
+            try {
+                runSuspendCatching {
+                    val publicKey = initializeMutex.withLock {
+                        ensureServiceInitialized()
+                        val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
+                        val rawPublicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
+                        require(PubkyPublicKeyFormat.matches(rawPublicKey, pubky)) {
+                            "Ring credential does not match '${redacted(pubky)}'"
+                        }
+                        keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)
+                        signInOrSignUpAdoptedIdentity(secretKeyHex, rawPublicKey)
+                        sessionInstalled = true
+
+                        val prefixedPublicKey = rawPublicKey.ensurePubkyPrefix()
+                        clearProfileIfIdentityChanged(prefixedPublicKey)
+                        _publicKey.update { prefixedPublicKey }
+                        notifyBackupStateChanged()
+                        Logger.info("Adopted ring identity for '${redacted(rawPublicKey)}'", context = TAG)
+                        prefixedPublicKey
                     }
-                    generation = ++adoptionGeneration
-                    keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)
-                    signInOrSignUpAdoptedIdentity(secretKeyHex, rawPublicKey)
-                    sessionInstalled = true
 
-                    val prefixedPublicKey = rawPublicKey.ensurePubkyPrefix()
-                    clearProfileIfIdentityChanged(prefixedPublicKey)
-                    _publicKey.update { prefixedPublicKey }
-                    notifyBackupStateChanged()
-                    Logger.info("Adopted ring identity for '${redacted(rawPublicKey)}'", context = TAG)
-                    prefixedPublicKey
-                }
+                    loadProfile()
+                    loadContacts()
 
-                loadProfile()
-                loadContacts()
-
-                initializeMutex.withLock {
-                    check(_publicKey.value == publicKey) { "Adopted Pubky identity changed before setup completed" }
-                    val hasProfile = _profile.value?.publicKey == publicKey
-                    runSuspendCatching { settingsStore.setPubkyProfileSetupPending(!hasProfile) }
-                        .onFailure { Logger.warn("Failed to save pending profile setup", it, context = TAG) }
-                    completed = true
-                    hasProfile
-                }
-            }.onFailure { clearAdoptedSourceIfMatches(reference) }
-        } catch (error: CancellationException) {
-            if (!completed) rollBackInterruptedAdoption(reference, generation, sessionInstalled)
-            throw error
+                    initializeMutex.withLock {
+                        check(_publicKey.value == publicKey) { "Adopted Pubky identity changed before setup completed" }
+                        val hasProfile = _profile.value?.publicKey == publicKey
+                        runSuspendCatching { settingsStore.setPubkyProfileSetupPending(!hasProfile) }
+                            .onFailure { Logger.warn("Failed to save pending profile setup", it, context = TAG) }
+                        completed = true
+                        hasProfile
+                    }
+                }.onFailure { clearAdoptedSourceIfMatches(reference) }
+            } catch (error: CancellationException) {
+                if (!completed) rollBackInterruptedAdoption(reference, sessionInstalled)
+                throw error
+            }
         }
     }
 
-    private suspend fun rollBackInterruptedAdoption(reference: String, generation: Long, sessionInstalled: Boolean) {
+    private suspend fun rollBackInterruptedAdoption(reference: String, sessionInstalled: Boolean) {
         withContext(NonCancellable + ioDispatcher) {
             initializeMutex.withLock {
-                if (generation != adoptionGeneration) return@withLock
                 if (keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) != reference) return@withLock
                 if (sessionInstalled && !discardAbandonedSession()) clearLocalState()
                 clearAdoptedSourceIfMatches(reference)

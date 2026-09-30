@@ -1321,10 +1321,13 @@ class PubkyRepoTest : BaseUnitTest() {
         var session: String? = null
         var signIns = 0
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
-        val secondSignedIn = CompletableDeferred<Unit>()
         whenever(pubkyService.signIn("ring_secret")).thenAnswer {
             session = "session_${++signIns}"
-            if (signIns == 2) secondSignedIn.complete(Unit)
+            Unit
+        }
+        whenever(pubkyService.signOut()).thenAnswer {
+            session = null
+            adoptedSource = null
             Unit
         }
         val firstProfileLoadStarted = CompletableDeferred<Unit>()
@@ -1338,17 +1341,17 @@ class PubkyRepoTest : BaseUnitTest() {
         }
         val firstPick = async { sut.adoptRingIdentity(ringPubky) }
         firstProfileLoadStarted.await()
-
         val secondPick = async { sut.adoptRingIdentity(ringPubky) }
-        secondSignedIn.await()
+        assertEquals(1, signIns)
 
         firstPick.cancelAndJoin()
 
         assertTrue(secondPick.await().isSuccess)
+        assertEquals(2, signIns)
         assertEquals("session_2", session)
         assertEquals(reference, adoptedSource)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
-        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService) { signOut() }
     }
 
     @Test
@@ -1375,10 +1378,48 @@ class PubkyRepoTest : BaseUnitTest() {
         }
         val firstPick = async { sut.adoptRingIdentity(ringPubky) }
         profileLoadStarted.await()
+        val secondPick = async { sut.adoptRingIdentity(otherPubky) }
 
-        assertTrue(sut.adoptRingIdentity(otherPubky).isFailure)
         firstPick.cancelAndJoin()
 
+        assertTrue(secondPick.await().isFailure)
+        assertNull(session)
+        assertNull(adoptedSource)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService) { signOut() }
+    }
+
+    @Test
+    fun `canceling a pick while another pubky fails to sign in leaves no session or ring reference`() = test {
+        sut.awaitInitialization()
+        val ringPubky = stubRingCredential()
+        val otherPubky = VALID_CONTACT_KEY_A.removePrefix("pubky")
+        whenever(sharedPubkyClient.ringCredential(otherPubky)).thenReturn(Result.success("other_secret"))
+        whenever(pubkyService.publicKeyFromSecret("other_secret")).thenReturn(otherPubky)
+        whenever(pubkyService.signIn("other_secret")).thenAnswer { throw TestAppError("Relay unavailable") }
+        whenever(pubkyService.hasIdentityRecord(otherPubky)).thenReturn(true)
+        var session: String? = null
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer {
+            session = "installed_session"
+            Unit
+        }
+        whenever(pubkyService.signOut()).thenAnswer {
+            session = null
+            Unit
+        }
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            awaitCancellation()
+        }
+        val firstPick = async { sut.adoptRingIdentity(ringPubky) }
+        profileLoadStarted.await()
+        val secondPick = async { sut.adoptRingIdentity(otherPubky) }
+
+        firstPick.cancelAndJoin()
+
+        assertTrue(secondPick.await().isFailure)
         assertNull(session)
         assertNull(adoptedSource)
         assertNull(sut.publicKey.value)
