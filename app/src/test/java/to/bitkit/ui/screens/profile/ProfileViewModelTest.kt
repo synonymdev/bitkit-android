@@ -39,7 +39,10 @@ class ProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         val restore = CompletableDeferred<Unit>()
         val loaded = CompletableDeferred<Unit>()
-        whenever(pubkyRepo.restoreSessionIfNeeded()).doSuspendableAnswer { restore.await() }
+        whenever(pubkyRepo.restoreSessionIfNeeded()).doSuspendableAnswer {
+            restore.await()
+            false
+        }
         whenever(pubkyRepo.loadProfile()).doSuspendableAnswer { loaded.await() }
         clearInvocations(pubkyRepo)
 
@@ -57,6 +60,12 @@ class ProfileViewModelTest : BaseUnitTest() {
             verify(pubkyRepo, times(1)).restoreSessionIfNeeded()
             loaded.complete(Unit)
             advanceUntilIdle()
+            assertFalse(sut.uiState.value.isLoading)
+            whenever(pubkyRepo.restoreSessionIfNeeded()).thenReturn(true)
+            clearInvocations(pubkyRepo)
+            sut.loadProfile()
+            advanceUntilIdle()
+            verify(pubkyRepo, never()).loadProfile()
             assertFalse(sut.uiState.value.isLoading)
             cancelAndIgnoreRemainingEvents()
         }
@@ -240,7 +249,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
         whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.isRestoringSession).thenReturn(MutableStateFlow(false))
-        whenever { pubkyRepo.restoreSessionIfNeeded() }.thenReturn(Unit)
+        whenever { pubkyRepo.restoreSessionIfNeeded() }.thenReturn(false)
         whenever { pubkyRepo.loadProfile() }.thenReturn(Unit)
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))

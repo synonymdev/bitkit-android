@@ -208,6 +208,7 @@ class PubkyRepo @Inject constructor(
             loadProfile()
             loadContacts()
         }
+        restored
     }
 
     private suspend fun initializeSession(notifyFailure: Boolean = true): Boolean {

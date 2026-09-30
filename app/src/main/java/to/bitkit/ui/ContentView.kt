@@ -51,6 +51,8 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -477,7 +479,6 @@ fun ContentView(
         val isPubkyProfileSetupPending by settingsViewModel.isPubkyProfileSetupPending.collectAsStateWithLifecycle()
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
-        val pubkyIdentityExists by settingsViewModel.pubkyIdentityExists.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
         val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
@@ -763,7 +764,7 @@ fun ContentView(
                 hasSeenContactsIntro = hasSeenContactsIntro,
                 hasContacts = hasPubkyContacts,
                 isProfileAuthenticated = isProfileAuthenticated,
-                profileIdentityExists = pubkyIdentityExists,
+                profileIdentityExists = settingsViewModel.pubkyIdentityExists,
                 isPaykitEnabled = isPaykitEnabled,
                 showWidgets = showWidgets,
                 onOpenWalletHome = navigateToHomeWallet,
@@ -2051,8 +2052,16 @@ fun profileDestination(identityExists: Boolean?, hasSeenIntro: Boolean): Routes.
     null -> null
 }
 
-fun NavController.navigateToProfile(identityExists: Boolean?, hasSeenIntro: Boolean) {
-    profileDestination(identityExists, hasSeenIntro)?.let { navigateTo(it) }
+suspend fun NavController.navigateToProfile(
+    identityExists: Flow<Boolean?>,
+    hasSeenIntro: Boolean,
+    onBeforeNavigate: (Routes.DeepLinkable) -> Unit = {},
+) {
+    val origin = currentBackStackEntry
+    val destination = requireNotNull(profileDestination(identityExists.filterNotNull().first(), hasSeenIntro))
+    if (currentBackStackEntry != origin) return
+    onBeforeNavigate(destination)
+    navigateTo(destination)
 }
 
 fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)

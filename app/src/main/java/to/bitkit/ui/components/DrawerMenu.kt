@@ -39,11 +39,13 @@ import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateTo
-import to.bitkit.ui.profileDestination
+import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
@@ -70,6 +72,7 @@ fun DrawerMenu(
     hasSeenShopIntro: Boolean,
     onBeforeNavigate: (Routes?) -> Unit,
     showWidgets: Boolean,
+    profileIdentityExists: Flow<Boolean?>,
     modifier: Modifier = Modifier,
     onOpenWalletHome: () -> Unit = {},
     onOpenWidgetsHome: () -> Unit = {},
@@ -78,7 +81,6 @@ fun DrawerMenu(
     hasSeenContactsIntro: Boolean = false,
     hasContacts: Boolean = false,
     isProfileAuthenticated: Boolean = false,
-    profileIdentityExists: Boolean? = null,
     isPaykitEnabled: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
@@ -169,9 +171,12 @@ fun DrawerMenu(
                     onBeforeNavigate(Routes.Profile)
                     rootNavController.navigateIfNotCurrent(Routes.Profile)
                 } else {
-                    profileDestination(profileIdentityExists, hasSeenProfileIntro)?.let {
-                        onBeforeNavigate(it)
-                        rootNavController.navigateIfNotCurrent(it)
+                    scope.launch {
+                        rootNavController.navigateToProfile(
+                            profileIdentityExists,
+                            hasSeenProfileIntro,
+                            onBeforeNavigate,
+                        )
                     }
                 }
             },
@@ -400,6 +405,7 @@ private fun Preview() {
         Box {
             DrawerMenu(
                 rootNavController = navController,
+                profileIdentityExists = flowOf(false),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
                 hasSeenWidgetsIntro = false,
                 hasSeenShopIntro = false,

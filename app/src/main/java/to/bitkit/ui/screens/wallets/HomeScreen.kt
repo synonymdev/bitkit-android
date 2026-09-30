@@ -231,7 +231,7 @@ fun HomeScreen(
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
-    val pubkyIdentityExists by settingsViewModel.pubkyIdentityExists.collectAsStateWithLifecycle()
+    val profileNavigationScope = rememberCoroutineScope()
     val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
     val profileDisplayName by homeViewModel.profileDisplayName.collectAsStateWithLifecycle()
     val profileDisplayImageUri by homeViewModel.profileDisplayImageUri.collectAsStateWithLifecycle()
@@ -264,11 +264,13 @@ fun HomeScreen(
         DeleteWidgetAlert(type, homeViewModel)
     }
 
-    val navigateToProfile = {
-        rootNavController.navigateToProfile(
-            identityExists = pubkyIdentityExists,
-            hasSeenIntro = hasSeenProfileIntro,
-        )
+    val navigateToProfile: () -> Unit = {
+        profileNavigationScope.launch {
+            rootNavController.navigateToProfile(
+                identityExists = settingsViewModel.pubkyIdentityExists,
+                hasSeenIntro = hasSeenProfileIntro,
+            )
+        }
     }
 
     Content(

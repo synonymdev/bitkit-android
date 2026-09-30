@@ -92,8 +92,8 @@ class ProfileViewModel @Inject constructor(
         profileLoadJob = viewModelScope.launch {
             _isRefreshing.update { true }
             try {
-                pubkyRepo.restoreSessionIfNeeded()
-                pubkyRepo.loadProfile()
+                val restored = pubkyRepo.restoreSessionIfNeeded()
+                if (!restored) pubkyRepo.loadProfile()
             } finally {
                 _isRefreshing.update { false }
             }

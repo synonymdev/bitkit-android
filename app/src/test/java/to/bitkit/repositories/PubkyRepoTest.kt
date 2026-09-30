@@ -1627,11 +1627,11 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(pubkyStore, never()).reset()
         verifyBlocking(keychain, never()) { delete(any()) }
 
-        sut.restoreSessionIfNeeded()
+        assertFalse(sut.restoreSessionIfNeeded())
         assertTrue(sut.sessionRestorationFailed.value)
 
         canRestore = true
-        sut.restoreSessionIfNeeded()
+        assertTrue(sut.restoreSessionIfNeeded())
 
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertTrue(sut.isAuthenticated.value)

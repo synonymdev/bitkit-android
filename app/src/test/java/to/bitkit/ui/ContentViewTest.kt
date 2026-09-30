@@ -8,6 +8,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.createGraph
 import androidx.navigation.navigation
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -26,9 +31,10 @@ import kotlin.test.assertTrue
 
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 class ContentViewTest {
     @Test
-    fun `profile navigation waits for identity lookup and preserves disconnected identities`() {
+    fun `profile navigation waits for identity lookup and preserves disconnected identities`() = runTest {
         val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
             navigatorProvider.addNavigator(ComposeNavigator())
             graph = createGraph(startDestination = Routes.Home) {
@@ -48,14 +54,28 @@ class ContentViewTest {
             Triple(true, true, Routes.Profile),
         )
         for ((identityExists, hasSeenIntro, expected) in cases) {
+            navController.popBackStack(Routes.Home, inclusive = false)
             val destination = requireNotNull(profileDestination(identityExists, hasSeenIntro))
             assertEquals(expected, destination)
-            navController.navigateIfNotCurrent(destination)
+            val identity = MutableStateFlow<Boolean?>(null)
+            repeat(2) { launch { navController.navigateToProfile(identity, hasSeenIntro) } }
+            runCurrent()
+            assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
+            identity.value = identityExists
+            runCurrent()
             assertTrue(navController.currentDestination?.hasRoute(expected::class) == true)
             val entry = navController.currentBackStackEntry
             navController.navigateIfNotCurrent(destination)
             assertEquals(entry, navController.currentBackStackEntry)
         }
+        navController.popBackStack(Routes.Home, inclusive = false)
+        val identity = MutableStateFlow<Boolean?>(null)
+        launch { navController.navigateToProfile(identity, hasSeenIntro = true) }
+        runCurrent()
+        navController.navigateTo(Routes.ProfileIntro)
+        identity.value = true
+        runCurrent()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.ProfileIntro>() == true)
     }
 
     @Test
