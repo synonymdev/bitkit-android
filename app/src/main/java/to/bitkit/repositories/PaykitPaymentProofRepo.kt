@@ -65,6 +65,7 @@ data class PendingPaykitPaymentProof(
     val onchainAmountSats: ULong? = null,
     val onchainWalletId: String = WalletScope.default,
     val onchainMatchingTransactionIdsBeforeAttempt: Set<String> = emptySet(),
+    val onchainAcceptanceVerified: Boolean = false,
 )
 
 data class PaykitOnchainPaymentProofResolution(
@@ -239,6 +240,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         request: PaykitPaymentRequest,
         txid: String,
         paymentEndpointIdentifier: String,
+        acceptedOutcome: OnchainSendOutcome.Accepted? = null,
     ): Boolean = withContext(ioDispatcher) {
         if (!txid.isHex(HASH_BYTE_COUNT)) {
             Logger.warn("Ignored a Paykit on-chain proof with an invalid transaction id", context = TAG)
@@ -246,6 +248,14 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
 
         val identity = currentIdentity() ?: return@withContext false
+        if (acceptedOutcome != null && !acceptedOutcome.txid.equals(txid, ignoreCase = true)) return@withContext false
+        val attempt = if (acceptedOutcome == null) {
+            runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+        } else {
+            null
+        }
+        fun hasPositiveEvidence(proof: PendingPaykitPaymentProof): Boolean = acceptedOutcome != null ||
+            (attempt.matchesPositiveShopProof(proof) && attempt?.txid.equals(txid, ignoreCase = true))
         val fallbackProof = runSuspendCatching {
             pendingProof(request, paymentEndpointIdentifier, PaykitPaymentProofKind.Onchain)
         }.getOrNull()
@@ -264,14 +274,17 @@ class PaykitPaymentProofRepo @Inject constructor(
                     proofs[index].copy(
                         paymentIdentifier = txid.lowercase(),
                         proofData = txid.lowercase(),
+                        onchainAcceptanceVerified = true,
                     )
                 } else {
                     pendingProof(request, paymentEndpointIdentifier, PaykitPaymentProofKind.Onchain).copy(
                         paymentStarted = true,
                         paymentIdentifier = txid.lowercase(),
                         proofData = txid.lowercase(),
+                        onchainAcceptanceVerified = true,
                     )
                 }
+                if (!hasPositiveEvidence(proof)) return@runSuspendCatching false
                 if (index >= 0) proofs[index] = proof else proofs += proof
                 val retained = persistAndSubmit(listOf(proof), proofs)
                 if (retained) publishOnchainResolution(proof, txid)
@@ -284,11 +297,12 @@ class PaykitPaymentProofRepo @Inject constructor(
                     context = TAG,
                 )
             }
-            if (completion.isFailure && fallbackProof != null) {
+            if (completion.isFailure && fallbackProof != null && hasPositiveEvidence(fallbackProof)) {
                 val proof = fallbackProof.copy(
                     paymentStarted = true,
                     paymentIdentifier = txid.lowercase(),
                     proofData = txid.lowercase(),
+                    onchainAcceptanceVerified = true,
                 )
                 val delivered = runSuspendCatching { submitReady(proof) }
                     .onFailure { Logger.warn("Failed to complete a Paykit on-chain payment proof", it, context = TAG) }
@@ -431,9 +445,20 @@ class PaykitPaymentProofRepo @Inject constructor(
     ): Boolean {
         return when {
             proof.kind == PaykitPaymentProofKind.Onchain && proof.proofData != null -> {
-                if (!attempt.matchesPositiveShopProof(proof)) return false
+                if (!proof.paymentStarted || !proof.proofData.isHex(HASH_BYTE_COUNT) ||
+                    !proof.paymentIdentifier.equals(proof.proofData, ignoreCase = true)
+                ) return false
+                if (proof.onchainAcceptanceVerified != true) {
+                    if (!attempt.matchesPositiveShopProof(proof)) return false
+                    val proofs = loadProofs().toMutableList()
+                    val index = proofs.indexOf(proof)
+                    if (index < 0) return false
+                    val verified = proof.copy(onchainAcceptanceVerified = true)
+                    proofs[index] = verified
+                    return persistAndSubmit(listOf(verified), proofs)
+                }
                 submitReady(proof)
-                true // The proof is already durable even if private delivery remains pending.
+                attempt.matchesPositiveShopProof(proof)
             }
             proof.proofData != null -> {
                 submitReady(proof)
@@ -489,7 +514,9 @@ class PaykitPaymentProofRepo @Inject constructor(
         val proofs = loadProofs().toMutableList()
         val index = proofs.indexOf(proof)
         if (index < 0) return false
-        val completed = proof.copy(paymentIdentifier = txid.lowercase(), proofData = txid.lowercase())
+        val completed = proof.copy(
+            paymentIdentifier = txid.lowercase(), proofData = txid.lowercase(), onchainAcceptanceVerified = true,
+        )
         proofs[index] = completed
         val retained = persistAndSubmit(listOf(completed), proofs)
         if (retained) publishOnchainResolution(proof, txid)
@@ -543,6 +570,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         ?.let(PubkyPublicKeyFormat::normalized)
 
     private suspend fun submitReady(proof: PendingPaykitPaymentProof): Boolean {
+        if (proof.kind == PaykitPaymentProofKind.Onchain && proof.onchainAcceptanceVerified != true) return false
         val proofData = proof.proofData ?: return false
         val identityStatus = paykitSdkService.identityStatus()
         if (

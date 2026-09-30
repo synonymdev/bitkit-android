@@ -9,6 +9,7 @@ import to.bitkit.repositories.PaykitPaymentProofKind
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -23,6 +24,7 @@ class PaykitPaymentStateBackupTest {
             val backup = Json.decodeFromString<PaykitPaymentStateBackup>(fixture)
             val restored = backup.pendingProofs.single().restored()
             assertTrue(restored.paymentStarted)
+            assertFalse(restored.onchainAcceptanceVerified)
             assertEquals(PaykitPaymentProofKind.Onchain, restored.kind)
             assertEquals(
                 Instant.parse(requireNotNull(restored.requestId.billingPeriodStartsAt)),
@@ -40,6 +42,12 @@ class PaykitPaymentStateBackupTest {
             val decoded = Json.decodeFromString<PaykitPaymentStateBackup>(Json.encodeToString(rebuilt))
             assertEquals(restored, decoded.pendingProofs.single().restored())
             assertEquals(backup.subscriptions, decoded.subscriptions)
+
+            val verifiedProof = restored.copy(onchainAcceptanceVerified = true)
+            val verifiedBackup = PaykitPaymentStateBackup.Proof(verifiedProof)
+            val verifiedJson = Json.encodeToString(verifiedBackup)
+            assertContains(verifiedJson, "\"onchainAcceptanceVerified\":true")
+            assertTrue(Json.decodeFromString<PaykitPaymentStateBackup.Proof>(verifiedJson).restored().onchainAcceptanceVerified)
 
             val hardwareProof = restored.copy(onchainWalletId = "hardware-wallet")
             val hardwareBackup = PaykitPaymentStateBackup.Proof(hardwareProof)

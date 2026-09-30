@@ -1417,7 +1417,7 @@ class LightningRepoTest : BaseUnitTest() {
         )
         whenever {
             onchainSendAttemptStore.admit(
-                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), any(),
+                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(),
             )
         }
             .thenReturn(attempt)
@@ -1511,7 +1511,7 @@ class LightningRepoTest : BaseUnitTest() {
     private suspend fun prepareGuardedSend(attempt: OnchainSendAttempt): LightningRepo {
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         whenever(onchainSendAttemptStore.admit(
-            any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), any(),
+            any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(),
         )).thenReturn(attempt)
         startNodeForTesting()
         return spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
@@ -1545,6 +1545,91 @@ class LightningRepoTest : BaseUnitTest() {
 
         whenever { activityService.getOnchainActivityByTxId(txid, attempt.walletId) }.thenReturn(mock())
         sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+    }
+
+    @Test
+    fun `transient accepted write failure repairs original guard without another native send`() = test {
+        val txid = "ab".repeat(32)
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        var writes = 0
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
+            writes++
+            if (writes == 2) error("transient accepted write failure")
+            saved = it.getArgument(1)
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService)
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
+            coreService = coreService, lspNotificationsService = lspNotificationsService,
+            firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
+            cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator, electrumProbeService = electrumProbeService,
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(eq(txid), any())).thenReturn(mock())
+        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any()))
+            .thenReturn(OnchainSendOutcome.Accepted(txid))
+        startNodeForTesting()
+        val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+
+        assertEquals(OnchainSendOutcome.Accepted(txid), repo.sendOnChain("address", 1_000uL).getOrThrow())
+        assertEquals(txid, repo.currentOnchainSendAttempt()?.txid)
+        val blocked = assertIs<OnchainSendBlockedError>(repo.sendOnChain("different-address", 2_000uL).exceptionOrNull())
+        assertEquals(txid, blocked.attempt?.txid)
+        repo.completeAcceptedOrdinaryFollowup(txid)
+
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, lightningService).current()
+        assertEquals(txid, reopened?.txid)
+        assertEquals(OnchainSendEvidence.Accepted, reopened?.evidence)
+        assertTrue(reopened?.localFollowupComplete == true)
+        verify(lightningService, times(1)).send(any(), any(), any(), anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `transfer send admits original balance context before native dispatch`() = test {
+        val context = OnchainTransferContext(txTotalSats = 99_000uL, preTransferOnchainSats = 125_000uL)
+        val attempt = pendingSendAttempt().copy(isTransfer = true, orderId = "order-1", transferContext = context)
+        val repo = prepareGuardedSend(attempt)
+        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer {
+                verify(onchainSendAttemptStore).admit(
+                    any(), isNull(), eq("order-1"), any(), any(), any(), any(), eq(true), anyOrNull(), any(),
+                    eq(context), any(),
+                )
+                OnchainSendOutcome.Unknown("ab".repeat(32))
+            }
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Unknown, txid = "ab".repeat(32)))
+
+        assertTrue(repo.sendOnChain(
+            "address", 98_000uL, isTransfer = true, orderId = "order-1", transferContext = context,
+        ).getOrThrow() is OnchainSendOutcome.Unknown)
+    }
+
+    @Test
+    fun `observed ordinary send completes guard only after durable local activity`() = test {
+        val txid = "ab".repeat(32)
+        val attempt = pendingSendAttempt().copy(evidence = OnchainSendEvidence.Observed, txid = txid)
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.observeExactTransaction(txid)).thenReturn(attempt).thenReturn(null)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        val eventHandler = startNodeAndCaptureEvents()
+        val event = Event.OnchainTransactionReceived(txid = txid, details = mock())
+
+        eventHandler(event)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        eventHandler(event)
         verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
     }
 

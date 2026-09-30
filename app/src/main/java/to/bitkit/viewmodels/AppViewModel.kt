@@ -4102,15 +4102,12 @@ class AppViewModel @Inject constructor(
                     onchainPaymentStarted = true
                 }
             },
-            onBroadcast = { txId ->
-                proofRequest = null
-                completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
-            },
         ).onSuccess { outcome ->
             proofRequest = null
             when (outcome) {
                 is OnchainSendOutcome.Accepted -> {
                     Logger.info("Accepted on-chain send '${outcome.txid}'", context = TAG)
+                    completeOnchainPaymentProofInBackground(incomingPaymentRequest, outcome.txid, outcome)
                     onSendSuccess(
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.ONCHAIN,
@@ -4167,7 +4164,7 @@ class AppViewModel @Inject constructor(
             val previous = (error as? OnchainSendBlockedError)?.attempt
             val priorAccepted = previous?.takeIf {
                 it.hasPositiveEvidence && it.txid != null && !it.isTransfer &&
-                    it.requestId == incomingPaymentRequest?.id
+                    incomingPaymentRequest != null && it.requestId == incomingPaymentRequest.id
             }
             if (priorAccepted != null) {
                 val txid = requireNotNull(priorAccepted.txid)
@@ -4180,8 +4177,14 @@ class AppViewModel @Inject constructor(
                         isLoadingDetails = false,
                     )
                 )
-                if (priorAccepted.requestId == null) lightningRepo.completeAcceptedOrdinaryFollowup(txid)
                 return
+            }
+            if (previous != null && previous.hasPositiveEvidence && previous.txid != null &&
+                !previous.isTransfer && previous.requestId == null
+            ) {
+                // Finish the earlier payment, but this blocked confirmation did not send the new payment.
+                runSuspendCatching { lightningRepo.completeAcceptedOrdinaryFollowup(previous.txid) }
+                    .onFailure { Logger.warn("Failed to finish earlier ordinary send locally", it, context = TAG) }
             }
             previous?.refusalReason?.let {
                 toast(
@@ -4375,7 +4378,11 @@ class AppViewModel @Inject constructor(
     }
         ?: Result.success(Unit)
 
-    private fun completeOnchainPaymentProofInBackground(request: PaykitPaymentRequest?, txId: String) {
+    private fun completeOnchainPaymentProofInBackground(
+        request: PaykitPaymentRequest?,
+        txId: String,
+        acceptedOutcome: OnchainSendOutcome.Accepted? = null,
+    ) {
         val paymentRequest = request ?: return
         val endpointIdentifier = paymentProofPreparation().endpointIdentifier
         viewModelScope.launch {
@@ -4383,6 +4390,7 @@ class AppViewModel @Inject constructor(
                 request = paymentRequest,
                 txid = txId,
                 paymentEndpointIdentifier = endpointIdentifier,
+                acceptedOutcome = acceptedOutcome,
             )
             if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
         }

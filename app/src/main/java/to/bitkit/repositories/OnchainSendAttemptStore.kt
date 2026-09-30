@@ -35,6 +35,12 @@ enum class OnchainSendEvidence {
 }
 
 @Serializable
+data class OnchainTransferContext(
+    val txTotalSats: ULong,
+    val preTransferOnchainSats: ULong,
+)
+
+@Serializable
 @Suppress("LongParameterList")
 data class OnchainSendAttempt(
     val walletId: String,
@@ -53,6 +59,7 @@ data class OnchainSendAttempt(
     val refusalReason: String? = null,
     val localFollowupComplete: Boolean = false,
     val walletIndex: Int = 0,
+    val transferContext: OnchainTransferContext? = null,
 ) {
     val isUnresolved: Boolean
         get() = evidence == OnchainSendEvidence.Pending ||
@@ -87,9 +94,11 @@ class OnchainSendAttemptStore @Inject constructor(
     }
 
     private val mutex = Mutex()
+    // One known result per existing wallet guard; entries disappear after a successful durable write.
+    private val retainedAccepted = mutableMapOf<Int, OnchainSendAttempt>()
 
     suspend fun current(): OnchainSendAttempt? = withContext(ioDispatcher) {
-        mutex.withLock { load(lightningService.currentWalletIndex) }
+        mutex.withLock { loadWithRetainedAccepted(lightningService.currentWalletIndex) }
     }
 
     @Suppress("LongParameterList")
@@ -104,6 +113,7 @@ class OnchainSendAttemptStore @Inject constructor(
         isTransfer: Boolean,
         channelId: String?,
         tags: List<String>,
+        transferContext: OnchainTransferContext? = null,
         beforeSendAttempt: suspend () -> Unit,
     ): OnchainSendAttempt = withContext(ioDispatcher) {
         mutex.withLock {
@@ -116,7 +126,7 @@ class OnchainSendAttemptStore @Inject constructor(
                         (orderId != null && previous.orderId == orderId)
                     )
             ) {
-                throw OnchainSendBlockedError(previous)
+                throw OnchainSendBlockedError(loadWithRetainedAccepted(walletIndex) ?: previous)
             }
             beforeSendAttempt()
             val attempt = OnchainSendAttempt(
@@ -132,6 +142,7 @@ class OnchainSendAttemptStore @Inject constructor(
                 channelId = channelId,
                 tags = tags,
                 walletIndex = walletIndex,
+                transferContext = transferContext,
             )
             persist(attempt)
             attempt
@@ -148,17 +159,21 @@ class OnchainSendAttemptStore @Inject constructor(
                     is OnchainSendOutcome.Rejected -> OnchainSendEvidence.Rejected
                     is OnchainSendOutcome.Unknown -> OnchainSendEvidence.Unknown
                 }
-                current.copy(
+                val recorded = current.copy(
                     evidence = evidence,
                     txid = outcome.txid,
                     refusalReason = (outcome as? OnchainSendOutcome.Rejected)?.reason,
-                ).also { persist(it) }
+                )
+                if (outcome is OnchainSendOutcome.Accepted) retainedAccepted[walletIndex] = recorded
+                persist(recorded)
+                retainedAccepted.remove(walletIndex)
+                recorded
             }
         }
 
     suspend fun releaseBeforeDispatch(attemptId: String, walletIndex: Int) = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
-            val current = load(walletIndex)
+            val current = loadWithRetainedAccepted(walletIndex)
             if (current?.attemptId == attemptId && current.evidence == OnchainSendEvidence.Pending) {
                 keychain.delete(KEY, walletIndex)
             }
@@ -167,9 +182,10 @@ class OnchainSendAttemptStore @Inject constructor(
 
     suspend fun markLocalFollowupComplete(attemptId: String, walletIndex: Int) = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
-            val current = load(walletIndex)
+            val current = loadWithRetainedAccepted(walletIndex)
             if (current?.attemptId == attemptId && current.hasPositiveEvidence) {
                 persist(current.copy(localFollowupComplete = true))
+                retainedAccepted.remove(walletIndex)
             }
         }
     }
@@ -177,7 +193,7 @@ class OnchainSendAttemptStore @Inject constructor(
     suspend fun observeExactTransaction(txid: String): OnchainSendAttempt? =
         withContext(ioDispatcher + NonCancellable) {
             mutex.withLock {
-                val current = load(lightningService.currentWalletIndex) ?: return@withLock null
+                val current = loadWithRetainedAccepted(lightningService.currentWalletIndex) ?: return@withLock null
                 if (!current.txid.equals(txid, ignoreCase = true) || !current.isUnresolved) return@withLock null
                 current.copy(evidence = OnchainSendEvidence.Observed).also { persist(it) }
             }
@@ -194,6 +210,22 @@ class OnchainSendAttemptStore @Inject constructor(
             }
         }
             .getOrElse { throw OnchainSendAttemptUnreadableError(it) }
+    }
+
+    private fun loadWithRetainedAccepted(walletIndex: Int): OnchainSendAttempt? {
+        val persisted = load(walletIndex)
+        val retained = retainedAccepted[walletIndex] ?: return persisted
+        if (persisted?.attemptId != retained.attemptId || persisted.walletId != retained.walletId ||
+            (persisted.txid != null && !persisted.txid.equals(retained.txid, ignoreCase = true))
+        ) {
+            retainedAccepted.remove(walletIndex)
+            return persisted
+        }
+        if (persisted.hasPositiveEvidence) {
+            retainedAccepted.remove(walletIndex)
+            return persisted
+        }
+        return retained
     }
 
     private suspend fun persist(attempt: OnchainSendAttempt) {

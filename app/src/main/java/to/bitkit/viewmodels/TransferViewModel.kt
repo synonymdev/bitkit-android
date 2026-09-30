@@ -71,6 +71,7 @@ import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainTransferContext
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -377,7 +378,13 @@ class TransferViewModel @Inject constructor(
             if (previous.hasPositiveEvidence && txid != null) {
                 if (!previous.localFollowupComplete) {
                     withContext(NonCancellable) {
-                        fundPaidOrder(order = order, txId = txid, requireTransferPersisted = true)
+                        fundPaidOrder(
+                            order = order,
+                            txId = txid,
+                            txTotalSats = previous.transferContext?.txTotalSats,
+                            preTransferOnchainSats = previous.transferContext?.preTransferOnchainSats,
+                            requireTransferPersisted = true,
+                        )
                         lightningRepo.completeAcceptedTransferFollowup(order.id, txid)
                     }
                 }
@@ -401,6 +408,14 @@ class TransferViewModel @Inject constructor(
         if (holdForFeesChange(order, shown, plan) || isSendAllBelowOrderFee(order, shown, plan)) return false
 
         val address = order.payment?.onchain?.address.orEmpty()
+        val transferContext = OnchainTransferContext(
+            txTotalSats = if (plan.shouldUseSendAll) {
+                plan.spendableBalance
+            } else {
+                order.feeSat.safe() + plan.miningFeeSats.safe()
+            },
+            preTransferOnchainSats = plan.totalOnchainBalance,
+        )
         return lightningRepo
             .sendOnChain(
                 address = address,
@@ -412,6 +427,7 @@ class TransferViewModel @Inject constructor(
                 channelId = order.channel?.shortChannelId,
                 isMaxAmount = plan.shouldUseSendAll,
                 orderId = order.id,
+                transferContext = transferContext,
             )
             .fold(
                 onSuccess = { outcome ->
@@ -426,12 +442,8 @@ class TransferViewModel @Inject constructor(
                         fundPaidOrder(
                             order = order,
                             txId = outcome.txid,
-                            txTotalSats = if (plan.shouldUseSendAll) {
-                                plan.spendableBalance
-                            } else {
-                                order.feeSat.safe() + plan.miningFeeSats.safe()
-                            },
-                            preTransferOnchainSats = plan.totalOnchainBalance,
+                            txTotalSats = transferContext.txTotalSats,
+                            preTransferOnchainSats = transferContext.preTransferOnchainSats,
                             requireTransferPersisted = true,
                         )
                         lightningRepo.completeAcceptedTransferFollowup(order.id, outcome.txid)
@@ -676,6 +688,11 @@ class TransferViewModel @Inject constructor(
             throw AppError("Funding transaction is already assigned to another order")
         }
         if (existingOrderId == null) {
+            if (requireTransferPersisted) {
+                check(txTotalSats != null && preTransferOnchainSats != null) {
+                    "Accepted transfer is missing its original balance context"
+                }
+            }
             val transfer = transferRepo.createTransfer(
                 type = TransferType.TO_SPENDING,
                 amountSats = order.clientBalanceSat.toLong(),

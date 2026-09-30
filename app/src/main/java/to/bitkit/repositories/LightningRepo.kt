@@ -569,6 +569,7 @@ class LightningRepo @Inject constructor(
                     !attempt.isTransfer && attempt.requestId == null
                 ) {
                     finishOnchainSendLocally(attempt)
+                    onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
                 }
             }
                 .onFailure { Logger.warn("Failed to record exact on-chain transaction observation", it, context = TAG) }
@@ -1479,6 +1480,7 @@ class LightningRepo @Inject constructor(
         onBroadcast: suspend (Txid) -> Unit = {},
         requestId: PaykitPaymentRequestId? = null,
         orderId: String? = null,
+        transferContext: OnchainTransferContext? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
@@ -1515,6 +1517,7 @@ class LightningRepo @Inject constructor(
                 isTransfer = isTransfer,
                 channelId = channelId,
                 tags = tags,
+                transferContext = transferContext,
                 beforeSendAttempt = beforeSendAttempt,
             )
         }.getOrElse {

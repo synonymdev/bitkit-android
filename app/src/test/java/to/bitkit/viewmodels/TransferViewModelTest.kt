@@ -91,6 +91,7 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainTransferContext
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -1158,6 +1159,7 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
+            transferContext = eq(OnchainTransferContext(txTotalSats = 100_000uL, preTransferOnchainSats = 100_000uL)),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(blocktankRepo, times(1)).createOrder(eq(order.clientBalanceSat), eq(order.lspBalanceSat), any())
@@ -1198,6 +1200,7 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
+            transferContext = eq(OnchainTransferContext(txTotalSats = 38_171uL, preTransferOnchainSats = 41_000uL)),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1213,6 +1216,7 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
+            transferContext = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
     }
@@ -1245,6 +1249,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 anyOrNull(),
                 anyOrNull(),
+                anyOrNull(),
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
 
@@ -1269,6 +1274,7 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
+            transferContext = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1284,6 +1290,7 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
+            transferContext = anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -1296,6 +1303,7 @@ class TransferViewModelTest : BaseUnitTest() {
             address = order.payment?.onchain?.address.orEmpty(), amountSats = order.feeSat,
             isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
             channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Accepted, txid = TXID,
+            transferContext = OnchainTransferContext(txTotalSats = 99_000uL, preTransferOnchainSats = 125_000uL),
         )
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
         whenever(transferRepo.findLspOrderIdByFundingTxId(TXID)).thenReturn(Result.success(null))
@@ -1315,10 +1323,69 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
             anyOrNull(), anyOrNull(),
+            anyOrNull(),
         )
         verify(transferRepo, times(1)).createTransfer(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
+    }
+
+    @Test
+    fun `accepted transfer recovery preserves original balance totals`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val attempt = OnchainSendAttempt(
+            walletId = "wallet", attemptId = "attempt", requestId = null, orderId = order.id,
+            address = order.payment?.onchain?.address.orEmpty(), amountSats = order.feeSat,
+            isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
+            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Accepted, txid = TXID,
+            transferContext = OnchainTransferContext(txTotalSats = 99_000uL, preTransferOnchainSats = 125_000uL),
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        whenever(transferRepo.findLspOrderIdByFundingTxId(TXID)).thenReturn(Result.success(null))
+        whenever(transferRepo.createTransfer(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )).thenReturn(Result.success("transfer-id"))
+        quoteOrder(order)
+        prepareConfirm()
+        // A later balance is not the balance snapshot from before this accepted payment.
+        stubSpendableBalances(7_000uL)
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verify(transferRepo).createTransfer(
+            type = eq(TransferType.TO_SPENDING), amountSats = eq(order.clientBalanceSat.toLong()),
+            channelId = anyOrNull(), fundingTxId = eq(TXID), lspOrderId = eq(order.id),
+            claimableAtHeight = anyOrNull(), txTotalSats = eq(99_000L), preTransferOnchainSats = eq(125_000L),
+        )
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
+            anyOrNull(), anyOrNull(),
+            anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `accepted transfer without original context stays blocked instead of inventing balance totals`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val attempt = OnchainSendAttempt(
+            walletId = "wallet", attemptId = "attempt", requestId = null, orderId = order.id,
+            address = order.payment?.onchain?.address.orEmpty(), amountSats = order.feeSat,
+            isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
+            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Accepted, txid = TXID,
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        whenever(transferRepo.findLspOrderIdByFundingTxId(TXID)).thenReturn(Result.success(null))
+        quoteOrder(order)
+        prepareConfirm()
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verify(transferRepo, never()).createTransfer(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        assertFalse(sut.spendingUiState.value.isConfirmPaying)
     }
 
     @Test
@@ -1346,6 +1413,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 onBroadcast = any(),
                 requestId = anyOrNull(),
                 orderId = anyOrNull(),
+                transferContext = anyOrNull(),
             ),
         ).thenReturn(Result.success(OnchainSendOutcome.Unknown(TXID)))
         quoteOrder(order)
@@ -1412,6 +1480,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 any(),
+                anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
             ),
@@ -1676,6 +1745,7 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
+            transferContext = anyOrNull(),
         )
     }
 
@@ -1859,6 +1929,7 @@ class TransferViewModelTest : BaseUnitTest() {
             any(),
             anyOrNull(),
             anyOrNull(),
+            anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -1885,6 +1956,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 any(),
+                anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
             ),
@@ -2033,6 +2105,7 @@ class TransferViewModelTest : BaseUnitTest() {
             any(),
             any(),
             any(),
+            anyOrNull(),
             anyOrNull(),
             anyOrNull(),
         )
@@ -3278,6 +3351,7 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
+            transferContext = anyOrNull(),
         )
     }
 
@@ -3426,6 +3500,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 any(),
+                anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
             ),

@@ -25,7 +25,8 @@ class SendPendingScreenTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun unresolvedOnchainSendStaysPendingAfterCloseAndReopen() {
+    fun unresolvedOnchainContentStaysPendingWhenVisibilityIsToggled() {
+        // Component rendering only; this fixture does not reload the durable attempt or attempt another send.
         var visible by mutableStateOf(true)
         var closeCount = 0
         composeTestRule.setContent {

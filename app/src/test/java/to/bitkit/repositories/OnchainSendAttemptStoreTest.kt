@@ -47,6 +47,28 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `transfer balance context is durable before dispatch and survives reopen`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val context = OnchainTransferContext(txTotalSats = 99_000uL, preTransferOnchainSats = 125_000uL)
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val attempt = store.admit(
+            walletId = "wallet-1", requestId = null, orderId = "order-1", address = "bcrt1qfunding",
+            amountSats = 98_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
+            channelId = null, tags = emptyList(), transferContext = context, beforeSendAttempt = {},
+        )
+
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        assertEquals(context, reopened.current()?.transferContext)
+        assertEquals(OnchainSendEvidence.Pending, reopened.current()?.evidence)
+        assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
+        store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Accepted("ab".repeat(32)), attempt.walletIndex)
+        assertEquals(context, reopened.current()?.transferContext)
+    }
+
+    @Test
     fun `corrupt attempt refuses a new send without replacing evidence`() = test {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(key, 0)).thenReturn("not-json")
@@ -76,6 +98,33 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         currentIndex = 7
         assertEquals(OnchainSendEvidence.Accepted, store.current()?.evidence)
         assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
+    }
+
+    @Test
+    fun `known accepted survives write failures in memory while reopened pending stays blocked`() = test {
+        var saved: String? = null
+        var failWrite = false
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
+            if (failWrite) error("storage unavailable")
+            saved = it.getArgument(1)
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val attempt = store.admitForTest()
+        val txid = "ab".repeat(32)
+        failWrite = true
+        assertFailsWith<IllegalStateException> {
+            store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Accepted(txid), attempt.walletIndex)
+        }
+        assertEquals(txid, store.current()?.txid)
+        assertEquals(OnchainSendEvidence.Accepted, store.current()?.evidence)
+        assertFailsWith<IllegalStateException> { store.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex) }
+        assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        assertEquals(OnchainSendEvidence.Pending, reopened.current()?.evidence)
+        assertNull(reopened.current()?.txid)
+        assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
     }
 
     @Test
