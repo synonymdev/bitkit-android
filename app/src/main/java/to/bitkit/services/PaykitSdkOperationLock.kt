@@ -61,7 +61,10 @@ internal class PaykitSdkOperationLock {
         context = "Paykit operation interrupted by wallet wipe",
     )
 
-    private class WipeContext(val owner: PaykitSdkOperationLock, val generation: Long) : AbstractCoroutineContextElement(Key) {
+    private class WipeContext(
+        val owner: PaykitSdkOperationLock,
+        val generation: Long,
+    ) : AbstractCoroutineContextElement(Key) {
         companion object Key : CoroutineContext.Key<WipeContext>
     }
 }

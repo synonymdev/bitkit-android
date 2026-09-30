@@ -200,6 +200,7 @@ class PaykitSdkService @Inject constructor(
     private val setupMutex = Mutex()
     private var isSetup = CompletableDeferred<Unit>()
     private var setupFailed = false
+    private var platformInitializer: () -> Unit = { PaykitAndroid.initializeOrThrow(context) }
     private var sdk: PaykitSdk? = null
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
@@ -221,11 +222,16 @@ class PaykitSdkService @Inject constructor(
         bootstrapFactory: (() -> PubkySessionBootstrap)? = null,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
         sharedPubky: SharedPubkyClient = SharedPubkyClient(context, ioDispatcher),
+        platformInitializer: (() -> Unit)? = null,
         sdkFactory: () -> PaykitSdk,
     ) : this(context, keychain, pubkyStore, sharedPubky, ioDispatcher) {
         this.sdkFactory = sdkFactory
         if (bootstrapFactory != null) this.bootstrapFactory = bootstrapFactory
-        isSetup.complete(Unit)
+        if (platformInitializer == null) {
+            isSetup.complete(Unit)
+        } else {
+            this.platformInitializer = platformInitializer
+        }
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -238,7 +244,7 @@ class PaykitSdkService @Inject constructor(
             }
 
             try {
-                PaykitAndroid.initializeOrThrow(context)
+                platformInitializer()
                 launch { republishIdentityIfNeeded() }
                 operationLock.withLock {
                     var handle = handle()
@@ -1007,13 +1013,18 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun <T> withWalletWipe(operation: suspend () -> T): T = operationLock.withWalletWipe {
-        resetRuntime()
-        try {
-            operation()
-        } finally {
-            sessionProvider.clearLiveSessionAccess()
+    suspend fun <T> withWalletWipe(operation: suspend () -> T): T {
+        // Drain setup before closing admission, so cleanup cannot await setup queued behind its own barrier.
+        runSuspendCatching { initialize() }
+            .onFailure { Logger.warn("Failed to initialize Paykit before wallet wipe", it, context = TAG) }
+        return operationLock.withWalletWipe {
             resetRuntime()
+            try {
+                operation()
+            } finally {
+                sessionProvider.clearLiveSessionAccess()
+                resetRuntime()
+            }
         }
     }
 

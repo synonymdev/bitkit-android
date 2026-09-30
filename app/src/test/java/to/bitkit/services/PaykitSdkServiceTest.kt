@@ -21,7 +21,12 @@ import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicContactSharingPolicy
 import com.synonym.paykit.ReceiverNoiseSecretKey
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -58,6 +63,37 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `wallet wipe drains initialization before cleanup and allows fresh work`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        val releaseWipe = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        lateinit var service: PaykitSdkService
+        lateinit var wipe: Deferred<Unit>
+        service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            platformInitializer = {
+                wipe = async(start = CoroutineStart.UNDISPATCHED) {
+                    service.withWalletWipe {
+                        events.add("cleanup")
+                        releaseWipe.await()
+                    }
+                }
+            },
+            sdkFactory = { sdk },
+        )
+        service.initialize()
+        events.add("initialized")
+        releaseWipe.complete(Unit)
+        wipe.await()
+        assertEquals(listOf("initialized", "cleanup"), events)
+        assertEquals(emptyList(), service.contactRecords())
+    }
+
+    @Test
     fun `wallet wipe discards runtime handles before and after cleanup`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.contactRecords()).thenReturn(emptyList())
@@ -84,9 +120,12 @@ class PaykitSdkServiceTest {
             assertEquals("state_save_failed", mapped.code)
         }
         val conflict = PaykitException.Storage("revision_conflict", "State changed")
-        assertSame(conflict, assertFailsWith<PaykitException.Storage> {
-            paykitStorageCallback("state_save_failed") { throw conflict }
-        })
+        assertSame(
+            conflict,
+            assertFailsWith<PaykitException.Storage> {
+                paykitStorageCallback("state_save_failed") { throw conflict }
+            },
+        )
         assertEquals("healthy", paykitStorageCallback("state_save_failed") { "healthy" })
     }
 
