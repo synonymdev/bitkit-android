@@ -1270,7 +1270,7 @@ internal fun validatedApprovalClientId(requestClientId: String, approvedClientId
     return requestClientId
 }
 
-internal class PaykitSdkStateBlobStore(
+private class PaykitSdkStateBlobStore(
     private val keychain: Keychain,
 ) : SdkStateBlobStore {
     private val lock = Any()
