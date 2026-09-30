@@ -328,6 +328,10 @@ class MigrationService @Inject constructor(
                 Logger.debug("Cannot cleanup: pending metadata/transfers/boosts exists", context = TAG)
                 return false
             }
+            if (peekPendingChannelMigration() != null) {
+                Logger.debug("Cannot cleanup: pending channel migration exists", context = TAG)
+                return false
+            }
             return true
         }
 
@@ -941,13 +945,14 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRNMetadata(metadata: RNMetadata) {
+    private suspend fun applyRNMetadata(metadata: RNMetadata): Set<String> {
         val tags = metadata.tags
         if (tags.isNullOrEmpty()) {
             Logger.debug("No tags to apply in metadata", context = TAG)
-            return
+            return emptySet()
         }
 
+        val unapplied = mutableSetOf<String>()
         var applied = 0
         val allTags = tags.mapNotNull { (activityId, tagList) ->
             val onchain = activityRepo.getOnchainActivityByTxId(activityId)
@@ -968,7 +973,8 @@ class MigrationService @Inject constructor(
                         tags = tagList,
                     )
                 } else {
-                    Logger.warn("Activity not found for tags: id=$activityId", context = TAG)
+                    Logger.warn("Activity not found for tags: id='$activityId'", context = TAG)
+                    unapplied += activityId
                     null
                 }
             }
@@ -979,9 +985,11 @@ class MigrationService @Inject constructor(
                 coreService.activity.upsertTags(allTags)
                 Logger.info("Applied $applied/${tags.size} pending tags", context = TAG)
             }.onFailure {
-                Logger.error("Failed to upsert tags: $it", it, context = TAG)
+                Logger.error("Failed to upsert tags", it, context = TAG)
+                unapplied += tags.keys
             }
         }
+        return unapplied
     }
 
     private suspend fun applyRNTodos(todos: RNTodos) {
@@ -1720,8 +1728,12 @@ class MigrationService @Inject constructor(
         // Apply remote metadata (tags) AFTER activities are created
         pendingRemoteMetadata?.let { metadata ->
             Logger.info("Applying remote metadata (tags: ${metadata.tags?.size})", context = TAG)
-            applyRNMetadata(metadata)
-            clearPersistedMetadata()
+            val remaining = unappliedRnMetadata(metadata, applyRNMetadata(metadata))
+            if (remaining == null) {
+                clearPersistedMetadata()
+            } else {
+                persistMetadata(remaining)
+            }
         }
 
         var blocktankFetchFailed = false
@@ -2200,6 +2212,13 @@ data class RNMetadata(
     val tags: Map<String, List<String>>? = null,
     val lastUsedTags: List<String>? = null,
 )
+
+internal fun unappliedRnMetadata(metadata: RNMetadata, unappliedActivityIds: Set<String>): RNMetadata? {
+    if (unappliedActivityIds.isEmpty()) return null
+    val remaining = metadata.tags.orEmpty().filterKeys { it in unappliedActivityIds }
+    if (remaining.isEmpty()) return null
+    return metadata.copy(tags = remaining, lastUsedTags = null)
+}
 
 @Serializable
 data class RNTodos(

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
@@ -46,6 +47,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletViewModelTest : BaseUnitTest() {
@@ -75,6 +77,8 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
         whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
+        whenever(migrationService.isShowingMigrationLoading).thenReturn(MutableStateFlow(false))
         whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
         whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(null)
         whenever { backupRepo.hasPendingWalletRestore() }.thenReturn(false)
@@ -659,6 +663,91 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(testWalletRepo, never()).refreshBip21()
+    }
+
+    @Test
+    fun `start waits out an rn remote restore instead of opening the node`() = test {
+        val testWalletRepo: WalletRepo = mock()
+        val testLightningRepo: LightningRepo = mock()
+        val testWalletState = MutableStateFlow(WalletState(walletExists = true))
+
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(true))
+        whenever(testWalletRepo.walletState).thenReturn(testWalletState)
+        whenever(testWalletRepo.balanceState).thenReturn(balanceState)
+        whenever(testWalletRepo.walletExists()).thenReturn(true)
+        whenever(testWalletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(testLightningRepo.lightningState).thenReturn(lightningState)
+        whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
+        stubSuccessfulNodeStart(testLightningRepo)
+
+        val testSut = WalletViewModel(
+            context = context,
+            bgDispatcher = testDispatcher,
+            walletRepo = testWalletRepo,
+            lightningRepo = testLightningRepo,
+            settingsStore = settingsStore,
+            backupRepo = backupRepo,
+            blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
+            migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
+        )
+
+        testSut.restoreWallet("mnemonic", null)
+        testSut.start()
+        advanceTimeBy(31.seconds)
+
+        verifyNodeNotStarted(testLightningRepo)
+
+        testSut.onRestoreContinue()
+        advanceUntilIdle()
+
+        verifyNodeStarted(testLightningRepo)
+    }
+
+    private suspend fun stubSuccessfulNodeStart(repo: LightningRepo) {
+        whenever(
+            repo.start(
+                any(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+            ),
+        ).thenReturn(Result.success(Unit))
+    }
+
+    private suspend fun verifyNodeNotStarted(repo: LightningRepo) {
+        verify(
+            repo,
+            never(),
+        ).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
+    }
+
+    private suspend fun verifyNodeStarted(repo: LightningRepo) {
+        verify(repo).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
     }
 
     private fun stubSettingsUpdate(): MutableStateFlow<SettingsData> {

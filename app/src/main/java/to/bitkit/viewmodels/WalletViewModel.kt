@@ -342,9 +342,16 @@ class WalletViewModel @Inject constructor(
 
     private suspend fun waitForRestoreIfNeeded() {
         if (!_restoreState.value.isOngoing()) return
-        withTimeoutOrNull(TIMEOUT_RESTORE_WAIT) {
+        val finished = withTimeoutOrNull(TIMEOUT_RESTORE_WAIT) {
             _restoreState.first { !it.isOngoing() }
-        } ?: Logger.warn("waitForRestoreIfNeeded timeout, proceeding anyway", context = TAG)
+        }
+        if (finished != null) return
+        if (migrationService.isRestoringFromRNRemoteBackup.value) {
+            Logger.warn("RN remote restore still running, waiting for channel state", context = TAG)
+            _restoreState.first { !it.isOngoing() }
+            return
+        }
+        Logger.warn("waitForRestoreIfNeeded timeout, proceeding anyway", context = TAG)
     }
 
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? =
