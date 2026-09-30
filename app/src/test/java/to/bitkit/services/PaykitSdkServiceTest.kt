@@ -1,37 +1,61 @@
 package to.bitkit.services
 
+import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
+import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.LinkedPeerRecord
+import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PaymentRequestLifecycleState
+import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PaymentRequestRecurrence
+import com.synonym.paykit.PaymentRequestTerms
+import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkySessionAccess
+import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicContactSharingPolicy
 import com.synonym.paykit.ReceiverNoiseSecretKey
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.PubkyStore
+import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyAuthRequestError
+import to.bitkit.models.PubkyProfileData
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.utils.AppError
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class PaykitSdkServiceTest {
+    companion object {
+        private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
     @Test
     fun `registered identity activation persists credentials or clears partial activation`() = runTest {
         for (failure in listOf(null, "session", "secret", "initialize", "cancel")) {
@@ -65,7 +89,9 @@ class PaykitSdkServiceTest {
                 "initialize", "cancel" -> whenever(sdk.initialize()).thenThrow(error)
             }
             var handlesCreated = 0
-            val service = PaykitSdkService(mock(), keychain) {
+            val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+            val service = PaykitSdkService(mock(), keychain, store) {
                 handlesCreated++
                 sdk
             }
@@ -91,6 +117,279 @@ class PaykitSdkServiceTest {
             }
         }
     }
+
+    @Test
+    fun `deletion blocks all known receivers before removing the contact`() = runTest {
+        for (failBlock in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.paymentRequests()).thenReturn(emptyList())
+            val contact = mock<ContactRecord> { on { receiverPaths } doReturn listOf(PaykitReceiverPaths.WALLET) }
+            whenever(sdk.contactRecord(RING_PUBKY)).thenReturn(contact)
+            val peer = contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.LINKED)
+            whenever(sdk.linkedPeers()).thenReturn(listOf(peer))
+            if (failBlock) {
+                whenever(sdk.blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER))
+                    .thenThrow(IllegalStateException("storage failure"))
+            }
+            val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+            if (failBlock) {
+                assertFailsWith<IllegalStateException> { service.removeContact(RING_PUBKY) }
+                verify(sdk, never()).removeContact(any())
+            } else {
+                service.removeContact(RING_PUBKY)
+                inOrder(sdk) {
+                    verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.WALLET)
+                    verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
+                    verify(sdk).removeContact(RING_PUBKY)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `active subscription prevents deletion until it ends`() = runTest {
+        for ((role, endsNaturally) in listOf(
+            PaymentRequestLocalRole.PAYER to false,
+            PaymentRequestLocalRole.PAYER to true,
+            PaymentRequestLocalRole.PAYEE to false,
+        )) {
+            val sdk = mock<PaykitSdk>()
+            val recurrence = mock<PaymentRequestRecurrence>()
+            val requestTerms = mock<PaymentRequestTerms> { on { this.recurrence } doReturn recurrence }
+            val request = mock<PaymentRequestRecord> {
+                on { counterparty } doReturn RING_PUBKY
+                on { localRole } doReturn role
+                on { state } doReturn PaymentRequestLifecycleState.ACTIVE_RECURRING
+                on { terms } doReturn requestTerms
+            }
+            whenever(sdk.linkedPeers()).thenReturn(emptyList())
+            whenever(sdk.paymentRequests()).thenReturn(listOf(request))
+            val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+            assertFailsWith<PubkyContactError.ActiveSubscription> { service.removeContact(RING_PUBKY) }
+            verify(sdk, never()).blockPeer(any(), any())
+            verify(sdk, never()).removeContact(any())
+            if (endsNaturally) {
+                whenever(recurrence.endsAt).thenReturn("2026-02-01T00:00:00Z")
+            } else {
+                whenever(request.state).thenReturn(PaymentRequestLifecycleState.CANCELED)
+            }
+            service.removeContact(RING_PUBKY)
+            verify(sdk).removeContact(RING_PUBKY)
+        }
+    }
+
+    @Test
+    fun `identity lookup failure preserves stored state and stops activation`() = runTest {
+        for (error in listOf(
+            PaykitException.Identity("identity_error", "restore Pubky grant session from platform provider"),
+            PaykitException.Storage("storage_error", "unavailable"),
+        )) {
+            val keychain = mock<Keychain>()
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.identityStatus()).thenThrow(error)
+            val service = PaykitSdkService(mock(), keychain, mock()) { sdk }
+
+            val thrown = assertFailsWith<PaykitException> {
+                service.activateRegisteredIdentity(PubkySessionBootstrapResult(mock(), "pubky_test"))
+            }
+
+            assertEquals(error, thrown)
+            verify(keychain, never()).delete(any())
+            verify(keychain, never()).upsertString(any(), any())
+        }
+    }
+
+    @Test
+    fun `deletion withdraws private endpoints before blocking even when withdrawal fails`() = runTest {
+        for (failWithdrawal in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.paymentRequests()).thenReturn(emptyList())
+            whenever(sdk.linkedPeers()).thenReturn(
+                listOf(contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.LINKED)),
+            )
+            val withdrawal = whenever(
+                sdk.clearPrivatePaymentListAndProcessOutbound(RING_PUBKY, PaykitReceiverPaths.SERVER),
+            )
+            if (failWithdrawal) {
+                withdrawal.thenThrow(IllegalStateException("network unavailable"))
+            } else {
+                withdrawal.thenReturn(
+                    PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList()),
+                )
+            }
+            val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+            service.removeContact(RING_PUBKY)
+            inOrder(sdk) {
+                verify(sdk).clearPrivatePaymentListAndProcessOutbound(RING_PUBKY, PaykitReceiverPaths.SERVER)
+                verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
+                verify(sdk).removeContact(RING_PUBKY)
+            }
+        }
+    }
+
+    @Test
+    fun `activation isolates cached identity data by sdk or cache owner`() = runTest {
+        val originalKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val differentKey = "5" + originalKey.drop(1)
+        for ((previousKey, cachedOwner, resetFails) in identityCacheCases(originalKey, differentKey)) {
+            val keychain = mock<Keychain>()
+            stubReceiverNoiseSecret(keychain)
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.identityStatus()).thenReturn(IdentityStatus(previousKey, false))
+            val originalCache = PubkyStoreData(
+                ownerPublicKey = cachedOwner,
+                cachedName = "Original profile",
+                cachedImageUri = "pubky://original/avatar",
+                contactProfileOverrides = mapOf(originalKey to PubkyProfileData("Private label", "")),
+            )
+            var cache = originalCache
+            val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(cache))
+            val resetError = AppError("Cache unavailable")
+            whenever(store.reset()).thenAnswer {
+                if (resetFails) throw resetError
+                cache = PubkyStoreData()
+            }
+            val bootstrap = mock<PubkySessionBootstrap>()
+            whenever(bootstrap.republishIdentity(any())).thenReturn(true)
+            val access = mock<PubkySessionAccess>()
+            val noise = mock<ReceiverNoiseSecretKey>()
+            whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+            whenever(access.exportSessionSecret()).thenReturn("new-session")
+            whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+            val service = PaykitSdkService(mock(), keychain, store, { bootstrap }) { sdk }
+
+            val result = PubkySessionBootstrapResult(access, "pubky$originalKey")
+            if (resetFails) {
+                assertEquals(resetError, assertFailsWith<AppError> { service.activateRegisteredIdentity(result) })
+                verify(sdk, never()).initialize()
+                assertEquals(originalCache, cache)
+                continue
+            }
+            service.activateRegisteredIdentity(result)
+
+            if (previousKey == differentKey || cachedOwner == differentKey) {
+                assertEquals(PubkyStoreData(), cache)
+                inOrder(store, sdk) {
+                    verify(store).reset()
+                    verify(sdk).initialize()
+                }
+            } else {
+                assertEquals(originalCache, cache)
+                verify(store, never()).reset()
+            }
+        }
+    }
+
+    @Test
+    fun `only explicit readd unblocks every saved private receiver`() = runTest {
+        for (restoreConnection in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.saveContact(any())).thenReturn(mock())
+            whenever(sdk.linkedPeers()).thenReturn(
+                listOf(
+                    contactPeer(PaykitReceiverPaths.WALLET, LinkedPeerState.BLOCKED),
+                    contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED),
+                ),
+            )
+            val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+            if (restoreConnection) {
+                service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+                verify(sdk).unblockPeer(RING_PUBKY, PaykitReceiverPaths.WALLET)
+                verify(sdk).unblockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
+            } else {
+                assertFailsWith<IllegalStateException> { service.saveContact(RING_PUBKY, "Contact") }
+                verify(sdk, never()).saveContact(any())
+                verify(sdk, never()).unblockPeer(any(), any())
+            }
+        }
+    }
+
+    @Test
+    fun `failed private connection restoration leaves contact creation retryable`() = runTest {
+        for (failurePoint in listOf("lookup", "unblock", "save", "cancel")) {
+            val sdk = mock<PaykitSdk>()
+            val peers = listOf(
+                contactPeer(PaykitReceiverPaths.WALLET, LinkedPeerState.BLOCKED),
+                contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED),
+            )
+            val failure = if (failurePoint == "cancel") {
+                CancellationException("cancelled")
+            } else {
+                IllegalStateException("storage failure")
+            }
+            whenever(sdk.linkedPeers()).thenReturn(peers)
+            whenever(sdk.saveContact(any())).thenReturn(mock())
+            when (failurePoint) {
+                "lookup" -> whenever(sdk.linkedPeers()).thenThrow(failure).thenReturn(peers)
+                "unblock", "cancel" -> {
+                    whenever(sdk.unblockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER))
+                        .thenThrow(failure).thenReturn(peers.last().copy(state = LinkedPeerState.NOT_LINKED))
+                }
+                "save" -> whenever(sdk.saveContact(any())).thenThrow(failure).thenReturn(mock())
+            }
+            val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+            val thrown = assertFailsWith<Throwable> {
+                service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+            }
+            assertSame(failure, thrown)
+            if (failurePoint == "lookup") {
+                verify(sdk, never()).blockPeer(any(), any())
+            } else {
+                verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.WALLET)
+                verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
+            }
+            service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+            verify(sdk, atLeastOnce()).saveContact(any())
+        }
+    }
+
+    @Test
+    fun `private connection restoration preserves failures from rollback`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val peers = listOf(
+            contactPeer(PaykitReceiverPaths.WALLET, LinkedPeerState.BLOCKED),
+            contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED),
+        )
+        val restorationFailure = IllegalStateException("save failed")
+        val rollbackFailure = IllegalStateException("block failed")
+        whenever(sdk.linkedPeers()).thenReturn(peers)
+        whenever(sdk.saveContact(any())).thenThrow(restorationFailure)
+        whenever(sdk.blockPeer(RING_PUBKY, PaykitReceiverPaths.WALLET)).thenThrow(rollbackFailure)
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+        }
+
+        assertSame(restorationFailure, thrown)
+        assertEquals(listOf(rollbackFailure), thrown.suppressed.toList())
+        verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.WALLET)
+        verify(sdk).blockPeer(RING_PUBKY, PaykitReceiverPaths.SERVER)
+    }
+
+    @Test
+    fun `blocked peer cleanup does not attempt network delivery`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED)))
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        assertNull(service.clearPrivatePaymentList(RING_PUBKY, PaykitReceiverPaths.SERVER))
+        verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any(), any())
+    }
+
+    private fun contactPeer(path: String, state: LinkedPeerState) = LinkedPeerRecord(
+        counterparty = RING_PUBKY,
+        counterpartyReceiverPath = path,
+        state = state,
+        lastSyncAt = null,
+        lastPrivateReceiveAt = null,
+        failureCount = 0u,
+        localRecoveryAttemptId = null,
+        localRecoveryMarkerCreatedAt = null,
+        localRecoveryMarkerLastError = null,
+        remoteRecoveryAttemptId = null,
+        remoteRecoveryMarkerObservedAt = null,
+    )
 
     private val basePubkyClientConfig = PubkyClientConfig(
         requestTimeoutSecs = 30uL,
@@ -224,7 +523,7 @@ class PaykitSdkServiceTest {
     fun `external session retains private payment access`() {
         val keychain = mock<Keychain>()
         val sessionSecret = "external-session"
-        val provider = PaykitSdkSessionProvider(keychain)
+        val provider = PaykitSdkSessionProvider(keychain, mock())
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(sessionSecret)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
 
@@ -233,9 +532,23 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `adopted identity loads its secret key from the ring provider`() {
+        val keychain = mock<Keychain>()
+        val sharedPubky = mock<SharedPubkyClient>()
+        val provider = PaykitSdkSessionProvider(keychain, sharedPubky)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn("app.pubkyring:$RING_PUBKY")
+        whenever(sharedPubky.readCredential(RING_PUBKY)).thenReturn(null)
+
+        assertEquals(RING_PUBKY, provider.adoptedPubky())
+        assertNull(provider.loadLocalSecretKey())
+        verify(sharedPubky).readCredential(RING_PUBKY)
+    }
+
+    @Test
     fun `stale session can be deferred until sdk initialization completes`() {
         val keychain = mock<Keychain>()
-        val provider = PaykitSdkSessionProvider(keychain)
+        val provider = PaykitSdkSessionProvider(keychain, mock())
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
 
         assertTrue(provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
@@ -247,7 +560,7 @@ class PaykitSdkServiceTest {
     @Test
     fun `missing session or unrelated identity failures are not deferred`() {
         val keychain = mock<Keychain>()
-        val provider = PaykitSdkSessionProvider(keychain)
+        val provider = PaykitSdkSessionProvider(keychain, mock())
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
 
         assertTrue(!provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
@@ -276,4 +589,24 @@ class PaykitSdkServiceTest {
         upsertBytes: (ByteArray) -> Unit = {},
         deriveBytes: () -> ByteArray,
     ) = PaykitReceiverNoiseKeyStore(loadBytes, upsertBytes, deriveBytes)
+
+    private fun stubReceiverNoiseSecret(keychain: Keychain) {
+        val blocking = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Any?>(any())).doAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Any?>(0).invoke(blocking)
+        }
+        whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name))
+            .thenReturn(ByteArray(32) { 1 })
+    }
+
+    private fun identityCacheCases(originalKey: String, differentKey: String) = listOf(
+        Triple(originalKey, null, false),
+        Triple("pubky$originalKey", null, false),
+        Triple(differentKey, null, false),
+        Triple(null, null, false),
+        Triple(null, originalKey, false),
+        Triple(null, differentKey, false),
+        Triple(originalKey, differentKey, false),
+        Triple(differentKey, null, true),
+    )
 }

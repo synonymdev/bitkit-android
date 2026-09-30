@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.ChannelLiquidityOptions
+import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOptions
@@ -44,6 +45,7 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
@@ -58,7 +60,10 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.models.AddressModel
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BalanceState
+import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
@@ -67,13 +72,17 @@ import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletVendor
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
+import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletMismatchError
@@ -88,6 +97,7 @@ import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.screens.transfer.previewSpendingState
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
+import java.math.BigDecimal
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -114,9 +124,11 @@ class TransferViewModelTest : BaseUnitTest() {
     private val transferRepo = mock<TransferRepo>()
     private val clock = mock<Clock>()
     private val boltzService = mock<BoltzService>()
+    private val currencyRepo = mock<CurrencyRepo>()
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val blocktankState = MutableStateFlow(BlocktankState())
+    private val currencyState = MutableStateFlow(CurrencyState())
     private val boltzEvents = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 8)
     private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val feeResponse = mock<IBtEstimateFeeResponse2>()
@@ -136,6 +148,8 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
+        whenever(currencyRepo.currencyState).thenReturn(currencyState)
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(Result.failure(AppError("no rate")))
         whenever(boltzService.events).thenReturn(boltzEvents)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(boltzService.isSwapSupported).thenReturn(true)
@@ -143,6 +157,7 @@ class TransferViewModelTest : BaseUnitTest() {
         // Default: no mining-fee reserve so existing limit tests keep their balances.
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(0uL))
+        whenever { lightningRepo.getFeeRates() }.thenReturn(Result.success(FeeRates(fast = 2u, mid = 2u, slow = 2u)))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2uL))
         whenever {
@@ -164,6 +179,7 @@ class TransferViewModelTest : BaseUnitTest() {
             transferRepo = transferRepo,
             clock = clock,
             boltzService = boltzService,
+            currencyRepo = currencyRepo,
         )
     }
 
@@ -1107,12 +1123,13 @@ class TransferViewModelTest : BaseUnitTest() {
 
         quoteOrder(order)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
         assertEquals(true, sut.spendingUiState.value.isConfirmPaying)
         assertTrue(fundingPaidEmitted)
-        verify(lightningRepo).selectUtxosWithAlgorithm(
+        verify(lightningRepo, atLeastOnce()).selectUtxosWithAlgorithm(
             targetAmountSats = eq(order.feeSat),
             satsPerVByte = any(),
             algorithm = eq(CoinSelectionAlgorithm.LARGEST_FIRST),
@@ -1151,6 +1168,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         quoteOrder(order)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
@@ -1215,6 +1233,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         quoteOrder(order)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
@@ -1258,6 +1277,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
         stubSendOnChainSuccess()
+        prepareConfirm()
 
         sut.onTransferToSpendingConfirm()
         runCurrent()
@@ -1303,6 +1323,7 @@ class TransferViewModelTest : BaseUnitTest() {
         ).thenReturn(Result.failure(AppError("Coin selection failed")), Result.success(TXID))
         quoteOrder(order)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         sut.onTransferToSpendingConfirm()
@@ -1320,40 +1341,328 @@ class TransferViewModelTest : BaseUnitTest() {
             serviceFeeSat = estimate.serviceFeeSat + 1_000uL,
         )
         stubSpendableBalances(spendable = 110_000uL)
-        whenever {
-            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
-        }.thenReturn(Result.success(listOf(stubUtxo(110_000uL))))
-        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(1_000uL))
+        stubSingleUtxoFunding(miningFee = 1_000uL)
         stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
         quoteOrder(estimate)
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(createdOrder))
+        prepareConfirm()
 
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
-        assertEquals(createdOrder, sut.spendingUiState.value.order)
-        assertEquals(createdOrder.feeSat, sut.spendingUiState.value.feeSat)
-        assertFalse(sut.spendingUiState.value.isConfirmPaying)
-        verify(lightningRepo, never()).sendOnChain(
-            any(),
-            any(),
-            any(),
-            anyOrNull(),
-            anyOrNull(),
-            any(),
-            anyOrNull(),
-            any(),
-            any(),
-            any(),
-            any(),
-        )
+        val shown = sut.spendingUiState.value
+        assertEquals(createdOrder, shown.order)
+        assertEquals(createdOrder.feeSat, shown.feeSat)
+        assertFalse(shown.isConfirmPaying)
+        assertEquals(100_000uL, shown.confirmLeavingAmountSats)
+        verifySendOnChain(sats = createdOrder.feeSat, count = 0)
+        assertFeesChangedToast(toasts, FEES_CHANGED_SERVICE, delta = 1_000uL)
 
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
 
+        verifySendOnChain(sats = createdOrder.feeSat, count = 1)
         verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
         verify(cacheStore).addPaidOrder(createdOrder.id, TXID)
+        assertEquals(1, toasts.size)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm pays on the first swipe when the plan matches the screen`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+        assertTrue(toasts.isEmpty())
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm pays the rebuilt plan on the first swipe when the mining fee drops`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 2_000uL)
+        stubSendOnChainSuccess()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        assertEquals(100_000uL, sut.spendingUiState.value.confirmLeavingAmountSats)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+        assertTrue(toasts.isEmpty())
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm explains a higher mining fee and pays the kept plan on the next swipe`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        assertEquals(99_000uL, sut.spendingUiState.value.confirmLeavingAmountSats)
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        val shown = sut.spendingUiState.value
+        assertFalse(shown.isConfirmPaying)
+        assertTrue(shown.isConfirmFeeReady)
+        assertEquals(2_500uL, shown.miningFeeSats)
+        assertEquals(100_500uL, shown.confirmLeavingAmountSats)
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+        assertFeesChangedToast(toasts, FEES_CHANGED_NETWORK, delta = 1_500uL)
+
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+        assertEquals(1, toasts.size)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm compares with the amounts shown when the user swiped`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val creation = CompletableDeferred<Result<IBtOrder>>()
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        whenever(blocktankRepo.createOrder(any(), any(), any())).doSuspendableAnswer { creation.await() }
+
+        sut.onTransferToSpendingConfirm()
+        runCurrent()
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+        prepareConfirm()
+        assertEquals(2_500uL, sut.spendingUiState.value.miningFeeSats)
+        creation.complete(Result.success(order))
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        assertFeesChangedToast(toasts, FEES_CHANGED_NETWORK, delta = 1_500uL)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm shows the fee increase in fiat when fiat is the primary display`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val increase = ConvertedAmount(
+            value = BigDecimal("0.95"),
+            formatted = "0.95",
+            symbol = "$",
+            currency = "USD",
+            flag = "",
+            sats = 1_500,
+        )
+        currencyState.value = CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)
+        whenever(currencyRepo.convertSatsToFiat(eq(1_500L), anyOrNull())).thenReturn(Result.success(increase))
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        assertEquals(
+            FEES_CHANGED_NETWORK.replace("{amount}", increase.formattedWithSymbol()),
+            toasts.single().description,
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm shows the fee increase in the classic bitcoin unit`() = test {
+        currencyState.value = CurrencyState(
+            primaryDisplay = PrimaryDisplay.BITCOIN,
+            displayUnit = BitcoinDisplayUnit.CLASSIC,
+        )
+
+        val toasts = triggerNetworkFeesChanged()
+
+        assertEquals(
+            FEES_CHANGED_NETWORK.replace("{amount}", "$BITCOIN_SYMBOL 0.00001500"),
+            toasts.single().description,
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm shows the fee increase in bitcoin when fiat has no rate`() = test {
+        currencyState.value = CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)
+
+        val toasts = triggerNetworkFeesChanged()
+
+        assertFeesChangedToast(toasts, FEES_CHANGED_NETWORK, delta = 1_500uL)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm shows the fee increase in classic bitcoin when fiat has no rate`() = test {
+        currencyState.value = CurrencyState(
+            primaryDisplay = PrimaryDisplay.FIAT,
+            displayUnit = BitcoinDisplayUnit.CLASSIC,
+        )
+
+        val toasts = triggerNetworkFeesChanged()
+
+        assertEquals(
+            FEES_CHANGED_NETWORK.replace("{amount}", "$BITCOIN_SYMBOL 0.00001500"),
+            toasts.single().description,
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm pays with the fee rates of the plan it held`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val heldRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
+        val laterRates = FeeRates(fast = 50u, mid = 30u, slow = 10u)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        whenever { lightningRepo.getFeeRates() }.thenReturn(Result.success(heldRates))
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        assertFeesChangedToast(toasts, FEES_CHANGED_NETWORK, delta = 1_500uL)
+        whenever { lightningRepo.getFeeRates() }.thenReturn(Result.success(laterRates))
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verify(lightningRepo, atLeastOnce()).calculateTotalFee(any(), any(), any(), anyOrNull(), eq(heldRates))
+        verify(lightningRepo, never()).calculateTotalFee(any(), any(), any(), anyOrNull(), eq(laterRates))
+        verify(lightningRepo).sendOnChain(
+            address = any(),
+            sats = eq(order.feeSat),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = eq(heldRates),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm shows the order fee when the wallet cannot fund a pricier order`() = test {
+        val estimate = spendingOrder(feeSat = 98_000uL)
+        val createdOrder = estimate.copy(
+            feeSat = 99_000uL,
+            serviceFeeSat = estimate.serviceFeeSat + 1_000uL,
+        )
+        stubSpendableBalances(spendable = 98_500uL)
+        stubSingleUtxoFunding(miningFee = 500uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(estimate)
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(createdOrder))
+        prepareConfirm()
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.failure(AppError("no funding utxos")))
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull())).thenReturn(Result.success(500uL))
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        val shown = sut.spendingUiState.value
+        assertEquals(createdOrder.feeSat, shown.feeSat)
+        assertFalse(shown.isConfirmPaying)
+        verifySendOnChain(sats = createdOrder.feeSat, count = 0)
+        assertFeesChangedToast(toasts, FEES_CHANGED_SERVICE, delta = 1_000uL)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm keeps the shown plan when the rebuilt fee estimate fails`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("fee estimate unavailable")))
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        val shown = sut.spendingUiState.value
+        assertFalse(shown.isConfirmPaying)
+        assertTrue(shown.isConfirmFeeReady)
+        assertEquals(1_000uL, shown.miningFeeSats)
+        assertEquals(99_000uL, shown.confirmLeavingAmountSats)
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm pays on the first swipe when the created order costs less`() = test {
+        val estimate = spendingOrder(feeSat = 98_000uL)
+        val createdOrder = estimate.copy(
+            feeSat = 97_000uL,
+            serviceFeeSat = estimate.serviceFeeSat - 1_000uL,
+        )
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        val toasts = collectToasts()
+        quoteOrder(estimate)
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(createdOrder))
+        prepareConfirm()
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = createdOrder.feeSat, count = 1)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(cacheStore).addPaidOrder(createdOrder.id, TXID)
+        assertTrue(toasts.isEmpty())
     }
 
     @Test
@@ -1376,6 +1685,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(blocktankRepo.createOrder(any(), any(), any()))
             .thenReturn(Result.success(firstOrder), Result.success(nextOrder))
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         assertEquals(firstOrder, sut.spendingUiState.value.order)
@@ -1383,6 +1693,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onConfirmAmount(estimate.clientBalanceSat.toLong())
         advanceUntilIdle()
         assertNull(sut.spendingUiState.value.order)
+        prepareConfirm()
 
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
@@ -1400,6 +1711,7 @@ class TransferViewModelTest : BaseUnitTest() {
         stubSendOnChainSuccess()
         quoteOrder(paidOrder)
 
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         verify(cacheStore).addPaidOrder(eq(paidOrder.id), eq(TXID))
@@ -1474,6 +1786,7 @@ class TransferViewModelTest : BaseUnitTest() {
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
         quoteOrder(order)
+        prepareConfirm()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         assertEquals(order, sut.spendingUiState.value.order)
@@ -2091,6 +2404,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 transferRepo = transferRepo,
                 clock = clock,
                 boltzService = boltzService,
+                currencyRepo = currencyRepo,
             )
 
             quoteOrder(order, viewModel)
@@ -2918,6 +3232,77 @@ class TransferViewModelTest : BaseUnitTest() {
         )
     }
 
+    private suspend fun verifySendOnChain(sats: ULong, count: Int) {
+        verify(lightningRepo, times(count)).sendOnChain(
+            address = any(),
+            sats = eq(sats),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+        )
+    }
+
+    private suspend fun stubSingleUtxoFunding(miningFee: ULong) {
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(listOf(stubUtxo(110_000uL))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(miningFee))
+    }
+
+    private fun stubFeesChangedStrings() {
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_title))
+            .thenReturn(FEES_CHANGED_TITLE)
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_service))
+            .thenReturn(FEES_CHANGED_SERVICE)
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
+            .thenReturn(FEES_CHANGED_NETWORK)
+    }
+
+    private suspend fun TestScope.triggerNetworkFeesChanged(): List<Toast> {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        stubFeesChangedStrings()
+        val toasts = collectToasts()
+        quoteOrder(order)
+        prepareConfirm()
+        stubSingleUtxoFunding(miningFee = 2_500uL)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        return toasts
+    }
+
+    private fun TestScope.collectToasts(): List<Toast> {
+        val toasts = mutableListOf<Toast>()
+        backgroundScope.launch { ToastEventBus.events.collect { toasts.add(it) } }
+        return toasts
+    }
+
+    private fun assertFeesChangedToast(toasts: List<Toast>, body: String, delta: ULong) {
+        assertEquals(1, toasts.size)
+        val toast = toasts.single()
+        assertEquals(Toast.ToastType.INFO, toast.type)
+        assertEquals(FEES_CHANGED_TITLE, toast.title)
+        assertFalse(toast.description.orEmpty().contains("{amount}"))
+        assertEquals(body.replace("{amount}", "$BITCOIN_SYMBOL ${delta.formatToModernDisplay()}"), toast.description)
+    }
+
+    private fun TestScope.prepareConfirm() {
+        sut.prepareSpendingConfirmFunding()
+        advanceUntilIdle()
+    }
+
     private suspend fun TestScope.quoteOrder(order: IBtOrder, viewModel: TransferViewModel = sut) {
         whenever(blocktankRepo.calculateLiquidityOptions(any())).thenReturn(
             Result.success(
@@ -3019,6 +3404,9 @@ class TransferViewModelTest : BaseUnitTest() {
         const val LSP_BALANCE = 252_368uL
         const val ADVANCED_CLIENT_BALANCE = 100_000uL
         const val ADVANCED_BUDGET = 110_000uL
+        const val FEES_CHANGED_TITLE = "Fees changed"
+        const val FEES_CHANGED_SERVICE = "Fees are {amount} higher now that your order is created."
+        const val FEES_CHANGED_NETWORK = "Fees are {amount} higher because fee rates changed."
         const val NETWORK_FEE = 2_112uL
         const val SERVICE_FEE = 286uL
         const val LSP_FEE = 2_398uL // NETWORK_FEE + SERVICE_FEE

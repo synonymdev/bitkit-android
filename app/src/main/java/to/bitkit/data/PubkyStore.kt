@@ -35,6 +35,7 @@ class PubkyStore @Inject constructor(
 
 @Serializable
 data class PubkyStoreData(
+    val ownerPublicKey: String? = null,
     val cachedName: String? = null,
     val cachedImageUri: String? = null,
     val contactProfileOverrides: Map<String, PubkyProfileData> = emptyMap(),
