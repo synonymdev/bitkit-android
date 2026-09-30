@@ -820,6 +820,65 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `loadProfile does not overwrite cached metadata saved after its in-memory check`() = test {
+        val store = stubGatedPubkyStore()
+        authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Old")
+        gateNextProfileLoadStoreWrite(store, loadedName = "Old")
+        val load = async { sut.loadProfile() }
+        store.gatedUpdateStarted.await()
+
+        val save = sut.saveProfile(name = "New", bio = "", links = emptyList(), tags = emptyList(), imageUrl = null)
+        store.releaseGatedUpdate.complete(Unit)
+        load.await()
+
+        assertTrue(save.isSuccess)
+        assertEquals("New", sut.profile.value?.name)
+        assertEquals("New", store.data.cachedName)
+        assertEquals(VALID_SELF_KEY, store.data.cachedProfileOwner)
+    }
+
+    @Test
+    fun `loadProfile does not restore cached metadata that sign out cleared after its in-memory check`() = test {
+        val store = stubGatedPubkyStore()
+        authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Old")
+        gateNextProfileLoadStoreWrite(store, loadedName = "Loaded")
+        val load = async { sut.loadProfile() }
+        store.gatedUpdateStarted.await()
+
+        val signOut = sut.signOut()
+        store.releaseGatedUpdate.complete(Unit)
+        load.await()
+
+        assertTrue(signOut.isSuccess)
+        assertNull(store.data.cachedName)
+        assertNull(store.data.cachedProfileOwner)
+        assertNull(store.data.ownerPublicKey)
+    }
+
+    @Test
+    fun `loadProfile does not restore cached metadata written right after sign out resets the store`() = test {
+        val store = stubGatedPubkyStore()
+        whenever(pubkyStore.reset()).doSuspendableAnswer {
+            store.data = PubkyStoreData()
+            store.releaseGatedUpdate.complete(Unit)
+            store.gatedUpdateApplied.await()
+        }
+        authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Old")
+        gateNextProfileLoadStoreWrite(store, loadedName = "Loaded")
+        val load = async { sut.loadProfile() }
+        store.gatedUpdateStarted.await()
+
+        val signOut = sut.signOut()
+        load.await()
+
+        assertTrue(signOut.isSuccess)
+        assertTrue(store.gatedUpdateApplied.isCompleted)
+        assertNull(store.data.cachedName)
+        assertNull(store.data.cachedProfileOwner)
+        assertNull(store.data.ownerPublicKey)
+    }
+
+    @Test
     fun `fetchDisplayProfile resolves once without retrying a missing profile or an error`() = test {
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true)).thenReturn(null)
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
@@ -2851,6 +2910,33 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.initialize()
     }
 
+    private fun stubGatedPubkyStore(): GatedPubkyStore {
+        val store = GatedPubkyStore()
+        whenever { pubkyStore.update(any()) }.doSuspendableAnswer {
+            val isGated = store.gateNextUpdate
+            if (isGated) {
+                store.gateNextUpdate = false
+                store.gatedUpdateStarted.complete(Unit)
+                store.releaseGatedUpdate.await()
+            }
+            store.data = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(store.data)
+            if (isGated) store.gatedUpdateApplied.complete(Unit)
+            Unit
+        }
+        whenever { pubkyStore.reset() }.thenAnswer {
+            store.data = PubkyStoreData()
+            Unit
+        }
+        return store
+    }
+
+    private fun gateNextProfileLoadStoreWrite(store: GatedPubkyStore, loadedName: String) {
+        whenever { pubkyService.resolveContactProfile(VALID_SELF_KEY, true) }.doSuspendableAnswer {
+            store.gateNextUpdate = true
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = loadedName))
+        }
+    }
+
     private fun identityHttpClient() = HttpClient(
         MockEngine {
             respond(
@@ -2951,6 +3037,14 @@ class PubkyRepoTest : BaseUnitTest() {
 }
 
 private class TestAppError(message: String) : AppError(message)
+
+private class GatedPubkyStore {
+    var data = PubkyStoreData()
+    var gateNextUpdate = false
+    val gatedUpdateStarted = CompletableDeferred<Unit>()
+    val releaseGatedUpdate = CompletableDeferred<Unit>()
+    val gatedUpdateApplied = CompletableDeferred<Unit>()
+}
 
 private fun String.ensurePubkyPrefixForTest(): String =
     if (startsWith("pubky")) this else "pubky$this"

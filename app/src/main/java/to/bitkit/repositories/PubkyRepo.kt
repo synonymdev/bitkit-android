@@ -504,6 +504,7 @@ class PubkyRepo @Inject constructor(
             return
         }
         val writeGeneration = profileWriteGeneration.get()
+        val isCurrentLoad = { _publicKey.value == pk && profileWriteGeneration.get() == writeGeneration }
 
         _isLoadingProfile.update { true }
         try {
@@ -515,14 +516,14 @@ class PubkyRepo @Inject constructor(
             }.onSuccess { loadedProfile ->
                 var isCurrent = false
                 _profile.update {
-                    isCurrent = _publicKey.value == pk && profileWriteGeneration.get() == writeGeneration
+                    isCurrent = isCurrentLoad()
                     if (isCurrent) loadedProfile else it
                 }
                 if (!isCurrent) {
                     Logger.debug("Skipped stale profile load for '${redacted(pk)}'", context = TAG)
                     return@onSuccess
                 }
-                cacheMetadata(loadedProfile)
+                cacheMetadata(loadedProfile, isCurrentLoad)
             }.onFailure {
                 Logger.error("Failed to load profile", it, context = TAG)
             }
@@ -1427,8 +1428,9 @@ class PubkyRepo @Inject constructor(
         notifyBackupStateChanged()
     }
 
-    private suspend fun cacheMetadata(profile: PubkyProfile) {
+    private suspend fun cacheMetadata(profile: PubkyProfile, isCurrent: () -> Boolean = { true }) {
         pubkyStore.update {
+            if (!isCurrent()) return@update it
             it.copy(
                 ownerPublicKey = profile.publicKey,
                 cachedProfileOwner = profile.publicKey,
@@ -1503,6 +1505,7 @@ class PubkyRepo @Inject constructor(
     ) = withContext(ioDispatcher) {
         if (clearCachedProfile) {
             evictPubkyImages()
+            profileWriteGeneration.incrementAndGet()
             runSuspendCatching { pubkyStore.reset() }
         }
         _publicKey.update { null }

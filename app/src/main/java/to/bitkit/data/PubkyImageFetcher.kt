@@ -61,6 +61,7 @@ class PubkyImageFetcher(
             ?: return
         runCatching {
             cache.fileSystem.write(editor.data) { write(bytes) }
+            // The editor is open, so a clear after this check makes evictAll() zombie the entry and drop the commit.
             if (cacheEpoch.current() == epoch) editor.commit() else editor.abort()
         }.onFailure {
             runCatching { editor.abort() }
