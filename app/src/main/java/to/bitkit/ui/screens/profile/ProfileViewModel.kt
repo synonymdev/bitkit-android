@@ -58,8 +58,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     init {
-        val profile = pubkyRepo.profile.value
-        if (profile == null || profile.publicKey != pubkyRepo.publicKey.value) loadProfile()
+        if (!pubkyRepo.isLoadingProfile.value) loadProfile()
     }
 
     val uiState: StateFlow<ProfileUiState> = combine(

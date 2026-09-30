@@ -27,6 +27,7 @@ import org.robolectric.annotation.Config
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.io.IOException
 import java.util.concurrent.CancellationException
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -261,6 +262,32 @@ class PubkyImageFetcherTest : BaseUnitTest() {
         assertContentEquals(IMAGE_BYTES, result.bytes())
         verify(editor).abort()
         verify(editor, never()).commit()
+    }
+
+    @Test
+    fun `fetch should use the network when the disk cache read fails`() = test {
+        val diskCache = mock<DiskCache>()
+        whenever(diskCache.openSnapshot(IMAGE_URI)).thenAnswer { throw IOException("journal unreadable") }
+        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
+
+        val result = createFetcher(diskCache).fetch()
+
+        assertEquals(DataSource.NETWORK, result.dataSource())
+        assertContentEquals(IMAGE_BYTES, result.bytes())
+        verify(pubkyService).fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)
+    }
+
+    @Test
+    fun `fetch should return the network bytes when opening the disk cache editor fails`() = test {
+        val diskCache = mock<DiskCache>()
+        whenever(diskCache.openEditor(IMAGE_URI)).thenAnswer { throw IOException("journal write failed") }
+        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
+
+        val result = createFetcher(diskCache).fetch()
+
+        assertEquals(DataSource.NETWORK, result.dataSource())
+        assertContentEquals(IMAGE_BYTES, result.bytes())
+        verify(diskCache).openEditor(IMAGE_URI)
     }
 
     private fun createFetcher(

@@ -44,7 +44,10 @@ class PubkyImageFetcher(
     private fun readFromDiskCache(): FetchResult? {
         if (!options.diskCachePolicy.readEnabled) return null
         val cache = diskCache ?: return null
-        val snapshot = cache.openSnapshot(diskCacheKey) ?: return null
+        val snapshot = runCatching { cache.openSnapshot(diskCacheKey) }
+            .onFailure { Logger.warn("Failed to read pubky image from disk cache", it, context = TAG) }
+            .getOrNull()
+            ?: return null
         val source = ImageSource(snapshot.data, cache.fileSystem, diskCacheKey, snapshot)
         return SourceFetchResult(source, null, dataSource = DataSource.DISK)
     }
@@ -52,7 +55,10 @@ class PubkyImageFetcher(
     private fun writeToDiskCache(bytes: ByteArray, epoch: Long) {
         if (!options.diskCachePolicy.writeEnabled) return
         val cache = diskCache ?: return
-        val editor = cache.openEditor(diskCacheKey) ?: return
+        val editor = runCatching { cache.openEditor(diskCacheKey) }
+            .onFailure { Logger.warn("Failed to open pubky image disk cache editor", it, context = TAG) }
+            .getOrNull()
+            ?: return
         runCatching {
             cache.fileSystem.write(editor.data) { write(bytes) }
             if (cacheEpoch.current() == epoch) editor.commit() else editor.abort()

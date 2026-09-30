@@ -30,7 +30,7 @@ Delegates Pubky operations to `PaykitSdkService`, which uses:
 - **bitkit-core** (`com.synonym:bitkit-core-android`) — mnemonic-to-seed conversion for receiver noise-key derivation
   - `mnemonicToSeed()`
 
-All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensure serial access to the underlying Rust state.
+Session, state, key and publishing calls are serialized by `PaykitSdkService`'s operation lock. The public reads — `fetchFile()` (`fetchPubkyFileBounded()`), `fetchPubkyProfile()`, `fetchPubkyFollows()` and `resolveContactProfile()` — run outside that lock, at most 6 at once, and are cancelled with their caller. Only unauthenticated public reads may use that path.
 
 ## Repository Layer (`PubkyRepo`)
 
@@ -52,7 +52,7 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 - Profile name and image URI are cached in `PubkyStore` (DataStore) for instant display on launch before the full profile loads
 - The cache also records the public key it was taken from (`cachedProfileOwner`). Only the profile cache writes that field, and it is cleared together with the cached name and image URI
 - `ProfileScreen` shows the cached name and avatar with an inline loading indicator while a load is in flight, but only when the cached owner matches the current public key. `ProfileViewModel` makes this decision and exposes the cached profile only under those conditions. Editing, tags and the other profile actions wait for the loaded profile, and a failed load still shows the retry state
-- Opening `ProfileScreen` does not reload a profile that is already loaded for the current public key; Retry always reloads
+- Opening `ProfileScreen` always starts a background refresh, so tag and profile edits build on the latest published profile once it completes. An already loaded profile stays on screen while it runs, and a result overtaken by a save, deletion or identity change is dropped. The refresh is skipped when a load is already in flight, such as the startup load. Retry always reloads
 
 ### Exposed State
 

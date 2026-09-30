@@ -43,8 +43,18 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `init skips loading a profile already loaded for the current key`() = test {
-        createSut(createProfile())
+    fun `init refreshes a profile already loaded for the current key`() = test {
+        val profile = createProfile()
+        val sut = createSut(profile)
+        advanceUntilIdle()
+
+        verify(pubkyRepo).loadProfile()
+        assertEquals(profile, sut.uiState.value.profile)
+    }
+
+    @Test
+    fun `init skips loading while a profile load is in flight`() = test {
+        createSut(isLoading = true)
         advanceUntilIdle()
 
         verify(pubkyRepo, never()).loadProfile()
@@ -66,7 +76,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         sut.loadProfile()
         advanceUntilIdle()
 
-        verify(pubkyRepo, times(1)).loadProfile()
+        verify(pubkyRepo, times(2)).loadProfile()
     }
 
     @Test

@@ -769,6 +769,57 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `loadProfile marks the profile as loading before its first suspension`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val finishLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            finishLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+        assertFalse(sut.isLoadingProfile.value)
+
+        val load = launch(start = CoroutineStart.UNDISPATCHED) { sut.loadProfile() }
+
+        assertTrue(sut.isLoadingProfile.value)
+        finishLoad.complete(Unit)
+        load.join()
+        assertFalse(sut.isLoadingProfile.value)
+    }
+
+    @Test
+    fun `loadProfile drops a result that a profile deletion overtook`() = test {
+        var cached = PubkyStoreData()
+        whenever(pubkyStore.update(any())).thenAnswer {
+            cached = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(cached)
+            Unit
+        }
+        whenever(pubkyStore.reset()).thenAnswer {
+            cached = PubkyStoreData()
+            Unit
+        }
+        authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Old")
+        val loadStarted = CompletableDeferred<Unit>()
+        val finishLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            loadStarted.complete(Unit)
+            finishLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Loaded"))
+        }
+        val load = async { sut.loadProfile() }
+        loadStarted.await()
+
+        val delete = sut.deleteProfile()
+        finishLoad.complete(Unit)
+        load.await()
+
+        assertTrue(delete.isSuccess)
+        assertNull(sut.profile.value)
+        assertNull(cached.cachedName)
+        assertNull(cached.cachedProfileOwner)
+        assertNull(cached.ownerPublicKey)
+    }
+
+    @Test
     fun `fetchDisplayProfile resolves once without retrying a missing profile or an error`() = test {
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true)).thenReturn(null)
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
