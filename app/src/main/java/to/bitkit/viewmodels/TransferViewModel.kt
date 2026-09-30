@@ -385,7 +385,8 @@ class TransferViewModel @Inject constructor(
                             preTransferOnchainSats = previous.transferContext?.preTransferOnchainSats,
                             requireTransferPersisted = true,
                         )
-                        lightningRepo.completeAcceptedTransferFollowup(order.id, txid)
+                        runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(order.id, txid) }
+                            .onFailure { Logger.warn("Failed to finish accepted transfer locally", it, context = TAG) }
                     }
                 }
                 return true
@@ -448,7 +449,8 @@ class TransferViewModel @Inject constructor(
                             preTransferOnchainSats = transferContext.preTransferOnchainSats,
                             requireTransferPersisted = true,
                         )
-                        lightningRepo.completeAcceptedTransferFollowup(order.id, outcome.txid)
+                        runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(order.id, outcome.txid) }
+                            .onFailure { Logger.warn("Failed to finish accepted transfer locally", it, context = TAG) }
                     }
                     true
                 },

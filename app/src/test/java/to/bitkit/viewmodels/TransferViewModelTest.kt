@@ -1309,17 +1309,82 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
         whenever(transferRepo.persistAcceptedFunding(order, TXID, original))
             .thenReturn(Result.failure(AppError("transfer storage unavailable")), Result.success(Unit))
+        val effects = mutableListOf<TransferEffect>()
+        backgroundScope.launch { sut.transferEffects.collect { effects.add(it) } }
         quoteOrder(order)
         prepareConfirm()
+        effects.clear()
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        assertEquals(order, sut.spendingUiState.value.order)
+        assertFalse(sut.spendingUiState.value.isConfirmPaying)
+        assertTrue(effects.isEmpty())
 
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
         verify(lightningRepo).completeAcceptedTransferFollowup(order.id, TXID)
         verifySendOnChain(sats = order.feeSat, count = 0)
         verify(transferRepo, times(2)).persistAcceptedFunding(order, TXID, original)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        assertEquals(listOf<TransferEffect>(TransferEffect.OnSpendingFundingPaid), effects)
+    }
+
+    @Test
+    fun `durably paid accepted funding survives local followup failure without a second order`() = test {
+        assertPaidFundingSurvivesLocalFailure(resumedEvidence = null)
+    }
+
+    @Test
+    fun `durably paid resumed accepted funding survives local followup failure without a second order`() = test {
+        assertPaidFundingSurvivesLocalFailure(resumedEvidence = OnchainSendEvidence.Accepted)
+    }
+
+    @Test
+    fun `durably paid observed funding survives local followup failure without a second order`() = test {
+        assertPaidFundingSurvivesLocalFailure(resumedEvidence = OnchainSendEvidence.Observed)
+    }
+
+    private suspend fun TestScope.assertPaidFundingSurvivesLocalFailure(resumedEvidence: OnchainSendEvidence?) {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val original = OnchainTransferContext(99_000uL, 110_000uL)
+        val attempt = acceptedFundingAttempt(order, original).copy(
+            evidence = resumedEvidence ?: OnchainSendEvidence.Accepted,
+        )
+        var retainedAttempt = if (resumedEvidence == null) null else attempt
+        whenever(lightningRepo.currentOnchainSendAttempt()).doSuspendableAnswer { retainedAttempt }
+        whenever(lightningRepo.completeAcceptedTransferFollowup(order.id, TXID)).doSuspendableAnswer {
+            throw AppError("accepted activity readback unavailable")
+        }
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChainSuccess()
+        val toasts = collectToasts()
+        val effects = mutableListOf<TransferEffect>()
+        backgroundScope.launch { sut.transferEffects.collect { effects.add(it) } }
+        quoteOrder(order)
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(
+            Result.success(order), Result.success(order.copy(id = "second-order")),
+        )
+        prepareConfirm()
+        effects.clear()
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        // Simulate the background resumer repairing the original activity and acknowledging the guard.
+        // A second swipe on the still-mounted confirmation must not create or fund another order.
+        retainedAttempt = attempt.copy(localFollowupComplete = true)
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = if (resumedEvidence == null) 1 else 0)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(transferRepo).persistAcceptedFunding(order, TXID, original)
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, TXID)
+        assertEquals(listOf<TransferEffect>(TransferEffect.OnSpendingFundingPaid), effects)
+        assertTrue(sut.spendingUiState.value.isConfirmPaying)
+        assertTrue(toasts.isEmpty())
     }
 
     @Test
