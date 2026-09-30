@@ -179,6 +179,34 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `prepareImport excludes own key and imports remaining follows`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val ownProfile = checkNotNull(sut.profile.value)
+        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(
+            listOf(VALID_SELF_KEY, VALID_SELF_KEY.removePrefix("pubky"), VALID_CONTACT_KEY_A),
+        )
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        whenever(pubkyService.saveContact(alice.publicKey, alice.name, restorePrivateConnection = true))
+            .thenReturn(mock())
+        whenever(pubkyService.saveContact(VALID_SELF_KEY, ownProfile.name, restorePrivateConnection = true))
+            .thenAnswer { throw TestAppError("Cannot save own identity") }
+
+        assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(ownProfile, sut.pendingImportProfile.value)
+        assertEquals(listOf(alice), sut.pendingImportContacts.value)
+        assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
+        assertEquals(listOf(alice), sut.contacts.value)
+
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_SELF_KEY))
+
+        assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(ownProfile, sut.pendingImportProfile.value)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
+    }
+
+    @Test
     fun `initial state should have no public key`() = test {
         assertNull(sut.publicKey.value)
         assertFalse(sut.isAuthenticated.value)
