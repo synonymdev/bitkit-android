@@ -85,30 +85,33 @@ class ContactImportSelectViewModel @Inject constructor(
     }
 
     fun importSelected() {
+        if (_uiState.value.isImporting) return
         val selected = _uiState.value.contacts.filter { it.isSelected }
+        _uiState.update { it.copy(isImporting = true) }
         viewModelScope.launch {
-            if (selected.isEmpty()) {
-                pubkyRepo.clearPendingImport()
-                _effects.emit(ContactImportSelectEffect.ImportComplete)
-                return@launch
-            }
-
-            _uiState.update { it.copy(isImporting = true) }
-            pubkyRepo.importContacts(selected.map { it.profile.publicKey })
-                .onSuccess {
+            try {
+                if (selected.isEmpty()) {
                     pubkyRepo.clearPendingImport()
-                    _uiState.update { it.copy(isImporting = false) }
                     _effects.emit(ContactImportSelectEffect.ImportComplete)
+                    return@launch
                 }
-                .onFailure {
-                    Logger.error("Failed to import selected contacts", it, context = TAG)
-                    _uiState.update { it.copy(isImporting = false) }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = it.message,
-                    )
-                }
+
+                pubkyRepo.importContacts(selected.map { it.profile })
+                    .onSuccess {
+                        pubkyRepo.clearPendingImport()
+                        _effects.emit(ContactImportSelectEffect.ImportComplete)
+                    }
+                    .onFailure {
+                        Logger.error("Failed to import selected contacts", it, context = TAG)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = it.message,
+                        )
+                    }
+            } finally {
+                _uiState.update { it.copy(isImporting = false) }
+            }
         }
     }
 

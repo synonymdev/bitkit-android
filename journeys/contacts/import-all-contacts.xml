@@ -1,0 +1,14 @@
+<journey name="import all prepared contacts">
+  <description>
+    Precondition: the import preview is open for a disposable Ring identity with known follows
+    that are not yet saved in this Bitkit wallet. Include Pubky-only profiles without Paykit receivers.
+    Repeat with a large list (for example 62 contacts).
+  </description>
+  <actions>
+    <action>Note the friend count shown in the import preview</action>
+    <action>Tap Import All</action>
+    <action>Verify the import finishes and the Let Your Contacts Pay You screen appears</action>
+    <action>Return Home and open Contacts from the menu</action>
+    <action>Verify the prepared contacts, including Pubky-only profiles, are present with their preview names</action>
+  </actions>
+</journey>

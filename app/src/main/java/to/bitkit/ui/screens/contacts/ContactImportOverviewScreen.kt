@@ -156,6 +156,7 @@ private fun Content(
                 SecondaryButton(
                     text = stringResource(R.string.contacts__import_select),
                     onClick = onClickSelect,
+                    enabled = !uiState.isImporting,
                     modifier = Modifier.weight(1f),
                 )
                 PrimaryButton(
