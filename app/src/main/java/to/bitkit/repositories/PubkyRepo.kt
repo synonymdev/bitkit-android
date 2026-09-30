@@ -351,13 +351,13 @@ class PubkyRepo @Inject constructor(
         try {
             runSuspendCatching {
                 val publicKey = initializeMutex.withLock {
-                    generation = ++adoptionGeneration
                     ensureServiceInitialized()
                     val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
                     val rawPublicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
                     require(PubkyPublicKeyFormat.matches(rawPublicKey, pubky)) {
                         "Ring credential does not match '${redacted(pubky)}'"
                     }
+                    generation = ++adoptionGeneration
                     keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)
                     signInOrSignUpAdoptedIdentity(secretKeyHex, rawPublicKey)
                     sessionInstalled = true

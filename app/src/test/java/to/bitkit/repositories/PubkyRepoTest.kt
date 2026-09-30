@@ -1352,6 +1352,40 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `canceling a pick after a failed pick of another pubky signs out the installed session`() = test {
+        sut.awaitInitialization()
+        val ringPubky = stubRingCredential()
+        val otherPubky = VALID_CONTACT_KEY_A.removePrefix("pubky")
+        whenever(sharedPubkyClient.ringCredential(otherPubky)).thenReturn(Result.failure(TestAppError("Denied")))
+        var session: String? = null
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer {
+            session = "installed_session"
+            Unit
+        }
+        whenever(pubkyService.signOut()).thenAnswer {
+            session = null
+            adoptedSource = null
+            Unit
+        }
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            awaitCancellation()
+        }
+        val firstPick = async { sut.adoptRingIdentity(ringPubky) }
+        profileLoadStarted.await()
+
+        assertTrue(sut.adoptRingIdentity(otherPubky).isFailure)
+        firstPick.cancelAndJoin()
+
+        assertNull(session)
+        assertNull(adoptedSource)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService) { signOut() }
+    }
+
+    @Test
     fun `adopted identity loads after previous identity loads finish`() = test {
         val oldPublicKey = VALID_SELF_KEY
         val newPublicKey = VALID_CONTACT_KEY_A
