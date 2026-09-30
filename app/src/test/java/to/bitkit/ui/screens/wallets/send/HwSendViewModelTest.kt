@@ -335,6 +335,31 @@ class HwSendViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
     }
 
+    @Test
+    fun `hardware Shop core result does not create Sent activity before exact observation`() = test {
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty", "receiver"))
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+        verify(activityService, never()).createSentOnchainActivityFromSendResult(
+            any(), any(), any(), any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(),
+        )
+        verify(activityRepo, never()).notifyPaymentActivityChanged()
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `ordinary hardware Core result preserves existing Sent activity behavior`() = test {
+        val fixture = stubSuccessfulPayment()
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            fixture.broadcast.txId, ADDRESS, AMOUNT_SATS, fixture.broadcast.miningFeeSats,
+            fixture.broadcast.feeRate, false, null, WALLET_ID,
+        )
+    }
+
     private fun request() = HwSendRequest(
         walletId = WALLET_ID,
         address = ADDRESS,

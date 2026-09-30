@@ -549,7 +549,12 @@ class HwWalletRepo @Inject constructor(
     }
 
     /** Fresh backend observation of this exact transaction in the original hardware wallet. */
-    suspend fun observeExactTransaction(walletId: String, txid: String): Result<Boolean> = withContext(ioDispatcher) {
+    suspend fun observeExactTransaction(
+        walletId: String,
+        txid: String,
+        originalAddress: String? = null,
+        originalAmountSats: ULong? = null,
+    ): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {
             require(walletId != WalletScope.default && txid.matches(Regex("[0-9a-fA-F]{64}")))
             val account = getFundingAccount(walletId).getOrThrow()
@@ -559,7 +564,18 @@ class HwWalletRepo @Inject constructor(
                 network = Env.network.toCoreNetwork(),
                 scriptType = account.accountType,
             ).getOrThrow()
-            detail.txid.equals(txid, ignoreCase = true) && detail.sent > 0uL
+            if (!detail.txid.equals(txid, ignoreCase = true) || detail.sent == 0uL) {
+                return@runSuspendCatching false
+            }
+            if (originalAddress != null || originalAmountSats != null) {
+                val address = requireNotNull(originalAddress).also { require(it.isNotBlank()) }
+                val amount = requireNotNull(originalAmountSats)
+                val fee = requireNotNull(detail.fee)
+                val rate = requireNotNull(detail.feeRate).also { require(it.isFinite() && it >= 0.0) }
+                activityRepo.completeObservedHardwarePayment(walletId, txid, address, amount, fee, ceil(rate).toULong())
+                    .getOrThrow()
+            }
+            true
         }
     }
 

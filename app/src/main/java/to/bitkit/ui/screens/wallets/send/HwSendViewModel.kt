@@ -254,6 +254,9 @@ class HwSendViewModel @Inject constructor(
                 walletId = request.walletId,
             )
         }
+        // A Core txid alone is not positive evidence for a Shop payment. Its original proof
+        // completes local activity after a fresh exact outgoing transaction observation.
+        if (request.paymentRequestId != null) return
         coreService.activity.createSentOnchainActivityFromSendResult(
             txid = result.txId,
             address = request.address,

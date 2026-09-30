@@ -6607,7 +6607,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cancelling hardware signing fails the started payment proof`() = test {
+    fun `cancelling hardware signing only cancels unstarted preparation`() = test {
         pubkyPublicKey.value = testPublicKey
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
@@ -6630,11 +6630,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onHardwareSignCancelled()
         advanceUntilIdle()
 
-        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(request)
     }
 
     @Test
-    fun `dismissing hardware signing fails the started payment proof`() = test {
+    fun `dismissing hardware signing only cancels unstarted preparation`() = test {
         pubkyPublicKey.value = testPublicKey
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
@@ -6659,7 +6660,41 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.hideSheet()
         advanceUntilIdle()
 
-        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(request)
+    }
+
+    @Test
+    fun `hardware result persistence failure then dismissal preserves original started guard`() = test {
+        pubkyPublicKey.value = testPublicKey
+        val request = paymentRequest()
+        val txid = "ab".repeat(32)
+        val walletId = "hardware-wallet"
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain))
+            .thenReturn(Result.success(Unit), Result.failure(PaykitPaymentRequestError.OperationInProgress))
+        // Core returned, but retaining its candidate txid failed: durable proof is still started with no identifier.
+        whenever(paykitPaymentProofRepo.completeHardwareOnchainPayment(request.id, walletId, txid, testPublicKey))
+            .thenReturn(false)
+        setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request)
+        setSendState(SendUiState(address = "bcrt1qpaymentrequest", amount = request.amountSats,
+            payMethod = SendMethod.ONCHAIN, hardwareWalletId = walletId, isPaymentRequest = true))
+        sut.showSheet(Sheet.Send(SendRoute.HardwareSign))
+        advanceUntilIdle()
+        assertTrue(sut.prepareHardwareContactPayment())
+        assertFalse(sut.completeHardwareContactPayment(txid, walletId, request.id, testPublicKey))
+
+        sut.onHardwareSignCancelled()
+        sut.hideSheet()
+        advanceUntilIdle()
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
+        verify(paykitPaymentProofRepo, never()).cancelPreparation(any())
+
+        setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request)
+        assertFalse(sut.prepareHardwareContactPayment(walletId, "bcrt1qpaymentrequest", request.id, testPublicKey))
+        verify(paykitPaymentRequestRepo, times(1)).accept(request)
+        verify(paykitPaymentProofRepo, times(1)).markOnchainPaymentStarted(request, "bcrt1qpaymentrequest", walletId)
+        verify(lightningRepo, never()).sendOnChain(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     @Test

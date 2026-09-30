@@ -165,6 +165,34 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `observed hardware Shop activity failure retries original transaction without broadcast`() = test {
+        val txid = "ab".repeat(32)
+        val address = "bcrt1-original-shop-address"
+        val amount = 25000uL
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val detail = mock<TransactionDetail> {
+            on { this.txid }.thenReturn(txid)
+            on { sent }.thenReturn(26000uL)
+            on { fee }.thenReturn(1000uL)
+            on { feeRate }.thenReturn(2.0)
+        }
+        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+            .thenReturn(Result.success(detail))
+        whenever(activityRepo.completeObservedHardwarePayment(HARDWARE_WALLET_ID, txid, address, amount, 1000uL, 2uL))
+            .thenReturn(Result.failure(AppError("local write failed")))
+            .thenReturn(Result.success(Unit))
+
+        val sut = createRepo()
+        assertTrue(sut.observeExactTransaction(HARDWARE_WALLET_ID, txid, address, amount).isFailure)
+        assertTrue(sut.observeExactTransaction(HARDWARE_WALLET_ID, txid, address, amount).getOrThrow())
+        verify(activityRepo, times(2))
+            .completeObservedHardwarePayment(HARDWARE_WALLET_ID, txid, address, amount, 1000uL, 2uL)
+        verify(trezorRepo, times(2))
+            .getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
     fun `fresh hardware observation rejects missing wallet mismatched txid and lookup errors`() = test {
         val txid = "ab".repeat(32)
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))

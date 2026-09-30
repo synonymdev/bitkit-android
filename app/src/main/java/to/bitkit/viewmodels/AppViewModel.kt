@@ -5312,14 +5312,16 @@ class AppViewModel @Inject constructor(
                 ?.takeIf { it == preparedContactPaymentContext && _sendUiState.value.hardwareWalletId != null }
                 ?.incomingPaymentRequest
         }
-        if (request == null) {
+        // A returned Core result may still lack a durable txid when its candidate save failed.
+        // Dismissing that uncertain original payment must not reopen its started proof for a new send.
+        if (request == null || uncertainOnchainPaymentRequestId == request.id) {
             isSubmittingPaymentRequest = false
             return
         }
 
         viewModelScope.launch {
             try {
-                paykitPaymentProofRepo.failOnchainPayment(request)
+                paykitPaymentProofRepo.cancelPreparation(request)
             } finally {
                 isSubmittingPaymentRequest = false
             }

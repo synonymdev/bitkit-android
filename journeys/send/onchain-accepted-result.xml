@@ -13,12 +13,12 @@
     <action>Verify the Send Amount screen is visible with 1 000 sats and Savings selected</action>
     <action>Tap Continue (tag "ContinueAmount"), expand Show Details (tag "SendConfirmToggleDetails") if collapsed, and verify the Confirm screen shows the receiving test wallet address (tag "ReviewUri")</action>
     <action>Swipe the send handle (tag "GRAB") fully to the right</action>
-    <action>Wait for the sent transaction sheet (tag "new_transaction_sheet") and verify it shows the accepted payment amount</action>
+    <action>Wait for the Bitcoin Sent success screen (tag "SendSuccess") and verify it shows the accepted payment amount</action>
     <action>Tap Details (tag "Details"), then Explore (tag "ActivityTxDetails"), and verify the outbound transaction shows a transaction ID (tag "TXID"); record that exact ID without inferring a different transaction from address or amount</action>
     <action>Close the transaction details and return to the wallet home screen</action>
     <action>Hand the receiving test wallet address to the app again with adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;test recipient address&gt;" to.bitkit.dev</action>
     <action>Tap the available balance (tag "AvailableAmount") on Send Amount to choose Max, tap Continue (tag "ContinueAmount"), expand Show Details (tag "SendConfirmToggleDetails") if collapsed, and verify the Confirm screen shows the receiving test wallet address (tag "ReviewUri")</action>
     <action>Swipe the send handle (tag "GRAB") fully to the right, then tap Yes, Send (tag "DialogConfirm") if the over-50%-of-balance confirmation appears</action>
-    <action>Wait for the sent transaction sheet (tag "new_transaction_sheet"), tap Details (tag "Details"), then Explore (tag "ActivityTxDetails"), and verify this send-all transaction shows its own exact transaction ID (tag "TXID")</action>
+    <action>Wait for the Bitcoin Sent success screen (tag "SendSuccess"), tap Details (tag "Details"), then Explore (tag "ActivityTxDetails"), and verify this send-all transaction shows its own exact transaction ID (tag "TXID")</action>
   </actions>
 </journey>

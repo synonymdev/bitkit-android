@@ -380,6 +380,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     suspend fun failOnchainPayment(request: PaykitPaymentRequest) {
         removeRequestProofs(request) {
             it.kind == PaykitPaymentProofKind.Onchain &&
+                it.onchainWalletId == WalletScope.default &&
                 it.paymentStarted &&
                 it.paymentIdentifier == null &&
                 it.proofData == null
@@ -568,8 +569,10 @@ class PaykitPaymentProofRepo @Inject constructor(
             (proof.proofData != null && !proof.proofData.equals(txid, true))
         ) return false
         if (!proof.onchainAcceptanceVerified) {
+            val address = proof.onchainAddress?.takeIf { it.isNotBlank() } ?: return false
+            val amount = proof.onchainAmountSats ?: return false
             val observed = withTimeoutOrNull(HARDWARE_OBSERVATION_TIMEOUT) {
-                hwWalletRepo.observeExactTransaction(proof.onchainWalletId, txid).getOrDefault(false)
+                hwWalletRepo.observeExactTransaction(proof.onchainWalletId, txid, address, amount).getOrDefault(false)
             } == true
             if (!observed) return false
         }

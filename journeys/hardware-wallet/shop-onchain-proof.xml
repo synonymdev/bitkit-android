@@ -4,6 +4,8 @@
     Requires the hardware-wallet Bridge setup and payment-requests issuer fixture; the hardware
     native-segwit account must cover 100,000 sats plus fees. Observe the exact returned transaction
     in the original hardware account and match the issuer's delivered proof to that transaction.
+    If Core fails after payment has started and returns no transaction ID, dismissing and reopening
+    must keep that original request pending; this journey cannot inject that response-loss condition.
     This journey does not inject native broadcast faults or prove physical USB/BLE behavior.
   </description>
   <actions>
@@ -15,8 +17,8 @@
     <action>Swipe to confirm; verify hardware sign shows the original issuer destination (testTag "HardwareSendAddress") and 100,000 sats (testTag "HardwareSendAmount")</action>
     <action>Tap Open Trezor Connect (testTag "HardwareSendOpenTrezorConnect") once and approve the Bridge emulator's transaction prompts</action>
     <action>While signing or local proof observation is running, verify another tap cannot start another payment; wait for Success (testTag "SendSuccess") or the existing Payment Pending screen</action>
-    <action>If Pending is shown, verify there is no resend action; close the sheet and reopen the same request from Payment Requests and verify it cannot start a fresh hardware payment</action>
-    <action>Once the original transaction is visible to Electrum, resume Bitkit to allow existing proof reconciliation; verify the same original payment finishes or its request leaves the pending list, without another signing prompt</action>
+    <action>If Pending is shown, verify there is no resend action or Sent activity from the returned Core transaction ID alone; close the sheet and reopen the same request from Payment Requests and verify it cannot start a fresh hardware payment</action>
+    <action>Once the original outgoing transaction is visible to Electrum, resume Bitkit to allow existing proof reconciliation; verify the same original payment creates Sent activity in its original hardware wallet and finishes or its request leaves the pending list, without another signing prompt</action>
     <action>Open the original hardware wallet's activity and record the exact new transaction ID; independently read that transaction from the regtest backend and verify it spends that hardware account's inputs</action>
     <action>Inspect the fixture issuer's proof for the original request and payer identity; verify type "bitcoin-onchain-txid" contains exactly the recorded original transaction ID, and the backend contains only the original payment</action>
   </actions>
