@@ -81,7 +81,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
@@ -193,9 +195,12 @@ class PaykitSdkService @Inject constructor(
     private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationMutex = Mutex()
+    private val publicReadPermits = Semaphore(PUBLIC_READ_PERMITS)
     private val setupMutex = Mutex()
     private var isSetup = CompletableDeferred<Unit>()
     private var setupFailed = false
+
+    @Volatile
     private var sdk: PaykitSdk? = null
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
@@ -451,12 +456,8 @@ class PaykitSdkService @Inject constructor(
         )
     }
 
-    suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray {
-        isSetup.await()
-        return operationMutex.withLock {
-            handle().fetchPubkyFileBounded(uri, maxBytes) ?: throw AppError("Pubky file not found")
-        }
-    }
+    suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray =
+        publicRead { it.fetchPubkyFileBounded(uri, maxBytes) } ?: throw AppError("Pubky file not found")
 
     suspend fun publishPaykitProfile(profile: PaykitProfile): PaykitProfileRecord {
         isSetup.await()
@@ -491,19 +492,11 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun fetchPubkyProfile(publicKey: String): PubkyProfile? {
-        isSetup.await()
-        return operationMutex.withLock {
-            handle().fetchPubkyProfile(publicKey)?.profile
-        }
-    }
+    suspend fun fetchPubkyProfile(publicKey: String): PubkyProfile? =
+        publicRead { it.fetchPubkyProfile(publicKey) }?.profile
 
-    suspend fun fetchPubkyFollows(publicKey: String): List<String> {
-        isSetup.await()
-        return operationMutex.withLock {
-            handle().fetchPubkyFollows(publicKey)
-        }
-    }
+    suspend fun fetchPubkyFollows(publicKey: String): List<String> =
+        publicRead { it.fetchPubkyFollows(publicKey) }
 
     suspend fun contactRecords(): List<ContactRecord> {
         isSetup.await()
@@ -546,11 +539,8 @@ class PaykitSdkService @Inject constructor(
     suspend fun resolveContactProfile(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
-    ): ContactProfileResolution? {
-        isSetup.await()
-        return operationMutex.withLock {
-            handle().resolveContactProfile(publicKey, PaykitReceiverPaths.WALLET, allowPubkyProfileFallback)
-        }
+    ): ContactProfileResolution? = publicRead {
+        it.resolveContactProfile(publicKey, PaykitReceiverPaths.WALLET, allowPubkyProfileFallback)
     }
 
     suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> {
@@ -1044,6 +1034,17 @@ class PaykitSdkService @Inject constructor(
         sdkFactory().also { sdk = it }
     }
 
+    /**
+     * Runs [block] on the existing SDK instance without [operationMutex]. [block] may only call unauthenticated
+     * public Pubky reads, never session, secret, state-blob or publishing APIs. Without an instance it takes the
+     * locked path, because building one here would race [resetRuntime].
+     */
+    private suspend fun <T> publicRead(block: suspend (PaykitSdk) -> T): T {
+        isSetup.await()
+        val existing = sdk ?: return operationMutex.withLock { block(handle()) }
+        return publicReadPermits.withPermit { block(existing) }
+    }
+
     private fun bootstrap() = cachedBootstrap
 
     private fun approvalBootstrap(authUrl: String, approvedClientId: String): PubkySessionBootstrap {
@@ -1084,6 +1085,9 @@ class PaykitSdkService @Inject constructor(
 
         /** Maximum time identity maintenance may delay its caller. */
         private val IDENTITY_REPUBLISH_WAIT_TIMEOUT = 5.seconds
+
+        /** Maximum concurrent public Pubky reads that run outside the operation lock. */
+        private const val PUBLIC_READ_PERMITS = 6
 
         fun localSecretKey(secretKeyHex: String): PubkyLocalSecretKey =
             PubkyLocalSecretKey(secretKeyHex.fromHex())
