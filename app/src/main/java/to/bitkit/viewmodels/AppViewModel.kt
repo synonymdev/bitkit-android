@@ -5204,17 +5204,24 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
-        incomingPaymentRequest?.let { request ->
-            paykitPaymentRequestRepo.ensurePaymentAllowed(request).onFailure {
-                paykitPaymentProofRepo.failOnchainPayment(request)
-                synchronized(contactPaymentContextLock) {
-                    if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
-                }
-                handlePaymentPreparationFailure(it, contactPaymentContext)
-                return false
-            }
-        }
         return true
+    }
+
+    suspend fun authorizeHardwareContactPayment(hasAttemptedBroadcast: Boolean): Boolean {
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        val request = contactPaymentContext?.incomingPaymentRequest ?: return true
+        val error = paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull() ?: return true
+        if (hasAttemptedBroadcast) {
+            toast(error)
+            return false
+        }
+
+        paykitPaymentProofRepo.failOnchainPayment(request)
+        synchronized(contactPaymentContextLock) {
+            if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
+        }
+        handlePaymentPreparationFailure(error, contactPaymentContext)
+        return false
     }
 
     fun completeHardwareContactPayment(txId: String) {

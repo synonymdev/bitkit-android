@@ -6650,9 +6650,58 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 "hardware-wallet",
             )
         }
+        verify(paykitPaymentRequestRepo, never()).ensurePaymentAllowed(request)
+
         whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
-        assertFalse(sut.prepareHardwareContactPayment())
+        assertFalse(sut.authorizeHardwareContactPayment(hasAttemptedBroadcast = false))
+        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+    }
+
+    @Test
+    fun `hardware retry denial keeps the started proof until cancellation`() = test {
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(
+            publicKey = testPublicKey,
+            privatePaymentContext = privateContext,
+            incomingPaymentRequest = request,
+            isInitialSubscriptionPayment = true,
+        )
+        setSendState(
+            SendUiState(
+                address = "bcrt1qpaymentrequest",
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+                isInitialSubscriptionPayment = true,
+                hardwareWalletId = "hardware-wallet",
+            )
+        )
+        val sheet = Sheet.Send(SendRoute.HardwareSign)
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+        assertTrue(sut.prepareHardwareContactPayment())
+
+        sut.sendEffect.test {
+            assertFalse(sut.authorizeHardwareContactPayment(hasAttemptedBroadcast = true))
+            expectNoEvents()
+        }
+
+        assertEquals(sheet, sut.currentSheet.value)
+        verify(toastManager).enqueue(any())
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(request)
+
+        sut.onHardwareSignCancelled()
+        advanceUntilIdle()
+
         verify(paykitPaymentProofRepo).failOnchainPayment(request)
     }
 

@@ -320,6 +320,7 @@ fun SendSheet(
                         satsPerVByte = satsPerVByte,
                         viewModel = hwSendViewModel,
                         prepareContactPayment = appViewModel::prepareHardwareContactPayment,
+                        authorizeContactPayment = appViewModel::authorizeHardwareContactPayment,
                         onBack = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle
