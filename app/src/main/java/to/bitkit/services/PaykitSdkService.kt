@@ -71,6 +71,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -274,8 +275,14 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun republishIdentityIfNeeded(publicKey: String? = null, now: Long = nowMillis()) {
+        val publication = launchIdentityRepublish(publicKey, now)
+        withTimeoutOrNull(IDENTITY_REPUBLISH_WAIT_TIMEOUT) { publication.join() }
+            ?: Logger.debug("Continuing while Pubky identity publication is pending", context = TAG)
+    }
+
+    private suspend fun launchIdentityRepublish(publicKey: String?, now: Long = nowMillis()): Job {
         currentCoroutineContext().ensureActive()
-        val publication = launch {
+        return launch {
             if (!identityRepublishMutex.tryLock()) return@launch
             try {
                 withTimeoutOrNull(IDENTITY_REPUBLISH_TIMEOUT) {
@@ -306,8 +313,6 @@ class PaykitSdkService @Inject constructor(
                 identityRepublishMutex.unlock()
             }
         }
-        withTimeoutOrNull(IDENTITY_REPUBLISH_WAIT_TIMEOUT) { publication.join() }
-            ?: Logger.debug("Continuing while Pubky identity publication is pending", context = TAG)
     }
 
     /** Rebroadcasts the identity record when one exists. Returns false only when the network reports none. */
@@ -982,7 +987,7 @@ class PaykitSdkService @Inject constructor(
         val handle = handle()
         handle.initialize()
         publishReceiverMarkerIfLiveSessionAvailable(handle)
-        republishIdentityIfNeeded(publicKey = result.publicKey)
+        launchIdentityRepublish(publicKey = result.publicKey)
     }
 
     private suspend fun clearRegisteredIdentityActivationLocked() = withContext(NonCancellable) {
@@ -1035,13 +1040,13 @@ class PaykitSdkService @Inject constructor(
     }
 
     /**
-     * Runs [block] on the existing SDK instance without [operationMutex]. [block] may only call unauthenticated
-     * public Pubky reads, never session, secret, state-blob or publishing APIs. Without an instance it takes the
-     * locked path, because building one here would race [resetRuntime].
+     * Runs [block] on the SDK instance without [operationMutex]. [block] may only call unauthenticated public
+     * Pubky reads, never session, secret, state-blob or publishing APIs. Without an instance it builds one under
+     * [operationMutex], because building one outside it would race [resetRuntime], but reads under the permit.
      */
     private suspend fun <T> publicRead(block: suspend (PaykitSdk) -> T): T {
         isSetup.await()
-        val existing = sdk ?: return operationMutex.withLock { block(handle()) }
+        val existing = sdk ?: operationMutex.withLock { handle() }
         return publicReadPermits.withPermit { block(existing) }
     }
 
