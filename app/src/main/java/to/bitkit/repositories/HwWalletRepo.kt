@@ -548,6 +548,21 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    /** Fresh backend observation of this exact transaction in the original hardware wallet. */
+    suspend fun observeExactTransaction(walletId: String, txid: String): Result<Boolean> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            require(walletId != WalletScope.default && txid.matches(Regex("[0-9a-fA-F]{64}")))
+            val account = getFundingAccount(walletId).getOrThrow()
+            val detail = trezorRepo.getTransactionDetail(
+                extendedKey = account.xpub,
+                txid = txid,
+                network = Env.network.toCoreNetwork(),
+                scriptType = account.accountType,
+            ).getOrThrow()
+            detail.txid.equals(txid, ignoreCase = true) && detail.sent > 0uL
+        }
+    }
+
     suspend fun disconnectStaleSession(walletId: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val deviceId = transportDeviceIdOrNull(walletId) ?: return@runSuspendCatching

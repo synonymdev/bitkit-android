@@ -56,6 +56,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val paykitSdkService = mock<PaykitSdkService>()
     private val lightningRepo = mock<LightningRepo>()
     private val store = mock<PaykitPaymentProofStore>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
     private var storedProofs = emptyList<PendingPaykitPaymentProof>()
     private var shouldFailNextLoad = false
     private var shouldFailNextSave = false
@@ -908,11 +909,109 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(listOf(request.id), storedProofs.map { it.requestId })
     }
 
+    @Test
+    fun `hardware core txid remains pending until fresh exact observation then resumes original proof`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val txid = "ab".repeat(32)
+        val walletId = "original-hardware-wallet"
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid)).thenReturn(Result.success(false))
+
+        assertFalse(repo.completeHardwareOnchainPayment(request.id, walletId, txid, LOCAL_IDENTITY))
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        assertNull(storedProofs.single().proofData)
+        assertFalse(storedProofs.single().onchainAcceptanceVerified)
+        assertEquals(PaykitPaymentRequestError.OperationInProgress,
+            repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).exceptionOrNull())
+        repo.failOnchainPayment(request)
+        assertEquals(1, storedProofs.size)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid)).thenReturn(Result.success(true))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+            .thenReturn(paymentRequestRecord())
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedAttempt(request, "cd".repeat(32)))
+        paymentProofRepo().reconcile()
+        verify(lightningRepo, never()).completeAcceptedShopFollowup(any(), any())
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), eq(MethodId.P2wpkh.rawValue),
+            eq("""{"data":"$txid","type":"bitcoin-onchain-txid"}"""), isNull())
+        assertTrue(storedProofs.isEmpty())
+        verify(hwWalletRepo, never()).broadcastFunding(any())
+    }
+
+    @Test
+    fun `hardware fresh observation submits completed durable proof with original wallet`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val txid = "cd".repeat(32)
+        val walletId = "original-hardware-wallet"
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid)).thenReturn(Result.success(true))
+        // No delivery session: preserve the verified proof durably for later delivery.
+        assertTrue(repo.completeHardwareOnchainPayment(request.id, walletId, txid, LOCAL_IDENTITY))
+        assertEquals(txid, storedProofs.single().proofData)
+        assertTrue(storedProofs.single().onchainAcceptanceVerified)
+        assertEquals(walletId, storedProofs.single().onchainWalletId)
+        assertEquals(request.id, repo.onchainPaymentResolutions.value.single().requestId)
+        verify(hwWalletRepo, never()).broadcastFunding(any())
+    }
+
+    @Test
+    fun `hardware observation errors and changed transaction id retain only the original pending lookup`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val txid = "ab".repeat(32)
+        val walletId = "original-hardware-wallet"
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid)).thenReturn(Result.failure(AppError("lookup failed")))
+        assertFalse(repo.completeHardwareOnchainPayment(request.id, walletId, txid, LOCAL_IDENTITY))
+        assertFalse(repo.completeHardwareOnchainPayment(request.id, "different-wallet", txid, LOCAL_IDENTITY))
+        assertFalse(repo.completeHardwareOnchainPayment(request.id, walletId, "cd".repeat(32), LOCAL_IDENTITY))
+        repo.reconcile()
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        assertNull(storedProofs.single().proofData)
+        assertFalse(storedProofs.single().onchainAcceptanceVerified)
+        verify(hwWalletRepo, times(2)).observeExactTransaction(walletId, txid)
+        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+    }
+
+    @Test
+    fun `hardware callback cannot verify another identity with the same request and wallet`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val txid = "ab".repeat(32)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        val original = storedProofs.single()
+        val other = original.copy(identity = COUNTERPARTY)
+        storedProofs = listOf(other)
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(COUNTERPARTY, true))
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid)).thenReturn(Result.success(true))
+
+        assertFalse(repo.completeHardwareOnchainPayment(request.id, walletId, txid, LOCAL_IDENTITY))
+        assertEquals(listOf(other), storedProofs)
+        verify(hwWalletRepo, never()).observeExactTransaction(any(), any())
+
+        storedProofs = listOf(original, other)
+        assertTrue(repo.completeHardwareOnchainPayment(request.id, walletId, txid, LOCAL_IDENTITY))
+        assertTrue(storedProofs.first { it.identity == LOCAL_IDENTITY }.onchainAcceptanceVerified)
+        assertEquals(other, storedProofs.first { it.identity == COUNTERPARTY })
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+    }
+
     private fun paymentProofRepo() = PaykitPaymentProofRepo(
         ioDispatcher = testDispatcher,
         paykitSdkService = paykitSdkService,
         lightningRepo = lightningRepo,
         store = store,
+        hwWalletRepo = hwWalletRepo,
     )
 
     private fun acceptedAttempt(request: PaykitPaymentRequest, txid: String) = OnchainSendAttempt(

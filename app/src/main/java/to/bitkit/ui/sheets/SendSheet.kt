@@ -128,7 +128,19 @@ fun SendSheet(
             val navController = rememberNavController()
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
-                    appViewModel.completeHardwareContactPayment(result.txId)
+                    val proofComplete = appViewModel.completeHardwareContactPayment(
+                        result.txId, result.walletId, result.paymentRequestId, result.paymentIdentity,
+                    )
+                    if (!proofComplete) {
+                        navController.navigateTo(SendRoute.Pending(
+                            paymentHash = result.txId,
+                            amount = result.amountSats.toLong(),
+                            observeResolution = false,
+                            isOnchain = true,
+                        )) { popUpTo(navController.graph.id) { inclusive = true } }
+                        hwSendViewModel.completeBroadcast()
+                        return@collect
+                    }
                     appViewModel.onSendSuccess(
                         details = NewTransactionSheetDetails(
                             type = NewTransactionSheetType.ONCHAIN,
@@ -319,12 +331,18 @@ fun SendSheet(
                         ?.toULong()
                         ?.takeIf { rate -> rate > 0uL }
                         ?: HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE
+                    val paymentIdentity = appViewModel.hardwarePaymentIdentity()
                     HwSendSignScreen(
                         walletId = walletId,
                         sendUiState = uiState,
+                        paymentIdentity = paymentIdentity,
                         satsPerVByte = satsPerVByte,
                         viewModel = hwSendViewModel,
-                        prepareContactPayment = appViewModel::prepareHardwareContactPayment,
+                        prepareContactPayment = {
+                            appViewModel.prepareHardwareContactPayment(
+                                walletId, uiState.address, uiState.incomingPaymentRequestId, paymentIdentity,
+                            )
+                        },
                         onBack = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle

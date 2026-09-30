@@ -842,7 +842,8 @@ class AppViewModel @Inject constructor(
                 type = NewTransactionSheetType.ONCHAIN,
                 direction = NewTransactionSheetDirection.SENT,
                 paymentHashOrTxId = resolution.transactionId,
-                sats = _sendUiState.value.amount.toLong(),
+                sats = resolution.amountSats?.toLong() ?: _sendUiState.value.amount.toLong(),
+                activityWalletId = resolution.walletId,
                 isLoadingDetails = true,
             )
         )
@@ -860,6 +861,7 @@ class AppViewModel @Inject constructor(
                 contactPublicKey = resolution.requestId.counterparty,
                 forPaymentId = resolution.transactionId,
                 syncLdkPayments = false,
+                walletId = resolution.walletId,
             ).onFailure {
                 Logger.warn("Failed to associate a resolved Paykit payment with its contact", it, context = TAG)
             }
@@ -5248,24 +5250,34 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    suspend fun prepareHardwareContactPayment(): Boolean {
-        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-        if (isPreparedContactPayment(contactPaymentContext)) return true
+    fun hardwarePaymentIdentity(): String? = pubkyRepo.publicKey.value?.let(PubkyPublicKeyFormat::normalized)
 
+    suspend fun prepareHardwareContactPayment(
+        walletId: String? = _sendUiState.value.hardwareWalletId,
+        address: String = _sendUiState.value.address,
+        requestId: PaykitPaymentRequestId? = activeIncomingPaymentRequest()?.id,
+        identity: String? = hardwarePaymentIdentity(),
+    ): Boolean {
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        if (contactPaymentContext?.incomingPaymentRequest?.id != requestId) return false
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
+        if (incomingPaymentRequest != null &&
+            (identity == null || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value))
+        ) return false
+        // A retry of the original signed transaction skips this hook in HwSendViewModel.
+        // A new Shop payment must consult the durable paymentStarted guard again.
+        if (incomingPaymentRequest == null && isPreparedContactPayment(contactPaymentContext)) return true
         val proofPreparation = preparePaymentProof(incomingPaymentRequest)
-        if (proofPreparation.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress) {
-            handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
+        val preparedPaymentProofRequest = proofPreparation.getOrElse {
+            handlePaymentPreparationFailure(it, contactPaymentContext)
             return false
         }
-        val preparedPaymentProofRequest = proofPreparation.getOrNull()
         if (!prepareContactPayment(contactPaymentContext)) {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false
         }
         if (preparedPaymentProofRequest != null) {
-            val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
-            markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
+            markOnchainPaymentStarted(incomingPaymentRequest, address, walletId ?: WalletScope.default).onFailure {
                 synchronized(contactPaymentContextLock) {
                     if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
                 }
@@ -5274,14 +5286,20 @@ class AppViewModel @Inject constructor(
                 return false
             }
         }
-        return true
+        return incomingPaymentRequest == null || PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
     }
 
-    fun completeHardwareContactPayment(txId: String) {
-        val incomingPaymentRequest = synchronized(contactPaymentContextLock) {
-            activeContactPaymentContext?.incomingPaymentRequest
-        }
-        completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
+    suspend fun completeHardwareContactPayment(
+        txId: String,
+        walletId: String,
+        requestId: PaykitPaymentRequestId?,
+        identity: String?,
+    ): Boolean {
+        if (requestId == null) return true
+        val completed = paykitPaymentProofRepo.completeHardwareOnchainPayment(requestId, walletId, txId, identity) &&
+            PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        if (!completed) uncertainOnchainPaymentRequestId = requestId
+        return completed
     }
 
     fun onHardwareSignCancelled() {

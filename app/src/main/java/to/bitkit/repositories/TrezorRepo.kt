@@ -12,6 +12,7 @@ import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
+import com.synonym.bitkitcore.TransactionDetail
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -436,6 +437,18 @@ class TrezorRepo @Inject constructor(
         }.onFailure { e ->
             Logger.error("Trezor getPublicKey failed", e, context = TAG)
             _state.update { it.copy(error = trezorErrorMessage(e)) }
+        }
+    }
+
+    suspend fun getTransactionDetail(
+        extendedKey: String,
+        txid: String,
+        network: BitkitCoreNetwork,
+        scriptType: AccountType,
+    ): Result<TransactionDetail> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            awaitSetup()
+            trezorService.getTransactionDetail(extendedKey, currentElectrumUrl(), txid, network, scriptType)
         }
     }
 

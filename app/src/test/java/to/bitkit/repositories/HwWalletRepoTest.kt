@@ -12,6 +12,7 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.TransactionDetails
+import com.synonym.bitkitcore.TransactionDetail
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
@@ -19,6 +20,8 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -29,6 +32,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -133,6 +137,61 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever { activityRepo.getTagMetadataForWallet(any()) }.thenReturn(Result.success(emptyList()))
         whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
         whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
+    }
+
+    @Test
+    fun `fresh exact hardware observation keeps original account across wallet changes`() = test {
+        val txid = "ab".repeat(32)
+        val started = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Unit>()
+        whenever(hwWalletStore.loadKnownDevices()).thenAnswer { storeData.value.knownDevices }
+        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+            .doSuspendableAnswer {
+                started.complete(Unit)
+                finish.await()
+                Result.success(mock<TransactionDetail> {
+                    on { this.txid }.thenReturn(txid)
+                    on { sent }.thenReturn(1uL)
+                })
+            }
+        val sut = createRepo()
+        val result = async { sut.observeExactTransaction(HARDWARE_WALLET_ID, txid) }
+        started.await()
+        storeData.value = HwWalletData(knownDevices = listOf(hiddenWallet))
+        finish.complete(Unit)
+        assertTrue(result.await().getOrThrow())
+        verify(trezorRepo).getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
+    fun `fresh hardware observation rejects missing wallet mismatched txid and lookup errors`() = test {
+        val txid = "ab".repeat(32)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val mismatchedDetail = mock<TransactionDetail> { on { this.txid }.thenReturn("cd".repeat(32)) }
+        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+            .thenReturn(Result.success(mismatchedDetail))
+            .thenReturn(Result.failure(AppError("transaction not found")))
+        val sut = createRepo()
+        assertFalse(sut.observeExactTransaction(HARDWARE_WALLET_ID, txid).getOrThrow())
+        assertTrue(sut.observeExactTransaction(HARDWARE_WALLET_ID, txid).isFailure)
+        assertTrue(sut.observeExactTransaction(HIDDEN_WALLET_ID, txid).isFailure)
+        verify(trezorRepo, times(2)).getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
+    fun `fresh hardware observation rejects exact inbound transaction`() = test {
+        val txid = "ab".repeat(32)
+        val incoming = mock<TransactionDetail> {
+            on { this.txid }.thenReturn(txid)
+            on { sent }.thenReturn(0uL)
+        }
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+            .thenReturn(Result.success(incoming))
+        assertFalse(createRepo().observeExactTransaction(HARDWARE_WALLET_ID, txid).getOrThrow())
+        verify(trezorRepo, never()).broadcastRawTx(any())
     }
 
     private fun passphraseCapableFeatures(): TrezorFeatures =

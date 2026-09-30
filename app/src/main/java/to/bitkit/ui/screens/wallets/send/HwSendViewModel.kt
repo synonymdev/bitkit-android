@@ -31,6 +31,7 @@ import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -72,7 +73,7 @@ class HwSendViewModel @Inject constructor(
         request: HwSendRequest,
         beforeBroadcast: suspend () -> Boolean = { true },
     ) {
-        if (_uiState.value.isSigning || signingJob?.isActive == true) return
+        if (pendingResult.value != null || _uiState.value.isSigning || signingJob?.isActive == true) return
         if (pendingBroadcast?.matches(request) == false) return
         signingWalletId = request.walletId
         _uiState.update { it.copy(isSigning = true) }
@@ -107,7 +108,10 @@ class HwSendViewModel @Inject constructor(
                     }
                     runSuspendCatching { persistResult(request, result) }
                         .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
-                    pendingResult.update { HwSendResult(request.walletId, result.txId, request.amountSats) }
+                    pendingResult.update {
+                        HwSendResult(request.walletId, result.txId, request.amountSats,
+                            request.paymentRequestId, request.paymentIdentity)
+                    }
                 }.onFailure {
                     if (it is CancellationException && it !is TimeoutCancellationException) throw it
                     handleFailure(it, request.walletId)
@@ -319,6 +323,8 @@ data class HwSendResult(
     val walletId: String,
     val txId: String,
     val amountSats: ULong,
+    val paymentRequestId: PaykitPaymentRequestId? = null,
+    val paymentIdentity: String? = null,
 )
 
 data class HwSendRequest(
@@ -327,6 +333,8 @@ data class HwSendRequest(
     val amountSats: ULong,
     val satsPerVByte: ULong,
     val tags: List<String>,
+    val paymentRequestId: PaykitPaymentRequestId? = null,
+    val paymentIdentity: String? = null,
 )
 
 private data class PendingHwSendBroadcast(

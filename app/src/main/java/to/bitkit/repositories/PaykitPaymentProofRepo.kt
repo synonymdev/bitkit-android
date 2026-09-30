@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -36,6 +37,7 @@ import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Instant
+import kotlin.time.Duration.Companion.seconds
 
 /** New proof kinds must be readable on both platforms before either platform writes them to a wallet backup. */
 @Serializable
@@ -72,6 +74,8 @@ data class PaykitOnchainPaymentProofResolution(
     val identity: String,
     val requestId: PaykitPaymentRequestId,
     val transactionId: String,
+    val walletId: String = WalletScope.default,
+    val amountSats: ULong? = null,
 )
 
 @Singleton
@@ -81,10 +85,12 @@ class PaykitPaymentProofRepo @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
     private val lightningRepo: LightningRepo,
     private val store: PaykitPaymentProofStore,
+    private val hwWalletRepo: HwWalletRepo,
 ) {
     companion object {
         private const val TAG = "PaykitPaymentProofRepo"
         private const val HASH_BYTE_COUNT = 32
+        private val HARDWARE_OBSERVATION_TIMEOUT = 15.seconds
     }
 
     private val operationMutex = Mutex()
@@ -340,6 +346,37 @@ class PaykitPaymentProofRepo @Inject constructor(
         return true
     }
 
+    suspend fun completeHardwareOnchainPayment(
+        requestId: PaykitPaymentRequestId,
+        walletId: String,
+        txid: String,
+        identity: String? = null,
+    ): Boolean = withContext(ioDispatcher) {
+        if (walletId == WalletScope.default || !txid.isHex(HASH_BYTE_COUNT)) return@withContext false
+        val originalIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return@withContext false
+        operationMutex.withLock {
+            runSuspendCatching {
+                val proofs = loadProofs().toMutableList()
+                val index = proofs.indices.singleOrNull { index ->
+                    val proof = proofs[index]
+                    PubkyPublicKeyFormat.matches(proof.identity, originalIdentity) &&
+                        proof.requestId == requestId && proof.onchainWalletId == walletId &&
+                        proof.kind == PaykitPaymentProofKind.Onchain && proof.paymentStarted
+                } ?: return@runSuspendCatching false
+                val original = proofs[index]
+                if ((original.paymentIdentifier != null && !original.paymentIdentifier.equals(txid, true)) ||
+                    (original.proofData != null && !original.proofData.equals(txid, true))
+                ) return@runSuspendCatching false
+                // This id identifies the original lookup; it is not yet a payment proof or acceptance evidence.
+                val pending = original.copy(paymentIdentifier = txid.lowercase())
+                proofs[index] = pending
+                persist(proofs)
+                reconcileHardwareOnchainProof(pending)
+            }.onFailure { Logger.warn("Failed to retain or observe the original hardware Shop payment", it, context = TAG) }
+                .getOrDefault(false)
+        }
+    }
+
     suspend fun failOnchainPayment(request: PaykitPaymentRequest) {
         removeRequestProofs(request) {
             it.kind == PaykitPaymentProofKind.Onchain &&
@@ -419,7 +456,7 @@ class PaykitPaymentProofRepo @Inject constructor(
 
                 proofs.forEach { proof ->
                     runSuspendCatching { reconcileProof(proof, payments, attempt) }
-                        .onSuccess { if (it) completedShopTxid = attempt?.txid }
+                        .onSuccess { if (it && proof.onchainWalletId == WalletScope.default) completedShopTxid = attempt?.txid }
                         .onFailure {
                             Logger.warn(
                                 "Failed to reconcile a pending Paykit payment proof",
@@ -449,6 +486,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     !proof.paymentIdentifier.equals(proof.proofData, ignoreCase = true)
                 ) return false
                 if (proof.onchainAcceptanceVerified != true) {
+                    if (proof.onchainWalletId != WalletScope.default) return reconcileHardwareOnchainProof(proof)
                     if (!attempt.matchesPositiveShopProof(proof)) return false
                     val proofs = loadProofs().toMutableList()
                     val index = proofs.indexOf(proof)
@@ -508,6 +546,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         proof: PendingPaykitPaymentProof,
         attempt: OnchainSendAttempt?,
     ): Boolean {
+        if (proof.onchainWalletId != WalletScope.default) return reconcileHardwareOnchainProof(proof)
         if (!attempt.matchesPositiveShopProof(proof)) return false
         val txid = attempt?.txid ?: return false
 
@@ -520,6 +559,28 @@ class PaykitPaymentProofRepo @Inject constructor(
         proofs[index] = completed
         val retained = persistAndSubmit(listOf(completed), proofs)
         if (retained) publishOnchainResolution(proof, txid)
+        return retained
+    }
+
+    private suspend fun reconcileHardwareOnchainProof(proof: PendingPaykitPaymentProof): Boolean {
+        val txid = proof.paymentIdentifier?.takeIf { it.isHex(HASH_BYTE_COUNT) } ?: return false
+        if (!proof.paymentStarted || proof.onchainWalletId == WalletScope.default ||
+            (proof.proofData != null && !proof.proofData.equals(txid, true))
+        ) return false
+        if (!proof.onchainAcceptanceVerified) {
+            val observed = withTimeoutOrNull(HARDWARE_OBSERVATION_TIMEOUT) {
+                hwWalletRepo.observeExactTransaction(proof.onchainWalletId, txid).getOrDefault(false)
+            } == true
+            if (!observed) return false
+        }
+        val proofs = loadProofs().toMutableList()
+        val index = proofs.indexOf(proof)
+        if (index < 0) return false
+        val completed = proof.copy(proofData = txid.lowercase(), onchainAcceptanceVerified = true)
+        proofs[index] = completed
+        val retained = persistAndSubmit(listOf(completed), proofs)
+        if (retained) publishOnchainResolution(completed, txid)
+        // Hardware completion never acknowledges an unrelated node-wallet guard.
         return retained
     }
 
@@ -551,6 +612,8 @@ class PaykitPaymentProofRepo @Inject constructor(
             identity = proof.identity,
             requestId = proof.requestId,
             transactionId = txid.lowercase(),
+            walletId = proof.onchainWalletId,
+            amountSats = proof.onchainAmountSats,
         )
         _onchainPaymentResolutions.update { resolutions ->
             if (resolution in resolutions) resolutions else resolutions + resolution
