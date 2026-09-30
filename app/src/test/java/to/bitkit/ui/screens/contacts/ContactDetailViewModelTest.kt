@@ -612,6 +612,30 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending private link closes request or pay sheet without opening payment`() = test {
+        whenever(context.getString(any())).thenReturn("")
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.PrivateLinkPending))
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.payContact()
+            advanceUntilIdle()
+
+            assertFalse(sut.uiState.value.isPayLoading)
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+            expectNoEvents()
+        }
+    }
+
+    @Test
     fun `unsaved contact skips the payment request check`() = test {
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(emptyList()))
         whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(createContact()))

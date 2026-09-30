@@ -6,8 +6,9 @@
     plus an incoming, accepted monthly BTC subscription with no end date, a period-start deadline,
     one paid period and one unpaid period. Acceptance and proof submission must be prepared through the controlled
     client because Bitkit intentionally cannot accept these terms. Use valid regtest payment proofs.
-    Do not reset or replace a funded wallet to prepare this fixture. Record the payment request id
-    for each one-time state because history rows show notes or dates instead of status labels.
+    Do not reset or replace a funded wallet to prepare this fixture. On Android, unpaid
+    history rows show status labels, while paid rows show subscription names, notes or dates.
+    Record each payment request id.
   </description>
   <actions>
     <action>Open Subscriptions and select the Payments tab after the controlled peer's records have synchronized</action>

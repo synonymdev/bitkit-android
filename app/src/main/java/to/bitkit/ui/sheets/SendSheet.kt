@@ -540,9 +540,14 @@ fun SendSheet(
 
                                 resetResult
                                     .onSuccess {
-                                        appViewModel.setSendEvent(SendEvent.ClearPayConfirmation)
-                                        navController.navigateTo(route.retryRoute.sendRoute) {
-                                            popUpTo(navController.graph.id) { inclusive = true }
+                                        val requestId = sendUiState.incomingPaymentRequestId
+                                        if (sendUiState.isPaymentRequest && requestId != null) {
+                                            appViewModel.retryIncomingPaymentRequest(requestId)
+                                        } else {
+                                            appViewModel.setSendEvent(SendEvent.ClearPayConfirmation)
+                                            navController.navigateTo(route.retryRoute.sendRoute) {
+                                                popUpTo(navController.graph.id) { inclusive = true }
+                                            }
                                         }
                                     }
                                     .onFailure { appViewModel.toast(it) }
