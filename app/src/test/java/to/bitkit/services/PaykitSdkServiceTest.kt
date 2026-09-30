@@ -36,6 +36,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.KeychainError
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
@@ -54,6 +55,39 @@ import kotlin.test.assertTrue
 class PaykitSdkServiceTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
+    @Test
+    fun `wallet wipe discards runtime handles before and after cleanup`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        var handlesCreated = 0
+        val service = PaykitSdkService(mock(), mock(), mock()) {
+            handlesCreated++
+            sdk
+        }
+        service.contactRecords()
+        service.withWalletWipe {
+            service.contactRecords()
+            assertEquals(2, handlesCreated)
+        }
+        service.contactRecords()
+        assertEquals(3, handlesCreated)
+    }
+
+    @Test
+    fun `storage callbacks translate platform errors and preserve sdk errors`() {
+        for (error in listOf(KeychainError.FailedToLoad("state"), KeychainError.FailedToSave("state"))) {
+            val mapped = assertFailsWith<PaykitException.Storage> {
+                paykitStorageCallback("state_save_failed") { throw error }
+            }
+            assertEquals("state_save_failed", mapped.code)
+        }
+        val conflict = PaykitException.Storage("revision_conflict", "State changed")
+        assertSame(conflict, assertFailsWith<PaykitException.Storage> {
+            paykitStorageCallback("state_save_failed") { throw conflict }
+        })
+        assertEquals("healthy", paykitStorageCallback("state_save_failed") { "healthy" })
     }
 
     @Test

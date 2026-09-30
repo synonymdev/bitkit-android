@@ -1,0 +1,22 @@
+<journey name="new profile after wallet wipe">
+  <description>
+    Precondition: a disposable, unfunded test wallet with Paykit enabled and a Bitkit-created
+    Pubky profile and no available Pubky Ring identities. Use a reachable Pubky test network
+    and an English device. This deletes the
+    wallet and its profile credentials. Keep the app process alive throughout the journey.
+  </description>
+  <actions>
+    <action>Open Profile from the Home header and record the current public Pubky key</action>
+    <action>Return Home and leave the app active for at least 10 seconds so background Paykit work can run</action>
+    <action>Open Settings, select Security, and open Reset wallet (identifier "ResetAndRestore")</action>
+    <action>Tap Reset Wallet and confirm the reset</action>
+    <action>Wait for reset to finish and verify wallet onboarding is visible</action>
+    <action>Accept the terms, skip the introduction, and create a new wallet</action>
+    <action>Wait for Home, then open Profile from the header</action>
+    <action>Continue through the profile introduction and select Create Profile (identifier "PubkyChoiceCreate")</action>
+    <action>Enter "After Wipe" in the username field (identifier "CreateProfileUsername") and dismiss the keyboard</action>
+    <action>Tap Continue (identifier "CreateProfileSave") and wait for profile creation to finish</action>
+    <action>Open Profile and verify it shows "After Wipe" and a public Pubky key different from the deleted identity</action>
+    <action>Return Home and reopen Profile; verify the new profile is still available without restarting the app</action>
+  </actions>
+</journey>
