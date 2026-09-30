@@ -8,6 +8,7 @@ import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.CounterpartyReceiver
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
@@ -65,6 +66,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -1291,7 +1293,91 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginPaymentRequest waits for a linking peer before opening cached details`() = test {
+        val request = paymentRequest()
+        whenever(
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        ).thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
+                version = 7uL,
+                linkState = LinkedPeerState.LINKING,
+            ),
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
+                version = 7uL,
+                linkState = LinkedPeerState.LINKED,
+            ),
+        )
+        whenever(coreService.decode(SERVER_PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(SERVER_PRIVATE_BOLT11, byteArrayOf(8, 8, 8))))
+
+        val pending = sut.beginPaymentRequest(request).getOrThrow()
+        val opened = sut.beginPaymentRequest(request).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, pending)
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = SERVER_PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(SERVER_RECEIVER_PATH, 7uL),
+            ),
+            opened,
+        )
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginPaymentRequest rejects cached details when the peer is not linked`() = test {
+        val request = paymentRequest()
+        whenever(
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        ).thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
+                version = 7uL,
+                linkState = null,
+            ),
+        )
+
+        val result = sut.beginPaymentRequest(request).getOrThrow()
+
         assertEquals(PublicPaykitPaymentResult.NoEndpoint, result)
+        verify(coreService, never()).decode(any())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginPaymentRequest keeps typed recovery failures pending`() = test {
+        val request = paymentRequest()
+        whenever(
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        ).doSuspendableAnswer {
+            throw PaykitException.RecoveryRequired("recovery_required", "Handshake is in progress")
+        }
+
+        val result = sut.beginPaymentRequest(request).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result)
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
@@ -1369,6 +1455,31 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFailsWith<PrivatePaykitError.PaymentListAlreadyConsumed> {
             sut.consumePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
         }
+    }
+
+    @Test
+    fun `releasePrivatePaymentList makes matching version reusable without clearing newer consumption`() = test {
+        val releasedContext = PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL)
+        val newerContext = PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 8uL)
+
+        sut.consumePrivatePaymentList(CONTACT_KEY, releasedContext).getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, releasedContext).getOrThrow()
+
+        assertNull(
+            cacheData.value.contacts[CONTACT_KEY]
+                ?.consumedPrivatePaymentListVersionsByReceiverPath
+                ?.get(WALLET_RECEIVER_PATH),
+        )
+        sut.consumePrivatePaymentList(CONTACT_KEY, releasedContext).getOrThrow()
+        sut.consumePrivatePaymentList(CONTACT_KEY, newerContext).getOrThrow()
+
+        sut.releasePrivatePaymentList(CONTACT_KEY, releasedContext).getOrThrow()
+
+        assertEquals(
+            8uL,
+            cacheData.value.contacts.getValue(CONTACT_KEY)
+                .consumedPrivatePaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH],
+        )
     }
 
     @Test

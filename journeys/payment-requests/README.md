@@ -22,6 +22,8 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 
 `contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
 
+`definite-pre-broadcast-retry.xml` uses the linked fixture issuer and the local regtest LNURL server. Configure its LNURL-pay metadata endpoint normally, but make its invoice callback fail the first request and succeed after it is switched back to the healthy response. Do not republish the Paykit payment list between attempts. This makes the first send fail before Lightning dispatch and proves that the same private payment details can be opened and paid on retry.
+
 ## Reference evidence
 
 The source wallet-leg run completed this path on regtest on 2026-08-22: Bitkit presented the incoming request, opened the on-chain payment, broadcast it, and confirmed transaction
@@ -33,6 +35,8 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 
 - Pending-request bell: `PaymentRequestsBell`
 - Incoming sheet: `PaymentRequestsSheet`
+- Detail screen: `PaymentRequestDetailsScreen`
+- Detail amount and status: `PaymentRequestDetailsAmount`, `PaymentRequestDetailsStatus`
 - Request row: `PaymentRequestRow-<paymentRequestId>`
 - Pay action: `PaymentRequestPay-<paymentRequestId>`
 - Dismiss action: `PaymentRequestDismiss-<paymentRequestId>`
@@ -41,11 +45,17 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Confirmation invoice note: `PaymentRequestInvoiceNote`
 - Confirmation details: `SendConfirmToggleDetails`
 - Saved-contact recipient: `ReviewContactRecipient`
+- Send failure: `SendFailure` and retry action `Retry`
+- Swipe confirmation control: `GRAB`
 - Contact Detail pay action: `ContactPay`
 - Request or Pay sheet: `RequestOrPaySheet` (its Pay and Request buttons carry no tag; find them by text)
 - Payment Request amount screen: `PaymentRequestAmount`
 
 `android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI Automator hierarchy when a documented container tag is not present in the formatted layout output.
+
+`delete-and-readd-contact.xml` uses two Bitkit instances to verify that deleting a contact revokes private requests across restart and that explicitly adding the contact again restores a fresh private connection. It does not send funds.
+
+`delete-contact-with-active-subscription.xml` requires an accepted open-ended payer subscription. It verifies that deletion explains why the contact must stay saved until the subscription ends, then that canceling, deleting, and readding does not revive it. No new payment is sent. Both contact-deletion journeys are mirrored on iOS and Android.
 
 ## Payment deadline history
 
@@ -53,9 +63,10 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 Bitkit keeps their lifecycle and paid-period history, and subscription cancellation,
 but does not accept them, offer payments, or schedule payment reminders. The journey
 requires a controlled rc56 peer to prepare the accepted and paid records; repository
-tests cover these states without sending funds. On both platforms, payment-history rows
-show notes or dates rather than lifecycle labels, and active subscriptions are opened
-from Overview. The journeys therefore record each fixture's payment request id, check
-its full row identifier, and include the required back and tab transitions. The accepted
+tests cover these states without sending funds. On Android, unpaid history rows show
+lifecycle labels, while paid rows show subscription names, notes, or dates. Active
+subscriptions are opened from Overview. The journeys record each fixture's payment
+request id, check its full row identifier, and include the required back and tab
+transitions. The accepted
 subscription must have no end date so cancellation is available. The proposal review
 must explain that its payment details are unsupported and offer no Subscribe control.
