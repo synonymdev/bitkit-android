@@ -489,6 +489,8 @@ class WalletViewModel @Inject constructor(
             }
     }
 
+    suspend fun refreshChannelsAndPeers() = lightningRepo.refreshChannelsAndPeers()
+
     /**
      * Refresh wallet balances and channel state from the running node without a chain sync, so a
      * just-received payment is reflected immediately (e.g. when entering the transfer-to-savings flow).

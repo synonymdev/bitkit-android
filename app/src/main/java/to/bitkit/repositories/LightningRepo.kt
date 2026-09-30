@@ -1408,9 +1408,7 @@ class LightningRepo @Inject constructor(
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
 
-        val finalState = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
-            _lightningState.first { it.shouldStopWaitingForUsableChannels() }
-        } ?: run {
+        val finalState = awaitUsableChannels() ?: run {
             Logger.warn("Timed out waiting for usable channels", context = TAG)
             return@withContext
         }
@@ -1418,6 +1416,16 @@ class LightningRepo @Inject constructor(
         if (!finalState.nodeLifecycleState.canRun() || finalState.channels.isEmpty()) {
             delayNoUsableChannelsFeedback()
         }
+    }
+
+    /** A peer reconnecting makes a channel usable again without any node event, so the node is polled. */
+    private suspend fun awaitUsableChannels(): LightningState? = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
+        refreshChannelsAndPeers()
+        while (!_lightningState.value.shouldStopWaitingForUsableChannels()) {
+            delay(CHANNELS_USABLE_POLL_DELAY)
+            refreshChannelsAndPeers()
+        }
+        _lightningState.value
     }
 
     private suspend fun waitForChannelsToLoadIfNeeded(state: LightningState): LightningState? {
@@ -1662,6 +1670,17 @@ class LightningRepo @Inject constructor(
     ): Result<Unit> = executeWhenNodeRunning("closeChannel") {
         runCatching { lightningService.closeChannel(channel, force, forceCloseReason) }.also {
             syncState()
+        }
+    }
+
+    /** Re-reads channels and peers from the running node, leaving balances as they are (see [syncState]). */
+    suspend fun refreshChannelsAndPeers() = withContext(bgDispatcher) {
+        if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext
+        _lightningState.update {
+            it.copy(
+                peers = getPeers().orEmpty().toImmutableList(),
+                channels = getChannels().orEmpty().toImmutableList(),
+            )
         }
     }
 
@@ -2184,6 +2203,7 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
+        private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
 
         /** Max time to wait for a starting node before its id is treated as unavailable. */

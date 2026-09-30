@@ -43,6 +43,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -95,6 +96,8 @@ import kotlin.time.Duration.Companion.seconds
 class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
+        private const val CHANNELS_USABLE_POLL_DELAY_MS = 1_000L
+        private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
         private const val BACKGROUND_STOP_DELAY_MS = 5_000L
 
         /** Mirrors the bounded start retry delay `LightningRepo.startNode` waits before its one retry. */
@@ -1273,6 +1276,52 @@ class LightningRepoTest : BaseUnitTest() {
         testScheduler.runCurrent()
 
         assertTrue(wait.isCompleted)
+    }
+
+    @Test
+    fun `waitForUsableChannels re-reads a channel that becomes usable without a node event`() = test {
+        val notUsable = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        startNodeForTesting()
+        assertFalse(sut.canSend(1000uL))
+        val usable = notUsable.copy(isUsable = true, nextOutboundHtlcLimitMsat = 2_000_000u)
+        whenever(lightningService.channels).thenReturn(listOf(usable))
+        clearInvocations(lightningService)
+
+        val wait = async { sut.waitForUsableChannels() }
+        runCurrent()
+
+        assertTrue(wait.isCompleted)
+        assertTrue(sut.canSend(1000uL))
+        verify(lightningService, never()).balances
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `waitForUsableChannels polls until a channel is usable and stops at the timeout otherwise`() = test {
+        val notUsable = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        startNodeForTesting()
+
+        val wait = async { sut.waitForUsableChannels() }
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY_MS * 3)
+        assertFalse(wait.isCompleted)
+
+        whenever(lightningService.channels).thenReturn(
+            listOf(notUsable.copy(isUsable = true, nextOutboundHtlcLimitMsat = 2_000_000u)),
+        )
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY_MS)
+        testScheduler.runCurrent()
+        assertTrue(wait.isCompleted)
+
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        sut.syncState()
+        val timedOut = async { sut.waitForUsableChannels() }
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_TIMEOUT_MS - 1)
+        assertFalse(timedOut.isCompleted)
+        testScheduler.advanceTimeBy(1)
+        testScheduler.runCurrent()
+        assertTrue(timedOut.isCompleted)
     }
 
     @Test
