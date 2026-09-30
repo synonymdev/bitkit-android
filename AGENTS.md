@@ -50,25 +50,32 @@ the tool does not expose. Never copy the implementation model or infer settings 
 If multiple model/effort combinations contributed, list each pair in the footer. Unassisted human
 reviews do not need it; AI-assisted human reviews should identify the AI model and effort used.
 
+### PR relationships
+
+Use optional `Twin:`, `Companion:`, and `Dependency:` lines for confirmed related PRs, following
+`.agents/commands/pr.md`. A twin is the matching change in the other native Bitkit app; a companion
+is related coordinated work such as E2E coverage; a dependency is a prerequisite. Omit absent
+relationships and use repository-qualified PR references so cross-repository numbers are unambiguous.
+
 ### Models used
 
-Include `### Models used` in the PR body with `Planning/scoping`, `Implementation`, and one
-`Review round N` entry for each review round that actually happened. Record the model name reported
-by the tool for each phase as work proceeds, including subagent reviews; list multiple models if a
-phase used more than one. The same model may appear in every phase.
+Include `### Models used` in the PR body with `Planning/scoping`, `Implementation`, and a single
+`Review` entry. Record the model names reported by the tools as work proceeds, including subagent
+reviews. For each phase, list each distinct model/effort pair once, separated by commas; repeated
+reviews with the same pair do not add entries. The same model may appear in all three phases.
+Do not add per-round model rows. Optionally add `Review rounds: N` when the number of completed
+review passes is known; omit the count when unknown and do not count parallel reviewers as rounds.
 
-Record the reasoning effort alongside each model as `` `model-name` (reasoning: `medium`) ``, using the
-actual setting for that phase or review round. Check available session/run metadata before using
-`Unknown`. If a phase used multiple model/effort combinations, list each combination. Use
-`reasoning: Unknown` when the setting was not recorded, or `reasoning: Not exposed` when the tool
-does not expose a reasoning setting. Do not infer effort from the model name or apply the current
-setting to earlier phases. `Not used` and `Review: Not performed` need no reasoning value.
+Record reasoning effort alongside each model as `` `model-name` (reasoning: `medium`) ``. Check
+available session/run metadata before using `Unknown`. Use `reasoning: Unknown` when unrecorded,
+or `reasoning: Not exposed` when the tool does not expose a setting. Do not infer effort from the
+model name or apply the current setting to earlier work. Preserve all known model/effort pairs when
+updating the section; collapse older per-round rows into the single Review entry.
 
 This section is informational, not a quality score, verification result, or approval requirement.
 Use `Not used` when a phase had no AI involvement and `Unknown` when the model was not recorded;
-never infer a model from a tool name or fill earlier phases with the current model. If no review
-round happened, write `Review: Not performed` instead of inventing a round. Preserve known entries
-and update the section after later review rounds. See `.agents/commands/pr.md` for PR formatting.
+never infer a model from a tool name. If no review occurred, write `Review: Not performed`.
+`Not used` and `Not performed` need no reasoning value. See `.agents/commands/pr.md` for formatting.
 
 ## Build Commands
 

@@ -1,4 +1,9 @@
 <!-- Closes | Fixes | Resolves #ISSUE_ID -->
+<!-- Optional related PRs, after issue-closing lines and before the summary; include only confirmed references, with repository-qualified numbers:
+Twin: owner/other-native-app#number
+Companion: owner/related-repo#number
+Dependency: owner/prerequisite-repo#number
+Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e.g. E2E coverage); Dependency = prerequisite (e.g. bitkit-core or another library). Describe dependency merge/release order when needed. Omit absent labels. -->
 <!-- Changelog: For user-facing changes, add one fragment in changelog.d/next/ or changelog.d/hotfix/. Do not edit CHANGELOG.md in normal PRs. -->
 <!-- Brief summary of the PR changes, linking to the related resources (issue/design/bug/etc) if applicable. -->
 
@@ -34,7 +39,7 @@
 
 ### Models used
 
-<!-- Informational: the same model may be used in every phase. Use the reported model name(s), `Not used` for a phase without AI involvement, or `Unknown` if not recorded. Record each model with its actual effort as `` `model-name` (reasoning: `medium`) ``; check available session/run metadata first. Use `reasoning: Unknown` if unrecorded or `reasoning: Not exposed` if the tool does not expose it; omit effort for unused phases. Add ``- Review round N: `model-name` (reasoning: `effort`)`` only for rounds that happened, replacing `Review: Not performed` when the first round occurs. Preserve entries and append later rounds. -->
+<!-- Informational: use the actual model/effort pairs from session metadata, with separate inline-code spans as below. Use one Review line for all passes; deduplicate pairs, and separate distinct pairs with commas. Never add per-round model rows. Optionally add `- Review rounds: N` when the completed-pass count is known, not a count of parallel reviewer agents. Use `Unknown` if unrecorded or `reasoning: Not exposed` if no setting is exposed. Use `Not used` for phases without AI, and `Review: Not performed` when no review occurred; omit effort for these values. Preserve known pairs on updates. -->
 
 - Planning/scoping: `<model name>` (reasoning: `<effort>`)
 - Implementation: `<model name>` (reasoning: `<effort>`)

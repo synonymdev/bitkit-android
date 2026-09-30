@@ -19,7 +19,7 @@ Create a PR on GitHub using the `gh` CLI for the currently checked-out branch.
 
 ### 1. Check for Existing PR
 Run `gh pr view --json number,url 2>/dev/null` to check if a PR already exists for this branch.
-- If PR exists and the user requested a model-section update: follow "Updating models on an existing PR" below, then stop. Otherwise output `PR already exists: [URL]` and stop.
+- If PR exists and the user explicitly requested a description update (models, relationships, or the full body): follow "Updating an existing PR description" below, then stop. Otherwise output `PR already exists: [URL]` and stop.
 - If no PR: Continue
 
 ### 2. Parse Arguments
@@ -63,9 +63,14 @@ If no base branch argument provided, detect the repo's default branch:
 
 ### 4. Extract Linked Issues
 Scan commits for issue references:
-- Pattern to match: `#123` (just the issue number reference)
-- Extract unique issue numbers: `git log $base..HEAD --oneline | grep -oE "#[0-9]+" | sort -u`
-- Fetch each issue title: `gh api "repos/$REPO/issues/NUMBER" --jq '.title'` (using repo from Step 3)
+- Read commit messages with `git log $base..HEAD --format=%B`; collect unique issue references,
+  preserving repository-qualified references and full GitHub issue/PR URLs. Resolve bare `#123`
+  references in the current repository.
+- Fetch each candidate with `gh api "repos/OWNER/REPO/issues/NUMBER"`; read its title and check
+  whether the response has a `pull_request` field (which identifies a PR, not an issue).
+- Resolve each reference against its own repository and verify it is an issue before using a
+  closing keyword. Related PR references belong under Related PRs; do not turn Twin, Companion,
+  or Dependency PR numbers into issue-closing lines.
 - These will be used to start the PR description with linking keywords (see Step 6)
 
 ### 5. Identify Suggested Reviewers
@@ -87,6 +92,7 @@ Starting from the template in `.github/pull_request_template.md`:
 If linked issues were found in commit messages, begin the PR description with linking keywords:
 - Use `Fixes #123` for bug fixes
 - Use `Closes #123` for features/enhancements
+- Preserve `owner/repo#123` for cross-repository issues; never strip their repository qualification
 - One per line, before the "This PR..." opening separated by one empty line
 - Reference: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/using-keywords-in-issues-and-pull-requests
 
@@ -97,6 +103,30 @@ Closes #418
 
 This PR adds support for...
 ```
+
+**Related PRs:**
+- After any issue-closing lines and before the opening summary, add applicable `Twin:`, `Companion:`,
+  and `Dependency:` lines, in that order. Omit labels with no confirmed relationship; do not add
+  empty placeholders or `N/A` lines. Use `owner/repo#number`, or a Markdown link with that label,
+  so the PR number identifies the correct repository. Use one line per related PR when needed.
+- `Twin:` is the matching implementation of the same change in the other native Bitkit app:
+  Android points to `synonymdev/bitkit-ios#number`, and iOS to `synonymdev/bitkit-android#number`.
+  E2E tests and libraries are not native twins.
+- `Companion:` is related coordinated work that is not a prerequisite, such as coverage in
+  `synonymdev/bitkit-e2e-tests`.
+- `Dependency:` is a PR whose changes are required to build, validate, or ship this change, such as
+  a `synonymdev/bitkit-core` or other library PR. State any required merge/release order or published
+  version in the description; linking the PR does not imply its artifact is already available.
+  If a related E2E or app PR is itself a prerequisite, label it Dependency rather than Companion
+  (repository name alone does not determine the role). A twin can also be a dependency when both
+  relationships genuinely apply; state the reason.
+- Confirm references from the user's supplied links, existing PR/issue links, and the candidate
+  PR's body and diff. Read the candidate PR to verify repository, number, scope and status. Branch
+  names or similar titles alone do not prove a relationship. If pairing is ambiguous, report it
+  and ask for the missing reference rather than guessing; do not block an unrelated standalone PR.
+- For an existing `Counterpart:` line, classify the actual relationship and replace it with the
+  appropriate label when updating relationships. Do not duplicate the same link under equivalent
+  labels or edit the other PR automatically without authorization.
 
 **Opening Format:**
 - Single change: Start with "This PR [verb]s..." as a complete sentence
@@ -138,20 +168,23 @@ When the user provides custom instructions after `--`:
 
 **Models used:**
 - Include `### Models used` using the policy in `AGENTS.md` under Agent workflow.
-- Always include `Planning/scoping` and `Implementation`; add one numbered entry per review round
-  that actually happened. Use `Review: Not performed` if there were no rounds.
-- Use the reported model names, `Not used` for a phase without AI involvement, or `Unknown` if the
-  model was not recorded. The same model can appear in all phases. List multiple models within a
-  phase when applicable; never substitute the PR-writing model for an unknown earlier model.
+- Always include `Planning/scoping`, `Implementation`, and one `Review` entry. Aggregate all review
+  passes into that entry: list each distinct model/effort pair once, separated by commas. Do not
+  create numbered review-model rows. Repeated use of the same pair needs no duplicate entry.
+- Optionally add `- Review rounds: N` when the number of completed review passes is known. Omit it
+  when unknown; count passes, not individual parallel reviewer agents.
+- Use reported model names, `Not used` for a phase without AI involvement, or `Unknown` if the model
+  was not recorded. Use `Review: Not performed` if there has been no review. The same model is valid
+  in every phase; never substitute the PR-writing model for an unknown earlier model.
 - Include each model's actual reasoning effort as `` `model-name` (reasoning: `medium`) ``. Consult
   available session/run metadata first; use `reasoning: Unknown` if unrecorded or
   `reasoning: Not exposed` if the tool does not expose the setting. Never infer it from the model
-  or current configuration. List each model/effort combination used within a phase; omit effort
-  for `Not used` and `Review: Not performed`.
+  or current configuration; omit effort for `Not used` and `Not performed`.
 - Wrap the model name and reasoning value in separate inline-code spans; keep the phase label
-  and `(reasoning: ...)` punctuation outside them. Apply this to every phase and review round.
-- Preserve known entries when updating the PR and append later review rounds. This is informational;
-  it does not require different models or certify review quality.
+  and `(reasoning: ...)` punctuation outside them.
+- When updating an older PR, collapse per-round rows into Review without losing known model/effort
+  pairs. Preserve any known round count if included. Update the aggregate after subsequent reviews.
+  This is informational; it does not require different models or certify review quality.
 
 **QA Notes / Validation:**
 - QA Notes separate actionable human QA instructions from automated verification coverage.
@@ -248,7 +281,8 @@ Only include if the PR template (`.github/pull_request_template.md`) contains a 
 
 Before publishing, apply the verification requirements in `AGENTS.md` under Agent workflow.
 Prefer an independent subagent review with fresh context as described there before marking the PR
-ready for human review. Record only review rounds that actually occurred in Models used.
+ready for human review. Summarize the models used for completed reviews under Review; include a
+round count only when known.
 A dry run only prepares the description; it does not certify verification or review completion.
 
 ### 7. Save PR Description
@@ -318,11 +352,17 @@ If no media files were found (generated placeholders):
 ```
 List all media placeholders as TODOs with their descriptions.
 
-### Updating models on an existing PR
+### Updating an existing PR description
 
-When the user requests a model-section update on an existing PR:
-- Read the current body with `gh pr view --json number,url,body` and collect the known phase/round
-  models. Apply the Models used rules above, preserving earlier entries and all other PR content.
+When the user explicitly requests a model-section, relationship, or full-description update:
+- Read the current body and actual base with `gh pr view --json number,url,body,baseRefName`.
+- For a model-only update, apply Models used above. For a relationship-only update, apply Related
+  PRs above. Preserve all other PR content, including authored QA notes and known model metadata.
+- For a requested full-description update, gather current branch/issue context using Steps 3–6,
+  comparing against the PR's actual base. Reconcile with the existing description; retain still-valid
+  authored QA instructions and known model/effort pairs rather than replacing them with defaults.
 - Save the complete updated body to `.ai/pr_NN.md` using the actual PR number. With `--dry`, stop
   after saving and report the path; otherwise apply it with `gh pr edit NN --body-file .ai/pr_NN.md`.
-- This metadata-only update does not require rerunning application checks or another review round.
+- Description-only updates do not require application checks or an additional code review. When
+  source also changed, apply the repository verification requirements before publishing the update.
+- Keep the existing PR's draft/ready state; do not create a duplicate PR or mark it ready implicitly.
