@@ -462,6 +462,12 @@ class AppViewModel @Inject constructor(
 
     private val toastManager = toastManagerProvider(viewModelScope)
 
+    // Toasts are hidden only while dev mode and the "Disable All Toasts" dev setting are both on
+    private val areToastsDisabled = settingsStore.data
+        .map { it.isDevModeEnabled && it.disableAllToasts }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     init {
         viewModelScope.launch {
             ToastEventBus.events.collect {
@@ -4117,6 +4123,7 @@ class AppViewModel @Inject constructor(
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
                     paymentProofStarted = true
                 }
+                incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
                 sendAttempted = true
             },
             onBroadcast = { txId ->
@@ -4196,7 +4203,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun proceedWithLightningPayment(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
@@ -4229,7 +4236,23 @@ class AppViewModel @Inject constructor(
 
         val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
 
-        sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
+        var authorizationError: Throwable? = null
+        val result = sendLightning(decodedInvoice.bolt11, paymentAmount) {
+            authorizationError = incomingPaymentRequest?.let {
+                paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
+            }
+            authorizationError == null
+        }
+        authorizationError?.let {
+            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            cancelPaymentProofPreparation(proofRequest)
+            createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+        result.onSuccess { actualPaymentHash ->
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
             onSendSuccess(
@@ -4570,8 +4593,9 @@ class AppViewModel @Inject constructor(
     private suspend fun sendLightning(
         bolt11: String,
         amount: ULong? = null,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
-        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
+        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount, onBeforeSend = onBeforeSend).onSuccess { hash ->
             // Wait until matching payment event is received (with timeout for hold invoices)
             val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
                 when (it) {
@@ -5021,7 +5045,10 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    val currentToast: StateFlow<Toast?> = toastManager.currentToast
+    // Hidden at display time, not enqueue time, so a toast raised together with a dev mode change follows the new state
+    val currentToast: StateFlow<Toast?> = combine(toastManager.currentToast, areToastsDisabled) { toast, disabled ->
+        toast.takeUnless { disabled }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun toast(
         type: Toast.ToastType,
@@ -5235,6 +5262,24 @@ class AppViewModel @Inject constructor(
             }
         }
         return true
+    }
+
+    suspend fun authorizeHardwareContactPayment(hasAttemptedBroadcast: Boolean): Boolean {
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        val request = contactPaymentContext?.incomingPaymentRequest ?: return true
+        val error = paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull() ?: return true
+        if (hasAttemptedBroadcast) {
+            toast(error)
+            return false
+        }
+
+        paykitPaymentProofRepo.failOnchainPayment(request)
+        releasePrivatePaymentListIfNeeded(contactPaymentContext)
+        synchronized(contactPaymentContextLock) {
+            if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
+        }
+        handlePaymentPreparationFailure(error, contactPaymentContext)
+        return false
     }
 
     fun completeHardwareContactPayment(txId: String) {

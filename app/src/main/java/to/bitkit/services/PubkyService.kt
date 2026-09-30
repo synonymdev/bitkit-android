@@ -204,8 +204,9 @@ class PubkyService @Inject constructor(
         publicKey: String,
         label: String?,
         receiverPaths: List<String>? = null,
+        restorePrivateConnection: Boolean = false,
     ): ContactRecord = ServiceQueue.CORE.background {
-        paykitSdkService.saveContact(publicKey, label, receiverPaths)
+        paykitSdkService.saveContact(publicKey, label, receiverPaths, restorePrivateConnection)
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.CORE.background {
