@@ -5227,29 +5227,29 @@ class AppViewModel @Inject constructor(
 
     suspend fun prepareHardwareContactPayment(): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        if (isPreparedContactPayment(contactPaymentContext)) return true
+
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        if (!isPreparedContactPayment(contactPaymentContext)) {
-            val proofPreparation = preparePaymentProof(incomingPaymentRequest)
-            if (proofPreparation.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress) {
-                handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
-                return false
-            }
-            val preparedPaymentProofRequest = proofPreparation.getOrNull()
-            if (!prepareContactPayment(contactPaymentContext)) {
-                cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                return false
-            }
-            if (preparedPaymentProofRequest != null) {
-                val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
-                markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
-                    synchronized(contactPaymentContextLock) {
-                        if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
-                    }
-                    releasePrivatePaymentListIfNeeded(contactPaymentContext)
-                    cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                    handlePaymentPreparationFailure(it, contactPaymentContext)
-                    return false
+        val proofPreparation = preparePaymentProof(incomingPaymentRequest)
+        if (proofPreparation.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress) {
+            handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
+            return false
+        }
+        val preparedPaymentProofRequest = proofPreparation.getOrNull()
+        if (!prepareContactPayment(contactPaymentContext)) {
+            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            return false
+        }
+        if (preparedPaymentProofRequest != null) {
+            val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
+            markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
+                synchronized(contactPaymentContextLock) {
+                    if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
                 }
+                releasePrivatePaymentListIfNeeded(contactPaymentContext)
+                cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                handlePaymentPreparationFailure(it, contactPaymentContext)
+                return false
             }
         }
         return true
