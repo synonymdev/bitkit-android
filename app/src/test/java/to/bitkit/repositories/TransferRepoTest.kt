@@ -12,12 +12,15 @@ import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PendingSweepBalance
@@ -31,11 +34,14 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
 import to.bitkit.services.ActivityService
@@ -64,6 +70,8 @@ class TransferRepoTest : BaseUnitTest() {
         on { activity } doReturn activityService
     }
     private val clock = mock<Clock>()
+    private val cacheStore = mock<CacheStore>()
+    private val nodeEvents = MutableSharedFlow<Event>()
 
     companion object Fixtures {
         private const val ID_ORDER = "test-order-id"
@@ -74,6 +82,9 @@ class TransferRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        whenever(cacheStore.data).thenReturn(MutableStateFlow(AppCacheData()))
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(emptyList()))
 
         sut = TransferRepo(
@@ -83,7 +94,108 @@ class TransferRepoTest : BaseUnitTest() {
             coreService = coreService,
             transferDao = transferDao,
             clock = clock,
+            cacheStore = cacheStore,
         )
+    }
+
+    @Test
+    fun `startup resumes accepted original funding without a confirmation or native resend`() = test {
+        val order = previewBtOrder()
+        val txid = "ab".repeat(32)
+        val attempt = OnchainSendAttempt(
+            WalletScope.default, "attempt", null, order.id,
+            requireNotNull(order.payment?.onchain?.address), order.feeSat, false, 1uL, true, null, emptyList(),
+            OnchainSendEvidence.Accepted, txid, transferContext = OnchainTransferContext(99_000uL, 125_000uL)
+        )
+        setupClockNowMock()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
+        // Construct after the saved result exists, as on process startup.
+        val restarted =
+            TransferRepo(testDispatcher, lightningRepo, blocktankRepo, coreService, transferDao, clock, cacheStore)
+        runCurrent()
+        lightningRepo.lightningState.value.let {
+            (lightningRepo.lightningState as MutableStateFlow).value = it.copy(
+                nodeLifecycleState = NodeLifecycleState.Running,
+            )
+        }
+        runCurrent()
+
+        verify(transferDao).insert(
+            org.mockito.kotlin.check {
+                assertEquals(order.id, it.lspOrderId)
+                assertEquals(txid, it.fundingTxId)
+                assertEquals(99_000L, it.txTotalSats)
+                assertEquals(125_000L, it.preTransferOnchainSats)
+            }
+        )
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull()
+        )
+        assertNotNull(restarted)
+    }
+
+    @Test
+    fun `exact observed event retries partial original funding without duplicate transfer`() = test {
+        val order = previewBtOrder()
+        val txid = "ab".repeat(32)
+        val attempt = OnchainSendAttempt(
+            WalletScope.default, "attempt", null, order.id,
+            requireNotNull(order.payment?.onchain?.address), order.feeSat, false, 1uL, true, null, emptyList(),
+            OnchainSendEvidence.Observed, txid, transferContext = OnchainTransferContext(99_000uL, 125_000uL)
+        )
+        setupClockNowMock()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
+        var persisted: TransferEntity? = null
+        whenever(transferDao.getByFundingTxId(txid)).thenAnswer { persisted }
+        whenever(transferDao.insert(any())).doSuspendableAnswer {
+            persisted = it.getArgument(0)
+            Unit
+        }
+        var failCache = true
+        whenever(cacheStore.addPaidOrder(order.id, txid)).doSuspendableAnswer {
+            if (failCache) {
+                failCache = false
+                error("cache storage unavailable")
+            }
+            Unit
+        }
+        assertTrue(sut.resumeAcceptedFunding().isFailure)
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+
+        nodeEvents.emit(Event.OnchainTransactionReceived(txid, mock()))
+        runCurrent()
+        verify(transferDao, times(1)).insert(any())
+        verify(cacheStore, times(2)).addPaidOrder(order.id, txid)
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
+        assertEquals(99_000L, persisted?.txTotalSats)
+        assertEquals(125_000L, persisted?.preTransferOnchainSats)
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull()
+        )
+    }
+
+    @Test
+    fun `unknown funding cannot resume from local records or another transaction event`() = test {
+        val order = previewBtOrder()
+        val attempt = OnchainSendAttempt(
+            WalletScope.default, "attempt", null, order.id,
+            requireNotNull(order.payment?.onchain?.address), order.feeSat, false, 1uL, true, null, emptyList(),
+            OnchainSendEvidence.Unknown, "ab".repeat(32), transferContext = OnchainTransferContext(99_000uL, 125_000uL)
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        nodeEvents.emit(Event.OnchainTransactionReceived("cd".repeat(32), mock()))
+        runCurrent()
+        verify(transferDao, never()).insert(any())
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        org.mockito.kotlin.verifyNoInteractions(blocktankRepo)
     }
 
     // MARK: - createTransfer
@@ -1575,6 +1687,7 @@ class TransferRepoTest : BaseUnitTest() {
             coreService = coreService,
             transferDao = transferDao,
             clock = clock,
+            cacheStore = cacheStore,
         )
 
         testSut.activeTransfers.test {

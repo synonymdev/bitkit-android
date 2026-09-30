@@ -21,6 +21,10 @@ import kotlin.test.assertEquals
 
 @ComposeUi
 class SendPendingScreenTest {
+    companion object {
+        private const val SCREENSHOT_FRAME_WAIT_MS = 500L
+    }
+
     @get:Rule
     val composeTestRule = createComposeRule()
 
@@ -37,6 +41,8 @@ class SendPendingScreenTest {
                             amount = 1_000L,
                             isOnchain = true,
                             activityId = null,
+                            txid = "ab".repeat(32),
+                            refusalReason = "Test backend refusal",
                             onClose = { closeCount++; visible = false },
                             onViewDetails = { error("Unresolved send has no activity") },
                         )
@@ -45,14 +51,36 @@ class SendPendingScreenTest {
             }
         }
         assertUnresolved()
-        saveScreenshot("ln112-onchain-pending.png")
+        saveScreenshot("ln112-babysit-pending-refused-component.png")
         composeTestRule.onNodeWithText("Close").performClick()
         composeTestRule.runOnIdle { assertEquals(1, closeCount); visible = true }
         assertUnresolved()
-        saveScreenshot("ln112-onchain-pending-reopened.png")
+        saveScreenshot("ln112-babysit-pending-refused-visible-component.png")
+    }
+
+    @Test
+    fun exactCandidateWithLocalActivityOffersDetailsWithoutClaimingAcceptance() {
+        var detailsId: String? = null
+        val txid = "cd".repeat(32)
+        composeTestRule.setContent {
+            AppThemeSurface {
+                CompositionLocalProvider(LocalInspectionMode provides true) {
+                    SendPendingContent(amount = 1_000L, isOnchain = true, activityId = "queued-local-activity",
+                        txid = txid, onClose = {}, onViewDetails = { detailsId = it })
+                }
+            }
+        }
+        composeTestRule.onNodeWithText(txid, substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Payment Pending").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Payment Sent").assertDoesNotExist()
+        saveScreenshot("ln112-babysit-pending-details-component.png")
+        composeTestRule.onNodeWithText("Details").performClick()
+        composeTestRule.runOnIdle { assertEquals("queued-local-activity", detailsId) }
     }
 
     private fun assertUnresolved() {
+        composeTestRule.onNodeWithText("Test backend refusal", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("ab".repeat(32), substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("Payment Pending").assertIsDisplayed()
         composeTestRule.onNodeWithText("Bitkit will block another send", substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("Details").assertIsNotEnabled()
@@ -62,6 +90,10 @@ class SendPendingScreenTest {
 
     private fun saveScreenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        composeTestRule.waitForIdle()
+        instrumentation.waitForIdleSync()
+        // Semantics may be committed before the emulator compositor presents that frame.
+        android.os.SystemClock.sleep(SCREENSHOT_FRAME_WAIT_MS)
         val image = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         File(instrumentation.targetContext.getExternalFilesDir(null), name).outputStream().use {
             check(image.compress(Bitmap.CompressFormat.PNG, 100, it))

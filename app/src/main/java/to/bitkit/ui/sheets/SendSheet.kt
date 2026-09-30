@@ -39,6 +39,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeView
@@ -132,12 +133,15 @@ fun SendSheet(
                         result.txId, result.walletId, result.paymentRequestId, result.paymentIdentity,
                     )
                     if (!proofComplete) {
-                        navController.navigateTo(SendRoute.Pending(
-                            paymentHash = result.txId,
-                            amount = result.amountSats.toLong(),
-                            observeResolution = false,
-                            isOnchain = true,
-                        )) { popUpTo(navController.graph.id) { inclusive = true } }
+                        navController.navigateTo(
+                            SendRoute.Pending(
+                                paymentHash = result.txId,
+                                amount = result.amountSats.toLong(),
+                                walletId = result.walletId,
+                                observeResolution = false,
+                                isOnchain = true,
+                            )
+                        ) { popUpTo(navController.graph.id) { inclusive = true } }
                         hwSendViewModel.completeBroadcast()
                         return@collect
                     }
@@ -191,6 +195,7 @@ fun SendSheet(
                                 it.amount,
                                 observeResolution = it.observeResolution,
                                 isOnchain = it.isOnchain,
+                                refusalReason = it.refusalReason,
                             )
                         ) { popUpTo(startDestination) { inclusive = true } }
                         is SendEffect.NavigateToError -> navController.navigateTo(
@@ -486,6 +491,8 @@ fun SendSheet(
                         amount = route.amount,
                         observeResolution = route.observeResolution,
                         isOnchain = route.isOnchain,
+                        walletId = route.walletId,
+                        refusalReason = route.refusalReason,
                         onPaymentSuccess = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
@@ -510,7 +517,7 @@ fun SendSheet(
                             }
                         },
                         onClose = { appViewModel.hideSheet() },
-                        onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId) },
+                        onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId, route.walletId) },
                         viewModel = hiltViewModel<SendPendingViewModel>(),
                     )
                 }
@@ -564,9 +571,14 @@ fun SendSheet(
 
                                 resetResult
                                     .onSuccess {
-                                        appViewModel.setSendEvent(SendEvent.ClearPayConfirmation)
-                                        navController.navigateTo(route.retryRoute.sendRoute) {
-                                            popUpTo(navController.graph.id) { inclusive = true }
+                                        val requestId = sendUiState.incomingPaymentRequestId
+                                        if (sendUiState.isPaymentRequest && requestId != null) {
+                                            appViewModel.retryIncomingPaymentRequest(requestId)
+                                        } else {
+                                            appViewModel.setSendEvent(SendEvent.ClearPayConfirmation)
+                                            navController.navigateTo(route.retryRoute.sendRoute) {
+                                                popUpTo(navController.graph.id) { inclusive = true }
+                                            }
                                         }
                                     }
                                     .onFailure { appViewModel.toast(it) }
@@ -680,6 +692,8 @@ sealed interface SendRoute {
         val amount: Long,
         val observeResolution: Boolean = true,
         val isOnchain: Boolean = false,
+        val walletId: String = WalletScope.default,
+        val refusalReason: String? = null,
         val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
         val paymentRequest: String? = null,
     ) : InternalOnly

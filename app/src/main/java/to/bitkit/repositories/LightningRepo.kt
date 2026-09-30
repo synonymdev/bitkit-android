@@ -1609,6 +1609,7 @@ class LightningRepo @Inject constructor(
         if (attempt?.orderId == orderId && attempt.txid.equals(txid, ignoreCase = true) &&
             attempt.hasPositiveEvidence
         ) {
+            finishOnchainSendLocally(attempt)
             onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
         }
     }

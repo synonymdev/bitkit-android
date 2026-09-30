@@ -83,8 +83,8 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -1590,6 +1590,28 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(OnchainSendEvidence.Accepted, reopened?.evidence)
         assertTrue(reopened?.localFollowupComplete == true)
         verify(lightningService, times(1)).send(any(), any(), any(), anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `accepted transfer acknowledgement waits for original durable local activity`() = test {
+        val txid = "ab".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            isTransfer = true,
+            orderId = "order-1",
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+
+        assertTrue(runCatching { sut.completeAcceptedTransferFollowup("order-1", txid) }.isFailure)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedTransferFollowup("order-1", txid)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        verify(lightningService, never()).send(any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test

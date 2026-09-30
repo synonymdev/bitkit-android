@@ -10,7 +10,12 @@
     <action>Press Android back to dismiss the automatic confirmation</action>
     <action>Verify the pending Payment Requests bell (testTag "PaymentRequestsBell") is visible, then tap it</action>
     <action>Verify the incoming Payment Requests sheet (testTag "PaymentRequestsSheet") appears</action>
-    <action>Verify request row (testTag "PaymentRequestRow-71300000-0000-4000-8000-000000000001") shows 100,000 sats</action>
+    <action>Verify the one-time request row (testTag "PaymentRequestRow-71300000-0000-4000-8000-000000000001") shows 100,000 sats</action>
+    <action>Tap the one-time request row (testTag "PaymentRequestRow-71300000-0000-4000-8000-000000000001")</action>
+    <action>Verify Payment Request details (testTag "PaymentRequestDetailsScreen") shows an unsigned 100,000 sats amount (testTag "PaymentRequestDetailsAmount") and status "Waiting for payment" (testTag "PaymentRequestDetailsStatus")</action>
+    <action>Tap Back (testTag "NavigationBack")</action>
+    <action>Tap the pending Payment Requests bell (testTag "PaymentRequestsBell")</action>
+    <action>Verify the incoming Payment Requests sheet (testTag "PaymentRequestsSheet") appears</action>
     <action>Tap Pay (testTag "PaymentRequestPay-71300000-0000-4000-8000-000000000001")</action>
     <action>Verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") shows 100,000 sats</action>
     <action>Tap Show details (testTag "SendConfirmToggleDetails")</action>

@@ -126,7 +126,9 @@ class AddContactViewModel @Inject constructor(
                             showPayError(R.string.slashtags__error_pay_empty_msg)
                         PublicPaykitPaymentResult.NotOpened ->
                             showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
+                        PublicPaykitPaymentResult.PrivateLinkPending,
+                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
+                        ->
                             showPayError(R.string.slashtags__error_pay_waiting_msg)
                     }
                 }

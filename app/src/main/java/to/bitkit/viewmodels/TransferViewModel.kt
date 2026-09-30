@@ -391,7 +391,9 @@ class TransferViewModel @Inject constructor(
                 return true
             }
             ToastEventBus.send(
-                AppError(previous.refusalReason ?: "This funding payment is unresolved. Check its transaction before retrying.")
+                AppError(
+                    previous.refusalReason ?: context.getString(R.string.wallet__send_pending__funding_description)
+                )
             )
             return false
         }
@@ -433,7 +435,7 @@ class TransferViewModel @Inject constructor(
                 onSuccess = { outcome ->
                     if (outcome !is OnchainSendOutcome.Accepted) {
                         ToastEventBus.send(
-                            AppError("Funding transaction is unresolved. Check its transaction before retrying.")
+                            AppError(context.getString(R.string.wallet__send_pending__funding_description))
                         )
                         return@fold false
                     }
@@ -678,22 +680,16 @@ class TransferViewModel @Inject constructor(
         activityWalletId: String = WalletScope.default,
         requireTransferPersisted: Boolean = false,
     ) {
-        cacheStore.addPaidOrder(orderId = order.id, txId = txId)
-        val existingOrderId = if (requireTransferPersisted) {
-            transferRepo.findLspOrderIdByFundingTxId(txId).getOrThrow()
-        } else {
-            null
-        }
-        if (existingOrderId != null && existingOrderId != order.id) {
-            throw AppError("Funding transaction is already assigned to another order")
-        }
-        if (existingOrderId == null) {
-            if (requireTransferPersisted) {
-                check(txTotalSats != null && preTransferOnchainSats != null) {
-                    "Accepted transfer is missing its original balance context"
-                }
+        if (requireTransferPersisted) {
+            val originalContext = if (txTotalSats != null && preTransferOnchainSats != null) {
+                OnchainTransferContext(txTotalSats, preTransferOnchainSats)
+            } else {
+                null
             }
-            val transfer = transferRepo.createTransfer(
+            transferRepo.persistAcceptedFunding(order, txId, originalContext).getOrThrow()
+        } else {
+            cacheStore.addPaidOrder(orderId = order.id, txId = txId)
+            transferRepo.createTransfer(
                 type = TransferType.TO_SPENDING,
                 amountSats = order.clientBalanceSat.toLong(),
                 fundingTxId = txId,
@@ -701,7 +697,6 @@ class TransferViewModel @Inject constructor(
                 txTotalSats = txTotalSats?.toLong(),
                 preTransferOnchainSats = preTransferOnchainSats?.toLong(),
             )
-            if (requireTransferPersisted) transfer.getOrThrow()
         }
         if (createTransferActivity) {
             transferRepo.createPendingToSpendingActivity(
