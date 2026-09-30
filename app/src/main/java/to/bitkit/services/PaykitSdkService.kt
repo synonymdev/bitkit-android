@@ -559,7 +559,7 @@ class PaykitSdkService @Inject constructor(
                 val now = nowMillis()
                 val hasActiveSubscription = handle.paymentRequests().any {
                     val endsAt = it.terms?.recurrence?.endsAt?.let { timestamp ->
-                        runCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
+                        runSuspendCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
                     }
                     PubkyPublicKeyFormat.matches(it.counterparty, publicKey) &&
                         it.state == PaymentRequestLifecycleState.ACTIVE_RECURRING &&
