@@ -43,15 +43,15 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateTo
-import to.bitkit.ui.navigateToProfile
+import to.bitkit.ui.profileDestination
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
 
-private inline fun <reified T : Any> NavController.navigateIfNotCurrent(route: T) {
-    if (currentBackStackEntry?.destination?.hasRoute<T>() != true) {
+internal fun NavController.navigateIfNotCurrent(route: Any) {
+    if (currentBackStackEntry?.destination?.hasRoute(route::class) != true) {
         navigateTo(route)
     }
 }
@@ -78,6 +78,7 @@ fun DrawerMenu(
     hasSeenContactsIntro: Boolean = false,
     hasContacts: Boolean = false,
     isProfileAuthenticated: Boolean = false,
+    profileIdentityExists: Boolean? = null,
     isPaykitEnabled: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
@@ -168,17 +169,10 @@ fun DrawerMenu(
                     onBeforeNavigate(Routes.Profile)
                     rootNavController.navigateIfNotCurrent(Routes.Profile)
                 } else {
-                    onBeforeNavigate(
-                        when {
-                            isProfileAuthenticated -> Routes.Profile
-                            hasSeenProfileIntro -> Routes.PubkyChoice
-                            else -> Routes.ProfileIntro
-                        }
-                    )
-                    rootNavController.navigateToProfile(
-                        isAuthenticated = isProfileAuthenticated,
-                        hasSeenIntro = hasSeenProfileIntro,
-                    )
+                    profileDestination(profileIdentityExists, hasSeenProfileIntro)?.let {
+                        onBeforeNavigate(it)
+                        rootNavController.navigateIfNotCurrent(it)
+                    }
                 }
             },
             onClickWallet = {

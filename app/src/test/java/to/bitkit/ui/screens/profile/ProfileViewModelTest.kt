@@ -2,10 +2,12 @@ package to.bitkit.ui.screens.profile
 
 import android.content.Context
 import app.cash.turbine.test
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
+import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -30,6 +32,35 @@ class ProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `profile retry stays loading until session and profile are available`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        val restore = CompletableDeferred<Unit>()
+        val loaded = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.restoreSessionIfNeeded()).doSuspendableAnswer { restore.await() }
+        whenever(pubkyRepo.loadProfile()).doSuspendableAnswer { loaded.await() }
+        clearInvocations(pubkyRepo)
+
+        sut.uiState.test {
+            awaitItem()
+            sut.loadProfile()
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.isLoading)
+            verify(pubkyRepo, never()).loadProfile()
+
+            sut.loadProfile()
+            restore.complete(Unit)
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.isLoading)
+            verify(pubkyRepo, times(1)).restoreSessionIfNeeded()
+            loaded.complete(Unit)
+            advanceUntilIdle()
+            assertFalse(sut.uiState.value.isLoading)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 
     @Test
     fun `signOut marks profile recovery before signing out`() = test {
@@ -208,6 +239,8 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
         whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.isRestoringSession).thenReturn(MutableStateFlow(false))
+        whenever { pubkyRepo.restoreSessionIfNeeded() }.thenReturn(Unit)
         whenever { pubkyRepo.loadProfile() }.thenReturn(Unit)
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))

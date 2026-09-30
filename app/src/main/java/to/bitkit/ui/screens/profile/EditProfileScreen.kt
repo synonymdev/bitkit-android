@@ -24,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -174,6 +175,15 @@ private fun Content(
                 onDelete = onDelete,
                 deleteLabel = stringResource(R.string.profile__delete_profile),
             )
+        }
+    }
+
+    if (uiState.isSaving) {
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        ) {
+            GradientCircularProgressIndicator(modifier = Modifier.size(32.dp).testTag("ProfileSaving"))
         }
     }
 

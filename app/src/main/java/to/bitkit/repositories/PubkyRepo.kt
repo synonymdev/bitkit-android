@@ -106,6 +106,9 @@ class PubkyRepo @Inject constructor(
     private val _isLoadingProfile = MutableStateFlow(false)
     val isLoadingProfile: StateFlow<Boolean> = _isLoadingProfile.asStateFlow()
 
+    private val _isRestoringSession = MutableStateFlow(true)
+    val isRestoringSession: StateFlow<Boolean> = _isRestoringSession.asStateFlow()
+
     private val _contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     val contacts: StateFlow<List<PubkyProfile>> = _contacts.asStateFlow()
 
@@ -138,6 +141,16 @@ class PubkyRepo @Inject constructor(
 
     val isAuthenticated: StateFlow<Boolean> = _publicKey.map { it != null }
         .stateIn(scope, SharingStarted.Eagerly, false)
+
+    val identityExists: StateFlow<Boolean?> = combine(
+        _publicKey,
+        _backupStateVersion,
+        _identityRefreshVersion,
+    ) { _, _, _ ->
+        runSuspendCatching { hasIdentity() }
+            .onFailure { Logger.warn("Failed to check saved identity", it, context = TAG) }
+            .getOrDefault(true)
+    }.stateIn(scope, SharingStarted.Eagerly, null)
 
     val displayName: StateFlow<String?> = combine(_profile, pubkyStore.data) { profile, cached ->
         profile?.name ?: cached.cachedName
@@ -198,48 +211,53 @@ class PubkyRepo @Inject constructor(
     }
 
     private suspend fun initializeSession(notifyFailure: Boolean = true): Boolean {
-        runSuspendCatching {
-            ensureServiceInitialized()
-        }.onFailure {
-            Logger.error("Failed to initialize paykit", it, context = TAG)
-            if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
-                _sessionRestorationFailed.update { true }
-            }
-        }.getOrNull() ?: return false
+        _isRestoringSession.update { true }
+        try {
+            runSuspendCatching {
+                ensureServiceInitialized()
+            }.onFailure {
+                Logger.error("Failed to initialize paykit", it, context = TAG)
+                if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
+                    _sessionRestorationFailed.update { true }
+                }
+            }.getOrNull() ?: return false
 
-        if (notifyFailure) _sessionRestorationFailed.update { false }
-        val result = runSuspendCatching {
-            val savedSessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
-            val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+            if (notifyFailure) _sessionRestorationFailed.update { false }
+            val result = runSuspendCatching {
+                val savedSessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+                val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
 
-            resolveSessionInitialization(
-                savedSessionSecret = savedSessionSecret,
-                storedSecretKeyHex = storedSecretKeyHex,
-            )
-        }.onFailure {
-            Logger.error("Failed to initialize paykit", it, context = TAG)
-        }.getOrElse { InitResult.RestorationFailed }
-
-        when (result) {
-            is InitResult.NoSession -> {
-                clearAuthenticatedState()
-                Logger.debug("Found no saved paykit session", context = TAG)
-            }
-            is InitResult.Restored -> {
-                _sessionRestorationFailed.update { false }
-                _publicKey.update { result.publicKey }
-                Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
-            }
-            is InitResult.RestorationFailed -> {
-                clearAuthenticatedState(
-                    clearCachedProfile = false,
-                    clearRestorationFailure = notifyFailure,
+                resolveSessionInitialization(
+                    savedSessionSecret = savedSessionSecret,
+                    storedSecretKeyHex = storedSecretKeyHex,
                 )
-                if (notifyFailure) _sessionRestorationFailed.update { true }
+            }.onFailure {
+                Logger.error("Failed to initialize paykit", it, context = TAG)
+            }.getOrElse { InitResult.RestorationFailed }
+
+            when (result) {
+                is InitResult.NoSession -> {
+                    clearAuthenticatedState()
+                    Logger.debug("Found no saved paykit session", context = TAG)
+                }
+                is InitResult.Restored -> {
+                    _sessionRestorationFailed.update { false }
+                    _publicKey.update { result.publicKey }
+                    Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
+                }
+                is InitResult.RestorationFailed -> {
+                    clearAuthenticatedState(
+                        clearCachedProfile = false,
+                        clearRestorationFailure = notifyFailure,
+                    )
+                    if (notifyFailure) _sessionRestorationFailed.update { true }
+                }
             }
+            initializationReady.complete(Unit)
+            return result is InitResult.Restored
+        } finally {
+            _isRestoringSession.update { false }
         }
-        initializationReady.complete(Unit)
-        return result is InitResult.Restored
     }
 
     private fun hasSavedSession(): Boolean = runCatching {

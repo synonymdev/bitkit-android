@@ -155,6 +155,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun showDeleteConfirmation() {
+        if (_uiState.value.isSaving) return
         _uiState.update { it.copy(showDeleteDialog = true) }
     }
 
@@ -164,6 +165,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun save() {
         viewModelScope.launch {
+            if (_uiState.value.isSaving) return@launch
             _uiState.update { it.copy(isSaving = true) }
             val state = _uiState.value
 
@@ -226,6 +228,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun disconnectProfile() {
         viewModelScope.launch {
+            if (_uiState.value.isSaving) return@launch
             _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
             val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
             if (cleanupResult.isFailure) {
@@ -259,6 +262,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     private suspend fun attemptDeleteProfile() {
+        if (_uiState.value.isSaving) return
         _uiState.update {
             it.copy(
                 showDeleteDialog = false,
@@ -266,25 +270,23 @@ class EditProfileViewModel @Inject constructor(
                 isSaving = true,
             )
         }
-        privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-        val result = pubkyRepo.deleteProfileWithSessionRetry()
-        if (result.isSuccess) {
-            privatePaykitRepo.closeAndClear()
-            _uiState.update { it.copy(isSaving = false) }
-            ToastEventBus.send(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.profile__delete_success),
-            )
-            _effects.emit(EditProfileEffect.DeleteSuccess)
-        } else {
-            val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
-            Logger.error("Failed to delete profile", error, context = TAG)
-            _uiState.update {
-                it.copy(
-                    isSaving = false,
-                    showDeleteFailureDialog = true,
+        try {
+            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+            val result = pubkyRepo.deleteProfileWithSessionRetry()
+            if (result.isSuccess) {
+                privatePaykitRepo.closeAndClear()
+                ToastEventBus.send(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.profile__delete_success),
                 )
+                _effects.emit(EditProfileEffect.DeleteSuccess)
+            } else {
+                val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
+                Logger.error("Failed to delete profile", error, context = TAG)
+                _uiState.update { it.copy(showDeleteFailureDialog = true) }
             }
+        } finally {
+            _uiState.update { it.copy(isSaving = false) }
         }
     }
 }

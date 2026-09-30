@@ -47,6 +47,13 @@ class ProfileViewModel @Inject constructor(
     private val _copiedPublicKey = MutableStateFlow<String?>(null)
     private val tagUpdateMutex = Mutex()
     private var hideCopiedPopupJob: Job? = null
+    private var profileLoadJob: Job? = null
+    private val _isRefreshing = MutableStateFlow(true)
+    private val isLoading = combine(
+        pubkyRepo.isLoadingProfile,
+        pubkyRepo.isRestoringSession,
+        _isRefreshing,
+    ) { loading, restoring, refreshing -> loading || restoring || refreshing }
     private val controls = combine(
         _showSignOutDialog,
         _isSigningOut,
@@ -59,7 +66,7 @@ class ProfileViewModel @Inject constructor(
     val uiState: StateFlow<ProfileUiState> = combine(
         pubkyRepo.profile,
         pubkyRepo.publicKey,
-        pubkyRepo.isLoadingProfile,
+        isLoading,
         controls,
     ) { profile, publicKey, isLoading, controls ->
         ProfileUiState(
@@ -81,7 +88,16 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun loadProfile() {
-        viewModelScope.launch { pubkyRepo.loadProfile() }
+        if (profileLoadJob?.isActive == true) return
+        profileLoadJob = viewModelScope.launch {
+            _isRefreshing.update { true }
+            try {
+                pubkyRepo.restoreSessionIfNeeded()
+                pubkyRepo.loadProfile()
+            } finally {
+                _isRefreshing.update { false }
+            }
+        }
     }
 
     fun showSignOutConfirmation() {
@@ -199,7 +215,7 @@ class ProfileViewModel @Inject constructor(
 data class ProfileUiState(
     val profile: PubkyProfile? = null,
     val publicKey: String? = null,
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = true,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
     val showAddTagSheet: Boolean = false,

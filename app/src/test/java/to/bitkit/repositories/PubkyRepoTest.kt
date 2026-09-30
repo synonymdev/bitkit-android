@@ -1588,6 +1588,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoration exposes progress and keeps saved identity available on failure`() = test {
+        sut.awaitInitialization()
+        val finishRestore = CompletableDeferred<Unit>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer {
+            finishRestore.await()
+            throw TestAppError("Offline")
+        }
+
+        val retry = async { sut.restoreSessionIfNeeded() }
+        assertTrue(sut.isRestoringSession.value)
+        assertEquals(true, sut.identityExists.value)
+        assertNull(sut.publicKey.value)
+        finishRestore.complete(Unit)
+        retry.await()
+        assertFalse(sut.isRestoringSession.value)
+        assertEquals(true, sut.identityExists.value)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
     fun `failed restoration preserves profile data and credentials for retry`() = test {
         val session = "saved_session"
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
@@ -1676,6 +1697,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals(previousVersion + 1, sut.identityRefreshVersion.value)
         assertFalse(sut.hasIdentity())
+        assertEquals(false, sut.identityExists.value)
     }
 
     @Test

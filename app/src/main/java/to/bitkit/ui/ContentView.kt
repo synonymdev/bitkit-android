@@ -477,6 +477,7 @@ fun ContentView(
         val isPubkyProfileSetupPending by settingsViewModel.isPubkyProfileSetupPending.collectAsStateWithLifecycle()
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+        val pubkyIdentityExists by settingsViewModel.pubkyIdentityExists.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
         val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
@@ -762,6 +763,7 @@ fun ContentView(
                 hasSeenContactsIntro = hasSeenContactsIntro,
                 hasContacts = hasPubkyContacts,
                 isProfileAuthenticated = isProfileAuthenticated,
+                profileIdentityExists = pubkyIdentityExists,
                 isPaykitEnabled = isPaykitEnabled,
                 showWidgets = showWidgets,
                 onOpenWalletHome = navigateToHomeWallet,
@@ -2043,13 +2045,14 @@ inline fun <reified T : Any> NavController.navigateTo(
     }
 }
 
-fun NavController.navigateToProfile(
-    isAuthenticated: Boolean,
-    hasSeenIntro: Boolean,
-) = when {
-    isAuthenticated -> navigateTo(Routes.Profile)
-    hasSeenIntro -> navigateTo(Routes.PubkyChoice)
-    else -> navigateTo(Routes.ProfileIntro)
+fun profileDestination(identityExists: Boolean?, hasSeenIntro: Boolean): Routes.DeepLinkable? = when (identityExists) {
+    true -> Routes.Profile
+    false -> if (hasSeenIntro) Routes.PubkyChoice else Routes.ProfileIntro
+    null -> null
+}
+
+fun NavController.navigateToProfile(identityExists: Boolean?, hasSeenIntro: Boolean) {
+    profileDestination(identityExists, hasSeenIntro)?.let { navigateTo(it) }
 }
 
 fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)

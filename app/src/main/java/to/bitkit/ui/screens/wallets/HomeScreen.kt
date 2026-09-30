@@ -231,7 +231,7 @@ fun HomeScreen(
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
-    val isPubkyAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+    val pubkyIdentityExists by settingsViewModel.pubkyIdentityExists.collectAsStateWithLifecycle()
     val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
     val profileDisplayName by homeViewModel.profileDisplayName.collectAsStateWithLifecycle()
     val profileDisplayImageUri by homeViewModel.profileDisplayImageUri.collectAsStateWithLifecycle()
@@ -266,7 +266,7 @@ fun HomeScreen(
 
     val navigateToProfile = {
         rootNavController.navigateToProfile(
-            isAuthenticated = isPubkyAuthenticated,
+            identityExists = pubkyIdentityExists,
             hasSeenIntro = hasSeenProfileIntro,
         )
     }

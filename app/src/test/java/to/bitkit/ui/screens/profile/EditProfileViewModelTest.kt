@@ -3,11 +3,14 @@ package to.bitkit.ui.screens.profile
 import android.content.Context
 import app.cash.turbine.test
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.times
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -33,6 +36,36 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `pending deletion blocks duplicate actions and clears progress on failure`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        val result = CompletableDeferred<Result<Unit>>()
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).doSuspendableAnswer { result.await() }
+
+        sut.showDeleteConfirmation()
+        sut.deleteProfile()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.showDeleteDialog)
+
+        sut.deleteProfile()
+        sut.retryDeleteProfile()
+        sut.save()
+        sut.disconnectProfile()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        verify(pubkyRepo, times(1)).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).signOut()
+        assertFalse(sut.uiState.value.showDeleteDialog)
+
+        result.complete(Result.failure(TestAppError("Offline")))
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isSaving)
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+    }
 
     @Test
     fun `updateLinkUrl should update existing profile link`() = test {

@@ -14,6 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.navigateIfNotCurrent
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
@@ -26,6 +27,37 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class ContentViewTest {
+    @Test
+    fun `profile navigation waits for identity lookup and preserves disconnected identities`() {
+        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = Routes.Home) {
+                composable<Routes.Home> {}
+                composable<Routes.Profile> {}
+                composable<Routes.ProfileIntro> {}
+                composable<Routes.PubkyChoice> {}
+            }
+        }
+        for (hasSeenIntro in listOf(false, true)) {
+            assertNull(profileDestination(identityExists = null, hasSeenIntro))
+        }
+        val cases = listOf(
+            Triple(false, false, Routes.ProfileIntro),
+            Triple(false, true, Routes.PubkyChoice),
+            Triple(true, false, Routes.Profile),
+            Triple(true, true, Routes.Profile),
+        )
+        for ((identityExists, hasSeenIntro, expected) in cases) {
+            val destination = requireNotNull(profileDestination(identityExists, hasSeenIntro))
+            assertEquals(expected, destination)
+            navController.navigateIfNotCurrent(destination)
+            assertTrue(navController.currentDestination?.hasRoute(expected::class) == true)
+            val entry = navController.currentBackStackEntry
+            navController.navigateIfNotCurrent(destination)
+            assertEquals(entry, navController.currentBackStackEntry)
+        }
+    }
+
     @Test
     fun `wallet initialization waits for successful startup after each failure`() {
         val states = listOf(
