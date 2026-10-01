@@ -9,6 +9,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
+import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.PaykitSubscriptionMetadata
 import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import kotlin.test.assertEquals
@@ -19,6 +20,7 @@ import kotlin.time.Instant
 
 class SubscriptionsScreenTest {
     private val now = Instant.parse("2027-01-15T08:00:00Z")
+    private val paidThrough = Instant.parse("2027-02-01T08:00:00Z")
 
     @Test
     fun `next transition includes the next recurring period`() {
@@ -157,6 +159,102 @@ class SubscriptionsScreenTest {
     }
 
     @Test
+    fun `canceled subscription before its paid period ends reads active and expires`() {
+        val canceled = canceledWithPaidThrough()
+
+        assertTrue(canceled.runsUntilPaidThrough(now))
+        assertEquals(R.string.subscriptions__active, canceled.statusRes(now))
+        assertEquals(R.string.subscriptions__expires, canceled.timingTitleRes(now))
+        assertEquals(R.string.subscriptions__expires_date to paidThrough, canceled.rowSubtitleSpec(now))
+        assertTrue(canceled.shouldShowTiming(now))
+        assertEquals(paidThrough, canceled.expiryDate())
+        assertFalse(canceled.canCancel(now))
+    }
+
+    @Test
+    fun `canceled subscription expires when its paid period ends`() {
+        val canceled = canceledWithPaidThrough()
+
+        assertFalse(canceled.runsUntilPaidThrough(paidThrough))
+        assertEquals(R.string.subscriptions__expired, canceled.statusRes(paidThrough))
+        assertEquals(R.string.subscriptions__expired, canceled.timingTitleRes(paidThrough))
+        assertEquals(R.string.subscriptions__expired to null, canceled.rowSubtitleSpec(paidThrough))
+        assertTrue(canceled.hasEnded(paidThrough))
+        assertFalse(canceled.hasEnded(now))
+    }
+
+    @Test
+    fun `canceled subscription without an end date shows no timing`() {
+        val canceled = subscription(PaykitRecurrenceUnit.Month)
+            .copy(lifecycleState = PaymentRequestLifecycleState.CANCELED)
+
+        assertFalse(canceled.runsUntilPaidThrough(now))
+        assertFalse(canceled.shouldShowTiming(now))
+        assertEquals(R.string.subscriptions__expired, canceled.statusRes(now))
+    }
+
+    @Test
+    fun `active and ended subscriptions keep their status and timing`() {
+        val active = subscription(PaykitRecurrenceUnit.Month)
+        val fixedEnd = active.copy(recurrence = active.recurrence.copy(endsAt = Instant.parse("2027-06-01T08:00:00Z")))
+        val ended = active.copy(recurrence = active.recurrence.copy(endsAt = Instant.parse("2027-01-10T08:00:00Z")))
+
+        assertEquals(R.string.subscriptions__active, active.statusRes(now))
+        assertEquals(R.string.subscriptions__renews, active.timingTitleRes(now))
+        assertEquals(
+            R.string.subscriptions__renews_date to Instant.parse("2027-02-01T08:00:00Z"),
+            active.rowSubtitleSpec(now),
+        )
+        assertEquals(R.string.subscriptions__expires, fixedEnd.timingTitleRes(now))
+        assertEquals(R.string.subscriptions__expired, ended.statusRes(now))
+        assertEquals(R.string.subscriptions__expired, ended.timingTitleRes(now))
+    }
+
+    @Test
+    fun `expired proposal with a future end date does not run until paid through`() {
+        val expiredProposal = subscription(PaykitRecurrenceUnit.Month).let {
+            it.copy(
+                lifecycleState = PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
+                recurrence = it.recurrence.copy(endsAt = Instant.parse("2027-06-01T08:00:00Z")),
+            )
+        }
+
+        assertFalse(expiredProposal.runsUntilPaidThrough(now))
+        assertEquals(R.string.subscriptions__expired, expiredProposal.timingTitleRes(now))
+    }
+
+    @Test
+    fun `canceled subscription is listed as active until its paid period ends then as expired`() {
+        val canceled = canceledWithPaidThrough()
+        val active = subscription(PaykitRecurrenceUnit.Month).copy(paymentRequestId = "active")
+        val subscriptions = listOf(canceled, active)
+        val accepted = { _: PaykitSubscriptionId -> now }
+
+        val before = subscriptionSections(subscriptions, accepted, now)
+        assertEquals(listOf(canceled, active), before.active)
+        assertEquals(emptyList(), before.expired)
+
+        val after = subscriptionSections(subscriptions, accepted, paidThrough)
+        assertEquals(listOf(active), after.active)
+        assertEquals(listOf(canceled), after.expired)
+    }
+
+    @Test
+    fun `monthly cost counts a canceled subscription until its paid period ends`() {
+        val canceled = canceledWithPaidThrough().copy(amountSats = 1_200u)
+
+        assertEquals(1_200L, subscriptionMonthlyCostSats(listOf(canceled), now))
+        assertEquals(0L, subscriptionMonthlyCostSats(listOf(canceled), paidThrough))
+    }
+
+    @Test
+    fun `next transition includes the end of a canceled subscription's paid period`() {
+        val canceled = canceledWithPaidThrough()
+
+        assertEquals(paidThrough, nextSubscriptionTransition(listOf(canceled), now))
+    }
+
+    @Test
     fun `subscription payment confetti follows the settled rail`() {
         assertEquals(
             R.raw.confetti_purple,
@@ -168,6 +266,13 @@ class SubscriptionsScreenTest {
         )
         assertEquals(R.raw.confetti_purple, subscriptionConfettiResource(null))
     }
+
+    private fun canceledWithPaidThrough() = subscription(PaykitRecurrenceUnit.Month).copy(
+        lifecycleState = PaymentRequestLifecycleState.CANCELED,
+        paidPeriods = listOf(
+            PaykitBillingPeriod(startsAt = Instant.parse("2027-01-01T08:00:00Z"), endsAt = paidThrough),
+        ),
+    )
 
     private fun subscription(
         unit: PaykitRecurrenceUnit,

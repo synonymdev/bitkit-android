@@ -17,7 +17,10 @@
     <action>Tap Cancel</action>
     <action>Verify the sheet title reads "Cancel Subscription", the cross illustration is shown, and the swipe control reads "Swipe To Cancel"</action>
     <action>Swipe the confirm control to the end</action>
-    <action>Verify the sheet dismisses and "Journey Sub" leaves the ACTIVE section</action>
+    <action>Verify the sheet dismisses and "Journey Sub" stays under ACTIVE, because the period already paid for is still running, now with "Expires" and the end date of that period as its subtitle instead of "Renews"</action>
+    <action>Tap the "Journey Sub" row</action>
+    <action>Verify STATUS reads "Active", the timing cell reads "EXPIRES" with the end date of the paid period, and the footer shows no Cancel button</action>
+    <action>Press Android back and verify the Subscriptions list is shown again</action>
     <action>Switch to the creator instance and open Subscriptions</action>
     <action>Verify "Journey Sub" is still listed under CREATED, because its paid periods are retained as history</action>
     <action>Tap the pending "Journey Sub Two" row in the CREATED section</action>
