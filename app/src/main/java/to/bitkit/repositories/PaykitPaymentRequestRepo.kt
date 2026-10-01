@@ -871,7 +871,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         ensurePaymentAllowed(request, forExecution = false).getOrThrow()
         val alreadySaved = request.id in presentationStore.loadAcceptedOneTimeIds(identity)
         val acceptedIds = presentationStore.addAcceptedOneTimeId(identity, request.id)
-        if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
+        requireCurrentState(generation, identity)
         acceptedOneTimeRequestIds = acceptedIds
         val result = runSuspendCatching { operation() }.onFailure { error ->
             // Acceptance may already be committed. Reconcile before discarding its owner.
@@ -886,8 +886,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 if (isCurrentState(generation, identity)) acceptedOneTimeRequestIds = remaining
             }
         }.getOrThrow()
-        if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
+        requireCurrentState(generation, identity)
         return result
+    }
+
+    private fun requireCurrentState(generation: Long, identity: String) {
+        if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
     }
 
     suspend fun reject(request: PaykitPaymentRequest): Result<Unit> = updateRequest(
