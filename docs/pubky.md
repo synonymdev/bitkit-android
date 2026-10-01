@@ -45,6 +45,8 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 - `initialize()` attempts to restore any saved session via `importSession()`
 - If restoration fails, saved credentials and cached profile data remain available for retry
 - Recovery retries on connectivity restoration and app resume, and an adopted Ring credential can re-sign in the same identity
+- A `pubkyauth://` authorization deep link waits for `awaitIdentityReady()` as well as the first restore, so a link that cold-starts Bitkit after the first restore failed waits for the retry instead of reporting a missing identity. When no session is active, `awaitIdentityReady()` retries the restore once on the same lock as the resume retry, adoption, identity creation and backup restore, so it waits for one already running and never restores twice. It returns `Ready`, `Missing` (no saved identity, decided without a network call) or `Unavailable` (a saved identity whose session could not be restored yet; its credentials, cached profile and the session-expired flag are left alone). The retry runs in the repository scope, so a newer scan that supersedes the link cannot interrupt a half-done `importSession()`, and the profile and contacts it loads are not awaited
+- An authorization request that finds no active session shows "Pubky Identity Required" only when no identity is saved. With a saved identity that could not be restored, the deep link and the scanner both show a retryable "Couldn't Load Your Pubky Profile" error instead
 
 ### Profile Loading
 

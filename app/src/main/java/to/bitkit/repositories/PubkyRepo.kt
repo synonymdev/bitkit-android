@@ -79,6 +79,18 @@ private fun Throwable.containsActiveSubscriptionError(): Boolean =
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
 
+/** Whether a Pubky identity is ready to use once restores already under way have finished. */
+enum class PubkyIdentityReadiness {
+    /** A session is active. */
+    Ready,
+
+    /** No identity is saved on this device. */
+    Missing,
+
+    /** An identity is saved, or could not be checked, but its session could not be restored yet. */
+    Unavailable,
+}
+
 @Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @Singleton
 class PubkyRepo @Inject constructor(
@@ -220,19 +232,46 @@ class PubkyRepo @Inject constructor(
 
     suspend fun restoreSessionIfNeeded() = withContext(ioDispatcher) {
         awaitInitialization()
-        val restored = initializeMutex.withLock {
-            if (_publicKey.value != null) return@withLock false
-            runSuspendCatching {
-                val hasIdentity = hasIdentity()
-                _identityRefreshVersion.update { it + 1 }
-                hasIdentity && initializeSession(notifyFailure = false)
-            }.onFailure { Logger.warn("Failed to retry paykit session restoration", it, context = TAG) }
-                .getOrDefault(false)
-        }
+        val restored = initializeMutex.withLock { restoreSessionLocked() }
         if (restored) {
             loadProfile()
             loadContacts()
         }
+    }
+
+    /**
+     * Waits until a saved identity can be used. When no session is active, it retries the restore once, after any
+     * resume retry, adoption, identity creation or backup restore already under way, so an earlier success is never
+     * restored twice. The retry runs in the repository scope, so cancelling the caller does not interrupt it, and the
+     * profile and contacts it loads are not awaited.
+     */
+    suspend fun awaitIdentityReady(): PubkyIdentityReadiness = withContext(ioDispatcher) {
+        awaitInitialization()
+        if (_publicKey.value != null) return@withContext PubkyIdentityReadiness.Ready
+        scope.async {
+            val restored = initializeMutex.withLock { restoreSessionLocked() }
+            if (restored) {
+                scope.launch {
+                    loadProfile()
+                    loadContacts()
+                }
+            }
+        }.await()
+        when {
+            _publicKey.value != null -> PubkyIdentityReadiness.Ready
+            runSuspendCatching { hasIdentity() }.getOrNull() == false -> PubkyIdentityReadiness.Missing
+            else -> PubkyIdentityReadiness.Unavailable
+        }
+    }
+
+    private suspend fun restoreSessionLocked(): Boolean {
+        if (_publicKey.value != null) return false
+        return runSuspendCatching {
+            val hasIdentity = hasIdentity()
+            _identityRefreshVersion.update { it + 1 }
+            hasIdentity && initializeSession(notifyFailure = false)
+        }.onFailure { Logger.warn("Failed to retry paykit session restoration", it, context = TAG) }
+            .getOrDefault(false)
     }
 
     private suspend fun initializeSession(notifyFailure: Boolean = true): Boolean {

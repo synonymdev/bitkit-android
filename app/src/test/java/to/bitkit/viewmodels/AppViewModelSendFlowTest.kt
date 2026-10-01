@@ -150,6 +150,7 @@ import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
@@ -384,6 +385,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever { pubkyRepo.republishIdentityIfNeeded() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.hasIdentity() }.thenAnswer { pubkyPublicKey.value != null }
+        whenever { pubkyRepo.awaitIdentityReady() }.thenAnswer {
+            if (pubkyPublicKey.value != null) PubkyIdentityReadiness.Ready else PubkyIdentityReadiness.Missing
+        }
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever { refreshContactPaykitReceivers(any()) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
@@ -3496,6 +3500,101 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 assertEquals("Create a Pubky identity", it.description)
             }
         )
+    }
+
+    @Test
+    fun `cold pubky auth deeplink waits for a session retry after a failed startup restore`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        val retry = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        whenever(pubkyRepo.awaitIdentityReady()).doSuspendableAnswer {
+            retry.await()
+            pubkyPublicKey.value = testPublicKey
+            PubkyIdentityReadiness.Ready
+        }
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager, never()).enqueue(any())
+        retry.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `pubky auth deeplink shows a retryable error for a saved identity it cannot restore`() = test {
+        enablePaykitUi()
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(pubkyRepo.awaitIdentityReady()).thenReturn(PubkyIdentityReadiness.Unavailable)
+        whenever(context.getString(R.string.pubky_auth__identity_unavailable))
+            .thenReturn("Couldn't Load Your Pubky Profile")
+        whenever(context.getString(R.string.pubky_auth__identity_unavailable_desc))
+            .thenReturn("Check your connection and try again.")
+        advanceUntilIdle()
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo).awaitIdentityReady()
+        verify(context, never()).getString(R.string.pubky_auth__no_identity)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Couldn't Load Your Pubky Profile", it.title)
+                assertEquals("Check your connection and try again.", it.description)
+            }
+        )
+    }
+
+    @Test
+    fun `global scanner shows a retryable error for a saved identity without a session`() = test {
+        enablePaykitUi()
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(context.getString(R.string.pubky_auth__identity_unavailable))
+            .thenReturn("Couldn't Load Your Pubky Profile")
+        advanceUntilIdle()
+
+        sut.showScannerSheet()
+        advanceUntilIdle()
+        sut.onScannerSheetResult("pubkyauth://auth?caps=/pub/paykit/v0/:rw")
+        advanceUntilIdle()
+
+        verify(context, never()).getString(R.string.pubky_auth__no_identity)
+        verify(toastManager).enqueue(check { assertEquals("Couldn't Load Your Pubky Profile", it.title) })
+    }
+
+    @Test
+    fun `pubky auth deeplink session retry timeout releases scan lock`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        whenever(pubkyRepo.awaitIdentityReady()).doSuspendableAnswer { awaitCancellation() }
+        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
+        whenever(context.getString(R.string.profile__auth_error_timeout)).thenReturn("Authorization timed out")
+        val bolt11 = "lnbcrt1postretrytimeoutscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceTimeBy(PubkyService.AUTHORIZATION_TIMEOUT.inWholeMilliseconds)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager).enqueue(check { assertEquals("Authorization timed out", it.description) })
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
     }
 
     @Test

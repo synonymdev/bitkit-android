@@ -2265,6 +2265,149 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `awaitIdentityReady waits for an in-flight restore retry and restores once`() = test {
+        val restore = stubSavedSessionRestore()
+        sut.initialize()
+        assertNull(sut.publicKey.value)
+        clearInvocations(pubkyService)
+        val retryStarted = CompletableDeferred<Unit>()
+        val finishRetry = CompletableDeferred<Unit>()
+        restore.answer = {
+            retryStarted.complete(Unit)
+            finishRetry.await()
+            VALID_SELF_KEY
+        }
+        val retry = async { sut.restoreSessionIfNeeded() }
+        retryStarted.await()
+
+        val readiness = async { sut.awaitIdentityReady() }
+        assertFalse(readiness.isCompleted)
+        finishRetry.complete(Unit)
+
+        assertEquals(PubkyIdentityReadiness.Ready, readiness.await())
+        retry.await()
+        verify(pubkyService, times(1)).importSession("saved_session")
+    }
+
+    @Test
+    fun `awaitIdentityReady retries a failed startup restore of a saved identity`() = test {
+        val restore = stubSavedSessionRestore()
+        sut.initialize()
+        assertNull(sut.publicKey.value)
+        restore.answer = { VALID_SELF_KEY }
+
+        assertEquals(PubkyIdentityReadiness.Ready, sut.awaitIdentityReady())
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `awaitIdentityReady reports a missing identity without a network call`() = test {
+        sut.awaitInitialization()
+        clearInvocations(pubkyService)
+
+        assertEquals(PubkyIdentityReadiness.Missing, sut.awaitIdentityReady())
+
+        verify(pubkyService, never()).initialize()
+        verify(pubkyService, never()).importSession(any())
+        verify(pubkyService, never()).signIn(any())
+    }
+
+    @Test
+    fun `awaitIdentityReady reports a saved identity it cannot restore without clearing it`() = test {
+        stubSavedSessionRestore()
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.signIn("local_secret")).thenAnswer { throw TestAppError("Clock skew") }
+        sut.initialize()
+        sut.clearSessionRestorationFailed()
+        clearInvocations(pubkyStore, keychain)
+
+        assertEquals(PubkyIdentityReadiness.Unavailable, sut.awaitIdentityReady())
+
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.sessionRestorationFailed.value)
+        verify(pubkyStore, never()).reset()
+        verifyBlocking(keychain, never()) { delete(any()) }
+    }
+
+    @Test
+    fun `awaitIdentityReady reports an unreadable identity check as unavailable`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer {
+            throw TestAppError("Keychain unavailable")
+        }
+
+        assertEquals(PubkyIdentityReadiness.Unavailable, sut.awaitIdentityReady())
+    }
+
+    @Test
+    fun `awaitIdentityReady waits for an in-flight adoption`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        val ringPubky = stubRingCredential()
+        val signInStarted = CompletableDeferred<Unit>()
+        val finishSignIn = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("ring_secret")).doSuspendableAnswer {
+            signInStarted.complete(Unit)
+            finishSignIn.await()
+        }
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile()))
+
+        val adoption = async { sut.adoptRingIdentity(ringPubky) }
+        signInStarted.await()
+        val readiness = async { sut.awaitIdentityReady() }
+        assertFalse(readiness.isCompleted)
+        finishSignIn.complete(Unit)
+
+        assertTrue(adoption.await().isSuccess)
+        assertEquals(PubkyIdentityReadiness.Ready, readiness.await())
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
+    fun `cancelling an identity wait does not cancel its restore`() = test {
+        val restore = stubSavedSessionRestore()
+        sut.initialize()
+        val retryStarted = CompletableDeferred<Unit>()
+        val finishRetry = CompletableDeferred<Unit>()
+        restore.answer = {
+            retryStarted.complete(Unit)
+            finishRetry.await()
+            VALID_SELF_KEY
+        }
+        val caller = launch { sut.awaitIdentityReady() }
+        retryStarted.await()
+
+        caller.cancelAndJoin()
+        finishRetry.complete(Unit)
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `awaitIdentityReady returns without waiting for contacts`() = test {
+        val restore = stubSavedSessionRestore()
+        sut.initialize()
+        restore.answer = { VALID_SELF_KEY }
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile()))
+        val contactsRequested = CompletableDeferred<Unit>()
+        val finishContacts = CompletableDeferred<List<ContactRecord>>()
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            contactsRequested.complete(Unit)
+            finishContacts.await()
+        }
+
+        assertEquals(PubkyIdentityReadiness.Ready, sut.awaitIdentityReady())
+
+        contactsRequested.await()
+        assertTrue(sut.isLoadingContacts.value)
+        finishContacts.complete(emptyList())
+        assertFalse(sut.isLoadingContacts.value)
+    }
+
+    @Test
     fun `adoption excludes a queued restoration retry`() = test {
         sut.awaitInitialization()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
@@ -3120,6 +3263,13 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.initialize()
     }
 
+    private fun stubSavedSessionRestore(): SavedSessionRestore {
+        val restore = SavedSessionRestore()
+        whenever { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }.thenReturn("saved_session")
+        whenever { pubkyService.importSession("saved_session") }.doSuspendableAnswer { restore.answer() }
+        return restore
+    }
+
     private fun stubGatedPubkyStore(): GatedPubkyStore {
         val store = GatedPubkyStore()
         whenever { pubkyStore.update(any()) }.doSuspendableAnswer {
@@ -3247,6 +3397,10 @@ class PubkyRepoTest : BaseUnitTest() {
 }
 
 private class TestAppError(message: String) : AppError(message)
+
+private class SavedSessionRestore {
+    var answer: suspend () -> String = { throw TestAppError("Offline") }
+}
 
 private class GatedPubkyStore {
     var data = PubkyStoreData()
