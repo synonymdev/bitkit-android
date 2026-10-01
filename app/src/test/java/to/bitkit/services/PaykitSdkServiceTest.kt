@@ -40,6 +40,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -68,6 +69,28 @@ import kotlin.test.assertTrue
 class PaykitSdkServiceTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
+    @Test
+    fun `initialization can be retried after shared state contention`() = runTest {
+        val failure = PaykitException.ConcurrentUpdate("concurrent_update", "Resource locked")
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.initialize()).thenThrow(failure).thenReturn(mock())
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            settingsStore = mock(),
+            platformInitializer = {},
+            sdkFactory = { sdk },
+        )
+
+        assertSame(failure, assertFailsWith<PaykitException.ConcurrentUpdate> { service.initialize() })
+        assertSame(failure, assertFailsWith<PaykitException.ConcurrentUpdate> { service.contactRecords() })
+        service.initialize()
+        assertEquals(emptyList(), service.contactRecords())
     }
 
     @Test
@@ -103,21 +126,27 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `wallet wipe discards runtime handles before and after cleanup`() = runTest {
+    fun `wallet wipe discards handles and backup fingerprints even when cleanup fails`() = runTest {
         val sdk = mock<PaykitSdk>()
-        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.backupStateRevision()).thenReturn("backup")
         var handlesCreated = 0
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) {
             handlesCreated++
             sdk
         }
-        service.contactRecords()
-        service.withWalletWipe {
-            service.contactRecords()
-            assertEquals(2, handlesCreated)
+        repeat(2) { service.processPendingPrivateMessages() }
+        assertFailsWith<AppError> {
+            service.withWalletWipe {
+                service.processPendingPrivateMessages()
+                assertEquals(2, handlesCreated)
+                throw AppError("Cleanup failed")
+            }
         }
-        service.contactRecords()
+        service.processPendingPrivateMessages()
         assertEquals(3, handlesCreated)
+        verify(sdk, times(3)).backupStateRevision()
     }
 
     @Test

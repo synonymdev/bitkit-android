@@ -902,6 +902,7 @@ class AppViewModel @Inject constructor(
                 if (isOnline.value != ConnectivityState.CONNECTED) continue
                 val refreshMaintenance = maintenanceDelay <= Duration.ZERO
                 if (refreshMaintenance) {
+                    if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
                     pubkyRepo.republishIdentityIfNeeded()
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
                     maintenanceIntervalIndex =
