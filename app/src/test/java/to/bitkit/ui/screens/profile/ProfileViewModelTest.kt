@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
@@ -35,69 +36,45 @@ class ProfileViewModelTest : BaseUnitTest() {
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
 
     @Test
-    fun `init loads the profile when none is loaded`() = test {
-        createSut()
-        advanceUntilIdle()
+    fun `init loads the profile unless a profile load is in flight`() = test {
+        val loaded = createProfile()
+        listOf(
+            InitLoadCase("none loaded", profile = null, isLoading = false, loads = 1),
+            InitLoadCase("loaded for the current key", profile = loaded, isLoading = false, loads = 1),
+            InitLoadCase("loaded for another key", loaded.copy(publicKey = "pubkybob"), isLoading = false, loads = 1),
+            InitLoadCase("load in flight", profile = null, isLoading = true, loads = 0),
+        ).forEach { case ->
+            clearInvocations(pubkyRepo)
+            val sut = createSut(case.profile, isLoading = case.isLoading)
+            advanceUntilIdle()
 
-        verify(pubkyRepo).loadProfile()
+            verify(pubkyRepo, times(case.loads).description(case.name)).loadProfile()
+            assertEquals(case.profile, sut.uiState.value.profile, case.name)
+        }
     }
 
     @Test
-    fun `init refreshes a profile already loaded for the current key`() = test {
-        val profile = createProfile()
-        val sut = createSut(profile)
-        advanceUntilIdle()
+    fun `init loads once more only when the in-flight load fails`() = test {
+        listOf(Triple("succeeds", createProfile(), 0), Triple("fails", null, 1)).forEach { (case, loaded, loads) ->
+            clearInvocations(pubkyRepo)
+            val profileFlow = MutableStateFlow<PubkyProfile?>(null)
+            val isLoadingFlow = MutableStateFlow(true)
+            createSut(
+                profileFlow = profileFlow,
+                isLoadingFlow = isLoadingFlow,
+                onLoadProfile = {
+                    isLoadingFlow.value = true
+                    isLoadingFlow.value = false
+                },
+            )
+            advanceUntilIdle()
 
-        verify(pubkyRepo).loadProfile()
-        assertEquals(profile, sut.uiState.value.profile)
-    }
+            profileFlow.value = loaded
+            isLoadingFlow.value = false
+            advanceUntilIdle()
 
-    @Test
-    fun `init skips loading while a profile load is in flight`() = test {
-        createSut(isLoading = true)
-        advanceUntilIdle()
-
-        verify(pubkyRepo, never()).loadProfile()
-    }
-
-    @Test
-    fun `init does not load again when the in-flight load succeeds`() = test {
-        val profileFlow = MutableStateFlow<PubkyProfile?>(null)
-        val isLoadingFlow = MutableStateFlow(true)
-        createSut(profileFlow = profileFlow, isLoadingFlow = isLoadingFlow)
-        advanceUntilIdle()
-
-        profileFlow.value = createProfile()
-        isLoadingFlow.value = false
-        advanceUntilIdle()
-
-        verify(pubkyRepo, never()).loadProfile()
-    }
-
-    @Test
-    fun `init loads once more when the in-flight load fails`() = test {
-        val isLoadingFlow = MutableStateFlow(true)
-        createSut(
-            isLoadingFlow = isLoadingFlow,
-            onLoadProfile = {
-                isLoadingFlow.value = true
-                isLoadingFlow.value = false
-            },
-        )
-        advanceUntilIdle()
-
-        isLoadingFlow.value = false
-        advanceUntilIdle()
-
-        verify(pubkyRepo, times(1)).loadProfile()
-    }
-
-    @Test
-    fun `init loads the profile when the loaded one belongs to another key`() = test {
-        createSut(createProfile().copy(publicKey = "pubkybob"))
-        advanceUntilIdle()
-
-        verify(pubkyRepo).loadProfile()
+            verify(pubkyRepo, times(loads).description(case)).loadProfile()
+        }
     }
 
     @Test
@@ -122,11 +99,18 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cached profile is exposed while loading when its owner matches the public key`() = test {
-        val cachedProfile = createCachedProfile(publicKey = "pubkyalice")
-        val sut = createSut(isLoading = true, cachedProfile = cachedProfile)
+    fun `cached profile shows while loading only when its owner is the public key`() = test {
+        listOf(
+            Triple("same owner", "pubkyalice" to "pubkyalice", true),
+            Triple("other owner", "pubkyalice" to "pubkybob", false),
+            Triple("no public key", null to "pubkyalice", false),
+        ).forEach { (case, keys, shown) ->
+            val (publicKey, owner) = keys
+            val cachedProfile = createCachedProfile(publicKey = owner)
+            val sut = createSut(publicKey = publicKey, isLoading = true, cachedProfile = cachedProfile)
 
-        assertEquals(cachedProfile, sut.uiState.value.cachedProfile)
+            assertEquals(cachedProfile.takeIf { shown }, sut.uiState.value.cachedProfile, case)
+        }
     }
 
     @Test
@@ -161,24 +145,6 @@ class ProfileViewModelTest : BaseUnitTest() {
             assertFalse(state.isLoading)
             assertNull(state.cachedProfile)
         }
-    }
-
-    @Test
-    fun `cached profile is hidden when its owner differs from the public key`() = test {
-        val sut = createSut(isLoading = true, cachedProfile = createCachedProfile(publicKey = "pubkybob"))
-
-        assertNull(sut.uiState.value.cachedProfile)
-    }
-
-    @Test
-    fun `cached profile is hidden without a public key`() = test {
-        val sut = createSut(
-            publicKey = null,
-            isLoading = true,
-            cachedProfile = createCachedProfile(publicKey = "pubkyalice"),
-        )
-
-        assertNull(sut.uiState.value.cachedProfile)
     }
 
     @Test
@@ -408,5 +374,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         status = null,
     )
 }
+
+private class InitLoadCase(val name: String, val profile: PubkyProfile?, val isLoading: Boolean, val loads: Int)
 
 private class ProfileTestAppError(message: String) : AppError(message)
