@@ -13,8 +13,8 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -201,17 +201,43 @@ class PubkyRepo @Inject constructor(
 
     private class ContactProfileRefresh(
         private val owner: String,
-        private val contacts: List<SavedContact>,
-        val job: Job,
+        contacts: List<SavedContact>,
+        scope: CoroutineScope,
+        lookUp: suspend (SavedContact) -> Unit,
     ) {
         private val keys = contacts.mapTo(mutableSetOf()) { it.profile.publicKey }
+        private val unloaded = contacts.filter { it.showsLabelOnly }
+            .associateByTo(mutableMapOf()) { it.profile.publicKey }
+        private val lookingUp = MutableStateFlow(keys.toSet())
 
-        fun covers(other: ContactProfileRefresh): Boolean = isActiveFor(other.owner) && keys.containsAll(other.keys)
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            contacts.forEach { contact ->
+                launch {
+                    try {
+                        lookUp(contact)
+                    } finally {
+                        lookingUp.update { it - contact.profile.publicKey }
+                    }
+                }
+            }
+        }.apply { invokeOnCompletion { lookingUp.update { emptySet() } } }
 
-        fun labelOnlyContact(owner: String, publicKey: String): SavedContact? = contacts.takeIf { isActiveFor(owner) }
-            ?.firstOrNull { it.showsLabelOnly && it.profile.publicKey == publicKey }
+        fun covers(other: ContactProfileRefresh): Boolean =
+            job.isActive && owner == other.owner && keys.containsAll(other.keys)
 
-        private fun isActiveFor(owner: String): Boolean = job.isActive && this.owner == owner
+        fun unloadedContact(owner: String, publicKey: String): SavedContact? =
+            unloaded[publicKey]?.takeIf { this.owner == owner }
+
+        fun markLoaded(owner: String, contact: SavedContact) {
+            val publicKey = contact.profile.publicKey
+            if (this.owner == owner && unloaded[publicKey] == contact) unloaded.remove(publicKey)
+        }
+
+        fun isLookingUp(publicKey: String): Boolean = publicKey in lookingUp.value
+
+        suspend fun awaitLookup(publicKey: String) {
+            lookingUp.first { publicKey !in it }
+        }
     }
 
     private val initializationReady = CompletableDeferred<Unit>()
@@ -958,17 +984,32 @@ class PubkyRepo @Inject constructor(
 
     /**
      * Resolves a saved contact's profile on the interactive read lane while its row still shows only its label
-     * because the background refresh of [loadContacts] has not reached it, so a screen showing that contact does not
-     * wait behind bulk reads and an edit made there keeps the contact's avatar, bio and links. It returns at once
-     * for any other row; when the lookup fails, the row keeps its label.
+     * because no lookup of its profile has succeeded, so a screen showing that contact does not wait behind bulk
+     * reads. When that lookup fails, it waits for the background refresh of [loadContacts] to finish looking the
+     * contact up. It returns at once for any other row; [isContactProfilePending] tells whether every lookup failed.
      */
     suspend fun resolvePendingContactProfile(publicKey: String) {
         val owner = _publicKey.value ?: return
-        val contact = synchronized(contactsLock) {
-            contactProfileRefresh?.labelOnlyContact(owner, publicKey.ensurePubkyPrefix())
-                ?.takeIf { it.profile in _contacts.value }
-        } ?: return
-        refreshContactProfile(owner, contact, PaykitReadLane.Interactive)
+        val prefixedKey = publicKey.ensurePubkyPrefix()
+        val contact = synchronized(contactsLock) { pendingContact(owner, prefixedKey) } ?: return
+        if (refreshContactProfile(owner, contact, PaykitReadLane.Interactive)) return
+        while (true) {
+            val refresh = synchronized(contactsLock) {
+                contactProfileRefresh?.takeIf {
+                    pendingContact(owner, prefixedKey) != null && it.isLookingUp(prefixedKey)
+                }
+            } ?: return
+            refresh.awaitLookup(prefixedKey)
+        }
+    }
+
+    /**
+     * Whether a saved contact's row still shows only its label because no lookup of its profile has succeeded. An
+     * edit made from such a row must not be saved, since it would replace the avatar, bio and links it never loaded.
+     */
+    fun isContactProfilePending(publicKey: String): Boolean {
+        val owner = _publicKey.value ?: return false
+        return synchronized(contactsLock) { pendingContact(owner, publicKey.ensurePubkyPrefix()) != null }
     }
 
     suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
@@ -1470,13 +1511,9 @@ class PubkyRepo @Inject constructor(
 
     private fun refreshContactProfiles(owner: String, contacts: List<SavedContact>) {
         if (contacts.isEmpty()) return
-        val refresh = ContactProfileRefresh(
-            owner = owner,
-            contacts = contacts,
-            job = scope.launch(start = CoroutineStart.LAZY) {
-                contacts.forEach { launch { refreshContactProfile(owner, it, PaykitReadLane.Bulk) } }
-            },
-        )
+        val refresh = ContactProfileRefresh(owner, contacts, scope) {
+            refreshContactProfile(owner, it, PaykitReadLane.Bulk)
+        }
         val replaced = synchronized(contactsLock) {
             val active = contactProfileRefresh
             if (_publicKey.value != owner || active?.covers(refresh) == true) {
@@ -1490,21 +1527,27 @@ class PubkyRepo @Inject constructor(
         refresh.job.start()
     }
 
-    private suspend fun refreshContactProfile(owner: String, contact: SavedContact, lane: PaykitReadLane) {
+    private suspend fun refreshContactProfile(owner: String, contact: SavedContact, lane: PaykitReadLane): Boolean {
         val publicKey = contact.profile.publicKey
         val resolved = resolveContactProfile(publicKey, retry = false, lane = lane)
             .onFailure { Logger.warn("Failed to resolve contact '${redacted(publicKey)}'", it, context = TAG) }
-            .getOrNull() ?: return
-        val refreshed = resolved.withNameFallback(contact.label)
+            .getOrElse { return false }
         synchronized(contactsLock) {
-            if (_publicKey.value != owner) return
+            if (_publicKey.value != owner) return false
+            contactProfileRefresh?.markLoaded(owner, contact)
+            if (resolved == null) return true
             cacheSessionContactProfiles(owner, listOf(resolved))
-            if (contact.profile !in _contacts.value) return
+            if (contact.profile !in _contacts.value) return true
+            val refreshed = resolved.withNameFallback(contact.label)
             _contacts.update { current ->
                 current.map { if (it == contact.profile) refreshed else it }.sortedBy { it.name.lowercase() }
             }
         }
+        return true
     }
+
+    private fun pendingContact(owner: String, publicKey: String): SavedContact? =
+        contactProfileRefresh?.unloadedContact(owner, publicKey)?.takeIf { it.profile in _contacts.value }
 
     private fun sessionContactProfile(owner: String, publicKey: String): PubkyProfile? = synchronized(contactsLock) {
         sessionContactProfiles[publicKey].takeIf { sessionContactProfilesOwner == owner }
