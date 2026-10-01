@@ -1395,6 +1395,7 @@ private fun NavGraphBuilder.contacts(
         PaykitRouteGuard(settingsViewModel, navController) {
             val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
             val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+            val scope = rememberCoroutineScope()
             ContactsIntroScreen(
                 onContinue = {
                     settingsViewModel.setHasSeenContactsIntro(true)
@@ -1403,8 +1404,12 @@ private fun NavGraphBuilder.contacts(
                             Routes.Contacts(showAddContactSheet = true)
                         ) { popUpTo(Routes.Home) }
 
-                        hasSeenProfileIntro -> navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
-                        else -> navController.navigateTo(Routes.ProfileIntro) { popUpTo(Routes.Home) }
+                        else -> scope.launch {
+                            navController.navigateToProfile(
+                                settingsViewModel.pubkyIdentityExists,
+                                hasSeenProfileIntro,
+                            ) { popUpTo(Routes.Home) }
+                        }
                     }
                 },
                 onBackClick = { navController.popBackStack() },
@@ -2056,12 +2061,13 @@ suspend fun NavController.navigateToProfile(
     identityExists: Flow<Boolean?>,
     hasSeenIntro: Boolean,
     onBeforeNavigate: (Routes.DeepLinkable) -> Unit = {},
+    builder: NavOptionsBuilder.() -> Unit = {},
 ) {
     val origin = currentBackStackEntry
     val destination = requireNotNull(profileDestination(identityExists.filterNotNull().first(), hasSeenIntro))
     if (currentBackStackEntry != origin) return
     onBeforeNavigate(destination)
-    navigateTo(destination)
+    navigateTo(destination, builder)
 }
 
 fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)

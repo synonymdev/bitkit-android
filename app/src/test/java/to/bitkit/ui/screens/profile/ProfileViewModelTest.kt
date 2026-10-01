@@ -1,9 +1,11 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
@@ -32,6 +34,57 @@ class ProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `disconnect finishes private cleanup after the screen is closed`() = test {
+        val sut = createSut()
+        val forget = CompletableDeferred<Result<Boolean>>()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).doSuspendableAnswer { forget.await() }
+        advanceUntilIdle()
+
+        sut.signOut()
+        advanceUntilIdle()
+        sut.viewModelScope.cancel()
+        forget.complete(Result.success(true))
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+    }
+
+    @Test
+    fun `disconnect forgets unrestored identity without remote cleanup`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.success(true))
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any()))
+            .thenReturn(Result.failure(AppError("No session")))
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.signOut()
+            advanceUntilIdle()
+            assertEquals(ProfileEffect.SignedOut, awaitItem())
+        }
+
+        assertFalse(sut.uiState.value.isSigningOut)
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo).closeAndClear()
+    }
+
+    @Test
+    fun `failed local disconnect preserves private state`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.failure(AppError("Storage failed")))
+        advanceUntilIdle()
+
+        sut.signOut()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isSigningOut)
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+    }
 
     @Test
     fun `profile retry stays loading until session and profile are available`() = test {
@@ -245,6 +298,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),
     ): ProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
+        whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
         whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(false))

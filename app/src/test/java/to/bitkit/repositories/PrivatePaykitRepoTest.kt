@@ -384,6 +384,22 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `endpoint cleanup cancels scheduled link publication before local state is cleared`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+
+        assertTrue(sut.removePublishedEndpointsForCleanup("test").isSuccess)
+        clearInvocations(pubkyService, paykitSdkService)
+        advanceTimeBy(30_000)
+        runCurrent()
+
+        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(any()) }
+        verifyBlocking(paykitSdkService, never()) { syncPrivatePaymentListsWithReservations(any(), any()) }
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `restarting initial link burst with no contacts cancels retries`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
 

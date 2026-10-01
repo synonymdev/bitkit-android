@@ -1222,6 +1222,17 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun forgetUnrestoredIdentity(): Result<Boolean> = withContext(NonCancellable + ioDispatcher) {
+        initializeMutex.withLock {
+            if (_publicKey.value != null) return@withLock Result.success(false)
+            runSuspendCatching {
+                pubkyService.forgetSessionAccess()
+                clearLocalState()
+                true
+            }.onFailure { Logger.error("Failed to forget unrestored Pubky identity", it, context = TAG) }
+        }
+    }
+
     suspend fun wipeLocalState() = initializeMutex.withLock {
         runSuspendCatching {
             withContext(ioDispatcher) { pubkyService.forgetSessionAccess() }

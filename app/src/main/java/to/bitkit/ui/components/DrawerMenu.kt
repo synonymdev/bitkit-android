@@ -155,14 +155,12 @@ fun DrawerMenu(
                         rootNavController.navigateIfNotCurrent(Routes.Contacts())
                     }
 
-                    hasSeenProfileIntro -> {
-                        onBeforeNavigate(Routes.PubkyChoice)
-                        rootNavController.navigateIfNotCurrent(Routes.PubkyChoice)
-                    }
-
-                    else -> {
-                        onBeforeNavigate(Routes.ProfileIntro)
-                        rootNavController.navigateIfNotCurrent(Routes.ProfileIntro)
+                    else -> scope.launch {
+                        rootNavController.navigateToProfile(
+                            profileIdentityExists,
+                            hasSeenProfileIntro,
+                            onBeforeNavigate,
+                        )
                     }
                 }
             },

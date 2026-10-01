@@ -904,6 +904,54 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forgetUnrestoredIdentity clears an expired imported grant without remote calls`() = test {
+        sut.awaitInitialization()
+        var session: String? = "expired_session"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        whenever(keychain.delete(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session = null }
+        whenever(pubkyService.importSession("expired_session")).thenAnswer { throw TestAppError("Expired") }
+        sut.initialize()
+        assertTrue(sut.hasIdentity())
+        assertNull(sut.publicKey.value)
+        clearInvocations(pubkyService, pubkyStore)
+
+        assertEquals(true, sut.forgetUnrestoredIdentity().getOrThrow())
+
+        assertFalse(sut.hasIdentity())
+        assertNull(sut.profile.value)
+        assertTrue(sut.contacts.value.isEmpty())
+        verify(pubkyService).forgetSessionAccess()
+        verify(pubkyService, never()).signOut()
+        verify(pubkyService, never()).removeBitkitPaymentEndpoints()
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyStore).reset()
+    }
+
+    @Test
+    fun `forgetUnrestoredIdentity preserves identity restored while waiting for auth lock`() = test {
+        sut.awaitInitialization()
+        val importStarted = CompletableDeferred<Unit>()
+        val finishImport = CompletableDeferred<String>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer {
+            importStarted.complete(Unit)
+            finishImport.await()
+        }
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+        val initialize = async { sut.initialize() }
+        importStarted.await()
+        val disconnect = async(start = CoroutineStart.UNDISPATCHED) { sut.forgetUnrestoredIdentity() }
+        assertFalse(disconnect.isCompleted)
+        finishImport.complete(VALID_SELF_KEY)
+        initialize.await()
+
+        assertEquals(false, disconnect.await().getOrThrow())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verify(pubkyService, never()).forgetSessionAccess()
+        verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
+    }
+
+    @Test
     fun `signOut should preserve local state when grant revocation fails`() = test {
         authenticateForTesting()
         settingsFlow.value = SettingsData(

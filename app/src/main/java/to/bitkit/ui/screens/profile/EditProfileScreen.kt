@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.profile
 
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,7 +25,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -112,6 +112,8 @@ private fun Content(
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
 ) {
+    BackHandler(enabled = uiState.isSaving) {}
+
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { onAvatarSelected(it) } }
@@ -132,8 +134,8 @@ private fun Content(
     val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__edit_nav_title),
-            onBackClick = onBackClick,
-            actions = { DrawerNavIcon() },
+            onBackClick = { if (!uiState.isSaving) onBackClick() },
+            actions = { if (!uiState.isSaving) DrawerNavIcon() },
             modifier = modifier,
         )
     }
@@ -165,25 +167,18 @@ private fun Content(
                 onCancel = onBackClick,
                 isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
                 topBar = topBar,
+                isSaving = uiState.isSaving,
                 avatarContent = {
                     AvatarSection(
                         imageUrl = uiState.imageUrl,
                         newAvatarUri = uiState.newAvatarUri,
                         onClick = launchPhotoPicker,
+                        enabled = !uiState.isSaving,
                     )
                 },
                 onDelete = onDelete,
                 deleteLabel = stringResource(R.string.profile__delete_profile),
             )
-        }
-    }
-
-    if (uiState.isSaving) {
-        Dialog(
-            onDismissRequest = {},
-            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-        ) {
-            GradientCircularProgressIndicator(modifier = Modifier.size(32.dp).testTag("ProfileSaving"))
         }
     }
 
@@ -233,6 +228,7 @@ private fun AvatarSection(
     imageUrl: String?,
     newAvatarUri: Uri?,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -241,7 +237,7 @@ private fun AvatarSection(
             .clip(CircleShape)
             .background(Colors.Gray6)
             .testTag("EditProfileAvatar")
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
     ) {
         when {
             newAvatarUri != null -> AsyncImage(

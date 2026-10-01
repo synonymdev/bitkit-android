@@ -78,6 +78,7 @@ fun ProfileEditForm(
     isSaveEnabled: Boolean,
     topBar: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
+    isSaving: Boolean = false,
     avatarContent: @Composable () -> Unit = {},
     publicKeyLabel: String? = null,
     bioPlaceholder: String? = null,
@@ -113,6 +114,7 @@ fun ProfileEditForm(
                 publicKeyLabel = resolvedPublicKeyLabel,
                 avatarContent = avatarContent,
                 nameTestTag = "ProfileEditName",
+                enabled = !isSaving,
             )
             VerticalSpacer(16.dp)
 
@@ -123,6 +125,7 @@ fun ProfileEditForm(
                 HorizontalDivider()
                 FieldLabel(text = stringResource(R.string.profile__edit_bio)) {
                     TextInput(
+                        enabled = !isSaving,
                         value = bio,
                         onValueChange = { onBioChange(it.take(BIO_MAX_LENGTH)) },
                         placeholder = resolvedBioPlaceholder,
@@ -138,6 +141,7 @@ fun ProfileEditForm(
                 links.forEachIndexed { index, link ->
                     FieldLabel(text = link.label) {
                         TextInput(
+                            enabled = !isSaving,
                             value = link.url,
                             onValueChange = { onLinkUrlChange(index, it) },
                             placeholder = stringResource(R.string.profile__add_link_url_placeholder),
@@ -145,6 +149,7 @@ fun ProfileEditForm(
                             trailingIcon = {
                                 IconButton(
                                     onClick = { onRemoveLink(index) },
+                                    enabled = !isSaving,
                                     modifier = Modifier.testTag("ProfileEditLinkRemove_$index")
                                 ) {
                                     Icon(
@@ -163,6 +168,7 @@ fun ProfileEditForm(
                 }
                 PrimaryButton(
                     text = stringResource(R.string.profile__add_link),
+                    enabled = !isSaving,
                     onClick = {
                         focusManager.clearFocus(force = true)
                         keyboardController?.hide()
@@ -191,7 +197,7 @@ fun ProfileEditForm(
                             tags.forEachIndexed { index, tag ->
                                 TagButton(
                                     text = tag,
-                                    onClick = { onRemoveTag(index) },
+                                    onClick = if (isSaving) null else ({ onRemoveTag(index) }),
                                     displayIconClose = true,
                                 )
                             }
@@ -199,6 +205,7 @@ fun ProfileEditForm(
                     }
                     PrimaryButton(
                         text = stringResource(R.string.profile__add_tag),
+                        enabled = !isSaving,
                         onClick = {
                             focusManager.clearFocus(force = true)
                             keyboardController?.hide()
@@ -231,6 +238,7 @@ fun ProfileEditForm(
                     FieldLabel(text = stringResource(R.string.profile__edit_delete_section)) {
                         PrimaryButton(
                             text = deleteLabel,
+                            isLoading = isSaving,
                             onClick = onDelete,
                             size = ButtonSize.Small,
                             fullWidth = false,
@@ -269,6 +277,7 @@ fun ProfileEditForm(
         ) {
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
+                enabled = !isSaving,
                 onClick = onCancel,
                 hazeState = hazeState,
                 modifier = Modifier
@@ -279,6 +288,7 @@ fun ProfileEditForm(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
                 enabled = isSaveEnabled,
+                isLoading = isSaving,
                 modifier = Modifier
                     .weight(1f)
                     .testTag("ProfileEditSave")
@@ -295,6 +305,7 @@ fun ProfileEditHeader(
     nameTestTag: String,
     modifier: Modifier = Modifier,
     publicKeyLabel: String = stringResource(R.string.profile__your_pubky),
+    enabled: Boolean = true,
     autoFocusName: Boolean = false,
     avatarContent: @Composable () -> Unit = {},
 ) {
@@ -314,6 +325,7 @@ fun ProfileEditHeader(
         avatarContent()
         VerticalSpacer(16.dp)
         TextInput(
+            enabled = enabled,
             value = name,
             onValueChange = onNameChange,
             placeholder = stringResource(R.string.profile__edit_name_placeholder),

@@ -1,10 +1,12 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
@@ -36,6 +38,57 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `disconnect finishes private cleanup after the screen is closed`() = test {
+        val sut = createSut()
+        val forget = CompletableDeferred<Result<Boolean>>()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).doSuspendableAnswer { forget.await() }
+        advanceUntilIdle()
+
+        sut.disconnectProfile()
+        advanceUntilIdle()
+        sut.viewModelScope.cancel()
+        forget.complete(Result.success(true))
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+    }
+
+    @Test
+    fun `disconnect forgets unrestored identity without remote cleanup`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.success(true))
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any()))
+            .thenReturn(Result.failure(AppError("No session")))
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.disconnectProfile()
+            advanceUntilIdle()
+            assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
+        }
+
+        assertFalse(sut.uiState.value.isSaving)
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo).closeAndClear()
+    }
+
+    @Test
+    fun `failed local disconnect preserves private state`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.failure(AppError("Storage failed")))
+        advanceUntilIdle()
+
+        sut.disconnectProfile()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isSaving)
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+    }
 
     @Test
     fun `pending deletion blocks duplicate actions and clears progress on failure`() = test {
@@ -232,6 +285,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     private fun createSut(): EditProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
+        whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }

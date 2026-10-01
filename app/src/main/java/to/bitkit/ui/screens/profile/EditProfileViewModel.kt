@@ -10,13 +10,16 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -230,33 +233,27 @@ class EditProfileViewModel @Inject constructor(
         viewModelScope.launch {
             if (_uiState.value.isSaving) return@launch
             _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
-            val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-            if (cleanupResult.isFailure) {
-                val error = requireNotNull(cleanupResult.exceptionOrNull()) {
-                    "Private Paykit cleanup failed without an error"
+            try {
+                val result = runSuspendCatching {
+                    withContext(NonCancellable) {
+                        if (!pubkyRepo.forgetUnrestoredIdentity().getOrThrow()) {
+                            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
+                            pubkyRepo.signOut().getOrThrow()
+                        }
+                        privatePaykitRepo.closeAndClear()
+                    }
                 }
+                if (result.isSuccess) {
+                    _effects.emit(EditProfileEffect.DisconnectSuccess)
+                } else {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__disconnect_error),
+                        description = result.exceptionOrNull()?.message,
+                    )
+                }
+            } finally {
                 _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__disconnect_error),
-                    description = error.message,
-                )
-                return@launch
-            }
-
-            val result = pubkyRepo.signOut()
-            if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear()
-                _uiState.update { it.copy(isSaving = false) }
-                _effects.emit(EditProfileEffect.DisconnectSuccess)
-            } else {
-                val error = requireNotNull(result.exceptionOrNull()) { "Disconnect failed without an error" }
-                _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__disconnect_error),
-                    description = error.message,
-                )
             }
         }
     }

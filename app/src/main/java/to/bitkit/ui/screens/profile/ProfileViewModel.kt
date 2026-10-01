@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +20,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
@@ -129,35 +132,31 @@ class ProfileViewModel @Inject constructor(
 
     fun signOut() {
         viewModelScope.launch {
+            if (_isSigningOut.value) return@launch
             _isSigningOut.update { true }
             _showSignOutDialog.update { false }
-            val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-            if (cleanupResult.isFailure) {
-                val error = requireNotNull(cleanupResult.exceptionOrNull()) {
-                    "Private Paykit cleanup failed without an error"
+            try {
+                val result = runSuspendCatching {
+                    withContext(NonCancellable) {
+                        if (!pubkyRepo.forgetUnrestoredIdentity().getOrThrow()) {
+                            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
+                            pubkyRepo.signOut().getOrThrow()
+                        }
+                        privatePaykitRepo.closeAndClear()
+                    }
                 }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__sign_out_title),
-                    description = error.message,
-                )
+                if (result.isSuccess) {
+                    _effects.emit(ProfileEffect.SignedOut)
+                } else {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__sign_out_title),
+                        description = result.exceptionOrNull()?.message,
+                    )
+                }
+            } finally {
                 _isSigningOut.update { false }
-                return@launch
             }
-
-            val result = pubkyRepo.signOut()
-            if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear()
-                _effects.emit(ProfileEffect.SignedOut)
-            } else {
-                val error = requireNotNull(result.exceptionOrNull()) { "Sign out failed without an error" }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__sign_out_title),
-                    description = error.message,
-                )
-            }
-            _isSigningOut.update { false }
         }
     }
 

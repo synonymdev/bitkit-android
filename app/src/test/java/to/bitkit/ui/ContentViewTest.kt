@@ -79,6 +79,47 @@ class ContentViewTest {
     }
 
     @Test
+    fun `contacts intro fallback awaits identity and removes intro only when still current`() = runTest {
+        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = Routes.Home) {
+                composable<Routes.Home> {}
+                composable<Routes.ContactsIntro> {}
+                composable<Routes.Profile> {}
+                composable<Routes.ProfileIntro> {}
+                composable<Routes.PubkyChoice> {}
+            }
+        }
+        for ((savedIdentity, hasSeenIntro, expected) in listOf(
+            Triple(true, false, Routes.Profile),
+            Triple(true, true, Routes.Profile),
+            Triple(false, false, Routes.ProfileIntro),
+            Triple(false, true, Routes.PubkyChoice),
+        )) {
+            navController.navigateTo(Routes.ContactsIntro)
+            val identity = MutableStateFlow<Boolean?>(null)
+            repeat(2) {
+                launch { navController.navigateToProfile(identity, hasSeenIntro) { popUpTo(Routes.Home) } }
+            }
+            runCurrent()
+            assertTrue(navController.currentDestination?.hasRoute<Routes.ContactsIntro>() == true)
+            identity.value = savedIdentity
+            runCurrent()
+            assertTrue(navController.currentDestination?.hasRoute(expected::class) == true)
+            navController.popBackStack()
+            assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
+        }
+        navController.navigateTo(Routes.ContactsIntro)
+        val identity = MutableStateFlow<Boolean?>(null)
+        launch { navController.navigateToProfile(identity, true) { popUpTo(Routes.Home) } }
+        runCurrent()
+        navController.popBackStack()
+        identity.value = true
+        runCurrent()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
+    }
+
+    @Test
     fun `wallet initialization waits for successful startup after each failure`() {
         val states = listOf(
             NodeLifecycleState.Initializing,
