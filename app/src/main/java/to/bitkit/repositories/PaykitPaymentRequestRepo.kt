@@ -853,7 +853,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     current.paymentRequestId,
                 )
                 processPendingMessages()
-                // Acceptance is stored on real time, so a period made due by the offset is not dropped when it turns Off.
+                // Stored on real time, so a period the offset made due is not dropped when it turns Off.
                 val acceptanceDate = clock.now()
                 subscriptionAcceptedAt = subscriptionAcceptedAt + (current.id to acceptanceDate)
                 persistSubscriptionState(identity)
