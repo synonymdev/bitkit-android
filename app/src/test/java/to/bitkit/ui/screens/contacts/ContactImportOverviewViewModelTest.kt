@@ -53,36 +53,26 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an import started from select completes the overview once it succeeds`() = test {
+    fun `an import started from select completes the overview only once it succeeds`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
-        stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
-        val sut = createSut()
-        advanceUntilIdle()
-        isImportingContacts.value = true
-        advanceUntilIdle()
+        listOf("succeeds" to true, "fails" to false).forEach { (case, succeeds) ->
+            isImportingContacts.value = false
+            stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
+            val sut = createSut()
+            advanceUntilIdle()
+            isImportingContacts.value = true
+            advanceUntilIdle()
 
-        pendingImportProfile.value = null
-        pendingImportContacts.value = emptyList()
-        isImportingContacts.value = false
-        advanceUntilIdle()
+            if (succeeds) {
+                pendingImportProfile.value = null
+                pendingImportContacts.value = emptyList()
+            }
+            isImportingContacts.value = false
+            advanceUntilIdle()
 
-        assertTrue(sut.uiState.value.shouldRedirectToPayContacts)
-    }
-
-    @Test
-    fun `an import started from select that fails leaves the overview open`() = test {
-        val contacts = listOf(createProfile(publicKey = "pubkyalice"))
-        stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
-        val sut = createSut()
-        advanceUntilIdle()
-        isImportingContacts.value = true
-        advanceUntilIdle()
-
-        isImportingContacts.value = false
-        advanceUntilIdle()
-
-        assertFalse(sut.uiState.value.isImporting)
-        assertFalse(sut.uiState.value.shouldRedirectToPayContacts)
+            assertFalse(sut.uiState.value.isImporting, case)
+            assertEquals(succeeds, sut.uiState.value.shouldRedirectToPayContacts, case)
+        }
     }
 
     @Test

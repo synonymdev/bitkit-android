@@ -73,18 +73,25 @@ class EditContactViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `another contact's profile update keeps unsaved edits`() = test {
-        val other = createContact().copy(publicKey = "pubkyother", name = "Bob")
-        val contacts = MutableStateFlow(listOf(createContact(), other))
-        whenever(pubkyRepo.contacts).thenReturn(contacts)
-        val sut = createSut()
-        advanceUntilIdle()
+    fun `a profile update of this or another contact keeps unsaved edits`() = test {
+        val alice = createContact()
+        val bob = createContact().copy(publicKey = "pubkyother", name = "Bob")
+        listOf(
+            Triple("same contact", listOf(alice), listOf(alice.copy(name = "Alice Resolved", bio = "Updated"))),
+            Triple("another contact", listOf(alice, bob), listOf(alice, bob.copy(name = "Bob Resolved"))),
+        ).forEach { (case, initial, updated) ->
+            val contacts = MutableStateFlow(initial)
+            whenever(pubkyRepo.contacts).thenReturn(contacts)
+            val sut = createSut()
+            advanceUntilIdle()
 
-        sut.onNameChange("Alice Edited")
-        contacts.value = listOf(createContact(), other.copy(name = "Bob Resolved"))
-        advanceUntilIdle()
+            sut.onNameChange("Alice Edited")
+            contacts.value = updated
+            advanceUntilIdle()
 
-        assertEquals("Alice Edited", sut.uiState.value.name)
+            assertEquals("Alice Edited", sut.uiState.value.name, case)
+            assertEquals("Hello", sut.uiState.value.bio, case)
+        }
     }
 
     @Test
@@ -128,21 +135,6 @@ class EditContactViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(pubkyRepo).updateContact(TEST_PUBLIC_KEY, "Alice", "Met at a meetup", null, emptyList(), emptyList())
-    }
-
-    @Test
-    fun `a profile update of the same contact keeps unsaved edits`() = test {
-        val contacts = MutableStateFlow(listOf(createContact()))
-        whenever(pubkyRepo.contacts).thenReturn(contacts)
-        val sut = createSut()
-        advanceUntilIdle()
-
-        sut.onNameChange("Alice Edited")
-        contacts.value = listOf(createContact().copy(name = "Alice Resolved", bio = "Updated"))
-        advanceUntilIdle()
-
-        assertEquals("Alice Edited", sut.uiState.value.name)
-        assertEquals("Hello", sut.uiState.value.bio)
     }
 
     @Test
