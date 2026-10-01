@@ -8246,6 +8246,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `private Paykit sync ignores contact row updates that keep the same keys`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        val contact = PubkyProfile.placeholder("pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg")
+        pubkyPublicKey.value = testPublicKey
+        pubkyContacts.value = listOf(contact)
+        pubkyContactsLoadVersion.value = 1L
+        advanceUntilIdle()
+        verify(privatePaykitRepo).prepareSavedContacts(setOf(contact.publicKey), false)
+        clearInvocations(privatePaykitRepo)
+
+        pubkyContacts.value = listOf(contact.copy(name = "Bob", imageUrl = "pubky://avatar"))
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
+        verify(privatePaykitRepo, never()).startInitialLinkBurst(any(), any())
+    }
+
+    @Test
     fun `private Paykit removes stale contact without duplicate load version cleanup`() = test {
         enablePaykitUi()
         advanceUntilIdle()

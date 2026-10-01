@@ -2797,6 +2797,119 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `loadContacts publishes saved records before their profile lookups finish`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(
+                createContactRecord(VALID_CONTACT_KEY_A, label = "Saved label"),
+                createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("Bob")),
+            ),
+        )
+        val lookup = CompletableDeferred<ContactProfileResolution?>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { lookup.await() }
+        val loadVersion = sut.contactsLoadVersion.value
+        val completionVersion = sut.contactsLoadCompletionVersion.value
+
+        sut.loadContacts()
+
+        assertEquals(listOf("Bob", "Saved label"), sut.contacts.value.map { it.name })
+        assertFalse(sut.isLoadingContacts.value)
+        assertEquals(loadVersion + 1, sut.contactsLoadVersion.value)
+        assertEquals(completionVersion + 1, sut.contactsLoadCompletionVersion.value)
+
+        lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+
+        assertEquals(listOf("Alice", "Bob"), sut.contacts.value.map { it.name })
+        assertEquals(listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B), sut.contacts.value.map { it.publicKey })
+        assertEquals(loadVersion + 1, sut.contactsLoadVersion.value)
+        assertEquals(completionVersion + 1, sut.contactsLoadCompletionVersion.value)
+        verify(pubkyService, never()).resolveContactProfile(eq(VALID_CONTACT_KEY_B), any(), any())
+    }
+
+    @Test
+    fun `loadContacts shows a profile resolved earlier in the session while it refreshes`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        assertTrue(sut.prepareImport().isSuccess)
+        val lookup = CompletableDeferred<ContactProfileResolution?>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { lookup.await() }
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))
+
+        sut.loadContacts()
+
+        assertEquals(listOf("Alice"), sut.contacts.value.map { it.name })
+        lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice Renamed")))
+        assertEquals(listOf("Alice Renamed"), sut.contacts.value.map { it.name })
+    }
+
+    @Test
+    fun `sign out drops session contact profiles and stops their refresh`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        assertTrue(sut.prepareImport().isSuccess)
+        val lookup = CompletableDeferred<ContactProfileResolution?>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { lookup.await() }
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))
+        sut.loadContacts()
+
+        sut.wipeLocalState()
+        lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        assertTrue(sut.contacts.value.isEmpty())
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        sut.loadContacts()
+
+        assertEquals(listOf(PubkyProfile.placeholder(VALID_CONTACT_KEY_A).name), sut.contacts.value.map { it.name })
+    }
+
+    @Test
+    fun `a contact profile refresh leaves an edited or removed contact alone`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(createContactRecord(VALID_CONTACT_KEY_A), createContactRecord(VALID_CONTACT_KEY_B)),
+        )
+        val lookups = mapOf(VALID_CONTACT_KEY_A to CompletableDeferred<Unit>(), VALID_CONTACT_KEY_B to CompletableDeferred())
+        lookups.forEach { (key, gate) ->
+            whenever(pubkyService.resolveContactProfile(key, true, PaykitReadLane.Bulk)).doSuspendableAnswer {
+                gate.await()
+                createResolution(key, paykitProfile = createPaykitProfile("Resolved"))
+            }
+        }
+        sut.loadContacts()
+
+        assertTrue(sut.updateContact(VALID_CONTACT_KEY_A, "Edited", "", null, emptyList(), emptyList()).isSuccess)
+        assertTrue(sut.removeContact(VALID_CONTACT_KEY_B).isSuccess)
+        lookups.values.forEach { it.complete(Unit) }
+
+        assertEquals(listOf("Edited"), sut.contacts.value.map { it.name })
+    }
+
+    @Test
+    fun `repeated contact loads share one background profile refresh`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))
+        val lookup = CompletableDeferred<ContactProfileResolution?>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { lookup.await() }
+
+        sut.loadContacts()
+        sut.loadContacts()
+        lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+
+        assertEquals(listOf("Alice"), sut.contacts.value.map { it.name })
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
+    }
+
+    @Test
     fun `loadContacts should treat empty SDK contact records as empty`() = test {
         authenticateForTesting()
         whenever(pubkyService.contactRecords()).thenReturn(emptyList())

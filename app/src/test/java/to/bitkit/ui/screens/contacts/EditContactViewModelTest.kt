@@ -69,6 +69,21 @@ class EditContactViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `another contact's profile update keeps unsaved edits`() = test {
+        val other = createContact().copy(publicKey = "pubkyother", name = "Bob")
+        val contacts = MutableStateFlow(listOf(createContact(), other))
+        whenever(pubkyRepo.contacts).thenReturn(contacts)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.onNameChange("Alice Edited")
+        contacts.value = listOf(createContact(), other.copy(name = "Bob Resolved"))
+        advanceUntilIdle()
+
+        assertEquals("Alice Edited", sut.uiState.value.name)
+    }
+
+    @Test
     fun `contact still missing after refresh produces missing state`() = test {
         val contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
         whenever(pubkyRepo.contacts).thenReturn(contacts)

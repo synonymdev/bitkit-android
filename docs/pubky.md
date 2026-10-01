@@ -73,12 +73,15 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 
 ### Contacts
 
-- `loadContacts()` reads saved Paykit contact records, then concurrently resolves any missing profiles via `resolveContactProfile()`
+- `loadContacts()` reads the saved Paykit contact records and publishes them at once, without waiting for any profile lookup. Each row uses, in order, the user's profile override, the record's stored Paykit profile, a profile resolved earlier in this session, then the record's label. A record with neither an override nor a stored profile is then refreshed in the background on the bulk read lane via `resolveContactProfile()`, and its row updates when the lookup finishes. A row the user edited or removed meanwhile is left alone, and repeated loads share one refresh while it covers the same contacts
+- `isLoadingContacts`, `contactsLoadVersion` and `contactsLoadCompletionVersion` describe the saved records only: a load counts as finished once they are published. Background row updates change neither the version counters nor the set of contact keys, so the private Paykit sync observer in `AppViewModel`, which keys on the contact keys and whether contacts have loaded, does not run again for them
+- The session profiles are kept in memory per identity. `prepareImport()`, `importContacts()`, `addContact()` and background refreshes add to them; sign-out, wipe, profile deletion, backup restore and a switch to another identity clear them and stop a running refresh
+- `ContactsScreen` shows its full-screen spinner only until the saved records first load for the current identity
 - Contact keys from the FFI may lack the `pubky` prefix; `ensurePubkyPrefix()` normalizes them before profile resolution
 - `prepareImport()` discovers followed keys via `fetchPubkyFollows()`, then resolves each profile once
 - `importContacts()` saves the profiles `prepareImport()` resolved without resolving them again, and discovers each one's receiver paths. A follow `prepareImport()` could not resolve is saved as a placeholder with only the wallet receiver path: private sync (`PrivatePaykitRepo`) discovers a saved contact's receiver paths and merges them into the record before it uses them, and nothing else uses them for payments. Removing a contact blocks the record's receiver paths and those of its linked peers, so a placeholder private sync never reached blocks only the wallet path. Only a contact whose save fails is left out
 - The import runs in `PubkyRepo`'s scope, so leaving the import screens does not stop it half way, and it stops saving once the identity changes. `isImportingContacts` is true while an import runs, and the import screens disable Select, Import All and Continue meanwhile
-- If a contact profile fetch fails, a `PubkyProfile.placeholder()` is used to ensure the contact still appears in the list with a truncated public key
+- A contact without a resolved profile still appears in the list under its label, or its truncated public key when it has none
 - `fetchContactProfile()` fetches a single contact's profile on demand (used by the detail screen)
 
 ## Contacts Flow

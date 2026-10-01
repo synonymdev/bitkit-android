@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import coil3.ImageLoader
 import com.synonym.paykit.ContactProfileResolution
-import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -14,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -106,6 +107,9 @@ class PubkyRepo @Inject constructor(
     private val loadContactsMutex = Mutex()
     private val contactsLock = Any()
     private var contactsRevision = 0L
+    private val sessionContactProfiles = mutableMapOf<String, PubkyProfile>()
+    private var sessionContactProfilesOwner: String? = null
+    private var contactProfileRefresh: ContactProfileRefresh? = null
     private val adoptedSourceCheckMutex = Mutex()
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
@@ -174,6 +178,17 @@ class PubkyRepo @Inject constructor(
         data object NoSession : InitResult
         data class Restored(val publicKey: String) : InitResult
         data object RestorationFailed : InitResult
+    }
+
+    private data class SavedContact(
+        val profile: PubkyProfile,
+        val label: String?,
+        val needsRefresh: Boolean,
+    )
+
+    private class ContactProfileRefresh(val owner: String, val keys: Set<String>, val job: Job) {
+        fun covers(owner: String, keys: Set<String>): Boolean =
+            job.isActive && this.owner == owner && this.keys.containsAll(keys)
     }
 
     private val initializationReady = CompletableDeferred<Unit>()
@@ -480,6 +495,7 @@ class PubkyRepo @Inject constructor(
         _contactsLoadVersion.update { 0L }
         setProfile(null)
         _contacts.update { emptyList() }
+        clearSessionContactProfiles()
         clearPendingImport()
     }
 
@@ -834,6 +850,11 @@ class PubkyRepo @Inject constructor(
 
     // region Contact management
 
+    /**
+     * Publishes the saved contact records without waiting for any profile lookup. A record without a profile override
+     * or a stored Paykit profile shows the profile resolved earlier in this session, else its label, and is then
+     * refreshed in the background on the bulk read lane, its row updating once its lookup finishes.
+     */
     suspend fun loadContacts() {
         val pk = _publicKey.value ?: return
         loadContactsMutex.lock()
@@ -844,6 +865,7 @@ class PubkyRepo @Inject constructor(
 
         _isLoadingContacts.update { true }
         var shouldMarkLoadCompleted = false
+        var contactsToRefresh = emptyList<SavedContact>()
         try {
             var reload: Boolean
             do {
@@ -853,26 +875,9 @@ class PubkyRepo @Inject constructor(
                     withContext(ioDispatcher) {
                         val records = pubkyService.contactRecords()
                         val overrides = pubkyStore.data.first().contactProfileOverrides
-
-                        coroutineScope {
-                            records.map { record ->
-                                async {
-                                    runSuspendCatching {
-                                        contactProfile(record.publicKey, record.label, record.profile, overrides)
-                                    }.onFailure {
-                                        Logger.warn(
-                                            "Failed to load contact '${redacted(record.publicKey)}'",
-                                            it,
-                                            context = TAG,
-                                        )
-                                    }.getOrElse {
-                                        PubkyProfile.placeholder(record.publicKey.ensurePubkyPrefix())
-                                    }
-                                }
-                            }.awaitAll().sortedBy { it.name.lowercase() }
-                        }
+                        records.map { savedContact(it, overrides) }
                     }
-                }.onSuccess { loadedContacts ->
+                }.onSuccess { savedContacts ->
                     if (_publicKey.value != pk) {
                         Logger.debug("Skipped stale contacts load for '${redacted(pk)}'", context = TAG)
                         return@onSuccess
@@ -882,7 +887,9 @@ class PubkyRepo @Inject constructor(
                             reload = true
                             return@onSuccess
                         }
-                        _contacts.update { loadedContacts }
+                        val loadedContacts = savedContacts.map { it.withSessionProfile(pk) }
+                        _contacts.update { loadedContacts.map { it.profile }.sortedBy { it.name.lowercase() } }
+                        contactsToRefresh = loadedContacts.filter { it.needsRefresh }
                     }
                     markContactsLoaded()
                     shouldMarkLoadCompleted = true
@@ -896,6 +903,7 @@ class PubkyRepo @Inject constructor(
             loadContactsMutex.unlock()
             if (shouldMarkLoadCompleted && _publicKey.value == pk) markContactsLoadCompleted()
         }
+        refreshContactProfiles(pk, contactsToRefresh)
     }
 
     suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
@@ -930,6 +938,7 @@ class PubkyRepo @Inject constructor(
                 relevantReceiverPaths(prefixedKey),
                 restorePrivateConnection = true,
             )
+            _publicKey.value?.let { cacheSessionContactProfiles(it, listOf(profile)) }
             updateContacts { current ->
                 (current.filter { it.publicKey != prefixedKey } + profile)
                     .sortedBy { it.name.lowercase() }
@@ -1022,6 +1031,7 @@ class PubkyRepo @Inject constructor(
             }
             synchronized(contactsLock) {
                 check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
+                cacheSessionContactProfiles(owner, imported.filter { it.publicKey !in unresolvedKeys })
                 updateContacts { current ->
                     val existing = current.map { it.publicKey }.toSet()
                     (current + imported.filter { it.publicKey !in existing })
@@ -1074,6 +1084,7 @@ class PubkyRepo @Inject constructor(
                 ?: resolveContactProfile(pk, retry = true).getOrNull()
             check(_publicKey.value == pk) { "Pubky identity changed while preparing import" }
 
+            cacheSessionContactProfiles(pk, resolvedFollows.mapNotNull { it.second })
             _pendingImportProfile.update { ownProfile }
             _pendingImportContacts.update { contacts }
             pendingImportUnresolvedKeys.update { unresolvedKeys }
@@ -1352,28 +1363,87 @@ class PubkyRepo @Inject constructor(
             .onFailure { Logger.warn("Failed to clear pubky image disk cache", it, context = TAG) }
     }
 
-    private suspend fun contactProfile(
-        publicKey: String,
-        label: String?,
-        paykitProfile: PaykitProfile?,
-        overrides: Map<String, PubkyProfileData>,
-    ): PubkyProfile {
-        val prefixedKey = publicKey.ensurePubkyPrefix()
+    private fun savedContact(record: ContactRecord, overrides: Map<String, PubkyProfileData>): SavedContact {
+        val prefixedKey = record.publicKey.ensurePubkyPrefix()
         overrides[prefixedKey]?.let {
-            return it.toPubkyProfile(prefixedKey)
+            return SavedContact(it.toPubkyProfile(prefixedKey), record.label, needsRefresh = false)
         }
-        paykitProfile?.let {
-            return PubkyProfile.fromPaykitProfile(prefixedKey, it).withNameFallback(label)
+        record.profile?.let {
+            val profile = PubkyProfile.fromPaykitProfile(prefixedKey, it).withNameFallback(record.label)
+            return SavedContact(profile, record.label, needsRefresh = false)
         }
-        resolveContactProfile(prefixedKey, retry = false, lane = PaykitReadLane.Bulk)
-            .onFailure { Logger.warn("Failed to resolve contact '${redacted(prefixedKey)}'", it, context = TAG) }
-            .getOrNull()
-            ?.let { return it.withNameFallback(label) }
-        return PubkyProfile.forDisplay(
-            publicKey = prefixedKey,
-            name = label,
-            imageUrl = null,
+        val profile = PubkyProfile.forDisplay(publicKey = prefixedKey, name = record.label, imageUrl = null)
+        return SavedContact(profile, record.label, needsRefresh = true)
+    }
+
+    private fun SavedContact.withSessionProfile(owner: String): SavedContact {
+        if (!needsRefresh) return this
+        val cached = sessionContactProfile(owner, profile.publicKey) ?: return this
+        return copy(profile = cached.withNameFallback(label))
+    }
+
+    private fun refreshContactProfiles(owner: String, contacts: List<SavedContact>) {
+        val keys = contacts.mapTo(mutableSetOf()) { it.profile.publicKey }
+        if (keys.isEmpty()) return
+        val refresh = ContactProfileRefresh(
+            owner = owner,
+            keys = keys,
+            job = scope.launch(start = CoroutineStart.LAZY) {
+                contacts.forEach { launch { refreshContactProfile(owner, it) } }
+            },
         )
+        val replaced = synchronized(contactsLock) {
+            val active = contactProfileRefresh
+            if (_publicKey.value != owner || active?.covers(owner, keys) == true) {
+                refresh.job.cancel()
+                return
+            }
+            contactProfileRefresh = refresh
+            active
+        }
+        replaced?.job?.cancel()
+        refresh.job.start()
+    }
+
+    private suspend fun refreshContactProfile(owner: String, contact: SavedContact) {
+        val publicKey = contact.profile.publicKey
+        val resolved = resolveContactProfile(publicKey, retry = false, lane = PaykitReadLane.Bulk)
+            .onFailure { Logger.warn("Failed to resolve contact '${redacted(publicKey)}'", it, context = TAG) }
+            .getOrNull() ?: return
+        val refreshed = resolved.withNameFallback(contact.label)
+        synchronized(contactsLock) {
+            if (_publicKey.value != owner) return
+            cacheSessionContactProfiles(owner, listOf(resolved))
+            if (contact.profile !in _contacts.value) return
+            _contacts.update { current ->
+                current.map { if (it == contact.profile) refreshed else it }.sortedBy { it.name.lowercase() }
+            }
+        }
+    }
+
+    private fun sessionContactProfile(owner: String, publicKey: String): PubkyProfile? = synchronized(contactsLock) {
+        sessionContactProfiles[publicKey].takeIf { sessionContactProfilesOwner == owner }
+    }
+
+    private fun cacheSessionContactProfiles(owner: String, profiles: Collection<PubkyProfile>) {
+        synchronized(contactsLock) {
+            if (_publicKey.value != owner) return
+            if (sessionContactProfilesOwner != owner) {
+                sessionContactProfiles.clear()
+                sessionContactProfilesOwner = owner
+            }
+            profiles.filter { it != PubkyProfile.placeholder(it.publicKey) }
+                .forEach { sessionContactProfiles[it.publicKey] = it }
+        }
+    }
+
+    private fun clearSessionContactProfiles() {
+        synchronized(contactsLock) {
+            contactProfileRefresh?.job?.cancel()
+            contactProfileRefresh = null
+            sessionContactProfiles.clear()
+            sessionContactProfilesOwner = null
+        }
     }
 
     private suspend fun resolveContactProfile(
@@ -1550,6 +1620,7 @@ class PubkyRepo @Inject constructor(
         _publicKey.update { null }
         setProfile(null)
         updateContacts { emptyList() }
+        clearSessionContactProfiles()
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
