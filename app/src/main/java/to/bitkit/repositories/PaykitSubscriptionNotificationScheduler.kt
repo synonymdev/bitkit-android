@@ -89,19 +89,23 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
         val scheduledWork = subscriptions
             .filter {
                 it.isPayer &&
-                    it.isActive(now) &&
                     !it.hasPaymentDeadline &&
                     it.recurrence.unit.isSupported &&
                     acceptedAt(it) != null
             }
             .flatMap { subscription ->
-                val duePeriods = acceptedAt(subscription)
+                // A jump can pass the end of a finite subscription, whose last unpaid period still needs its alert.
+                // Only the latest unpaid period alerts, so a long jump cannot fill every slot with catch-up alerts.
+                val duePeriod = acceptedAt(subscription)
                     ?.takeIf { offsetChanged }
                     ?.let { subscription.recurrence.periodsThrough(now, it) }
-                    ?.filter { workName(payerIdentity, subscription, it) in pendingWorkNames }
-                    .orEmpty()
-                (duePeriods + subscription.recurrence.upcomingPeriodsAfter(now, MAX_NOTIFICATIONS))
-                    .map { subscription to it }
+                    ?.lastOrNull { workName(payerIdentity, subscription, it) in pendingWorkNames }
+                val upcomingPeriods = if (subscription.isActive(now)) {
+                    subscription.recurrence.upcomingPeriodsAfter(now, MAX_NOTIFICATIONS)
+                } else {
+                    emptyList()
+                }
+                (listOfNotNull(duePeriod) + upcomingPeriods).map { subscription to it }
             }
             .sortedBy { it.second.startsAt }
             .take(MAX_NOTIFICATIONS)
