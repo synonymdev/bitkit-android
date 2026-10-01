@@ -934,7 +934,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             Result.success(
                 PublicPaykitPaymentResult.Opened(
                     paymentRequest = bolt11,
-                    privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 8uL),
+                    privatePaymentContext = privatePaymentContext(version = 8uL),
                 ),
             ),
         )
