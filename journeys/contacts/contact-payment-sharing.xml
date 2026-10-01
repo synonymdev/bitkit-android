@@ -1,0 +1,20 @@
+<journey name="contact payment sharing stays disabled">
+  <description>
+    Verifies the contact-payment preference stays off when leaving and returning to Settings.
+    Requires an authenticated disposable Pubky identity with contact payments enabled and a saved,
+    linked contact. Cleanup failure injection is a manual check because network and storage fault
+    injection are not journey capabilities, as documented in README.md. Use only one active
+    install of this wallet.
+  </description>
+  <actions>
+    <action>Open the menu and tap Settings (id "DrawerSettings")</action>
+    <action>Open the General tab (id "Tab-general")</action>
+    <action>Verify the contact payments toggle (id "ContactPaymentsToggle") is on</action>
+    <action>Tap the contact payments toggle (id "ContactPaymentsToggle")</action>
+    <action>Wait for the update to finish and verify the contact payments toggle is off</action>
+    <action>Return to the wallet home screen</action>
+    <action>Open the menu and tap Settings (id "DrawerSettings")</action>
+    <action>Open the General tab (id "Tab-general")</action>
+    <action>Verify the contact payments toggle (id "ContactPaymentsToggle") is still off</action>
+  </actions>
+</journey>
