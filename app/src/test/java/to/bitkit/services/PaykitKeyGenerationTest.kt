@@ -45,7 +45,7 @@ class PaykitKeyGenerationTest {
             whenever(keychain.loadString(storageKey)).thenReturn(null, generation.toString())
             val key = mock<PaykitIdentitySecretKey>()
             val bytes = ByteArray(32) { 1 }
-            val service = PaykitSdkService(mock(), keychain, mock()) { sdk }
+            val service = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { sdk }
 
             mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
                 native.`when`<String> { pubkyPublicKeyFromSecret(any()) }.thenReturn(RING_PUBKY)
@@ -88,7 +88,7 @@ class PaykitKeyGenerationTest {
             mockConstruction(PaykitSdkSessionProvider::class.java) { provider, _ ->
                 whenever(provider.loadLocalSecretKey()).thenReturn(root)
             }.use { providers ->
-                val service = PaykitSdkService(mock(), keychain, mock()) { sdk }
+                val service = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { sdk }
                 val provider = providers.constructed().single()
                 repeat(2) { assertEquals(RING_PUBKY, service.currentPublicKey()) }
                 repeat(2) {

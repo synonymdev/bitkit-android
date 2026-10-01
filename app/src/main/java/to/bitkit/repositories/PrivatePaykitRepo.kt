@@ -1250,7 +1250,6 @@ class PrivatePaykitRepo @Inject constructor(
             if (normalizedKeys.isEmpty()) return@runSuspendCatching
 
             ensureState()
-            publicPaykitRepo.syncPaykitApp(privateSharingEnabled = true).getOrThrow()
             val cleanupStateByPublicKey = normalizedKeys.associateWith(::publishedEndpointCleanupState)
             val preparation = clearPrivatePaymentLists(normalizedKeys)
             val failedPublicKeys = preparation.failedPublicKeys.toMutableSet()
@@ -1282,6 +1281,9 @@ class PrivatePaykitRepo @Inject constructor(
             clearPublishedEndpointCache(normalizedKeys.filterNot { it in failedPublicKeys })
             firstError?.let { throw it }
             publicPaykitRepo.syncPaykitApp().getOrThrow()
+        }.onFailure {
+            runSuspendCatching { settingsStore.update { it.copy(publicPaykitCleanupPending = true) } }
+                .onFailure(it::addSuppressed)
         }
 
     private suspend fun clearPrivatePaymentLists(

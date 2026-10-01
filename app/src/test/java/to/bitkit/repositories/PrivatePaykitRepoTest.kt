@@ -113,6 +113,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             cacheData.value = PrivatePaykitCacheData()
         }
         whenever(settingsStore.data).thenReturn(settingsData)
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsData.value = transform(settingsData.value)
+        }
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(NOW_SECONDS))
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
@@ -321,7 +325,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `disabled cleanup retains its capability through failures and direct retries`() = test {
+    fun `disabled cleanup uses existing capability and retries withdrawal and registry failures`() = test {
         val publicRepo = PublicPaykitRepo(
             ioDispatcher = testDispatcher,
             pubkyRepo = mock(),
@@ -330,20 +334,20 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             coreService = coreService,
             paykitSdkService = paykitSdkService,
             settingsStore = settingsStore,
-            privatePaykitCacheStore = cacheStore,
             clock = clock,
         )
-        for (failureStage in listOf("enable capability", "withdraw", "disable capability")) {
+        for (failureStage in listOf("withdraw", "disable capability")) {
             cacheData.value = PrivatePaykitCacheData(
                 contacts = mapOf(CONTACT_KEY to PrivatePaykitContactCacheData(hasPublishedPrivatePaymentList = true)),
             )
             settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
             sut = createSut(publicRepo)
-            var capability = false
+            var capability = true
             var failed = false
             doSuspendableAnswer {
                 val enabled = it.getArgument<Boolean>(0)
-                if (!failed && failureStage == if (enabled) "enable capability" else "disable capability") {
+                assertFalse(enabled, "Cleanup must not enable private payments")
+                if (!failed && failureStage == "disable capability") {
                     failed = true
                     throw AppError("Registration unavailable")
                 }
@@ -363,8 +367,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertTrue(result.isFailure, failureStage)
             assertTrue(failed, failureStage)
             assertTrue(cacheData.value.cleanupPending, failureStage)
-            publicRepo.syncPaykitApp(privateSharingEnabled = false).getOrThrow()
             assertTrue(capability, failureStage)
+            assertTrue(settingsData.value.publicPaykitCleanupPending, failureStage)
 
             sut.retryPendingEndpointRemoval(listOf(CONTACT_KEY)).getOrThrow()
 
@@ -372,6 +376,41 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertFalse(cacheData.value.cleanupPending, failureStage)
             assertFalse(cacheData.value.contacts[CONTACT_KEY]?.hasPublishedPrivatePaymentList == true, failureStage)
         }
+    }
+
+    @Test
+    fun `failed deleted contact cleanup does not enable private payments`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        val failure = AppError("Peer lookup unavailable")
+        whenever(paykitSdkService.linkedPeers()).thenAnswer { throw failure }
+
+        val result = sut.removeSavedContact(CONTACT_KEY)
+
+        assertEquals(failure, result.exceptionOrNull())
+        verifyBlocking(publicPaykitRepo, never()) { syncPaykitApp(anyOrNull()) }
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+        assertTrue(CONTACT_KEY in cacheData.value.deletedContactCleanupPendingPublicKeys)
+    }
+
+    @Test
+    fun `deleted contact cleanup retries registry update after withdrawal`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
+        sut = createSut()
+        whenever(publicPaykitRepo.syncPaykitApp()).thenReturn(
+            Result.failure(AppError("Registry unavailable")),
+            Result.success(Unit),
+        )
+
+        assertTrue(sut.removeSavedContact(CONTACT_KEY).isFailure)
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+        assertTrue(CONTACT_KEY in cacheData.value.deletedContactCleanupPendingPublicKeys)
+
+        sut.retryPendingEndpointRemoval(emptyList()).getOrThrow()
+
+        assertFalse(CONTACT_KEY in cacheData.value.deletedContactCleanupPendingPublicKeys)
+        verifyBlocking(publicPaykitRepo, never()) { syncPaykitApp(true) }
+        verifyBlocking(publicPaykitRepo, times(2)) { syncPaykitApp() }
     }
 
     @Test
