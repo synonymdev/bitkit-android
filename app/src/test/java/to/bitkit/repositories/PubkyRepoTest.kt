@@ -180,17 +180,21 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `prepareImport excludes own key and imports remaining follows`() = test {
-        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A)
         val ownProfile = checkNotNull(sut.profile.value)
-        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
-        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(
-            listOf(VALID_SELF_KEY, VALID_SELF_KEY.removePrefix("pubky"), VALID_CONTACT_KEY_A),
+        val ownKeys = listOf(
+            VALID_CONTACT_KEY_A,
+            VALID_CONTACT_KEY_A.removePrefix("pubky"),
+            NON_CANONICAL_CONTACT_KEY_A,
+            NON_CANONICAL_CONTACT_KEY_A.removePrefix("pubky"),
         )
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true))
-            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Alice")
+        whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(ownKeys + VALID_CONTACT_KEY_B)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_B, paykitProfile = createPaykitProfile("Alice")))
         whenever(pubkyService.saveContact(alice.publicKey, alice.name, restorePrivateConnection = true))
             .thenReturn(mock())
-        whenever(pubkyService.saveContact(VALID_SELF_KEY, ownProfile.name, restorePrivateConnection = true))
+        whenever(pubkyService.saveContact(VALID_CONTACT_KEY_A, ownProfile.name, restorePrivateConnection = true))
             .thenAnswer { throw TestAppError("Cannot save own identity") }
 
         assertTrue(sut.prepareImport().isSuccess)
@@ -199,7 +203,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
         assertEquals(listOf(alice), sut.contacts.value)
 
-        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_SELF_KEY))
+        whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(ownKeys)
 
         assertTrue(sut.prepareImport().isSuccess)
         assertEquals(ownProfile, sut.pendingImportProfile.value)

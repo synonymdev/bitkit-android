@@ -963,7 +963,10 @@ class PubkyRepo @Inject constructor(
         clearPendingImport()
         val pk = requireNotNull(_publicKey.value) { "Not authenticated" }
         withContext(ioDispatcher) {
-            val contactKeys = pubkyService.getContacts(pk).filterNot { PubkyPublicKeyFormat.matches(it, pk) }
+            val canonicalOwnKey = PubkyPublicKeyFormat.canonicalized(pk)
+            val contactKeys = pubkyService.getContacts(pk).filterNot {
+                canonicalOwnKey != null && PubkyPublicKeyFormat.canonicalized(it) == canonicalOwnKey
+            }
             Logger.debug("Discovered '${contactKeys.size}' contacts for import", context = TAG)
 
             val contacts = coroutineScope {

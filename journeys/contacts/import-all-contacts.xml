@@ -3,6 +3,7 @@
     Precondition: the import preview is open for a disposable Ring identity with known follows
     that are not yet saved in this Bitkit wallet. Include Pubky-only profiles without Paykit receivers.
     Include the identity's own key in the following list.
+    Repeat with a spelling of that key that changes only the final z-base32 padding bits.
     Repeat with a large list (for example 62 contacts).
   </description>
   <actions>
