@@ -61,7 +61,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
     private val migrationService = mock<MigrationService>()
-    private val paykitSdkService = PaykitSdkService(mock(), keychain, mock()) { mock() }
+    private val paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() }
     private val privatePaykitRepoProvider = Provider { privatePaykitRepo }
 
     private lateinit var sut: WipeWalletUseCase

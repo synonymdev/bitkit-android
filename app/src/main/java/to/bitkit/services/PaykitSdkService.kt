@@ -82,6 +82,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.PubkyStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.data.sharedpubky.SharedPubkyContract
@@ -157,6 +158,7 @@ class PaykitSdkService @Inject constructor(
     private val pubkyStore: PubkyStore,
     sharedPubky: SharedPubkyClient,
     @IoDispatcher ioDispatcher: CoroutineDispatcher,
+    private val settingsStore: SettingsStore,
 ) : BaseCoroutineScope(ioDispatcher, TAG) {
     private val sessionProvider = PaykitSdkSessionProvider(keychain, sharedPubky)
     private val paymentAdapter = PaykitSdkPaymentAdapter()
@@ -199,8 +201,9 @@ class PaykitSdkService @Inject constructor(
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
         sharedPubky: SharedPubkyClient = SharedPubkyClient(context, ioDispatcher),
         platformInitializer: (() -> Unit)? = null,
+        settingsStore: SettingsStore,
         sdkFactory: () -> PaykitSdk,
-    ) : this(context, keychain, pubkyStore, sharedPubky, ioDispatcher) {
+    ) : this(context, keychain, pubkyStore, sharedPubky, ioDispatcher, settingsStore) {
         this.sdkFactory = sdkFactory
         if (bootstrapFactory != null) this.bootstrapFactory = bootstrapFactory
         if (platformInitializer == null) {
@@ -666,6 +669,11 @@ class PaykitSdkService @Inject constructor(
                 ) {
                     return@withStateRevisionTracking null
                 }
+                val publicKey = handle.identityStatus()?.publicKey
+                if (publicKey != null) {
+                    val app = handle.paykitAppRegistry(publicKey)?.apps?.find { it.appId == "bitkit" }
+                    if (app?.capabilities?.privatePayments == false) return@withStateRevisionTracking null
+                }
                 handle.clearPrivatePaymentListAndProcessOutbound(counterparty)
             }
         }
@@ -1053,7 +1061,10 @@ class PaykitSdkService @Inject constructor(
         runSuspendCatching {
             val capabilities = appCapabilities(handle)
             if (capabilities.privatePayments) {
-                handle.publishPaykitApp("Bitkit", capabilities)
+                handle.publishPaykitApp(
+                    "Bitkit",
+                    capabilities.copy(privatePayments = settingsStore.data.first().sharesPrivatePaykitEndpoints),
+                )
             }
         }.onFailure {
             Logger.warn("Failed to publish Paykit app", it, context = TAG)

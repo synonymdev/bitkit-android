@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
-import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -100,7 +99,6 @@ class PublicPaykitRepo @Inject constructor(
     private val coreService: CoreService,
     private val paykitSdkService: PaykitSdkService,
     private val settingsStore: SettingsStore,
-    private val privatePaykitCacheStore: PrivatePaykitCacheStore,
     private val clock: Clock,
 ) {
     companion object {
@@ -276,11 +274,7 @@ class PublicPaykitRepo @Inject constructor(
         runSuspendCatching {
             val settings = settingsStore.data.first()
             val privateSharing = privateSharingEnabled ?: settings.sharesPrivatePaykitEndpoints
-            val privateCache = privatePaykitCacheStore.data.first()
-            paykitSdkService.syncPaykitApp(
-                privatePaymentsEnabled = privateSharing || privateCache.cleanupPending ||
-                    privateCache.deletedContactCleanupPendingPublicKeys.isNotEmpty(),
-            )
+            paykitSdkService.syncPaykitApp(privatePaymentsEnabled = privateSharing)
         }
     }
 
