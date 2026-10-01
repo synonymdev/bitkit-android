@@ -3057,6 +3057,50 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `resolvePendingContactProfile looks up a label-only contact on the interactive lane`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        val alice = createPaykitProfile("Alice", image = "pubky://a")
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = alice))
+        sut.loadContacts()
+
+        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
+        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
+
+        assertEquals(listOf("Alice" to "pubky://a"), sut.contacts.value.map { it.name to it.imageUrl })
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive)
+    }
+
+    @Test
+    fun `resolvePendingContactProfile leaves a contact showing a profile alone`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        assertTrue(sut.prepareImport().isSuccess)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(
+                createContactRecord(VALID_CONTACT_KEY_A),
+                createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("Bob")),
+            ),
+        )
+        sut.loadContacts()
+
+        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
+        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_B)
+
+        assertEquals(listOf("Alice", "Bob"), sut.contacts.value.map { it.name })
+        listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B).forEach {
+            verify(pubkyService, never()).resolveContactProfile(it, true, PaykitReadLane.Interactive)
+        }
+    }
+
+    @Test
     fun `repeated contact loads share one background profile refresh`() = test {
         authenticateForTesting()
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))

@@ -196,11 +196,18 @@ class PubkyRepo @Inject constructor(
         val profile: PubkyProfile,
         val label: String?,
         val needsRefresh: Boolean,
+        val showsLabelOnly: Boolean = false,
     )
 
-    private class ContactProfileRefresh(val owner: String, val keys: Set<String>, val job: Job) {
+    private class ContactProfileRefresh(val owner: String, val contacts: List<SavedContact>, val job: Job) {
+        private val keys = contacts.mapTo(mutableSetOf()) { it.profile.publicKey }
+
         fun covers(owner: String, keys: Set<String>): Boolean =
             job.isActive && this.owner == owner && this.keys.containsAll(keys)
+
+        fun labelOnlyContact(owner: String, publicKey: String): SavedContact? =
+            contacts.takeIf { job.isActive && this.owner == owner }
+                ?.firstOrNull { it.showsLabelOnly && it.profile.publicKey == publicKey }
     }
 
     private val initializationReady = CompletableDeferred<Unit>()
@@ -945,6 +952,21 @@ class PubkyRepo @Inject constructor(
         refreshContactProfiles(pk, contactsToRefresh)
     }
 
+    /**
+     * Resolves a saved contact's profile on the interactive read lane while its row still shows only its label
+     * because the background refresh of [loadContacts] has not reached it, so a screen showing that contact does not
+     * wait behind bulk reads and an edit made there keeps the contact's avatar, bio and links. It returns at once
+     * for any other row; when the lookup fails, the row keeps its label.
+     */
+    suspend fun resolvePendingContactProfile(publicKey: String) {
+        val owner = _publicKey.value ?: return
+        val contact = synchronized(contactsLock) {
+            contactProfileRefresh?.labelOnlyContact(owner, publicKey.ensurePubkyPrefix())
+                ?.takeIf { it.profile in _contacts.value }
+        } ?: return
+        refreshContactProfile(owner, contact, PaykitReadLane.Interactive)
+    }
+
     suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
         val prefixedKey = runCatching { requireCanonicalAddableContactPublicKey(publicKey) }
             .getOrElse { return Result.failure(it) }
@@ -1425,13 +1447,13 @@ class PubkyRepo @Inject constructor(
             return SavedContact(profile, record.label, needsRefresh = false)
         }
         val profile = PubkyProfile.forDisplay(publicKey = prefixedKey, name = record.label, imageUrl = null)
-        return SavedContact(profile, record.label, needsRefresh = true)
+        return SavedContact(profile, record.label, needsRefresh = true, showsLabelOnly = true)
     }
 
     private fun SavedContact.withSessionProfile(owner: String): SavedContact {
         if (!needsRefresh) return this
         val cached = sessionContactProfile(owner, profile.publicKey) ?: return this
-        return copy(profile = cached.withNameFallback(label))
+        return copy(profile = cached.withNameFallback(label), showsLabelOnly = false)
     }
 
     private fun refreshContactProfiles(owner: String, contacts: List<SavedContact>) {
@@ -1439,9 +1461,9 @@ class PubkyRepo @Inject constructor(
         if (keys.isEmpty()) return
         val refresh = ContactProfileRefresh(
             owner = owner,
-            keys = keys,
+            contacts = contacts,
             job = scope.launch(start = CoroutineStart.LAZY) {
-                contacts.forEach { launch { refreshContactProfile(owner, it) } }
+                contacts.forEach { launch { refreshContactProfile(owner, it, PaykitReadLane.Bulk) } }
             },
         )
         val replaced = synchronized(contactsLock) {
@@ -1457,9 +1479,9 @@ class PubkyRepo @Inject constructor(
         refresh.job.start()
     }
 
-    private suspend fun refreshContactProfile(owner: String, contact: SavedContact) {
+    private suspend fun refreshContactProfile(owner: String, contact: SavedContact, lane: PaykitReadLane) {
         val publicKey = contact.profile.publicKey
-        val resolved = resolveContactProfile(publicKey, retry = false, lane = PaykitReadLane.Bulk)
+        val resolved = resolveContactProfile(publicKey, retry = false, lane = lane)
             .onFailure { Logger.warn("Failed to resolve contact '${redacted(publicKey)}'", it, context = TAG) }
             .getOrNull() ?: return
         val refreshed = resolved.withNameFallback(contact.label)

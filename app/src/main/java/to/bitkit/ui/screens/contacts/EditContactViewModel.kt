@@ -54,6 +54,8 @@ class EditContactViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<EditContactEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    private var hasEdits = false
+
     init {
         observeContactUpdates()
         retryLoadContact()
@@ -61,12 +63,6 @@ class EditContactViewModel @Inject constructor(
 
     fun retryLoadContact() {
         viewModelScope.launch {
-            val cachedContact = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
-            if (cachedContact != null) {
-                applyContact(cachedContact)
-                return@launch
-            }
-
             _uiState.update {
                 it.copy(
                     isLoading = true,
@@ -74,11 +70,17 @@ class EditContactViewModel @Inject constructor(
                 )
             }
 
+            val cachedContact = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
+            if (cachedContact != null) {
+                applyResolvedContact(cachedContact)
+                return@launch
+            }
+
             pubkyRepo.loadContacts()
 
             val refreshedContact = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
             if (refreshedContact != null) {
-                applyContact(refreshedContact)
+                applyResolvedContact(refreshedContact)
                 return@launch
             }
 
@@ -98,8 +100,13 @@ class EditContactViewModel @Inject constructor(
                 .map { contacts -> contacts.find { it.publicKey == publicKey } }
                 .filterNotNull()
                 .distinctUntilChanged()
-                .collectLatest { applyContact(it) }
+                .collectLatest { if (!_uiState.value.isLoading && !hasEdits) applyContact(it) }
         }
+    }
+
+    private suspend fun applyResolvedContact(contact: PubkyProfile) {
+        pubkyRepo.resolvePendingContactProfile(publicKey)
+        applyContact(pubkyRepo.contacts.value.find { it.publicKey == publicKey } ?: contact)
     }
 
     private fun applyContact(contact: PubkyProfile) {
@@ -119,14 +126,17 @@ class EditContactViewModel @Inject constructor(
     }
 
     fun onNameChange(name: String) {
+        hasEdits = true
         _uiState.update { it.copy(name = name) }
     }
 
     fun onBioChange(bio: String) {
+        hasEdits = true
         _uiState.update { it.copy(bio = bio) }
     }
 
     fun addLink(label: String, url: String) {
+        hasEdits = true
         _uiState.update {
             it.copy(
                 links = (it.links + ProfileEditLink(label, url)).toImmutableList(),
@@ -136,6 +146,7 @@ class EditContactViewModel @Inject constructor(
     }
 
     fun updateLinkUrl(index: Int, url: String) {
+        hasEdits = true
         _uiState.update {
             it.copy(
                 links = it.links.mapIndexed { i, link ->
@@ -146,12 +157,14 @@ class EditContactViewModel @Inject constructor(
     }
 
     fun removeLink(index: Int) {
+        hasEdits = true
         _uiState.update {
             it.copy(links = it.links.filterIndexed { i, _ -> i != index }.toImmutableList())
         }
     }
 
     fun addTag(tag: String) {
+        hasEdits = true
         _uiState.update {
             it.copy(
                 tags = (it.tags + tag).toImmutableList(),
@@ -161,6 +174,7 @@ class EditContactViewModel @Inject constructor(
     }
 
     fun removeTag(index: Int) {
+        hasEdits = true
         _uiState.update {
             it.copy(tags = it.tags.filterIndexed { i, _ -> i != index }.toImmutableList())
         }

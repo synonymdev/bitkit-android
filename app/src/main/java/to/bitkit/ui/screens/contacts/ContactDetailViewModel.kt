@@ -79,6 +79,7 @@ class ContactDetailViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<ContactDetailEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    private var contactLoad: Job? = null
     private var payJob: Job? = null
     private var paymentScanJob: Job? = null
     private var paymentRequestTargetRefresh: Deferred<PaykitPaymentRequestTarget?>? = null
@@ -92,7 +93,7 @@ class ContactDetailViewModel @Inject constructor(
     }
 
     fun loadContact() {
-        viewModelScope.launch {
+        contactLoad = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val cached = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
             if (cached != null) {
@@ -104,6 +105,7 @@ class ContactDetailViewModel @Inject constructor(
                         isLoading = false,
                     )
                 }
+                pubkyRepo.resolvePendingContactProfile(publicKey)
                 return@launch
             }
             pubkyRepo.fetchContactProfile(publicKey)
@@ -347,8 +349,11 @@ class ContactDetailViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             tagPersistenceMutex.withLock {
+                contactLoad?.join()
                 val state = _uiState.value
-                val profile = state.profile ?: return@withLock
+                val profile = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
+                    ?: state.profile
+                    ?: return@withLock
                 val tags = transform(state.tags)
                 if (tags == state.tags) {
                     onSuccess()

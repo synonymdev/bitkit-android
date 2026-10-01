@@ -2,10 +2,12 @@ package to.bitkit.ui.screens.contacts
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -81,6 +83,45 @@ class EditContactViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals("Alice Edited", sut.uiState.value.name)
+    }
+
+    @Test
+    fun `form waits for the profile of a contact still showing its label`() = test {
+        val labelOnly = PubkyProfile.forDisplay(TEST_PUBLIC_KEY, "Alice", imageUrl = null)
+        val contacts = MutableStateFlow(listOf(labelOnly))
+        whenever(pubkyRepo.contacts).thenReturn(contacts)
+        val lookup = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.resolvePendingContactProfile(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            lookup.await()
+            contacts.value = listOf(createContact())
+        }
+        val sut = createSut()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isLoading)
+        lookup.complete(Unit)
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        assertFalse(state.isLoading)
+        assertEquals("Hello", state.bio)
+        assertEquals("https://example.com/avatar.jpg", state.imageUrl)
+        assertEquals(listOf("Website"), state.links.map { it.label })
+    }
+
+    @Test
+    fun `a profile update of the same contact keeps unsaved edits`() = test {
+        val contacts = MutableStateFlow(listOf(createContact()))
+        whenever(pubkyRepo.contacts).thenReturn(contacts)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.onNameChange("Alice Edited")
+        contacts.value = listOf(createContact().copy(name = "Alice Resolved", bio = "Updated"))
+        advanceUntilIdle()
+
+        assertEquals("Alice Edited", sut.uiState.value.name)
+        assertEquals("Hello", sut.uiState.value.bio)
     }
 
     @Test
