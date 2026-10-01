@@ -56,6 +56,7 @@ class PaykitAllowancePayer @Inject constructor(
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val paymentProofRepo: PaykitPaymentProofRepo,
     private val lightningRepo: LightningRepo,
+    private val paymentRequestRepo: PaykitPaymentRequestRepo,
 ) {
     suspend fun resolve(
         request: PaykitPaymentRequest,
@@ -64,6 +65,10 @@ class PaykitAllowancePayer @Inject constructor(
 
     suspend fun consumePaymentList(publicKey: String, context: PrivatePaykitPaymentContext): Result<Unit> =
         privatePaykitRepo.consumePrivatePaymentList(publicKey, context)
+
+    /** Accepts through [accept] with this install as the request's owner, so a failed payment stays payable here. */
+    suspend fun <T> acceptOnThisInstall(request: PaykitPaymentRequest, accept: suspend () -> T): Result<T> =
+        paymentRequestRepo.acceptOnThisInstall(request, accept)
 
     suspend fun prepareProof(
         request: PaykitPaymentRequest,
@@ -400,17 +405,19 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
 
         val endpointIdentifier = payment.endpoint.methodId.rawValue
-        // Every identity-wide execution step needs this app to own the request's execution claim first.
-        paykitSdkService.claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
-        val association = paykitSdkService.acceptPaymentRequestAutomatically(
-            scope = scope,
-            selection = AllowanceSelectionInput(
-                allowanceId = candidate.allowanceId,
-                expectedRevision = null,
-                trustedTime = selectionTime,
-            ),
-            checks = checks(request, endpointIdentifier, selectionTime),
-        )
+        val association = payer.acceptOnThisInstall(request) {
+            // Every identity-wide execution step needs this app to own the request's execution claim first.
+            paykitSdkService.claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
+            paykitSdkService.acceptPaymentRequestAutomatically(
+                scope = scope,
+                selection = AllowanceSelectionInput(
+                    allowanceId = candidate.allowanceId,
+                    expectedRevision = null,
+                    trustedTime = selectionTime,
+                ),
+                checks = checks(request, endpointIdentifier, selectionTime),
+            )
+        }.getOrThrow()
         sendQueuedMessages(request)
 
         val occurrence = PaymentOccurrence(scope, billingPeriod = null)

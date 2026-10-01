@@ -203,6 +203,9 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
     private suspend fun stubPayer() {
         whenever(payer.resolve(any(), any())).thenReturn(Result.success(lightningPayment()))
+        whenever(payer.acceptOnThisInstall<AllowanceAssociationRecord>(any(), any())).doSuspendableAnswer {
+            runCatching { it.getArgument<suspend () -> AllowanceAssociationRecord>(1).invoke() }
+        }
         whenever(payer.consumePaymentList(any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.prepareProof(any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(payer.associateLightningPayment(any(), any(), any(), any())).thenReturn(Result.success(Unit))
@@ -242,6 +245,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val order = inOrder(sdk, payer)
         order.verify(sdk).evaluateAllowanceCandidates(any(), any())
         order.verify(payer).resolve(eq(request), eq(listOf(fixtures.lightningIdentifier)))
+        order.verify(payer).acceptOnThisInstall<AllowanceAssociationRecord>(eq(request), any())
         order.verify(sdk).claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
         order.verify(sdk).acceptPaymentRequestAutomatically(any(), any(), any())
         order.verify(sdk).reserveAutomaticPayment(any(), any(), any())
