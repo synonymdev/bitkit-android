@@ -1,8 +1,5 @@
 package to.bitkit.repositories
 
-import org.mockito.kotlin.doReturn
-import kotlinx.collections.immutable.persistentListOf
-import org.lightningdevkit.ldknode.ChannelDetails
 import com.synonym.paykit.AllowanceHistoryStatus
 import com.synonym.paykit.AllowanceLifecycleState
 import com.synonym.paykit.AllowanceLocalRole
@@ -10,14 +7,17 @@ import com.synonym.paykit.AllowanceRecord
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateSendReport
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -26,8 +26,8 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.repositories.PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceFixtures.ALLOWANCE_ID
+import to.bitkit.repositories.PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
