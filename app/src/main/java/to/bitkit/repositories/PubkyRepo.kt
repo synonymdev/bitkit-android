@@ -199,15 +199,19 @@ class PubkyRepo @Inject constructor(
         val showsLabelOnly: Boolean = false,
     )
 
-    private class ContactProfileRefresh(val owner: String, val contacts: List<SavedContact>, val job: Job) {
+    private class ContactProfileRefresh(
+        private val owner: String,
+        private val contacts: List<SavedContact>,
+        val job: Job,
+    ) {
         private val keys = contacts.mapTo(mutableSetOf()) { it.profile.publicKey }
 
-        fun covers(owner: String, keys: Set<String>): Boolean =
-            job.isActive && this.owner == owner && this.keys.containsAll(keys)
+        fun covers(other: ContactProfileRefresh): Boolean = isActiveFor(other.owner) && keys.containsAll(other.keys)
 
-        fun labelOnlyContact(owner: String, publicKey: String): SavedContact? =
-            contacts.takeIf { job.isActive && this.owner == owner }
-                ?.firstOrNull { it.showsLabelOnly && it.profile.publicKey == publicKey }
+        fun labelOnlyContact(owner: String, publicKey: String): SavedContact? = contacts.takeIf { isActiveFor(owner) }
+            ?.firstOrNull { it.showsLabelOnly && it.profile.publicKey == publicKey }
+
+        private fun isActiveFor(owner: String): Boolean = job.isActive && this.owner == owner
     }
 
     private val initializationReady = CompletableDeferred<Unit>()
@@ -1096,7 +1100,7 @@ class PubkyRepo @Inject constructor(
             }
             synchronized(contactsLock) {
                 check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
-                cacheSessionContactProfiles(owner, imported.filter { it.publicKey !in unresolvedKeys })
+                cacheSessionContactProfiles(owner, imported)
                 updateContacts { current ->
                     val existing = current.map { it.publicKey }.toSet()
                     (current + imported.filter { it.publicKey !in existing })
@@ -1458,8 +1462,7 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun refreshContactProfiles(owner: String, contacts: List<SavedContact>) {
-        val keys = contacts.mapTo(mutableSetOf()) { it.profile.publicKey }
-        if (keys.isEmpty()) return
+        if (contacts.isEmpty()) return
         val refresh = ContactProfileRefresh(
             owner = owner,
             contacts = contacts,
@@ -1469,7 +1472,7 @@ class PubkyRepo @Inject constructor(
         )
         val replaced = synchronized(contactsLock) {
             val active = contactProfileRefresh
-            if (_publicKey.value != owner || active?.covers(owner, keys) == true) {
+            if (_publicKey.value != owner || active?.covers(refresh) == true) {
                 refresh.job.cancel()
                 return
             }
