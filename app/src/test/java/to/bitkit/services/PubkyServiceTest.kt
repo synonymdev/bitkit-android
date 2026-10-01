@@ -47,10 +47,12 @@ class PubkyServiceTest : BaseUnitTest() {
         whenever(paykit.resolveContactProfile("pubky-test", true)).doSuspendableAnswer(pending)
         whenever(paykit.fetchFile("pubky://pubky-test/avatar", 1uL)).doSuspendableAnswer(pending)
         whenever(paykit.fetchPubkyFollows("pubky-test")).doSuspendableAnswer(pending)
+        whenever(paykit.discoverRelevantReceiverPaths("pubky-test")).doSuspendableAnswer(pending)
         val reads = listOf<suspend () -> Unit>(
             { sut.resolveContactProfile("pubky-test", allowPubkyProfileFallback = true) },
             { sut.fetchFile("pubky://pubky-test/avatar", 1uL) },
             { sut.getContacts("pubky-test") },
+            { sut.discoverRelevantReceiverPaths("pubky-test") },
         )
 
         for (read in reads) {

@@ -598,55 +598,47 @@ class PaykitSdkService @Inject constructor(
         it.resolveContactProfile(publicKey, PaykitReceiverPaths.WALLET, allowPubkyProfileFallback)
     }
 
-    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> {
-        isSetup.await()
-        return operationMutex.withLock {
-            val handle = handle()
-            val discovered = handle.paykitReceiverPaths(publicKey)
-                .filter { it in PaykitReceiverPaths.supported }
-                .filter {
-                    it == PaykitReceiverPaths.WALLET ||
-                        handle.paykitReceiverMarker(publicKey, it)?.requiresPrivateLink() == true
-                }
-            mergedReceiverPaths(discovered)
-        }
+    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> = publicRead { handle ->
+        val discovered = handle.paykitReceiverPaths(publicKey)
+            .filter { it in PaykitReceiverPaths.supported }
+            .filter {
+                it == PaykitReceiverPaths.WALLET ||
+                    handle.paykitReceiverMarker(publicKey, it)?.requiresPrivateLink() == true
+            }
+        mergedReceiverPaths(discovered)
     }
 
     suspend fun privateReceiverPathSelection(
         publicKey: String,
         savedReceiverPaths: List<String>,
-    ): PaykitPrivateReceiverPathSelection {
-        isSetup.await()
-        return operationMutex.withLock {
-            val handle = handle()
-            val linkable = mutableListOf<String>()
-            val publishable = mutableListOf<String>()
-            val cleanupProtected = mutableListOf<String>()
-            var firstError: Throwable? = null
+    ): PaykitPrivateReceiverPathSelection = publicRead { handle ->
+        val linkable = mutableListOf<String>()
+        val publishable = mutableListOf<String>()
+        val cleanupProtected = mutableListOf<String>()
+        var firstError: Throwable? = null
 
-            mergedReceiverPaths(savedReceiverPaths).forEach { receiverPath ->
-                runSuspendCatching { handle.paykitReceiverMarker(publicKey, receiverPath) }
-                    .onSuccess { marker ->
-                        if (marker?.requiresPrivateLink() == true) {
-                            linkable += receiverPath
-                        }
-                        if (marker.canReceivePrivatePaymentDetails()) {
-                            publishable += receiverPath
-                        }
+        mergedReceiverPaths(savedReceiverPaths).forEach { receiverPath ->
+            runSuspendCatching { handle.paykitReceiverMarker(publicKey, receiverPath) }
+                .onSuccess { marker ->
+                    if (marker?.requiresPrivateLink() == true) {
+                        linkable += receiverPath
                     }
-                    .onFailure {
-                        cleanupProtected += receiverPath
-                        firstError = firstError ?: it
+                    if (marker.canReceivePrivatePaymentDetails()) {
+                        publishable += receiverPath
                     }
-            }
-
-            PaykitPrivateReceiverPathSelection(
-                linkableReceiverPaths = linkable,
-                publishableReceiverPaths = publishable,
-                cleanupProtectedReceiverPaths = cleanupProtected,
-                error = firstError,
-            )
+                }
+                .onFailure {
+                    cleanupProtected += receiverPath
+                    firstError = firstError ?: it
+                }
         }
+
+        PaykitPrivateReceiverPathSelection(
+            linkableReceiverPaths = linkable,
+            publishableReceiverPaths = publishable,
+            cleanupProtectedReceiverPaths = cleanupProtected,
+            error = firstError,
+        )
     }
 
     suspend fun syncLocalReceiverMarker(
@@ -766,15 +758,12 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun paymentRequestReceiverPaths(publicKey: String): List<String> {
-        isSetup.await()
-        return operationMutex.withLock {
-            val handle = handle()
+    suspend fun paymentRequestReceiverPaths(publicKey: String): List<String> =
+        publicRead { handle ->
             handle.paykitReceiverPaths(publicKey)
                 .filter { it in PaykitReceiverPaths.supported }
                 .filter { handle.paykitReceiverMarker(publicKey, it)?.capabilities?.paymentRequests == true }
         }
-    }
 
     suspend fun proposePaymentRequest(
         counterparty: String,

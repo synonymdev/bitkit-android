@@ -8,6 +8,8 @@ import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaykitReceiverCapabilities
+import com.synonym.paykit.PaykitReceiverMarker
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
@@ -411,6 +413,56 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `receiver reads run outside the operation lock with their filtering intact`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        service.contactRecords()
+        whenever(sdk.paykitReceiverPaths(RING_PUBKY))
+            .thenReturn(listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER, "other/path"))
+        whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.WALLET))
+            .thenReturn(receiverMarker(PaykitReceiverPaths.WALLET, paymentRequests = true, outgoingPayments = true))
+        whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.SERVER))
+            .thenReturn(receiverMarker(PaykitReceiverPaths.SERVER, paymentRequests = false, outgoingPayments = false))
+        val lockedGate = CompletableDeferred<List<ContactRecord>>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer { lockedGate.await() }
+        val locked = async { service.contactRecords() }
+        runCurrent()
+
+        assertEquals(
+            listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER),
+            service.discoverRelevantReceiverPaths(RING_PUBKY),
+        )
+        assertEquals(listOf(PaykitReceiverPaths.WALLET), service.paymentRequestReceiverPaths(RING_PUBKY))
+        val selection = service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER))
+        assertEquals(listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER), selection.linkableReceiverPaths)
+        assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.publishableReceiverPaths)
+        assertEquals(emptyList(), selection.cleanupProtectedReceiverPaths)
+        assertNull(selection.error)
+        assertFalse(locked.isCompleted)
+
+        lockedGate.complete(emptyList())
+        assertEquals(emptyList(), locked.await())
+    }
+
+    @Test
+    fun `private receiver selection protects a path whose marker read fails`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        val failure = AppError("Marker unavailable")
+        whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.WALLET))
+            .thenReturn(receiverMarker(PaykitReceiverPaths.WALLET, paymentRequests = true, outgoingPayments = true))
+        whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.SERVER)).thenAnswer { throw failure }
+
+        val selection = service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER))
+
+        assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.linkableReceiverPaths)
+        assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.publishableReceiverPaths)
+        assertEquals(listOf(PaykitReceiverPaths.SERVER), selection.cleanupProtectedReceiverPaths)
+        assertSame(failure, selection.error)
+    }
+
+    @Test
     fun `activation returns while identity publication is still running`() = runTest {
         val keychain = mock<Keychain>()
         stubReceiverNoiseSecret(keychain)
@@ -590,6 +642,18 @@ class PaykitSdkServiceTest {
         assertNull(service.clearPrivatePaymentList(RING_PUBKY, PaykitReceiverPaths.SERVER))
         verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any(), any())
     }
+
+    private fun receiverMarker(path: String, paymentRequests: Boolean, outgoingPayments: Boolean) =
+        PaykitReceiverMarker(
+            receiverPath = path,
+            capabilities = PaykitReceiverCapabilities(
+                privatePayments = true,
+                paymentRequests = paymentRequests,
+                receipts = false,
+                outgoingPayments = outgoingPayments,
+            ),
+            noisePublicKey = "noise",
+        )
 
     private fun contactPeer(path: String, state: LinkedPeerState) = LinkedPeerRecord(
         counterparty = RING_PUBKY,

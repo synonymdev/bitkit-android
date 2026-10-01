@@ -30,7 +30,7 @@ Delegates Pubky operations to `PaykitSdkService`, which uses:
 - **bitkit-core** (`com.synonym:bitkit-core-android`) — mnemonic-to-seed conversion for receiver noise-key derivation
   - `mnemonicToSeed()`
 
-Session, state, key and publishing calls are serialized by `PaykitSdkService`'s operation lock. The public reads — `fetchFile()` (`fetchPubkyFileBounded()`), `fetchPubkyProfile()`, `fetchPubkyFollows()` and `resolveContactProfile()` — run outside that lock, at most 6 at once, and are cancelled with their caller. Only unauthenticated public reads may use that path.
+Session, state, key and publishing calls are serialized by `PaykitSdkService`'s operation lock. The public reads — `fetchFile()` (`fetchPubkyFileBounded()`), `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, and the receiver reads `discoverRelevantReceiverPaths()`, `privateReceiverPathSelection()` and `paymentRequestReceiverPaths()` (`paykitReceiverPaths()` and `paykitReceiverMarker()`) — run outside that lock, at most 6 at once, and are cancelled with their caller. Only unauthenticated public reads may use that path. Reading or saving a contact record stays under the lock, so a caller that discovers receiver paths and then saves them takes the lock only for the save.
 
 ## Repository Layer (`PubkyRepo`)
 

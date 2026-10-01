@@ -220,7 +220,7 @@ class PubkyService @Inject constructor(
         paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback)
     }
 
-    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> = ServiceQueue.CORE.background {
+    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> = cancellablePublicRead {
         paykitSdkService.discoverRelevantReceiverPaths(publicKey)
     }
 
