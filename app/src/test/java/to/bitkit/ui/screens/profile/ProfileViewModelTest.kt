@@ -105,6 +105,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             Triple("other owner", "pubkyalice" to "pubkybob", false),
             Triple("no public key", null to "pubkyalice", false),
         ).forEach { (case, keys, shown) ->
+            clearInvocations(pubkyRepo)
             val (publicKey, owner) = keys
             val cachedProfile = createCachedProfile(publicKey = owner)
             val sut = createSut(publicKey = publicKey, isLoading = true, cachedProfile = cachedProfile)

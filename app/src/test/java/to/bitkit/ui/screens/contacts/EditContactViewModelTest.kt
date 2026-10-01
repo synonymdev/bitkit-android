@@ -11,6 +11,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
@@ -80,6 +81,7 @@ class EditContactViewModelTest : BaseUnitTest() {
             Triple("same contact", listOf(alice), listOf(alice.copy(name = "Alice Resolved", bio = "Updated"))),
             Triple("another contact", listOf(alice, bob), listOf(alice, bob.copy(name = "Bob Resolved"))),
         ).forEach { (case, initial, updated) ->
+            reset(pubkyRepo)
             val contacts = MutableStateFlow(initial)
             whenever(pubkyRepo.contacts).thenReturn(contacts)
             val sut = createSut()

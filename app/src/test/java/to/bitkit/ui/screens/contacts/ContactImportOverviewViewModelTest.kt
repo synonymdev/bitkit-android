@@ -1,7 +1,9 @@
 package to.bitkit.ui.screens.contacts
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -9,6 +11,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
@@ -56,6 +59,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     fun `an import started from select completes the overview only once it succeeds`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
         listOf("succeeds" to true, "fails" to false).forEach { (case, succeeds) ->
+            reset(pubkyRepo)
             isImportingContacts.value = false
             stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
             val sut = createSut()
@@ -72,6 +76,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
 
             assertFalse(sut.uiState.value.isImporting, case)
             assertEquals(succeeds, sut.uiState.value.shouldRedirectToPayContacts, case)
+            sut.viewModelScope.cancel()
         }
     }
 
