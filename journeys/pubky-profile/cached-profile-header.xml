@@ -1,35 +1,40 @@
-<journey name="cached profile header">
+<journey name="cached profile header while loading">
   <description>
-    Opening Profile while the profile is still loading after a relaunch shows a read-only header
-    built from the cached name, avatar and key, then the full profile once the load finishes. The
-    header shows only while the load is in flight and only for the identity the cache was taken
-    from. Edit, the QR code, Share and Tags wait for the loaded profile.
+    Verifies that opening Profile straight after a relaunch, while the signed-in profile is still
+    loading, shows the cached name read-only. The edit, copy, share, QR code and tag controls are
+    absent. The full profile then replaces the cached header in place.
 
-    Precondition: onboarded dev wallet with Paykit enabled (the default), PIN off, and an active
-    Pubky profile with a name and an avatar, created in Bitkit or adopted from Pubky Ring. The first
-    steps open Profile once so the name, avatar and key are cached before the relaunch.
+    Precondition: an onboarded dev wallet with Paykit enabled (the default), PIN off, and an active
+    Pubky profile with a name and an avatar, created in Bitkit or adopted from Pubky Ring. Profile
+    must have loaded fully once on this install, so the cache records which key the name and avatar
+    belong to; the first steps do that.
 
-    On a fast network the load can finish before Profile opens, so the journey slows the emulator
-    network with adb emu; a physical device needs another way to slow its connection. If the full
-    profile still shows at once, run adb emu network speed gsm and repeat from the relaunch. If the
-    load fails instead, the cached header gives way to the retry state (testTag "ProfileRetry"),
-    which is not what this journey covers: relax the throttle and repeat. If the session is still
-    restoring when the profile button is tapped, the button opens the Pubky choice screen, which
-    moves on to Profile by itself once the session is back. The avatar is an image with no text, so
-    check it from a screenshot.
+    A warm network can finish the load before the first inspection, so an "already loaded" result
+    repeats the relaunch once instead of failing. To keep the load running on an emulator, run adb
+    emu network delay gprs and adb emu network speed edge before the first step, and adb emu network
+    delay none and adb emu network speed full after the last; a physical device needs another way to
+    slow its connection. If the load fails instead, the cached header gives way to the retry state
+    (testTag "ProfileRetry"), which is not what this journey covers: relax the throttle and repeat.
+
+    Two steps differ from iOS. While the session is still restoring, the profile button opens the
+    Pubky choice screen, which moves on to Profile by itself once the session is back, where iOS
+    shows a bare initialization spinner. Android also checks the cached avatar from a screenshot,
+    because it comes from the Pubky image disk cache, which shows it without the network. See
+    README.md.
   </description>
   <actions>
-    <action>Tap the profile button (testTag "ProfileButton") on the home screen</action>
-    <action>Verify the full profile shows its name (testTag "ProfileViewName") and note the name</action>
-    <action>Navigate back to the wallet</action>
-    <action>Run adb emu network delay gprs and adb emu network speed edge</action>
-    <action>Run adb shell am force-stop to.bitkit.dev, then adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity</action>
-    <action>As soon as the home screen shows, tap the profile button (testTag "ProfileButton")</action>
-    <action>Verify the cached header (testTag "ProfileCachedHeader") is visible with the noted name (testTag "ProfileCachedName"), the truncated public key and a loading spinner</action>
-    <action>Take a screenshot and verify the header shows the profile's avatar, not the placeholder icon</action>
-    <action>Verify Edit (testTag "ProfileEdit"), the QR code (testTag "ProfileQRCode"), Share (testTag "ProfileShare") and the Tags header (testTag "ProfileViewTagsHeader") are not shown</action>
-    <action>Wait up to a minute for the load to finish, then verify the full profile has replaced the cached header: the cached header (testTag "ProfileCachedHeader") is gone and the same name (testTag "ProfileViewName"), Edit (testTag "ProfileEdit"), the QR code (testTag "ProfileQRCode") and Share (testTag "ProfileShare") are visible</action>
-    <action>Scroll down and verify the Tags header (testTag "ProfileViewTagsHeader") is visible</action>
-    <action>Run adb emu network delay none and adb emu network speed full</action>
+    <action>Tap the header profile button (testTag "ProfileButton")</action>
+    <action>Wait for the full profile name (testTag "ProfileViewName") and note the name it shows</action>
+    <action>Run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`</action>
+    <action>If the PIN screen appears, unlock the wallet</action>
+    <action>As soon as the home screen shows, tap the header profile button (testTag "ProfileButton")</action>
+    <action>If the Pubky choice screen shows first, wait for it to move on to Profile. That is the session restore, which has to finish before the cached header can show. A spinner under the "Profile" title with no name is not that wait: no cached header showed, so report it</action>
+    <action>Verify the cached profile header (testTag "ProfileCachedHeader") is visible and its name (testTag "ProfileCachedName") matches the name noted before the relaunch. If the full profile name (testTag "ProfileViewName") is already showing, the load finished first: report "already loaded" and repeat from the force-stop step once rather than failing</action>
+    <action>Verify the cached header is read-only: edit (testTag "ProfileEdit"), copy (testTag "ProfileCopy"), share (testTag "ProfileShare"), the QR code (testTag "ProfileQRCode") and add tag (testTag "ProfileAddTag") are all absent</action>
+    <action>Take a screenshot and verify the cached header shows the profile's avatar, not the placeholder icon</action>
+    <action>Wait for the full profile name (testTag "ProfileViewName")</action>
+    <action>Verify the cached profile header (testTag "ProfileCachedHeader") is gone and the full profile name (testTag "ProfileViewName") matches the cached name</action>
+    <action>Verify edit (testTag "ProfileEdit") and the QR code (testTag "ProfileQRCode") are visible</action>
   </actions>
 </journey>

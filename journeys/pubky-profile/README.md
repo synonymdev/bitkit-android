@@ -5,9 +5,9 @@ opened before the profile has loaded after a relaunch, the Pubky Ring choice scr
 rows look up their profiles and while one of them is adopted, and Contacts opened after a relaunch
 while its profiles load. They also cover a contact import that finishes after you leave it.
 Importing contacts itself is covered by `journeys/contacts`, which arrives with
-synonymdev/bitkit-android#1395. `bitkit-ios` carries the same suite with the same file names;
-`contact-import-after-leaving.xml` and `contacts-list-loading.xml` also share their journey names
-and steps with it, see [Android vs iOS](#android-vs-ios).
+synonymdev/bitkit-android#1395. `bitkit-ios` carries the same suite with the same file names and
+journey names, and the steps differ only where the platform forces it; see
+[Android vs iOS](#android-vs-ios).
 
 ## What the behaviour is
 
@@ -46,16 +46,16 @@ and steps with it, see [Android vs iOS](#android-vs-ios).
 
 1. **Slow the network on an emulator.** On a fast network the profile load, the row lookups, the
    adoption, the import and the contact lookups can all finish before the screen is inspected. The
-   cached header and ring rows journeys throttle with `adb emu network delay gprs` and
-   `adb emu network speed edge` and restore the network with `adb emu network delay none` and
-   `adb emu network speed full`. The contact import after leaving and contacts list journeys keep
-   the iOS steps, which report "already imported" or "already resolved" instead, so run the same
-   commands before their first step and after their last to catch the loading states. A contact
-   import here still reads each resolved follow's Paykit receiver paths from the network, so the
-   throttle also keeps it running long enough to leave. synonymdev/bitkit-android#1395 makes it
-   save only to the device, as on iOS; it can then finish before you leave it, and the journey
-   reports "already imported". `adb emu` works only on an emulator. If a state still passes too
-   quickly, use `adb emu network speed gsm`; if loads start failing, relax the throttle.
+   journeys keep the iOS steps, which report "already loaded", "already resolved", "already
+   adopted" or "already imported" instead of failing, so slow the network with
+   `adb emu network delay gprs` and `adb emu network speed edge` before a journey's first step and
+   restore it with `adb emu network delay none` and `adb emu network speed full` after its last to
+   catch the loading states. A contact import here still reads each resolved follow's Paykit
+   receiver paths from the network, so the throttle also keeps it running long enough to leave.
+   synonymdev/bitkit-android#1395 makes it save only to the device, as on iOS; it can then finish
+   before you leave it, and the journey reports "already imported". `adb emu` works only on an
+   emulator. If a state still passes too quickly, use `adb emu network speed gsm`; if loads start
+   failing, relax the throttle.
 2. **Cached header:** an active Pubky profile with a name and an avatar, PIN off, and Profile
    opened once on this install so the cache is filled. The journey does that as its first steps.
 3. **Ring rows (not a listed capability):** Pubky Ring (`app.pubkyring`) installed on the same
@@ -89,6 +89,26 @@ and steps with it, see [Android vs iOS](#android-vs-ios).
 
 ## Android vs iOS
 
+All four journeys share their file names and journey names with `bitkit-ios`. Every step names
+identifiers as testTags rather than iOS ids, drops the iOS `predicate exists` wait argument and runs
+`adb` instead of `xcrun simctl`; the differences below are the rest.
+
+- **Cached profile header while loading.** Two steps differ. While the session is still restoring,
+  the profile button opens the Pubky choice screen, which moves on to Profile by itself, so that
+  step waits for the choice screen where iOS waits for a bare initialization spinner. Android also
+  adds a screenshot check that the cached header shows the profile's avatar: the avatar comes from
+  the Pubky image disk cache that synonymdev/bitkit-android#1399 adds, so the check is what shows
+  it works without the network. iOS shows the cached avatar too but does not check it.
+- **Pubky ring choice rows.** Every row is `PubkyChoiceIdentity` and every lookup spinner
+  `PubkyChoiceIdentityLookup`, where iOS gives each its own `PubkyChoiceRing_<pubky>` and
+  `PubkyChoiceRingLookup_<pubky>`, so the steps tell rows apart by their key caption. The row
+  avatar has a testTag here (`PubkyContactAvatar`) and none on iOS. Three steps differ: the profile
+  button always opens the next screen, so it needs no second tap; a disabled row ignores taps, so
+  the disabled check taps another row and expects nothing to change, where iOS reads the rows
+  missing from the snapshot's Targets list; and the import overview has no testTag, so the last
+  step names its "Import" title. On Android the other rows' lookups keep running during an
+  adoption, where iOS stops them; the journey checks the rows only after every lookup has finished,
+  so it does not depend on that.
 - **Contact import after leaving.** `contact-import-after-leaving.xml` has the same file, journey
   name and steps on both platforms, and the steps differ only in identifiers. Android tags every
   Ring row `PubkyChoiceIdentity`, where iOS tags each `PubkyChoiceRing_<pubky>`, and the import
@@ -107,8 +127,8 @@ and steps with it, see [Android vs iOS](#android-vs-ios).
 
 - Home: `ProfileButton`.
 - Profile, cached: `ProfileCachedHeader`, `ProfileCachedName`.
-- Profile, loaded: `ProfileViewName`, `ProfileEdit`, `ProfileQRCode`, `ProfileShare`,
-  `ProfileViewTagsHeader`; failed load `ProfileRetry`.
+- Profile, loaded: `ProfileViewName`, `ProfileEdit`, `ProfileCopy`, `ProfileShare`, `ProfileQRCode`,
+  `ProfileAddTag`; failed load `ProfileRetry`.
 - Profile intro: `ProfileIntro`, `ProfileIntro-button`.
 - Pubky choice: `PubkyChoiceIdentity` for each Ring row, `PubkyChoiceIdentityLookup` for a row's
   lookup spinner and `PubkyContactAvatar` for the avatar that replaces it, `PubkyChoiceCreate` when

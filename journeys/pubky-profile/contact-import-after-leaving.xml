@@ -6,8 +6,8 @@
     import-selected-contacts.xml, which arrive with synonymdev/bitkit-android#1395.
 
     Precondition (not a listed capability): Pubky Ring (package app.pubkyring) installed on the same
-    device and signed with this repository's app/debug.keystore, as for the ring choice rows
-    journey, with an identity that follows many pubkys on pubky.app (62, as in
+    device and signed with this repository's app/debug.keystore, as for the pubky ring choice
+    rows journey, with an identity that follows many pubkys on pubky.app (62, as in
     import-all-contacts.xml), so the import takes long enough to leave. An onboarded dev wallet with
     Paykit enabled (the default), PIN off and no active Pubky identity in Bitkit. The journey adopts
     that identity and saves its follows as contacts, so sign out of it in Bitkit before running the
