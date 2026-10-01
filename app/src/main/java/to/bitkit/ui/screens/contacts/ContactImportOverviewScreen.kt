@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -156,13 +157,18 @@ private fun Content(
                 SecondaryButton(
                     text = stringResource(R.string.contacts__import_select),
                     onClick = onClickSelect,
-                    modifier = Modifier.weight(1f),
+                    enabled = !uiState.isImporting,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("ContactImportOverviewSelect")
                 )
                 PrimaryButton(
                     text = stringResource(R.string.contacts__import_all),
                     onClick = onClickImportAll,
                     isLoading = uiState.isImporting,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("ContactImportOverviewImportAll")
                 )
             }
             VerticalSpacer(16.dp)

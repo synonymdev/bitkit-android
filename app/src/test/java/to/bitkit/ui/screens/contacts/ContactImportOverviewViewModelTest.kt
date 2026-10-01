@@ -6,19 +6,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactImportOverviewViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
+    private val isImportingContacts = MutableStateFlow(false)
 
     @Test
     fun `missing pending import redirects to pay contacts`() = test {
@@ -46,6 +50,34 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
 
         verify(pubkyRepo).clearPendingImport()
         assertEquals(ContactImportOverviewEffect.ImportComplete, effects.last())
+
+        effectsJob.cancel()
+    }
+
+    @Test
+    fun `select and import all are ignored while an import runs`() = test {
+        val contacts = listOf(createProfile(publicKey = "pubkyalice"))
+        stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
+        isImportingContacts.value = true
+        val sut = createSut()
+        val effects = mutableListOf<ContactImportOverviewEffect>()
+        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isImporting)
+
+        sut.navigateToSelect()
+        sut.importAll()
+        advanceUntilIdle()
+
+        assertTrue(effects.isEmpty())
+        verify(pubkyRepo, never()).importContacts(any())
+
+        isImportingContacts.value = false
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isImporting)
+        sut.navigateToSelect()
+        advanceUntilIdle()
+        assertEquals(listOf<ContactImportOverviewEffect>(ContactImportOverviewEffect.NavigateToSelect), effects)
 
         effectsJob.cancel()
     }
@@ -79,6 +111,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     private fun stubPendingImport(profile: PubkyProfile?, contacts: List<PubkyProfile>) {
         whenever(pubkyRepo.pendingImportProfile).thenReturn(MutableStateFlow(profile))
         whenever(pubkyRepo.pendingImportContacts).thenReturn(MutableStateFlow(contacts))
+        whenever(pubkyRepo.isImportingContacts).thenReturn(isImportingContacts)
     }
 
     private fun createProfile(publicKey: String) = PubkyProfile(

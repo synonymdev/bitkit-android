@@ -69,13 +69,15 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 | `isLoadingProfile` | Loading indicator |
 | `contacts` | List of followed `PubkyProfile` contacts |
 | `isLoadingContacts` | Contacts loading indicator |
+| `isImportingContacts` | True while a contact import runs |
 
 ### Contacts
 
 - `loadContacts()` reads saved Paykit contact records, then concurrently resolves any missing profiles via `resolveContactProfile()`
 - Contact keys from the FFI may lack the `pubky` prefix; `ensurePubkyPrefix()` normalizes them before profile resolution
 - `prepareImport()` discovers followed keys via `fetchPubkyFollows()`, then resolves each profile once
-- `importContacts()` saves the profiles `prepareImport()` resolved without resolving them again, and discovers each one's receiver paths. A follow `prepareImport()` could not resolve is saved as a placeholder with only the wallet receiver path: private sync (`PrivatePaykitRepo`) discovers a saved contact's receiver paths and merges them into the record before it uses them, and nothing else reads them. Only a contact whose save fails is left out
+- `importContacts()` saves the profiles `prepareImport()` resolved without resolving them again, and discovers each one's receiver paths. A follow `prepareImport()` could not resolve is saved as a placeholder with only the wallet receiver path: private sync (`PrivatePaykitRepo`) discovers a saved contact's receiver paths and merges them into the record before it uses them, and nothing else uses them for payments. Removing a contact blocks the record's receiver paths and those of its linked peers, so a placeholder private sync never reached blocks only the wallet path. Only a contact whose save fails is left out
+- The import runs in `PubkyRepo`'s scope, so leaving the import screens does not stop it half way, and it stops saving once the identity changes. `isImportingContacts` is true while an import runs, and the import screens disable Select, Import All and Continue meanwhile
 - If a contact profile fetch fails, a `PubkyProfile.placeholder()` is used to ensure the contact still appears in the list with a truncated public key
 - `fetchContactProfile()` fetches a single contact's profile on demand (used by the detail screen)
 

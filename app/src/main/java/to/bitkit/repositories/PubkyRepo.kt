@@ -13,6 +13,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -144,6 +145,10 @@ class PubkyRepo @Inject constructor(
     val pendingImportContacts: StateFlow<List<PubkyProfile>> = _pendingImportContacts.asStateFlow()
 
     private val pendingImportUnresolvedKeys = MutableStateFlow<Set<String>>(emptySet())
+
+    private val activeContactImports = MutableStateFlow(0)
+    val isImportingContacts: StateFlow<Boolean> = activeContactImports.map { it > 0 }
+        .stateIn(scope, SharingStarted.Eagerly, false)
 
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
@@ -992,34 +997,50 @@ class PubkyRepo @Inject constructor(
     /**
      * Saves [contacts], the profiles [prepareImport] resolved, without resolving them again. A follow it could not
      * resolve is saved as a placeholder with the wallet receiver path only; private sync discovers its other receiver
-     * paths later. Only a contact whose save fails is left out.
+     * paths later. Only a contact whose save fails is left out. The import runs in the repository scope, so it
+     * finishes even when the caller is cancelled, and stops saving once the identity changes.
      */
-    suspend fun importContacts(contacts: List<PubkyProfile>): Result<Unit> = runSuspendCatching {
+    suspend fun importContacts(contacts: List<PubkyProfile>): Result<Unit> =
+        scope.async(start = CoroutineStart.UNDISPATCHED) {
+            activeContactImports.update { it + 1 }
+            try {
+                saveImportedContacts(contacts)
+            } finally {
+                activeContactImports.update { it - 1 }
+            }
+        }.await()
+
+    private suspend fun saveImportedContacts(contacts: List<PubkyProfile>): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
+            val owner = requireNotNull(_publicKey.value) { "Not authenticated" }
             val unresolvedKeys = pendingImportUnresolvedKeys.value
             val imported = coroutineScope {
                 contacts.map { contact ->
                     val profile = contact.copy(publicKey = contact.publicKey.ensurePubkyPrefix())
-                    async { importContact(profile, isResolved = profile.publicKey !in unresolvedKeys) }
+                    async { importContact(owner, profile, isResolved = profile.publicKey !in unresolvedKeys) }
                 }.awaitAll().filterNotNull()
             }
-            updateContacts { current ->
-                val existing = current.map { it.publicKey }.toSet()
-                (current + imported.filter { it.publicKey !in existing })
-                    .sortedBy { it.name.lowercase() }
+            synchronized(contactsLock) {
+                check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
+                updateContacts { current ->
+                    val existing = current.map { it.publicKey }.toSet()
+                    (current + imported.filter { it.publicKey !in existing })
+                        .sortedBy { it.name.lowercase() }
+                }
             }
             markContactsLoaded()
             Logger.info("Imported '${imported.size}' contacts", context = TAG)
         }
     }
 
-    private suspend fun importContact(profile: PubkyProfile, isResolved: Boolean): PubkyProfile? =
+    private suspend fun importContact(owner: String, profile: PubkyProfile, isResolved: Boolean): PubkyProfile? =
         runSuspendCatching {
             val receiverPaths = if (isResolved) {
                 relevantReceiverPaths(profile.publicKey, PaykitReadLane.Bulk)
             } else {
                 listOf(PaykitReceiverPaths.WALLET)
             }
+            check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
             pubkyService.saveContact(profile.publicKey, profile.name, receiverPaths, restorePrivateConnection = true)
             profile
         }.onFailure {

@@ -56,6 +56,11 @@ class ContactImportSelectViewModel @Inject constructor(
                 )
             }
         }
+        viewModelScope.launch {
+            pubkyRepo.isImportingContacts.collect { isImporting ->
+                _uiState.update { it.copy(isImporting = isImporting) }
+            }
+        }
     }
 
     fun toggleContact(publicKey: String) {
@@ -85,7 +90,9 @@ class ContactImportSelectViewModel @Inject constructor(
     }
 
     fun importSelected() {
+        if (_uiState.value.isImporting) return
         val selected = _uiState.value.contacts.filter { it.isSelected }
+        if (selected.isNotEmpty()) _uiState.update { it.copy(isImporting = true) }
         viewModelScope.launch {
             if (selected.isEmpty()) {
                 pubkyRepo.clearPendingImport()
@@ -93,7 +100,6 @@ class ContactImportSelectViewModel @Inject constructor(
                 return@launch
             }
 
-            _uiState.update { it.copy(isImporting = true) }
             pubkyRepo.importContacts(selected.map { it.profile })
                 .onSuccess {
                     pubkyRepo.clearPendingImport()
