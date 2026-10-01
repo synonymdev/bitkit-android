@@ -2,11 +2,12 @@
 
 These journeys cover the states a Pubky profile passes through while it loads: the Profile screen
 opened before the profile has loaded after a relaunch, the Pubky Ring choice screen while its
-rows look up their profiles and while one of them is adopted, the import of an adopted
-identity's follows into Contacts, and Contacts opened after a relaunch while its profiles load.
-`bitkit-ios` carries the same suite with the same file names; `contact-import.xml` and
-`contacts-list-loading.xml` also share their journey names and steps with it, see
-[Android vs iOS](#android-vs-ios).
+rows look up their profiles and while one of them is adopted, and Contacts opened after a relaunch
+while its profiles load. They also cover a contact import that finishes after you leave it.
+Importing contacts itself is covered by `journeys/contacts`, which arrives with
+synonymdev/bitkit-android#1395. `bitkit-ios` carries the same suite with the same file names;
+`contact-import-after-leaving.xml` and `contacts-list-loading.xml` also share their journey names
+and steps with it, see [Android vs iOS](#android-vs-ios).
 
 ## What the behaviour is
 
@@ -31,7 +32,9 @@ identity's follows into Contacts, and Contacts opened after a relaunch while its
   whose profile could not be looked up, such as a key that never published one, is saved under its
   truncated public key rather than dropped. While the import runs, Import All shows a spinner and
   both buttons are disabled. The import belongs to the app rather than the screen, so leaving the
-  screen does not stop it.
+  overview does not stop it, and an import that finishes after you left does not take you to Pay
+  Contacts. `contact-import-after-leaving.xml` checks the leaving; the saving is covered by
+  `journeys/contacts` once synonymdev/bitkit-android#1395 merges.
 - **Contacts lists saved contacts at once.** Contacts shows every saved contact as soon as the saved
   records are read, under its saved name or truncated key, and fills in a name and avatar when that
   contact's profile lookup finishes; a lookup that fails leaves the row as it is. The screen-wide
@@ -45,11 +48,14 @@ identity's follows into Contacts, and Contacts opened after a relaunch while its
    adoption, the import and the contact lookups can all finish before the screen is inspected. The
    cached header and ring rows journeys throttle with `adb emu network delay gprs` and
    `adb emu network speed edge` and restore the network with `adb emu network delay none` and
-   `adb emu network speed full`. The contact import and contacts list journeys keep the iOS steps,
-   which report "already imported" or "already resolved" instead, so run the same commands before
-   their first step and after their last to catch the loading states. `adb emu` works only on an
-   emulator. If a state still passes too quickly, use `adb emu network speed gsm`; if loads start
-   failing, relax the throttle.
+   `adb emu network speed full`. The contact import after leaving and contacts list journeys keep
+   the iOS steps, which report "already imported" or "already resolved" instead, so run the same
+   commands before their first step and after their last to catch the loading states. A contact
+   import here still reads each resolved follow's Paykit receiver paths from the network, so the
+   throttle also keeps it running long enough to leave. synonymdev/bitkit-android#1395 makes it
+   save only to the device, as on iOS; it can then finish before you leave it, and the journey
+   reports "already imported". `adb emu` works only on an emulator. If a state still passes too
+   quickly, use `adb emu network speed gsm`; if loads start failing, relax the throttle.
 2. **Cached header:** an active Pubky profile with a name and an avatar, PIN off, and Profile
    opened once on this install so the cache is filled. The journey does that as its first steps.
 3. **Ring rows (not a listed capability):** Pubky Ring (`app.pubkyring`) installed on the same
@@ -58,12 +64,14 @@ identity's follows into Contacts, and Contacts opened after a relaunch while its
    signed with the same key, so a dev build needs a Ring build signed with `app/debug.keystore`.
    Without that, the choice screen offers only "Create profile with Bitkit" (`PubkyChoiceCreate`).
    The journey adopts one identity; sign out of it in Bitkit before running the journey again.
-4. **Contact import (not a listed capability):** the same Ring setup, with an identity that has a
-   published profile and follows at least five keys, at least one of which never published a
-   profile.
+4. **Contact import after leaving (not a listed capability):** the same Ring setup, with an
+   identity that has a published profile and follows many pubkys on pubky.app (62, as in
+   `journeys/contacts/import-all-contacts.xml`, which arrives with synonymdev/bitkit-android#1395),
+   so the import takes long enough to leave. The journey saves the follows as contacts; sign out in
+   Bitkit before running it again.
 5. **Contacts list loading:** a Pubky identity with at least five saved contacts, at least one with
-   a published profile name and bio and one with no published profile. Running the contact import
-   journey first leaves exactly that if one of the follows publishes a bio.
+   a published profile name and bio and one with no published profile. Importing such follows with
+   `journeys/contacts/import-all-contacts.xml` leaves exactly that.
 
 ## Gotchas
 
@@ -81,12 +89,17 @@ identity's follows into Contacts, and Contacts opened after a relaunch while its
 
 ## Android vs iOS
 
-- **Contact import.** `contact-import.xml` has the same file, journey name and steps on both
-  platforms; only the identifiers differ. Android tags every Ring row `PubkyChoiceIdentity`, where
-  iOS tags each `PubkyChoiceRing_<pubky>`, and the import overview's profile and friend count have
-  no testTag here (iOS: `ContactImportOverviewProfile`, `ContactImportOverviewSummary`), so the
-  journey names the "Import" title and the "N friends" text instead. See the Identifiers table in
-  [`journeys/README.md`](../README.md#identifiers).
+- **Contact import after leaving.** `contact-import-after-leaving.xml` has the same file, journey
+  name and steps on both platforms, and the steps differ only in identifiers. Android tags every
+  Ring row `PubkyChoiceIdentity`, where iOS tags each `PubkyChoiceRing_<pubky>`, and the import
+  overview's profile and friend count have no testTag here (iOS: `ContactImportOverviewProfile`,
+  `ContactImportOverviewSummary`), so the journey names the "Import" title and the "N friends" text
+  instead. synonymdev/bitkit-android#1399 adds `ContactImportOverviewImportAll`, the only contact
+  import testTag the journeys use; Back is the shared `NavigationBack`. See the Identifiers table
+  in [`journeys/README.md`](../README.md#identifiers). Until synonymdev/bitkit-android#1395 merges,
+  the import also takes longer here: iOS saves only to the device, while Android still reads each
+  resolved follow's Paykit receiver paths from the network, so the import can still be running
+  when the journey opens Contacts. The app log shows "Imported 'N' contacts" when it finishes.
 - **Contacts list loading.** `contacts-list-loading.xml` has the same file, journey name and steps
   on both platforms; only the relaunch commands differ.
 
@@ -100,7 +113,7 @@ identity's follows into Contacts, and Contacts opened after a relaunch while its
 - Pubky choice: `PubkyChoiceIdentity` for each Ring row, `PubkyChoiceIdentityLookup` for a row's
   lookup spinner and `PubkyContactAvatar` for the avatar that replaces it, `PubkyChoiceCreate` when
   Ring has none.
-- Contact import: `ContactImportOverviewImportAll`, `ContactImportOverviewSelect`; Pay Contacts:
+- Contact import: `ContactImportOverviewImportAll` and Back `NavigationBack`; Pay Contacts:
   `PayContactsContinue`.
 - Contacts: `HeaderMenu`, `DrawerContacts`, the contacts intro's `ContactsIntro-button`,
   `Contact_<pubky>` for each row (the full key with its `pubky` prefix); contact screen
