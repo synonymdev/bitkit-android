@@ -1,6 +1,6 @@
 <journey name="Automatic Payment Request Presentation">
   <description>
-    Verifies that a newly received request opens automatically in the foreground, waits for another sheet to close, and does not reopen a request the payer already reviewed. Requires two Bitkit instances saved as each other's contacts and linked on receiver path "bitkit/wallet", with the payer funded for 21,000 sats; see README.md.
+    Verifies that a newly received request opens automatically in the foreground, waits for another sheet to close, and does not reopen a request the payer already reviewed. Requires two Bitkit instances with separate Pubky identities, saved as each other's contacts and linked, with the payer funded for 21,000 sats; see README.md.
   </description>
   <actions>
     <action>On the payer, leave Bitkit unlocked and in the foreground on Home</action>
