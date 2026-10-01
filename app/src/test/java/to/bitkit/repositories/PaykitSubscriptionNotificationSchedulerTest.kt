@@ -28,7 +28,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY
-import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH
 import to.bitkit.ui.EXTRA_PAYKIT_PAYER_IDENTITY
 import to.bitkit.ui.EXTRA_PAYKIT_PAYMENT_REQUEST_ID
 import to.bitkit.utils.SubscriptionClockOffset
@@ -47,11 +46,10 @@ class PaykitSubscriptionNotificationSchedulerTest {
         const val COUNTERPARTY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         const val PAYER_IDENTITY = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         const val PAYMENT_REQUEST_ID = "request-id"
-        const val RECEIVER_PATH = "bitkit/server"
         const val WORK_TAG = "paykit-subscriptions"
         val NOW = Instant.parse("2027-01-02T08:00:00Z")
         val NEXT_PERIOD_START = Instant.parse("2027-01-08T08:00:00Z")
-        val WORK_NAME = "paykit-subscription-$PAYER_IDENTITY|$COUNTERPARTY|$RECEIVER_PATH|" +
+        val WORK_NAME = "paykit-subscription-$PAYER_IDENTITY|$COUNTERPARTY|" +
             "$PAYMENT_REQUEST_ID|$NEXT_PERIOD_START"
     }
 
@@ -94,7 +92,6 @@ class PaykitSubscriptionNotificationSchedulerTest {
         assertEquals(PAYMENT_REQUEST_ID, request.workSpec.input.getString(EXTRA_PAYKIT_PAYMENT_REQUEST_ID))
         assertEquals(PAYER_IDENTITY, request.workSpec.input.getString(EXTRA_PAYKIT_PAYER_IDENTITY))
         assertEquals(COUNTERPARTY, request.workSpec.input.getString(EXTRA_PAYKIT_COUNTERPARTY))
-        assertEquals(RECEIVER_PATH, request.workSpec.input.getString(EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH))
         assertEquals(
             NEXT_PERIOD_START.toString(),
             request.workSpec.input.getString(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT),
@@ -328,7 +325,6 @@ class PaykitSubscriptionNotificationSchedulerTest {
     private fun subscription() = PaykitSubscription(
         paymentRequestId = PAYMENT_REQUEST_ID,
         counterparty = COUNTERPARTY,
-        counterpartyReceiverPath = RECEIVER_PATH,
         amountValue = "0.00025",
         amountSats = 25_000uL,
         note = "Weekly coffee",

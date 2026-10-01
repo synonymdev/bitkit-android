@@ -100,6 +100,7 @@ import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
+import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -567,6 +568,53 @@ class ActivityService(
         updateActivity(activityId = id, activity = activity)
     }
 
+    suspend fun backfillPaykitContacts(): Boolean = ServiceQueue.CORE.background {
+        val resolver = privatePaykitContactResolver.get()
+        val contacts = resolver.receivedPaymentContacts
+        if (contacts === PaykitReceivedPaymentContacts.Empty) return@background false
+        val activities = getActivities(
+            walletId = null,
+            filter = ActivityFilter.ALL,
+            txType = PaymentType.RECEIVED,
+            tags = null,
+            search = null,
+            minDate = null,
+            maxDate = null,
+            limit = null,
+            sortDirection = null,
+        )
+        var changed = false
+        for (activity in activities) {
+            if (resolver.receivedPaymentContacts !== contacts) break
+            val contact = when (activity) {
+                is Activity.Lightning -> receivedPaykitContact(activity.v1, contacts)
+                is Activity.Onchain -> receivedPaykitContact(activity.v1, contacts)
+            }
+            if (contact != null && resolver.receivedPaymentContacts === contacts) {
+                val updated = when (activity) {
+                    is Activity.Lightning -> Activity.Lightning(activity.v1.copy(contact = contact))
+                    is Activity.Onchain -> Activity.Onchain(activity.v1.copy(contact = contact))
+                }
+                updateActivity(activityId = activity.rawId(), activity = updated)
+                changed = true
+            }
+        }
+        changed
+    }
+
+    private fun receivedPaykitContact(row: LightningActivity, contacts: PaykitReceivedPaymentContacts): String? {
+        if (row.contact != null || row.txType != PaymentType.RECEIVED || row.status == PaymentState.FAILED) return null
+        return contacts.contactsForPaymentHash(row.id).singleOrNull()
+    }
+
+    private fun receivedPaykitContact(row: OnchainActivity, contacts: PaykitReceivedPaymentContacts): String? {
+        if (row.contact != null || row.txType != PaymentType.RECEIVED) return null
+        val details = getBitkitCoreTransactionDetails(walletId = row.walletId, txId = row.txId) ?: return null
+        if (details.outputs.isEmpty()) return null
+        val addresses = listOfNotNull(row.address) + details.outputs.mapNotNull { it.scriptpubkeyAddress }
+        return contacts.contactsForAddresses(addresses).singleOrNull()
+    }
+
     suspend fun delete(id: String, walletId: String = defaultWalletId): Boolean = ServiceQueue.CORE.background {
         deleteActivityById(walletId = walletId, activityId = id)
     }
@@ -784,7 +832,9 @@ class ActivityService(
         val contact = existingActivity
             ?.takeIf { it is Activity.Lightning }
             ?.let { (it as Activity.Lightning).v1.contact }
-            ?: privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(payment.id, payment.direction)
+            ?: payment.takeUnless { it.status == PaymentStatus.FAILED }?.let {
+                privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(it.id, it.direction)
+            }
 
         val ln = if (existingActivity is Activity.Lightning) {
             existingActivity.v1.withPaymentUpdate(
@@ -1202,8 +1252,14 @@ class ActivityService(
 
         val resolvedAddress = resolveAddressForInboundPayment(kind, payment, transactionDetails)
         val existingContact = existingOnchainActivity?.v1?.contact
-        val contact = existingContact ?: if (payment.direction == PaymentDirection.INBOUND) {
-            resolvedAddress?.let { privatePaykitContactPublicKeyForReservedAddress(it) }
+        val contact = existingContact ?: if (
+            payment.direction == PaymentDirection.INBOUND && payment.status != PaymentStatus.FAILED &&
+            !transactionDetails?.outputs.isNullOrEmpty()
+        ) {
+            privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
+                listOfNotNull(resolvedAddress) +
+                    transactionDetails.outputs.mapNotNull { it.scriptpubkeyAddress },
+            )
         } else {
             null
         }

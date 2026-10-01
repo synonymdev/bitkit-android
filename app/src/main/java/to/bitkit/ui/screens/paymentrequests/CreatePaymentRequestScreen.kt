@@ -481,7 +481,7 @@ internal fun PaymentRequestRecipientContent(
             }
             items(
                 items = recipients,
-                key = { (target, _) -> "${target.publicKey}|${target.receiverPath}" },
+                key = { (target, _) -> target.publicKey },
             ) { (target, contact) ->
                 PubkyContactRow(
                     profile = contact,
@@ -592,13 +592,11 @@ private val previewDraft = PaykitPaymentRequestDraft(
 
 private val previewTarget = PaykitPaymentRequestTarget(
     publicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-    receiverPath = "bitkit/wallet",
 )
 
 private val previewCreatedRequest = PaykitPaymentRequest(
     paymentRequestId = "payment-request",
     counterparty = previewTarget.publicKey,
-    counterpartyReceiverPath = previewTarget.receiverPath,
     amountValue = "0.00025",
     amountSats = previewDraft.amountSats,
     note = previewDraft.note,

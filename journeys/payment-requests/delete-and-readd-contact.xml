@@ -1,6 +1,6 @@
 <journey name="Delete and Readd Private Contact">
   <description>
-    Verifies that deleting a contact stops incoming private Payment Requests until the user explicitly adds the contact again. Requires two authenticated Bitkit instances saved as each other's contacts and linked on receiver path "bitkit/wallet". The payer must have no active subscription with the requester. No payment needs to be sent.
+    Verifies that deleting a contact stops incoming private Payment Requests until the user explicitly adds the contact again. Requires two authenticated Bitkit instances saved as each other's contacts and linked as identities. The payer must have no active subscription with the requester. No payment needs to be sent.
   </description>
   <actions>
     <action>On the requester, send the payer contact a Payment Request for 5,000 sats with the note "Before deletion"</action>

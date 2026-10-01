@@ -11,6 +11,7 @@ import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
+import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -46,8 +47,8 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.satsToMsat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitPaymentRequestRecurrenceTerms
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.isBitkitPaymentRequest
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.SubscriptionIcon
@@ -66,14 +67,12 @@ import kotlin.time.Instant
 data class PaykitPaymentRequestId(
     val paymentRequestId: String,
     val counterparty: String,
-    val counterpartyReceiverPath: String,
     val billingPeriodStartsAt: String? = null,
 )
 
 data class PaykitPaymentRequest(
     val paymentRequestId: String,
     val counterparty: String,
-    val counterpartyReceiverPath: String,
     val amountValue: String,
     val amountSats: ULong,
     val note: String? = null,
@@ -110,7 +109,6 @@ data class PaykitPaymentRequest(
         get() = PaykitPaymentRequestId(
             paymentRequestId,
             counterparty,
-            counterpartyReceiverPath,
             billingPeriod?.startsAt?.toString(),
         )
 
@@ -131,8 +129,7 @@ data class PaykitPaymentRequest(
     fun belongsTo(subscription: PaykitSubscription): Boolean =
         billingPeriod != null &&
             paymentRequestId == subscription.paymentRequestId &&
-            counterparty == subscription.counterparty &&
-            counterpartyReceiverPath == subscription.counterpartyReceiverPath
+            counterparty == subscription.counterparty
 }
 
 internal sealed interface PaykitPaymentRequestParseResult {
@@ -198,7 +195,6 @@ enum class PaykitPaymentRequestDirection { Incoming, Outgoing }
 
 data class PaykitPaymentRequestTarget(
     val publicKey: String,
-    val receiverPath: String,
 )
 
 data class PaykitPaymentRequestDraft(
@@ -230,7 +226,7 @@ data class PaykitSubscriptionCreation(
 
 private data class PaykitPaymentRequestTargetContext(
     val savedPublicKeys: List<String>,
-    val linkedReceiverPaths: Map<String, Set<String>>,
+    val linkedPublicKeys: Set<String>,
 )
 
 private data class PaykitPaymentRequestTargetDiscovery(
@@ -294,6 +290,19 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     @Volatile
     private var activeIdentity: String? = null
+
+    @Volatile
+    private var receivedContacts: ReceivedContactsSnapshot? = null
+
+    internal val receivedPaymentContacts: PaykitReceivedPaymentContacts
+        get() = receivedContacts?.takeIf { isCurrentState(it.generation, it.identity) }?.contacts
+            ?: PaykitReceivedPaymentContacts.Empty
+
+    private data class ReceivedContactsSnapshot(
+        val generation: Long,
+        val identity: String,
+        val contacts: PaykitReceivedPaymentContacts,
+    )
 
     @Volatile
     private var presentedRequestIds = emptySet<PaykitPaymentRequestId>()
@@ -563,7 +572,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     )
                     val record = paykitSdkService.proposePaymentRequest(
                         counterparty = target.publicKey,
-                        counterpartyReceiverPath = target.receiverPath,
                         proposal = proposal,
                         expectedIdentity = expectedIdentity,
                     )
@@ -637,7 +645,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         PaykitSubscriptionProposal.validate(proposal)
         val record = paykitSdkService.proposePaymentRequest(
             counterparty = target.publicKey,
-            counterpartyReceiverPath = target.receiverPath,
             proposal = proposal,
             expectedIdentity = expectedIdentity,
         )
@@ -732,7 +739,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val messageId = record.proposalOutboundMessageId ?: return false
         return reports.any {
             PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
-                it.counterpartyReceiverPath == record.counterpartyReceiverPath &&
                 messageId in it.report?.sent.orEmpty()
         }
     }
@@ -772,12 +778,18 @@ class PaykitPaymentRequestRepo @Inject constructor(
             if (
                 paykitSdkService.linkedPeers().any {
                     it.state == LinkedPeerState.BLOCKED &&
-                        PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty) &&
-                        it.counterpartyReceiverPath == request.counterpartyReceiverPath
+                        PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
                 }
             ) {
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
+        }
+    }
+
+    suspend fun claimForPayment(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            paykitSdkService.claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
+            Unit
         }
     }
 
@@ -795,7 +807,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     ensurePaymentAllowed(it).getOrThrow()
                     paykitSdkService.acceptPaymentRequest(
                         counterparty = it.counterparty,
-                        counterpartyReceiverPath = it.counterpartyReceiverPath,
                         paymentRequestId = it.paymentRequestId,
                     )
                 }.getOrThrow()
@@ -811,7 +822,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
     ) {
         paykitSdkService.rejectPaymentRequest(
             counterparty = it.counterparty,
-            counterpartyReceiverPath = it.counterpartyReceiverPath,
             paymentRequestId = it.paymentRequestId,
         )
     }.onFailure {
@@ -831,7 +841,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         return updateRequest(request, PaymentRequestLifecycleState.CANCELED) {
             paykitSdkService.cancelPaymentRequest(
                 counterparty = it.counterparty,
-                counterpartyReceiverPath = it.counterpartyReceiverPath,
                 paymentRequestId = it.paymentRequestId,
             )
         }
@@ -849,7 +858,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     ?: throw PaykitPaymentRequestError.RequestUnavailable
                 val record = paykitSdkService.acceptPaymentRequest(
                     current.counterparty,
-                    current.counterpartyReceiverPath,
                     current.paymentRequestId,
                 )
                 processPendingMessages()
@@ -878,7 +886,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 throw PaykitPaymentRequestError.OperationInProgress
             }
         }
-        paykitSdkService.cancelPaymentRequest(it.counterparty, it.counterpartyReceiverPath, it.paymentRequestId)
+        paykitSdkService.cancelPaymentRequest(it.counterparty, it.paymentRequestId)
     }
 
     fun isPending(request: PaykitPaymentRequest): Boolean =
@@ -914,12 +922,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
         paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         val now = clock.now()
         val subscriptionNow = subscriptionClock.now()
-        val records = paykitSdkService.paymentRequests()
+        receivedContacts = null
+        val allRecords = paykitSdkService.allPaymentRequests(expectedIdentity)
+        val contacts = PaykitReceivedPaymentContacts.from(allRecords, Env.network)
+        val records = allRecords.filter(::isBitkitPaymentRequest)
         val blockedPeers = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.BLOCKED }
         val availableRecords = records.filterNot { record ->
             blockedPeers.any {
-                PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
-                    it.counterpartyReceiverPath == record.counterpartyReceiverPath
+                PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty)
             }
         }
         val locallyCompletedProofKinds = expectedIdentity
@@ -934,8 +944,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val blockedSubscriptionIds = allSubscriptions.mapNotNull { subscription ->
             subscription.id.takeIf {
                 blockedPeers.any {
-                    PubkyPublicKeyFormat.matches(it.counterparty, subscription.counterparty) &&
-                        it.counterpartyReceiverPath == subscription.counterpartyReceiverPath
+                    PubkyPublicKeyFormat.matches(it.counterparty, subscription.counterparty)
                 }
             }
         }.toSet()
@@ -1018,6 +1027,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val history = (recurringHistory + oneTimeHistory)
             .sortedByDescending { it.createdAt }
         if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return
+        receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
         val subscriptionStateChanged =
             subscriptionAcceptedAt != updatedSubscriptionAcceptedAt ||
                 dismissedSubscriptionPaymentIds != updatedDismissedPaymentIds
@@ -1061,24 +1071,19 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val identityStatus = paykitSdkService.identityStatus()
         if (
             savedKeys.isEmpty() ||
-            identityStatus?.liveSessionAvailable != true ||
+            identityStatus?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE ||
             !PubkyPublicKeyFormat.matches(identityStatus.publicKey, expectedIdentity)
         ) {
             return null
         }
-        val linkedPaths = mutableMapOf<String, MutableSet<String>>()
-        paykitSdkService.linkedPeers()
+        val linkedPublicKeys = paykitSdkService.linkedPeers()
             .filter { it.state == LinkedPeerState.LINKED }
-            .forEach { peer ->
-                val publicKey = PubkyPublicKeyFormat.normalized(peer.counterparty) ?: return@forEach
-                if (peer.counterpartyReceiverPath in PaykitReceiverPaths.supported) {
-                    linkedPaths.getOrPut(publicKey, ::mutableSetOf) += peer.counterpartyReceiverPath
-                }
-            }
+            .mapNotNull { PubkyPublicKeyFormat.normalized(it.counterparty) }
+            .toSet()
 
         return PaykitPaymentRequestTargetContext(
             savedPublicKeys = savedKeys,
-            linkedReceiverPaths = linkedPaths.mapValues { it.value.toSet() },
+            linkedPublicKeys = linkedPublicKeys,
         )
     }
 
@@ -1089,9 +1094,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
         var isComplete = true
         val failedPublicKeys = mutableSetOf<String>()
         val targets = context.savedPublicKeys.mapNotNull { publicKey ->
-            val linked = context.linkedReceiverPaths[publicKey] ?: return@mapNotNull null
+            if (publicKey !in context.linkedPublicKeys) return@mapNotNull null
             val lookup = withTimeoutOrNull(TARGET_DISCOVERY_TIMEOUT) {
-                runSuspendCatching { paykitSdkService.paymentRequestReceiverPaths(publicKey) }
+                runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey) }
             }
             if (lookup == null) {
                 isComplete = false
@@ -1100,7 +1105,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     "Timed out inspecting payment request support for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
                     context = TAG,
                 )
-                return@mapNotNull previousTargets[publicKey]?.takeIf { it.receiverPath in linked }
+                return@mapNotNull previousTargets[publicKey]
             }
             val capable = lookup
                 .onFailure {
@@ -1113,14 +1118,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     )
                 }
                 .getOrElse {
-                    return@mapNotNull previousTargets[publicKey]?.takeIf { it.receiverPath in linked }
+                    return@mapNotNull previousTargets[publicKey]
                 }
-            val receiverPath = PaykitReceiverPaths.ordered.firstOrNull { it in linked && it in capable }
-                ?: run {
-                    isComplete = false
-                    return@mapNotNull null
-                }
-            PaykitPaymentRequestTarget(publicKey, receiverPath)
+            if (!capable) {
+                isComplete = false
+                return@mapNotNull null
+            }
+            PaykitPaymentRequestTarget(publicKey)
         }
         return PaykitPaymentRequestTargetDiscovery(
             targets = targets,
@@ -1331,6 +1335,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private fun clearStateLocked() {
+        receivedContacts = null
         expirationJob?.cancel()
         expirationJob = null
         _pendingRequests.update { emptyList() }
@@ -1481,7 +1486,6 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
 ) = PaykitPaymentRequest(
     paymentRequestId = paymentRequestId,
     counterparty = counterparty,
-    counterpartyReceiverPath = counterpartyReceiverPath,
     amountValue = parsedTerms.terms.amount.value,
     amountSats = parsedTerms.amountSats,
     note = parsedTerms.terms.metadata.note(),
@@ -1533,14 +1537,12 @@ private fun PaymentRequestRecord.toCreatedPaykitPaymentRequest(
     val wasSent = proposalOutboundMessageId?.let { messageId ->
         reports.any { report ->
             PubkyPublicKeyFormat.matches(report.counterparty, counterparty) &&
-                report.counterpartyReceiverPath == counterpartyReceiverPath &&
                 messageId in report.report?.sent.orEmpty()
         }
     } == true
     return PaykitPaymentRequest(
         paymentRequestId = paymentRequestId,
         counterparty = target.publicKey,
-        counterpartyReceiverPath = target.receiverPath,
         amountValue = draft.amountSats.toBitcoinAmount(),
         amountSats = draft.amountSats,
         note = draft.note.takeIf(String::isNotBlank),

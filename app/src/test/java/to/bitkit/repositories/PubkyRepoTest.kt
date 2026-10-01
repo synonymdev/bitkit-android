@@ -4,11 +4,11 @@ import app.cash.turbine.test
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
-import com.synonym.paykit.ContactProfileResolution
-import com.synonym.paykit.ContactProfileSource
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.ProfileResolution
+import com.synonym.paykit.ProfileSource
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicationStatus
@@ -54,6 +54,7 @@ import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
+import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkySessionBackupKind
@@ -148,7 +149,6 @@ class PubkyRepoTest : BaseUnitTest() {
                 .thenReturn(mock())
         }
         whenever(pubkyService.resolveContactProfile(any(), any())).thenAnswer { throw TestAppError("Offline") }
-        whenever(pubkyService.discoverRelevantReceiverPaths(any())).thenAnswer { throw TestAppError("Offline") }
 
         val result = sut.importContacts(profiles + profiles)
 
@@ -158,7 +158,6 @@ class PubkyRepoTest : BaseUnitTest() {
             verify(pubkyService).saveContact(profile.publicKey, profile.name, restorePrivateConnection = true)
         }
         verify(pubkyService, never()).resolveContactProfile(any(), any())
-        verify(pubkyService, never()).discoverRelevantReceiverPaths(any())
     }
 
     @Test
@@ -390,27 +389,35 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `approveAuthWithCompanionClaim forwards exact claim identifiers and capability`() = test {
-        val authUrl = "pubkyauth://signin?x-bitkit-claim=watch-only-account-v1"
         val clientId = "paykit.test"
         val secretKey = "local_secret"
-        val payload = ByteArray(84) { it.toByte() }
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
 
-        val result = sut.approveAuthWithCompanionClaim(authUrl, clientId, payload)
+        val selections = listOf(
+            PubkyAuthClaim(Item.PAYKIT_ACCESS_V1),
+            PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
+            PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
+            requireNotNull(PubkyAuthClaim.fromWireValue("watch-only-account-v1.paykit-access-v1")),
+        )
+        for (claimType in selections) {
+            val payload = if (claimType.includesWatchOnlyAccount) ByteArray(84).apply { this[0] = 1 } else byteArrayOf()
+            val authUrl = "pubkyauth://signin?x-bitkit-claim=${claimType.wireValue}"
+            val result = sut.approveAuthWithCompanionClaim(authUrl, clientId, payload)
 
-        assertTrue(result.isSuccess)
-        verifyBlocking(pubkyService) {
-            approveAuthWithCompanionClaim(
-                authUrl = authUrl,
-                expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
-                approvedClientId = clientId,
-                secretKeyHex = secretKey,
-                claim = PubkyAuthCompanionClaim(
-                    queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
-                    claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
-                    unsignedPayload = payload,
-                ),
-            )
+            assertTrue(result.isSuccess)
+            verifyBlocking(pubkyService) {
+                approveAuthWithCompanionClaim(
+                    authUrl = authUrl,
+                    expectedCapabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES,
+                    approvedClientId = clientId,
+                    secretKeyHex = secretKey,
+                    claim = PubkyAuthCompanionClaim(
+                        queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
+                        claimType = claimType.wireValue,
+                        unsignedPayload = payload,
+                    ),
+                )
+            }
         }
     }
 
@@ -2253,71 +2260,13 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `addContact should canonicalize key before persistence`() = test {
         authenticateForTesting()
         val profile = PubkyProfile.placeholder(NON_CANONICAL_CONTACT_KEY_A)
-        whenever { pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_A) }.thenReturn(emptyList())
 
         val result = sut.addContact(NON_CANONICAL_CONTACT_KEY_A, existingProfile = profile)
 
         assertTrue(result.isSuccess)
         assertEquals(VALID_CONTACT_KEY_A, sut.contacts.value.single().publicKey)
         verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_A, profile.name, emptyList(), restorePrivateConnection = true)
-        }
-    }
-
-    @Test
-    fun `refreshContactReceiverPaths should update saved contact receiver paths`() = test {
-        authenticateForTesting()
-        val contact = PubkyProfile(
-            publicKey = VALID_CONTACT_KEY_B,
-            name = "Alice",
-            bio = "",
-            imageUrl = null,
-            links = emptyList(),
-            tags = emptyList(),
-            status = null,
-        )
-        sut.addContact(VALID_CONTACT_KEY_B, existingProfile = contact)
-        clearInvocations(pubkyService)
-        whenever(pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_B))
-            .thenReturn(listOf("bitkit/wallet", "bitkit/server"))
-
-        val result = sut.refreshContactReceiverPaths(VALID_CONTACT_KEY_B)
-
-        assertTrue(result.isSuccess)
-        verifyBlocking(pubkyService) {
-            saveContact(
-                VALID_CONTACT_KEY_B,
-                "Alice",
-                listOf("bitkit/wallet", "bitkit/server"),
-            )
-        }
-    }
-
-    @Test
-    fun `refreshContactReceiverPaths should preserve a loaded noncanonical key`() = test {
-        authenticateForTesting()
-        whenever(pubkyService.contactRecords()).thenReturn(
-            listOf(
-                createContactRecord(
-                    publicKey = NON_CANONICAL_CONTACT_KEY_A,
-                    profile = createPaykitProfile("Alice"),
-                ),
-            ),
-        )
-        sut.loadContacts()
-        clearInvocations(pubkyService)
-        whenever(pubkyService.discoverRelevantReceiverPaths(NON_CANONICAL_CONTACT_KEY_A))
-            .thenReturn(listOf("bitkit/wallet", "bitkit/server"))
-
-        val result = sut.refreshContactReceiverPaths(NON_CANONICAL_CONTACT_KEY_A)
-
-        assertTrue(result.isSuccess)
-        verifyBlocking(pubkyService) {
-            saveContact(
-                NON_CANONICAL_CONTACT_KEY_A,
-                "Alice",
-                listOf("bitkit/wallet", "bitkit/server"),
-            )
+            saveContact(VALID_CONTACT_KEY_A, profile.name, restorePrivateConnection = true)
         }
     }
 
@@ -2690,14 +2639,12 @@ class PubkyRepoTest : BaseUnitTest() {
         profile: PaykitProfile? = null,
     ) = ContactRecord(
         publicKey = publicKey,
-        receiverPaths = listOf("bitkit/wallet"),
         label = label,
         profile = profile,
         profileFetchedAt = null,
         createdAt = "2026-01-01T00:00:00Z",
         updatedAt = "2026-01-01T00:00:00Z",
         publicContactMarkerStatus = PublicationStatus.NOT_PUBLISHED,
-        publicContactMarkerReceiverPath = null,
         publicContactPublishedAt = null,
         publicContactRemovedAt = null,
         publicContactLastError = null,
@@ -2707,12 +2654,12 @@ class PubkyRepoTest : BaseUnitTest() {
         publicKey: String,
         paykitProfile: PaykitProfile? = null,
         pubkyProfile: SdkPubkyProfile? = null,
-    ) = ContactProfileResolution(
+    ) = ProfileResolution(
         publicKey = publicKey,
         source = if (paykitProfile != null) {
-            ContactProfileSource.PAYKIT_PROFILE
+            ProfileSource.PAYKIT_PROFILE
         } else {
-            ContactProfileSource.PUBKY_PROFILE
+            ProfileSource.PUBKY_PROFILE
         },
         displayName = paykitProfile?.displayName ?: pubkyProfile?.name,
         imageUri = paykitProfile?.imageUri ?: pubkyProfile?.image,
