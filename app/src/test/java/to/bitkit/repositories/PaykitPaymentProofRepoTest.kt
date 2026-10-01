@@ -10,6 +10,7 @@ import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
+import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Before
 import org.junit.Test
@@ -70,7 +71,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(store.hasPendingProofs()).thenReturn(true)
         whenever(
             paykitSdkService.identityStatus()
-        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, com.synonym.paykit.PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(onchainPaymentLookup.existingTransactionIds(any(), any(), any())).thenReturn(emptySet())
         whenever(store.load()).thenAnswer {

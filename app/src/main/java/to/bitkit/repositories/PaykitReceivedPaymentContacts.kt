@@ -14,11 +14,6 @@ internal class PaykitReceivedPaymentContacts private constructor(
     private val addresses: Map<String, Set<String>>,
     private val paymentHashes: Map<String, Set<String>>,
 ) {
-    fun contactsForAddresses(values: Collection<String>): Set<String> =
-        values.flatMapTo(mutableSetOf()) { addresses[it].orEmpty() }
-
-    fun contactsForPaymentHash(value: String): Set<String> = paymentHashes[value.lowercase()].orEmpty()
-
     companion object {
         val Empty = PaykitReceivedPaymentContacts(emptyMap(), emptyMap())
 
@@ -32,7 +27,7 @@ internal class PaykitReceivedPaymentContacts private constructor(
             for (record in records) {
                 val contact = validCounterparty(record) ?: continue
                 val terms = checkNotNull(record.terms)
-                // Only immutable request destinations identify a payer; proofs and current lists do not.
+                // Use immutable request destinations for attribution, not proofs or current lists.
                 val acceptedEndpoints = terms.paymentEndpoints.orEmpty()
                     .filterKeys(terms.acceptedPaymentEndpointIdentifiers::contains)
                 for ((identifier, payload) in acceptedEndpoints) {
@@ -87,4 +82,9 @@ internal class PaykitReceivedPaymentContacts private constructor(
             Network.REGTEST -> Currency.REGTEST
         }
     }
+
+    fun contactsForAddresses(values: Collection<String>): Set<String> =
+        values.flatMapTo(mutableSetOf()) { addresses[it].orEmpty() }
+
+    fun contactsForPaymentHash(value: String): Set<String> = paymentHashes[value.lowercase()].orEmpty()
 }
