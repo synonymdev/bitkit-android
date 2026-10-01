@@ -1100,9 +1100,13 @@ internal fun PaykitSubscription.shouldShowTiming(now: Instant): Boolean =
 internal fun PaykitSubscription.expiryDate(): Instant? =
     canceledPaidThrough() ?: recurrence.endsAt ?: paidPeriods.maxOfOrNull { it.endsAt }
 
-/** A canceled subscription is paid for up to its last paid period, whatever its fixed end date. */
+/** A canceled subscription we pay is paid for up to its last paid period, whatever its fixed end date. */
 private fun PaykitSubscription.canceledPaidThrough(): Instant? =
-    if (lifecycleState == PaymentRequestLifecycleState.CANCELED) paidPeriods.maxOfOrNull { it.endsAt } else null
+    if (isPayer && lifecycleState == PaymentRequestLifecycleState.CANCELED) {
+        paidPeriods.maxOfOrNull { it.endsAt }
+    } else {
+        null
+    }
 
 /** Active, or canceled with its last paid period still ahead: it keeps running until it is paid through. */
 internal fun PaykitSubscription.runsUntilPaidThrough(now: Instant): Boolean =

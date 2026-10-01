@@ -12,6 +12,7 @@ import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.PaykitSubscriptionMetadata
 import to.bitkit.repositories.PaykitSubscriptionRecurrence
+import to.bitkit.repositories.PaykitSubscriptionRole
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -194,6 +195,20 @@ class SubscriptionsScreenTest {
         assertFalse(canceled.runsUntilPaidThrough(paidThrough))
         assertEquals(R.string.subscriptions__expired, canceled.statusRes(paidThrough))
         assertEquals(paidThrough, nextSubscriptionTransition(listOf(canceled), now))
+    }
+
+    @Test
+    fun `canceled subscription the user created keeps its expired treatment and stays under created`() {
+        val created = canceledWithPaidThrough().copy(role = PaykitSubscriptionRole.Payee)
+        val sections = subscriptionSections(listOf(created), { now }, now)
+
+        assertFalse(created.runsUntilPaidThrough(now))
+        assertTrue(created.hasEnded(now))
+        assertEquals(R.string.subscriptions__expired, created.statusRes(now))
+        assertEquals(R.string.subscriptions__expired, created.timingTitleRes(now))
+        assertEquals(listOf(created), sections.created)
+        assertEquals(emptyList(), sections.active)
+        assertEquals(emptyList(), sections.expired)
     }
 
     @Test
