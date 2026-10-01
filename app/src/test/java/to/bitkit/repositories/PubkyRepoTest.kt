@@ -3406,7 +3406,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     private fun stubSavedSessionRestore(): SavedSessionRestore {
         val restore = SavedSessionRestore()
-        whenever { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }.thenReturn("saved_session")
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
         whenever { pubkyService.importSession("saved_session") }.doSuspendableAnswer { restore.answer() }
         return restore
     }
