@@ -39,6 +39,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.description
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
@@ -423,33 +424,7 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `public read without an sdk instance waits for the operation lock`() = runTest {
-        val keychain = mock<Keychain>()
-        val lockedGate = CompletableDeferred<Unit>()
-        whenever(keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)).doSuspendableAnswer { lockedGate.await() }
-        val sdk = mock<PaykitSdk>()
-        whenever(sdk.fetchPubkyFollows(RING_PUBKY)).thenReturn(listOf("follow"))
-        var handlesCreated = 0
-        val service = PaykitSdkService(mock(), keychain, mock()) {
-            handlesCreated++
-            sdk
-        }
-
-        val locked = async { service.clearState() }
-        runCurrent()
-        val read = async { service.fetchPubkyFollows(RING_PUBKY) }
-        runCurrent()
-        assertFalse(read.isCompleted)
-        assertEquals(0, handlesCreated)
-
-        lockedGate.complete(Unit)
-        assertEquals(listOf("follow"), read.await())
-        assertEquals(1, handlesCreated)
-        locked.await()
-    }
-
-    @Test
-    fun `public reads started without an sdk instance run concurrently once it exists`() = runTest {
+    fun `public reads started without an sdk instance wait for the operation lock then run concurrently`() = runTest {
         val keychain = mock<Keychain>()
         val lockedGate = CompletableDeferred<Unit>()
         whenever(keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)).doSuspendableAnswer { lockedGate.await() }
@@ -472,6 +447,8 @@ class PaykitSdkServiceTest {
         val reads = List(3) { async { service.fetchPubkyFollows(RING_PUBKY) } }
         runCurrent()
         assertEquals(0, active)
+        assertTrue(reads.none { it.isCompleted })
+        assertEquals(0, handlesCreated)
 
         lockedGate.complete(Unit)
         runCurrent()
@@ -622,87 +599,59 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `activation returns while identity publication is still running`() = runTest {
-        val keychain = mock<Keychain>()
-        stubReceiverNoiseSecret(keychain)
-        val store = mock<PubkyStore>()
-        whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
-        val publicationGate = CompletableDeferred<Boolean>()
-        var published = false
-        val bootstrap = mock<PubkySessionBootstrap>()
-        whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer {
-            publicationGate.await().also { published = true }
-        }
-        val access = mock<PubkySessionAccess>()
-        val noise = mock<ReceiverNoiseSecretKey>()
-        whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
-        whenever(access.exportSessionSecret()).thenReturn("new-session")
-        whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
-        val sdk = mock<PaykitSdk>()
-        val service = PaykitSdkService(
-            context = mock(),
-            keychain = keychain,
-            pubkyStore = store,
-            bootstrapFactory = { bootstrap },
-            ioDispatcher = StandardTestDispatcher(testScheduler),
-            sdkFactory = { sdk },
-        )
-
-        val activation = async {
-            service.activateRegisteredIdentity(PubkySessionBootstrapResult(access, "pubky$RING_PUBKY"))
-        }
-        runCurrent()
-
-        assertTrue(activation.isCompleted)
-        assertEquals(0L, currentTime)
-        verify(sdk).initialize()
-        verify(bootstrap).republishIdentity("pubky$RING_PUBKY")
-        assertFalse(published)
-        publicationGate.complete(true)
-        runCurrent()
-        assertTrue(published)
-    }
-
-    @Test
-    fun `approval republish joins the publication activation started until the cap`() = runTest {
-        for (gateOpens in listOf(true, false)) {
+    fun `activation returns while identity publication runs and approval republish joins it until the cap`() = runTest {
+        listOf("publication finishes" to true, "cap" to false).forEach { (case, gateOpens) ->
             val keychain = mock<Keychain>()
             stubReceiverNoiseSecret(keychain)
             val store = mock<PubkyStore>()
             whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
             val publicationGate = CompletableDeferred<Boolean>()
+            var published = false
             val bootstrap = mock<PubkySessionBootstrap>()
-            whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer { publicationGate.await() }
+            whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer {
+                publicationGate.await().also { published = true }
+            }
             val access = mock<PubkySessionAccess>()
             val noise = mock<ReceiverNoiseSecretKey>()
             whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
             whenever(access.exportSessionSecret()).thenReturn("new-session")
             whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+            val sdk = mock<PaykitSdk>()
             val service = PaykitSdkService(
                 context = mock(),
                 keychain = keychain,
                 pubkyStore = store,
                 bootstrapFactory = { bootstrap },
                 ioDispatcher = StandardTestDispatcher(testScheduler),
-                sdkFactory = { mock() },
+                sdkFactory = { sdk },
             )
-            service.activateRegisteredIdentity(PubkySessionBootstrapResult(access, "pubky$RING_PUBKY"))
+            val activationStart = currentTime
+
+            val activation = async {
+                service.activateRegisteredIdentity(PubkySessionBootstrapResult(access, "pubky$RING_PUBKY"))
+            }
             runCurrent()
-            verify(bootstrap).republishIdentity("pubky$RING_PUBKY")
+
+            assertTrue(activation.isCompleted, case)
+            assertEquals(activationStart, currentTime, case)
+            verify(sdk, description(case)).initialize()
+            verify(bootstrap, description(case)).republishIdentity("pubky$RING_PUBKY")
+            assertFalse(published, case)
             val start = currentTime
 
             val approval = async { service.republishIdentityIfNeeded(RING_PUBKY) }
             advanceTimeBy(4_999)
             runCurrent()
-            assertFalse(approval.isCompleted)
+            assertFalse(approval.isCompleted, case)
             if (gateOpens) publicationGate.complete(true) else advanceTimeBy(1)
             runCurrent()
 
-            assertTrue(approval.isCompleted)
-            assertEquals(start + if (gateOpens) 4_999 else 5_000, currentTime)
-            verify(bootstrap).republishIdentity("pubky$RING_PUBKY")
+            assertTrue(approval.isCompleted, case)
+            assertEquals(start + if (gateOpens) 4_999 else 5_000, currentTime, case)
+            verify(bootstrap, description(case)).republishIdentity("pubky$RING_PUBKY")
             publicationGate.complete(true)
             runCurrent()
+            assertTrue(published, case)
         }
     }
 
