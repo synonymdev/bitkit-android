@@ -1062,6 +1062,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val history = (recurringHistory + oneTimeHistory)
             .sortedByDescending { it.createdAt }
         if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return
+        pruneAcceptedOneTimeRequestIds(records, expectedIdentity, generation)
+        if (!isCurrentState(generation, expectedIdentity)) return
         receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
         val subscriptionStateChanged =
             subscriptionAcceptedAt != updatedSubscriptionAcceptedAt ||
@@ -1348,6 +1350,26 @@ class PaykitPaymentRequestRepo @Inject constructor(
         prunePresentedRequestIds(_pendingRequests.value)
         prunePresentedSubscriptionProposalIds(_subscriptions.value)
         scheduleExpirationLocked()
+    }
+
+    private suspend fun pruneAcceptedOneTimeRequestIds(
+        records: List<PaymentRequestRecord>,
+        identity: String,
+        generation: Long,
+    ) {
+        val finishedIds = records.filter {
+            it.localRole == PaymentRequestLocalRole.PAYER && it.terms?.recurrence == null &&
+                it.state in setOf(
+                    PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                    PaymentRequestLifecycleState.CANCELED,
+                    PaymentRequestLifecycleState.REJECTED,
+                )
+        }.mapTo(mutableSetOf()) { PaykitPaymentRequestId(it.paymentRequestId, it.counterparty) }
+            .intersect(acceptedOneTimeRequestIds)
+        if (finishedIds.isEmpty()) return
+        runSuspendCatching { presentationStore.removeAcceptedOneTimeIds(identity, finishedIds) }
+            .onSuccess { if (isCurrentState(generation, identity)) acceptedOneTimeRequestIds = it }
+            .onFailure { Logger.warn("Failed to prune accepted Paykit payment requests", it, context = TAG) }
     }
 
     private suspend fun prunePresentedRequestIds(requests: List<PaykitPaymentRequest>) {

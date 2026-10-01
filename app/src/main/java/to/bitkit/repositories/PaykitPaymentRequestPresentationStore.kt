@@ -90,6 +90,25 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
             ids
         }
 
+    suspend fun removeAcceptedOneTimeIds(
+        identity: String,
+        ids: Set<PaykitPaymentRequestId>,
+    ): Set<PaykitPaymentRequestId> =
+        mutex.withLock {
+            val normalizedIdentity = requireNotNull(PubkyPublicKeyFormat.normalized(identity))
+            val current = loadAcceptedOneTimeIdsByIdentity()
+            val storedIds = current[normalizedIdentity].orEmpty()
+            val remaining = storedIds - ids
+            if (remaining == storedIds) return@withLock remaining
+            val state = if (remaining.isEmpty()) {
+                current - normalizedIdentity
+            } else {
+                current + (normalizedIdentity to remaining)
+            }
+            keychain.upsertString(ACCEPTED_KEY, Json.encodeToString(state))
+            remaining
+        }
+
     private fun loadAcceptedOneTimeIdsByIdentity(): Map<String, Set<PaykitPaymentRequestId>> {
         val value = keychain.loadString(ACCEPTED_KEY) ?: return emptyMap()
         return runCatching { Json.decodeFromString<Map<String, Set<PaykitPaymentRequestId>>>(value) }
