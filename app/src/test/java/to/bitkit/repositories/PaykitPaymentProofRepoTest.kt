@@ -435,6 +435,21 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `broadcast transaction id is retained without a live identity`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val repo = paymentProofRepo()
+        val txid = "ab".repeat(32)
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        whenever(paykitSdkService.identityStatus()).thenReturn(null)
+
+        repo.completeOnchainPayment(request, txid, MethodId.P2wpkh.rawValue, "bitkit")
+
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        assertEquals(txid, storedProofs.single().proofData)
+    }
+
+    @Test
     fun `onchain proof submits without prepared proof`() = test {
         val txid = "ab".repeat(32)
         val endpoint = MethodId.P2wpkh.rawValue

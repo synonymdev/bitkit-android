@@ -26,6 +26,11 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 
 ## Accepting install
 
+Acceptance intent is saved before the remote operation and included in wallet backups.
+An interrupted response is reconciled against the shared request before payment. Restoring
+the wallet restores its pending acceptances; this does not support running the same wallet
+on multiple devices concurrently.
+
 `accepted-device-ownership.xml` extends the failing LNURL fixture to two separate installs sharing
 one Pubky identity and App ID. Only the accepting install may retry after restart; the other keeps
 the accepted request in history without payment controls. Confirm acceptance in shared request

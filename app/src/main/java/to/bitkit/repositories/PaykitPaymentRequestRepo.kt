@@ -5,6 +5,7 @@ package to.bitkit.repositories
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.OutboundPrivateMessageStatus
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
@@ -836,13 +837,27 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
                     val generation = stateGeneration.get()
                     ensurePaymentAllowed(it, forExecution = false).getOrThrow()
-                    paykitSdkService.acceptPaymentRequest(
-                        counterparty = it.counterparty,
-                        paymentRequestId = it.paymentRequestId,
-                    )
+                    val alreadySaved = it.id in presentationStore.loadAcceptedOneTimeIds(identity)
                     val acceptedIds = presentationStore.addAcceptedOneTimeId(identity, it.id)
                     if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
                     acceptedOneTimeRequestIds = acceptedIds
+                    runSuspendCatching {
+                        paykitSdkService.acceptPaymentRequest(
+                            counterparty = it.counterparty,
+                            paymentRequestId = it.paymentRequestId,
+                        )
+                    }.onFailure { error ->
+                        // Acceptance may already be committed. Reconcile before discarding its owner.
+                        val uncertain = when (error) {
+                            is PaykitException.Transport, is PaykitException.Storage, is PaykitException.Identity -> true
+                            else -> false
+                        }
+                        if (!alreadySaved && !uncertain) {
+                            val remaining = presentationStore.removeAcceptedOneTimeIds(identity, setOf(it.id))
+                            if (isCurrentState(generation, identity)) acceptedOneTimeRequestIds = remaining
+                        }
+                    }.getOrThrow()
+                    if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
                 }.getOrThrow()
             }
         }.onFailure {
@@ -1188,7 +1203,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
         activatedGeneration == stateGeneration.get() && request.id in acceptedOneTimeRequestIds
 
     private fun hasCurrentExecutionContext(request: PaykitPaymentRequest): Boolean {
-        if (request.billingPeriod == null) return hasLocalAcceptance(request)
+        if (request.billingPeriod == null) {
+            return hasLocalAcceptance(request) && _paymentRequestHistory.value.any {
+                it.id == request.id && it.lifecycleState == PaymentRequestLifecycleState.ACCEPTED
+            }
+        }
         return activatedGeneration == stateGeneration.get() && _subscriptions.value.any {
             it.isPayer && it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING && request.belongsTo(it)
         }

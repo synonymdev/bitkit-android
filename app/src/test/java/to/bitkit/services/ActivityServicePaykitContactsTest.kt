@@ -36,6 +36,7 @@ import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.create
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PaykitReceivedPaymentContactsTest.Companion.BUYER
@@ -118,6 +119,19 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         )
         whenever(contacts.contactsForPaymentHash(any())).thenReturn(setOf("buyer"))
         whenever(contacts.contactsForAddresses(any())).thenReturn(setOf("buyer"))
+
+        assertFalse(sut.backfillPaykitContacts())
+        assertTrue(updates.isEmpty())
+    }
+
+    @Test
+    fun `backfill respects a manually detached contact`() = coreTest {
+        val original = lightning()
+        rows = listOf(Activity.Lightning(original))
+        whenever(contacts.contactsForPaymentHash(original.id)).thenReturn(setOf(BUYER))
+        cacheData.value = cacheData.value.copy(
+            detachedActivityContacts = setOf(scopedActivityId(original.walletId, original.id)),
+        )
 
         assertFalse(sut.backfillPaykitContacts())
         assertTrue(updates.isEmpty())

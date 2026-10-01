@@ -514,7 +514,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun fetchPubkyFollows(publicKey: String): List<String> {
         isSetup.await()
         return operationLock.withLock {
-            handle().fetchPubkyFollows(publicKey, maxEntries = 1000u)
+            handle().fetchPubkyFollows(publicKey, maxEntries = 10_000u)
         }
     }
 
@@ -1303,7 +1303,7 @@ internal class PaykitSdkSessionProvider(
     }
 
     fun setPaykitIdentitySecretKey(key: PaykitIdentitySecretKey) = synchronized(lock) {
-        if ((paykitIdentitySecretKey?.keyGeneration() ?: 1uL) != key.keyGeneration()) {
+        if (paykitIdentitySecretKey?.keyGeneration() != key.keyGeneration()) {
             liveSessionAccess = null
         }
         paykitIdentitySecretKey = key

@@ -6,6 +6,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import to.bitkit.repositories.PaykitPaymentProofKind
+import to.bitkit.repositories.PaykitPaymentRequestId
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -36,10 +37,12 @@ class PaykitPaymentStateBackupTest {
                     )
                 },
                 pendingProofs = listOf(PaykitPaymentStateBackup.Proof(restored)),
+                acceptedOneTimeRequests = mapOf("alice" to setOf(PaykitPaymentRequestId("one-time", "bob"))),
             )
             val decoded = Json.decodeFromString<PaykitPaymentStateBackup>(Json.encodeToString(rebuilt))
             assertEquals(restored, decoded.pendingProofs.single().restored())
             assertEquals(backup.subscriptions, decoded.subscriptions)
+            assertEquals(rebuilt.acceptedOneTimeRequests, decoded.acceptedOneTimeRequests)
 
             val hardwareProof = restored.copy(onchainWalletId = "hardware-wallet")
             val hardwareBackup = PaykitPaymentStateBackup.Proof(hardwareProof)

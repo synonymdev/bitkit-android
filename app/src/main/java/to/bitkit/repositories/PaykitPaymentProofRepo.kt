@@ -273,8 +273,18 @@ class PaykitPaymentProofRepo @Inject constructor(
             return@withContext
         }
 
-        val identity = currentIdentity() ?: return@withContext
-        val fallbackProof = runSuspendCatching {
+        val prepared = operationMutex.withLock {
+            runSuspendCatching {
+                loadProofs().filter {
+                    it.requestId == request.id && it.paymentAppId == paymentAppId &&
+                        it.paymentEndpointIdentifier == paymentEndpointIdentifier &&
+                        it.kind == PaykitPaymentProofKind.Onchain && it.paymentStarted &&
+                        it.paymentIdentifier == null && it.proofData == null
+                }.singleOrNull()
+            }.getOrNull()
+        }
+        val identity = prepared?.identity ?: currentIdentity() ?: return@withContext
+        val fallbackProof = prepared ?: runSuspendCatching {
             pendingProof(request, paymentEndpointIdentifier, paymentAppId, PaykitPaymentProofKind.Onchain)
         }.getOrNull()
         operationMutex.withLock {
