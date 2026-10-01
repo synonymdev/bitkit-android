@@ -94,6 +94,17 @@ class PaykitReceivedPaymentContactsTest {
     }
 
     @Test
+    fun `contact snapshots compare by attribution values not record order or lifecycle`() = withDecoder {
+        val first = index(receivedRequest(), receivedRequest(counterparty = OTHER_BUYER))
+        val refreshed = index(
+            receivedRequest(counterparty = OTHER_BUYER, state = PaymentRequestLifecycleState.ACCEPTED),
+            receivedRequest(state = PaymentRequestLifecycleState.CANCELED),
+        )
+        assertEquals(first, refreshed)
+        assertEquals(first.hashCode(), refreshed.hashCode())
+    }
+
+    @Test
     fun `terminal request states retain exact destination attribution`() = withDecoder {
         for (state in PaymentRequestLifecycleState.entries.filterNot {
             it == PaymentRequestLifecycleState.INVALID_CONFLICT || it == PaymentRequestLifecycleState.UNKNOWN

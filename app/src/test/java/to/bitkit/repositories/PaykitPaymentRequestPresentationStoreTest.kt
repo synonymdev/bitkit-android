@@ -93,6 +93,50 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `accepted one time ownership survives reopening but never enters wallet backup`() = test {
+        val keychain = mock<Keychain>()
+        val values = mutableMapOf<String, String>()
+        whenever(keychain.loadString(any())).thenAnswer { values[it.getArgument<String>(0)] }
+        whenever { keychain.upsertString(any(), any()) }.thenAnswer {
+            values[it.getArgument(0)] = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
+        val secondId = PaykitPaymentRequestId("second", COUNTERPARTY)
+        sut.addAcceptedOneTimeId(IDENTITY, requestId)
+        sut.addAcceptedOneTimeId(COUNTERPARTY, secondId)
+        sut.addAcceptedOneTimeId(IDENTITY, secondId)
+        sut.save(IDENTITY, setOf(requestId))
+
+        val reopened = PaykitPaymentRequestPresentationStore(keychain)
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(secondId), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
+        assertEquals(emptyMap(), reopened.backupSnapshot())
+        assertEquals(0L, sut.backupStateVersion.value)
+        reopened.restoreBackup(emptyMap())
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+
+        values.clear()
+        reopened.restoreBackup(emptyMap())
+        assertEquals(emptySet(), reopened.loadAcceptedOneTimeIds(IDENTITY))
+    }
+
+    @Test
+    fun `unreadable accepted one time ownership is preserved and fails closed`() = test {
+        val keychain = mock<Keychain>()
+        val acceptedKey = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
+        whenever(keychain.loadString(acceptedKey)).thenReturn("not-json")
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+
+        assertFailsWith<PaykitPaymentStateUnreadableError> { sut.loadAcceptedOneTimeIds(IDENTITY) }
+        assertFailsWith<PaykitPaymentStateUnreadableError> {
+            sut.addAcceptedOneTimeId(IDENTITY, PaykitPaymentRequestId("request", COUNTERPARTY))
+        }
+        verify(keychain, never()).upsertString(any(), any())
+    }
+
+    @Test
     fun `backup restore preserves precise acceptance billing boundaries`() = test {
         val keychain = mock<Keychain>()
         var storedValue: String? = null

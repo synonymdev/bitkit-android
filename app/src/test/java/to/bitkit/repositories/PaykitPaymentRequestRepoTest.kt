@@ -103,6 +103,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
         whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(presentationStore.loadAcceptedOneTimeIds(any())).thenReturn(emptySet())
+        whenever(presentationStore.addAcceptedOneTimeId(any(), any())).thenAnswer {
+            setOf(it.getArgument<PaykitPaymentRequestId>(1))
+        }
         whenever(
             presentationStore.loadSubscriptionState(any())
         ).thenReturn(PaykitSubscriptionPresentationState())
@@ -181,6 +185,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `blocking an already presented accepted request prevents payment`() = test {
+        restoreAcceptedRequest()
         val record = paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
         sut.refresh().getOrThrow()
@@ -193,6 +198,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `accepted request checks blocking after waiting for synchronization`() = test {
+        restoreAcceptedRequest()
         val record = paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
         sut.refresh().getOrThrow()
@@ -419,7 +425,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.refresh().getOrThrow()
 
-        assertEquals(listOf("incoming", "accepted"), sut.pendingRequests.value.map { it.paymentRequestId })
+        assertEquals(listOf("incoming"), sut.pendingRequests.value.map { it.paymentRequestId })
         assertEquals(
             setOf(
                 "incoming", "accepted", "rejected", "expired", "outgoing", "unsupported",
@@ -537,6 +543,211 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(PaymentRequestLifecycleState.ACCEPTED, sut.paymentRequestHistory.value.single().lifecycleState)
         verifyBlocking(paykitSdkService) { processPendingPrivateMessages() }
+        verify(presentationStore).addAcceptedOneTimeId(
+            LOCAL_IDENTITY,
+            PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY),
+        )
+    }
+
+    @Test
+    fun `local acceptance survives refresh and reconnect without accepting twice`() = test {
+        val proposed = paymentRequestRecord()
+        val accepted = proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any())).thenReturn(accepted)
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        sut.accept(request).getOrThrow()
+
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(accepted))
+        sut.refresh().getOrThrow()
+        sut.accept(sut.pendingRequests.value.single()).getOrThrow()
+        whenever(presentationStore.loadAcceptedOneTimeIds(LOCAL_IDENTITY)).thenReturn(setOf(request.id))
+        sut.clear()
+        sut.activate(LOCAL_IDENTITY)
+        sut.refresh().getOrThrow()
+        sut.accept(sut.pendingRequests.value.single()).getOrThrow()
+        verify(paykitSdkService, times(1)).acceptPaymentRequest(any(), any())
+        sut.ensurePaymentAllowed(request).getOrThrow()
+
+        sut.activate(SECOND_IDENTITY)
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+    }
+
+    @Test
+    fun `final authorization rechecks identity after asynchronous peer lookup`() = test {
+        restoreAcceptedRequest()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val checking = CompletableDeferred<Unit>()
+        val checked = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            checking.complete(Unit)
+            checked.await()
+            emptyList()
+        }
+        val authorization = async { sut.ensurePaymentAllowed(request) }
+        checking.await()
+        sut.activate(SECOND_IDENTITY)
+        checked.complete(Unit)
+
+        assertTrue(authorization.await().isFailure)
+    }
+
+    @Test
+    fun `queued identity switch invalidates ownership before acquiring the repository mutex`() = test {
+        restoreAcceptedRequest()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val refreshing = CompletableDeferred<Unit>()
+        val refreshed = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            refreshing.complete(Unit)
+            refreshed.await()
+            emptyList()
+        }
+        val refresh = async { sut.refresh() }
+        refreshing.await()
+        val activation = async { sut.activate(SECOND_IDENTITY) }
+        runCurrent()
+
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+        refreshed.complete(Unit)
+        refresh.await()
+        activation.await()
+    }
+
+    @Test
+    fun `unknown acceptance or failed persistence never grants local ownership`() = test {
+        val proposed = paymentRequestRecord()
+        val accepted = proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any()))
+            .thenThrow(IllegalStateException("unknown completion")).thenReturn(accepted)
+        whenever(presentationStore.addAcceptedOneTimeId(any(), any())).thenThrow(IllegalStateException("disk"))
+        for (sdkSucceeded in listOf(false, true)) {
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
+            sut.refresh().getOrThrow()
+            assertTrue(sut.accept(sut.pendingRequests.value.single()).isFailure)
+            if (!sdkSucceeded) verify(presentationStore, never()).addAcceptedOneTimeId(any(), any())
+
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(accepted))
+            sut.refresh().getOrThrow()
+            assertTrue(sut.pendingRequests.value.isEmpty())
+            assertTrue(sut.accept(sut.paymentRequestHistory.value.single()).isFailure)
+            assertTrue(sut.ensurePaymentAllowed(sut.paymentRequestHistory.value.single()).isFailure)
+        }
+    }
+
+    @Test
+    fun `final authorization requires durable ownership regardless of snapshot lifecycle`() = test {
+        val proposed = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any()))
+            .thenReturn(proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED))
+        val saving = CompletableDeferred<Unit>()
+        val saved = CompletableDeferred<Unit>()
+        whenever(presentationStore.addAcceptedOneTimeId(any(), any())).doSuspendableAnswer {
+            saving.complete(Unit)
+            saved.await()
+            setOf(it.getArgument<PaykitPaymentRequestId>(1))
+        }
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val acceptedSnapshot = request.copy(lifecycleState = PaymentRequestLifecycleState.ACCEPTED)
+        val acceptance = async { sut.accept(request) }
+        saving.await()
+        assertFalse(acceptance.isCompleted)
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+        assertTrue(sut.ensurePaymentAllowed(acceptedSnapshot).isFailure)
+
+        saved.complete(Unit)
+        acceptance.await().getOrThrow()
+        sut.ensurePaymentAllowed(request).getOrThrow()
+        sut.ensurePaymentAllowed(acceptedSnapshot).getOrThrow()
+    }
+
+    @Test
+    fun `second install cannot accept stale proposal or resume first installs acceptance`() = test {
+        val otherStore = mock<PaykitPaymentRequestPresentationStore>()
+        whenever(otherStore.loadSubscriptionState(any())).thenReturn(PaykitSubscriptionPresentationState())
+        val other = PaykitPaymentRequestRepo(
+            testDispatcher,
+            paykitSdkService,
+            settingsStore,
+            otherStore,
+            diagnostics,
+            paymentProofStore,
+            paymentProofRepo,
+            subscriptionNotificationScheduler,
+            clock,
+        )
+        other.activate(LOCAL_IDENTITY)
+        var record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenAnswer { listOf(record) }
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any())).thenAnswer {
+            check(record.state == PaymentRequestLifecycleState.PROPOSED)
+            record = record.copy(state = PaymentRequestLifecycleState.ACCEPTED)
+            record
+        }
+        sut.refresh().getOrThrow()
+        other.refresh().getOrThrow()
+        val stale = other.pendingRequests.value.single()
+        sut.accept(sut.pendingRequests.value.single()).getOrThrow()
+
+        assertTrue(other.accept(stale).isFailure)
+        other.refresh().getOrThrow()
+        assertTrue(other.pendingRequests.value.isEmpty())
+        assertTrue(other.automaticPendingRequests().isEmpty())
+        val remoteAccepted = other.paymentRequestHistory.value.single()
+        assertNull(other.pendingRequest(remoteAccepted.id))
+        assertTrue(other.accept(remoteAccepted).isFailure)
+        assertTrue(other.claimForPayment(remoteAccepted).isFailure)
+        assertTrue(other.ensurePaymentAllowed(remoteAccepted).isFailure)
+        verify(paykitSdkService, never()).claimPaymentRequestForExecution(any(), any())
+        verify(otherStore, never()).addAcceptedOneTimeId(any(), any())
+        sut.refresh().getOrThrow()
+        sut.accept(sut.pendingRequests.value.single()).getOrThrow()
+        other.clear()
+    }
+
+    @Test
+    fun `identity switch during acceptance saves only the captured identity and prevents execution`() = test {
+        val proposed = paymentRequestRecord()
+        val accepting = CompletableDeferred<Unit>()
+        val accepted = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any())).doSuspendableAnswer {
+            accepting.complete(Unit)
+            accepted.await()
+            proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
+        }
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val acceptance = async { sut.accept(request) }
+        accepting.await()
+        val activation = async { sut.activate(SECOND_IDENTITY) }
+        runCurrent()
+        accepted.complete(Unit)
+
+        assertTrue(acceptance.await().isFailure)
+        activation.await()
+        verify(presentationStore).addAcceptedOneTimeId(LOCAL_IDENTITY, request.id)
+        verify(presentationStore, never()).addAcceptedOneTimeId(eq(SECOND_IDENTITY), any())
+        val snapshot = request.copy(lifecycleState = PaymentRequestLifecycleState.ACCEPTED)
+        assertTrue(sut.ensurePaymentAllowed(snapshot).isFailure)
+    }
+
+    @Test
+    fun `unreadable accepted ownership prevents activation`() = test {
+        sut.clear()
+        whenever(presentationStore.loadAcceptedOneTimeIds(LOCAL_IDENTITY))
+            .thenThrow(IllegalStateException("unreadable"))
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
+        sut.activate(LOCAL_IDENTITY)
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
     }
 
     @Test
@@ -1205,6 +1416,14 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         advanceTimeBy(1_000)
 
         assertTrue(!sut.isPending(request))
+    }
+
+    private suspend fun restoreAcceptedRequest() {
+        whenever(presentationStore.loadAcceptedOneTimeIds(LOCAL_IDENTITY)).thenReturn(
+            setOf(PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY)),
+        )
+        sut.clear()
+        sut.activate(LOCAL_IDENTITY)
     }
 
     @Suppress("LongParameterList")
