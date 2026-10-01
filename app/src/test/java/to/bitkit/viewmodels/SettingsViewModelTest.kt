@@ -79,7 +79,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
-        whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
 
@@ -144,7 +144,7 @@ class SettingsViewModelTest : BaseUnitTest() {
 
         assertFalse(settingsData.value.publicPaykitCleanupPending)
         verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
-        verify(publicPaykitRepo).syncLocalReceiverMarker(publicSharingEnabled = false, privateSharingEnabled = false)
+        verify(publicPaykitRepo).syncPaykitApp(privateSharingEnabled = false)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
     }
 
@@ -152,8 +152,7 @@ class SettingsViewModelTest : BaseUnitTest() {
     fun `disabling Paykit with private-only state keeps cleanup pending when marker removal fails`() = test {
         clearInvocations(publicPaykitRepo)
         whenever {
-            publicPaykitRepo.syncLocalReceiverMarker(
-                publicSharingEnabled = false,
+            publicPaykitRepo.syncPaykitApp(
                 privateSharingEnabled = false,
             )
         }
@@ -168,7 +167,7 @@ class SettingsViewModelTest : BaseUnitTest() {
 
         assertTrue(settingsData.value.publicPaykitCleanupPending)
         verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
-        verify(publicPaykitRepo).syncLocalReceiverMarker(publicSharingEnabled = false, privateSharingEnabled = false)
+        verify(publicPaykitRepo).syncPaykitApp(privateSharingEnabled = false)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
     }
 

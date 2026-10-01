@@ -6,7 +6,7 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 
 ## Setup
 
-Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save the fixture issuer as a contact, link it on receiver path `bitkit/server`, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. The `bitkit/server` path belongs to the third-party fixture issuer; use `bitkit/wallet` when another Bitkit instance is the issuer.
+Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save and link the fixture issuer as a contact, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. Its App ID is `paykit-server`; Bitkit uses `bitkit`.
 
 The accepted journey uses:
 
@@ -18,7 +18,7 @@ The accepted journey uses:
 
 Rejected fixture shapes stay in unit tests because Bitkit intentionally does not present requests that fail the contract gate.
 
-`request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked on receiver path `bitkit/wallet`, and the payer holds enough balance to pay 21,000 sats.
+`request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked, and the payer holds enough balance to pay 21,000 sats.
 
 `contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
 
@@ -59,10 +59,10 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 
 ## Payment deadline history
 
-`payment-deadline-history.xml` covers rc56 requests with actual-payment deadlines.
+`payment-deadline-history.xml` covers requests with actual-payment deadlines.
 Bitkit keeps their lifecycle and paid-period history, and subscription cancellation,
 but does not accept them, offer payments, or schedule payment reminders. The journey
-requires a controlled rc56 peer to prepare the accepted and paid records; repository
+requires a controlled shared-runtime peer to prepare the accepted and paid records; repository
 tests cover these states without sending funds. On Android, unpaid history rows show
 lifecycle labels, while paid rows show subscription names, notes, or dates. Active
 subscriptions are opened from Overview. The journeys record each fixture's payment

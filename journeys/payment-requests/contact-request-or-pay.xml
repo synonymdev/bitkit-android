@@ -1,6 +1,6 @@
 <journey name="Contact Request Or Pay">
   <description>
-    Verifies that Pay on a linked contact offers Request or Pay, that paying shows progress on the sheet until the amount screen opens within a few seconds, and that Request opens the Payment Request amount screen. Requires two Bitkit instances saved as each other's contacts and linked on receiver path "bitkit/wallet", with the payer funded; see README.md. Let the payer run for a minute after launch before starting, so start-up Paykit work does not dominate the timings. Open the contact with adb shell am start -a android.intent.action.VIEW -d "bitkit://contact?pubky=&lt;requester-public-key&gt;" to.bitkit.dev.
+    Verifies that Pay on a linked contact offers Request or Pay, that paying shows progress on the sheet until the amount screen opens within a few seconds, and that Request opens the Payment Request amount screen. Requires two Bitkit instances saved as each other's contacts and linked as identities, with the payer funded; see README.md. Let the payer run for a minute after launch before starting, so start-up Paykit work does not dominate the timings. Open the contact with adb shell am start -a android.intent.action.VIEW -d "bitkit://contact?pubky=&lt;requester-public-key&gt;" to.bitkit.dev.
   </description>
   <actions>
     <action>Open bitkit://contact?pubky=&lt;requester-public-key&gt; on the payer</action>

@@ -15,6 +15,7 @@ import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PreparedWatchOnlyAccountClaim
 import to.bitkit.models.PubkyAuthClaim
+import to.bitkit.models.PubkyAuthClaimCodec
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH
@@ -328,7 +329,7 @@ object WatchOnlyAccountClaimCodec {
     const val VERSION: Byte = 1
     const val NATIVE_SEGWIT_ADDRESS_TYPE: Byte = 0
     const val SERIALIZED_XPUB_LENGTH = WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH
-    const val PAYLOAD_LENGTH = 1 + 4 + 1 + SERIALIZED_XPUB_LENGTH
+    const val PAYLOAD_LENGTH = PubkyAuthClaimCodec.WATCH_ONLY_PAYLOAD_LENGTH
 
     fun encode(
         account: WatchOnlyAccountRecord,

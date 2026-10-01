@@ -10,24 +10,23 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-class RefreshContactPaykitReceiversUseCase @Inject constructor(
+class RefreshContactPaykitLinkUseCase @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val pubkyRepo: PubkyRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
 ) {
     companion object {
-        private const val TAG = "RefreshContactPaykitReceiversUseCase"
+        private const val TAG = "RefreshContactPaykitLinkUseCase"
     }
 
     suspend operator fun invoke(publicKey: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            pubkyRepo.refreshContactReceiverPaths(publicKey).getOrThrow()
             val savedPublicKeys = (pubkyRepo.contacts.value.map { it.publicKey } + publicKey).distinct()
             privatePaykitRepo.refreshSavedContactEndpoints(publicKey, savedPublicKeys).getOrThrow()
-            privatePaykitRepo.startInitialLinkBurst(savedPublicKeys, "contact receiver refresh")
+            privatePaykitRepo.startInitialLinkBurst(savedPublicKeys, "contact link refresh")
         }.onFailure {
             Logger.warn(
-                "Failed to refresh Paykit receivers for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
+                "Failed to refresh the Paykit link for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
                 it,
                 context = TAG,
             )

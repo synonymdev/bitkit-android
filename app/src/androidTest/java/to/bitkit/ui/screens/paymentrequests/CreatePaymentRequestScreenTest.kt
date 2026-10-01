@@ -163,13 +163,11 @@ class CreatePaymentRequestScreenTest {
 
     private val target = PaykitPaymentRequestTarget(
         publicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-        receiverPath = "bitkit/wallet",
     )
 
     private val request = PaykitPaymentRequest(
         paymentRequestId = "payment-request",
         counterparty = target.publicKey,
-        counterpartyReceiverPath = target.receiverPath,
         amountValue = "0.00025",
         amountSats = draft.amountSats,
         note = draft.note,

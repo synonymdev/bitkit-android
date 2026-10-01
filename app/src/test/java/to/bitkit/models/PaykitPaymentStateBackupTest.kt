@@ -18,7 +18,7 @@ class PaykitPaymentStateBackupTest {
     fun `payment backup accepts shared wire format and retains pending payment`() {
         WalletScope.pushTestOverride("wallet0").use {
             val fixture = """
-                {"subscriptions":{"alice":{"acceptances":[{"id":{"paymentRequestId":"request","counterparty":"bob","counterpartyReceiverPath":"bitkit/server"},"acceptedAt":"2026-09-24T10:00:00.123Z"}],"presentedProposalIds":[]}},"pendingProofs":[{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob","counterpartyReceiverPath":"bitkit/server","billingPeriodStartsAt":"2026-09-24T10:00:00.100Z"},"paymentEndpointIdentifier":"bitcoin-onchain","kind":"bitcoin-onchain-txid","paymentStarted":true,"billingPeriod":{"startsAt":"2026-09-24T10:00:00.100Z","endsAt":"2026-09-25T10:00:00.100Z"},"onchainMatchingTransactionIdsBeforeAttempt":[]}]}
+                {"subscriptions":{"alice":{"acceptances":[{"id":{"paymentRequestId":"request","counterparty":"bob"},"acceptedAt":"2026-09-24T10:00:00.123Z"}],"presentedProposalIds":[]}},"pendingProofs":[{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob","billingPeriodStartsAt":"2026-09-24T10:00:00.100Z"},"paymentAppId":"bitkit","paymentEndpointIdentifier":"bitcoin-onchain","kind":"bitcoin-onchain-txid","paymentStarted":true,"billingPeriod":{"startsAt":"2026-09-24T10:00:00.100Z","endsAt":"2026-09-25T10:00:00.100Z"},"onchainMatchingTransactionIdsBeforeAttempt":[]}]}
             """.trimIndent()
             val backup = Json.decodeFromString<PaykitPaymentStateBackup>(fixture)
             val restored = backup.pendingProofs.single().restored()
