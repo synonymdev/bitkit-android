@@ -101,7 +101,6 @@ class PaykitAllowanceRepo @Inject constructor(
         /** Endpoints Bitkit pays automatically: bolt11 and every on-chain method of the network. */
         fun allowedPaymentEndpointIdentifiers(network: Network = Env.network): List<String> =
             (listOf(MethodId.Bolt11) + MethodId.entries.filter { it.isOnchain }).map { it.rawValueForNetwork(network) }
-
     }
 
     private val scope = appScope(ioDispatcher, TAG)
