@@ -40,7 +40,7 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
             Unit
         }
         val sut = PaykitPaymentRequestPresentationStore(keychain)
-        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY, "bitkit/server")
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
 
         val loadError = assertFailsWith<PaykitPaymentStateUnreadableError> { sut.load(IDENTITY) }
         val saveError = assertFailsWith<PaykitPaymentStateUnreadableError> { sut.save(IDENTITY, setOf(requestId)) }
@@ -63,8 +63,8 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
             Unit
         }
         val sut = PaykitPaymentRequestPresentationStore(keychain)
-        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY, "bitkit/server")
-        val subscriptionId = PaykitSubscriptionId("subscription", COUNTERPARTY, "bitkit/server")
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
+        val subscriptionId = PaykitSubscriptionId("subscription", COUNTERPARTY)
         val dismissedOnly = PaykitSubscriptionPresentationState(dismissedPaymentIds = setOf(requestId))
         val accepted = dismissedOnly.copy(
             acceptedAt = mapOf(subscriptionId to Instant.parse("2026-09-24T08:00:00.123Z")),
@@ -102,8 +102,8 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
             Unit
         }
         val sut = PaykitPaymentRequestPresentationStore(keychain)
-        val millisecondId = PaykitSubscriptionId("millisecond", COUNTERPARTY, "bitkit/server")
-        val nanosecondId = PaykitSubscriptionId("nanosecond", COUNTERPARTY, "bitkit/server")
+        val millisecondId = PaykitSubscriptionId("millisecond", COUNTERPARTY)
+        val nanosecondId = PaykitSubscriptionId("nanosecond", COUNTERPARTY)
         val acceptedAt = mapOf(
             millisecondId to Instant.parse("2026-09-24T10:00:00.123Z"),
             nanosecondId to Instant.parse("2026-09-24T10:00:00.123456789Z"),
@@ -139,7 +139,7 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     fun `invalid subscription timestamp identifies its preserved key`() = test {
         val keychain = mock<Keychain>()
         val value = """
-            {"subscriptionStatesByIdentity":{"$IDENTITY":{"acceptances":[{"id":{"paymentRequestId":"subscription","counterparty":"$COUNTERPARTY","counterpartyReceiverPath":"bitkit/server"},"acceptedAt":"not-a-timestamp"}]}}}
+            {"subscriptionStatesByIdentity":{"$IDENTITY":{"acceptances":[{"id":{"paymentRequestId":"subscription","counterparty":"$COUNTERPARTY"},"acceptedAt":"not-a-timestamp"}]}}}
         """.trimIndent()
         whenever(keychain.loadString(KEY)).thenReturn(value)
 

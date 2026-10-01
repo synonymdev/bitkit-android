@@ -71,7 +71,6 @@ class PaymentRequestPresentationTest {
     ) = PaykitPaymentRequest(
         paymentRequestId = "request-id",
         counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-        counterpartyReceiverPath = "bitkit/server",
         amountValue = "0.000025",
         amountSats = 2_500uL,
         expiresAt = null,

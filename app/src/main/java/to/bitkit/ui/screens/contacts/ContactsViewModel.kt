@@ -16,13 +16,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
-import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
+import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import javax.inject.Inject
 
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
-    private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
+    private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase,
 ) : ViewModel() {
 
     private val _searchText = MutableStateFlow("")
@@ -70,7 +70,7 @@ class ContactsViewModel @Inject constructor(
     }
 
     fun refreshExistingContact(publicKey: String) {
-        viewModelScope.launch { refreshContactPaykitReceivers(publicKey) }
+        viewModelScope.launch { refreshContactPaykitLink(publicKey) }
     }
 }
 
