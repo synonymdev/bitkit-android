@@ -231,6 +231,24 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adding a tag to a contact whose profile cannot be loaded saves nothing`() = test {
+        whenever(context.getString(any())).thenReturn("")
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(pubkyRepo.isContactProfilePending(TEST_PUBLIC_KEY)).thenReturn(true)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.showAddTagSheet()
+
+        sut.addTag("Bitcoin")
+        advanceUntilIdle()
+
+        verify(pubkyRepo, never()).updateContact(any(), any(), any(), anyOrNull(), any(), any())
+        assertTrue(sut.uiState.value.showAddTagSheet)
+        assertEquals(emptyList(), sut.uiState.value.tags)
+        verify(pubkyRepo, times(2)).resolvePendingContactProfile(TEST_PUBLIC_KEY)
+    }
+
+    @Test
     fun `failed tag addition stays open and can be retried`() = test {
         whenever(context.getString(any())).thenReturn("")
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact(tags = listOf("Friend")))))

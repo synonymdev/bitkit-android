@@ -100,12 +100,21 @@ class EditContactViewModel @Inject constructor(
                 .map { contacts -> contacts.find { it.publicKey == publicKey } }
                 .filterNotNull()
                 .distinctUntilChanged()
-                .collectLatest { if (!_uiState.value.isLoading && !hasEdits) applyContact(it) }
+                .collectLatest {
+                    if (_uiState.value.isLoading || hasEdits || pubkyRepo.isContactProfilePending(publicKey)) {
+                        return@collectLatest
+                    }
+                    applyContact(it)
+                }
         }
     }
 
     private suspend fun applyResolvedContact(contact: PubkyProfile) {
         pubkyRepo.resolvePendingContactProfile(publicKey)
+        if (pubkyRepo.isContactProfilePending(publicKey)) {
+            _uiState.update { it.copy(isLoading = false, isMissing = true) }
+            return
+        }
         applyContact(pubkyRepo.contacts.value.find { it.publicKey == publicKey } ?: contact)
     }
 

@@ -350,6 +350,18 @@ class ContactDetailViewModel @Inject constructor(
         viewModelScope.launch {
             tagPersistenceMutex.withLock {
                 contactLoad?.join()
+                pubkyRepo.resolvePendingContactProfile(publicKey)
+                if (pubkyRepo.isContactProfilePending(publicKey)) {
+                    Logger.warn(
+                        "Skipped saving tags for contact '$redactedPublicKey' without its profile",
+                        context = TAG,
+                    )
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.contacts__edit_save_error),
+                    )
+                    return@withLock
+                }
                 val state = _uiState.value
                 val profile = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
                     ?: state.profile

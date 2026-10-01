@@ -110,6 +110,31 @@ class EditContactViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a contact whose profile cannot be loaded shows the retry state instead of the form`() = test {
+        val labelOnly = PubkyProfile.forDisplay(TEST_PUBLIC_KEY, "Alice", imageUrl = null)
+        val contacts = MutableStateFlow(listOf(labelOnly))
+        whenever(pubkyRepo.contacts).thenReturn(contacts)
+        var isPending = true
+        whenever(pubkyRepo.isContactProfilePending(TEST_PUBLIC_KEY)).thenAnswer { isPending }
+        val sut = createSut()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isMissing)
+        contacts.value = listOf(labelOnly.copy(name = "Alice Renamed"))
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isMissing)
+        isPending = false
+        contacts.value = listOf(createContact())
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        assertFalse(state.isMissing)
+        assertEquals("Hello", state.bio)
+        assertEquals("https://example.com/avatar.jpg", state.imageUrl)
+        assertEquals(listOf("Website"), state.links.map { it.label })
+    }
+
+    @Test
     fun `a profile update of the same contact keeps unsaved edits`() = test {
         val contacts = MutableStateFlow(listOf(createContact()))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
