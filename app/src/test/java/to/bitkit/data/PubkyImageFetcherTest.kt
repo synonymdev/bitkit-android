@@ -248,6 +248,31 @@ class PubkyImageFetcherTest : BaseUnitTest() {
         }
     }
 
+    @Test
+    fun `fetch should rethrow a disk cache cancellation instead of falling back`() = test {
+        val editor = mock<DiskCache.Editor>()
+        listOf<Pair<String, (DiskCache) -> Unit>>(
+            "read" to { whenever(it.openSnapshot(IMAGE_URI)).thenAnswer { throw CancellationException() } },
+            "editor" to { whenever(it.openEditor(IMAGE_URI)).thenAnswer { throw CancellationException() } },
+            "write" to {
+                whenever(it.fileSystem).thenReturn(FileSystem.SYSTEM)
+                whenever(it.openEditor(IMAGE_URI)).thenReturn(editor)
+                whenever(editor.data).thenReturn(tempFolder.newFile().toOkioPath())
+                whenever(editor.commit()).thenAnswer { throw CancellationException() }
+            },
+        ).forEachCase({ it.first }) { (name, cancel) ->
+            reset(pubkyService, editor)
+            val diskCache = mock<DiskCache>()
+            cancel(diskCache)
+            whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
+
+            assertFailsWith<CancellationException>(name) { createFetcher(diskCache).fetch() }
+
+            if (name == "read") verifyNoInteractions(pubkyService)
+            if (name == "write") verify(editor, description(name)).abort()
+        }
+    }
+
     private fun createFetcher(
         diskCache: DiskCache? = null,
         options: Options = this.options,

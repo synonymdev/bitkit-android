@@ -15,6 +15,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.Logger
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val TAG = "PubkyImageFetcher"
 private const val PUBKY_SCHEME = "pubky://"
@@ -41,10 +42,10 @@ class PubkyImageFetcher(
         return SourceFetchResult(source, null, dataSource = DataSource.NETWORK)
     }
 
-    private fun readFromDiskCache(): FetchResult? {
+    private suspend fun readFromDiskCache(): FetchResult? {
         if (!options.diskCachePolicy.readEnabled) return null
         val cache = diskCache ?: return null
-        val snapshot = runCatching { cache.openSnapshot(diskCacheKey) }
+        val snapshot = runSuspendCatching { cache.openSnapshot(diskCacheKey) }
             .onFailure { Logger.warn("Failed to read pubky image from disk cache", it, context = TAG) }
             .getOrNull()
             ?: return null
@@ -52,10 +53,10 @@ class PubkyImageFetcher(
         return SourceFetchResult(source, null, dataSource = DataSource.DISK)
     }
 
-    private fun writeToDiskCache(bytes: ByteArray, epoch: Long) {
+    private suspend fun writeToDiskCache(bytes: ByteArray, epoch: Long) {
         if (!options.diskCachePolicy.writeEnabled) return
         val cache = diskCache ?: return
-        val editor = runCatching { cache.openEditor(diskCacheKey) }
+        val editor = runSuspendCatching { cache.openEditor(diskCacheKey) }
             .onFailure { Logger.warn("Failed to open pubky image disk cache editor", it, context = TAG) }
             .getOrNull()
             ?: return
@@ -65,12 +66,13 @@ class PubkyImageFetcher(
             if (cacheEpoch.current() == epoch) editor.commit() else editor.abort()
         }.onFailure {
             runCatching { editor.abort() }
+            if (it is CancellationException) throw it
             Logger.warn("Failed to cache pubky image", it, context = TAG)
         }
     }
 
     private suspend fun resolveImageData(data: ByteArray): PubkyImageData {
-        val descriptor = runCatching { JSONObject(String(data)) }.getOrNull()
+        val descriptor = runSuspendCatching { JSONObject(String(data)) }.getOrNull()
             ?: return PubkyImageData(data, isCacheable = true)
         val src = descriptor.optString("src", "")
         if (!src.startsWith(PUBKY_SCHEME)) return PubkyImageData(data, isCacheable = false)
