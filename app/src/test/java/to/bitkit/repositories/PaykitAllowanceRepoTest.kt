@@ -294,7 +294,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         // The proposer took the allower role, so this wallet is the allowee.
         val offer = receivedProposal()
         records = listOf(offer)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+        whenever(sdk.acceptAllowance(any(), any())).thenAnswer {
             records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
             records.single()
         }
@@ -304,8 +304,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         val accepted = sut.acceptOffersFromAllowers()
 
         assertEquals(listOf(fixtures.counterpartyKey), accepted.map { it.counterparty })
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET, WALLET_ALLOWANCE_ID)
-        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET)
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID)
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
         val entry = sut.entries.value.single()
         assertEquals(PaykitAllowance.Status.ACTIVE, entry.status(fixtures.now))
         assertEquals(PaykitAllowance.Role.ALLOWEE, entry.role)
@@ -313,22 +313,22 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertNull(sut.proposalForPresentation())
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An accepted offer is not accepted or announced twice")
-        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+        verify(sdk, times(1)).acceptAllowance(any(), any())
     }
 
     @Test
     fun `failed offer accept stays unanswered and is retried on the next refresh`() = test {
         val offer = receivedProposal()
         records = listOf(offer)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenThrow(RuntimeException("offline"))
+        whenever(sdk.acceptAllowance(any(), any())).thenThrow(RuntimeException("offline"))
         sut.activate(identity)
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
         assertNull(sut.proposalForPresentation())
 
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(offer)
+        whenever(sdk.acceptAllowance(any(), any())).thenReturn(offer)
         assertEquals(1, sut.acceptOffersFromAllowers().size)
-        verify(sdk, times(2)).acceptAllowance(any(), any(), any())
+        verify(sdk, times(2)).acceptAllowance(any(), any())
     }
 
     @Test
@@ -339,8 +339,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
-        assertEquals(WALLET_ALLOWANCE_ID, sut.proposalForPresentation()?.id)
+        verify(sdk, never()).acceptAllowance(any(), any())
+        assertEquals(ALLOWANCE_ID, sut.proposalForPresentation()?.id)
         assertEquals(PaykitAllowance.Status.AWAITING_MY_ANSWER, sut.entries.value.single().status(fixtures.now))
     }
 
@@ -371,7 +371,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any())
     }
 
     @Test
@@ -380,7 +380,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any())
     }
 
     @Test
