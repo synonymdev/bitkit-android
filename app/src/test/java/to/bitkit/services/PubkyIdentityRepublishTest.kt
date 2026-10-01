@@ -234,9 +234,10 @@ class PubkyIdentityRepublishTest {
         assertEquals(5_000L, currentTime)
         assertFalse(cancelled)
         service.republishIdentityIfNeeded(publicKey, now = 60_000)
+        assertEquals(10_000L, currentTime)
         verify(bootstrap).republishIdentity("pubky$publicKey")
 
-        advanceTimeBy(24_999)
+        advanceTimeBy(19_999)
         runCurrent()
         assertFalse(cancelled)
         advanceTimeBy(1)

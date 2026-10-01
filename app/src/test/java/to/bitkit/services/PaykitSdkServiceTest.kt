@@ -28,6 +28,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -449,6 +450,49 @@ class PaykitSdkServiceTest {
         publicationGate.complete(true)
         runCurrent()
         assertTrue(published)
+    }
+
+    @Test
+    fun `approval republish joins the publication activation started until the cap`() = runTest {
+        for (gateOpens in listOf(true, false)) {
+            val keychain = mock<Keychain>()
+            stubReceiverNoiseSecret(keychain)
+            val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+            val publicationGate = CompletableDeferred<Boolean>()
+            val bootstrap = mock<PubkySessionBootstrap>()
+            whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer { publicationGate.await() }
+            val access = mock<PubkySessionAccess>()
+            val noise = mock<ReceiverNoiseSecretKey>()
+            whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+            whenever(access.exportSessionSecret()).thenReturn("new-session")
+            whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+            val service = PaykitSdkService(
+                context = mock(),
+                keychain = keychain,
+                pubkyStore = store,
+                bootstrapFactory = { bootstrap },
+                ioDispatcher = StandardTestDispatcher(testScheduler),
+                sdkFactory = { mock() },
+            )
+            service.activateRegisteredIdentity(PubkySessionBootstrapResult(access, "pubky$RING_PUBKY"))
+            runCurrent()
+            verify(bootstrap).republishIdentity("pubky$RING_PUBKY")
+            val start = currentTime
+
+            val approval = async { service.republishIdentityIfNeeded(RING_PUBKY) }
+            advanceTimeBy(4_999)
+            runCurrent()
+            assertFalse(approval.isCompleted)
+            if (gateOpens) publicationGate.complete(true) else advanceTimeBy(1)
+            runCurrent()
+
+            assertTrue(approval.isCompleted)
+            assertEquals(start + if (gateOpens) 4_999 else 5_000, currentTime)
+            verify(bootstrap).republishIdentity("pubky$RING_PUBKY")
+            publicationGate.complete(true)
+            runCurrent()
+        }
     }
 
     @Test

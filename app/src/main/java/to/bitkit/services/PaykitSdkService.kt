@@ -81,6 +81,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -195,6 +196,9 @@ class PaykitSdkService @Inject constructor(
     }
     private val cachedBootstrap by lazy { bootstrapFactory() }
     private val identityRepublishMutex = Mutex()
+
+    @Volatile
+    private var identityRepublishJob: Job? = null
     private var republishPublicKey: String? = null
     private var nextIdentityRepublishAt = 0L
     private var lastIdentityRepublishAt = 0L
@@ -280,14 +284,18 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun republishIdentityIfNeeded(publicKey: String? = null, now: Long = nowMillis()) {
         val publication = launchIdentityRepublish(publicKey, now)
-        withTimeoutOrNull(IDENTITY_REPUBLISH_WAIT_TIMEOUT) { publication.join() }
-            ?: Logger.debug("Continuing while Pubky identity publication is pending", context = TAG)
+        withTimeoutOrNull(IDENTITY_REPUBLISH_WAIT_TIMEOUT) {
+            publication.join()
+            identityRepublishJob?.join()
+            true
+        } ?: Logger.debug("Continuing while Pubky identity publication is pending", context = TAG)
     }
 
     private suspend fun launchIdentityRepublish(publicKey: String?, now: Long = nowMillis()): Job {
         currentCoroutineContext().ensureActive()
         return launch {
             if (!identityRepublishMutex.tryLock()) return@launch
+            identityRepublishJob = currentCoroutineContext().job
             try {
                 withTimeoutOrNull(IDENTITY_REPUBLISH_TIMEOUT) {
                     runSuspendCatching {
