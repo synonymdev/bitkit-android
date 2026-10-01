@@ -825,7 +825,10 @@ class PrivatePaykitRepo @Inject constructor(
         for (publicKey in publicKeys.distinct()) {
             val link = runSuspendCatching { paykitSdkService.ensureLinkWithPeer(publicKey) }
                 .onFailure { Logger.warn("Failed to prepare private Paykit link during '$reason'", it, context = TAG) }
-            if (link.exceptionOrNull() is PaykitException.NotFound) continue
+            if (link.isFailure) {
+                if (link.exceptionOrNull() !is PaykitException.NotFound) linkRetryKeys += publicKey
+                continue
+            }
             linkRetryKeys += publicKey
             runSuspendCatching { privatePaymentListUpdate(publicKey, forceRefreshLightning) }
                 .onSuccess { updates += it }

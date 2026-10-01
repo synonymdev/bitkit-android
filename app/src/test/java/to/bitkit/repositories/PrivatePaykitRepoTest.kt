@@ -249,24 +249,21 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `prepareSavedContacts succeeds when link preparation fails but SDK queues reservations`() = test {
+    fun `prepareSavedContacts defers reservations while link preparation is unavailable`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
-        whenever { paykitSdkService.ensureLinkWithPeer(CONTACT_KEY) }.thenAnswer {
-            throw PrivatePaykitTestAppError("still linking")
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).thenAnswer {
+            throw PaykitException.Transport("offline", "Unavailable homeserver")
         }
 
         val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
-        verifyBlocking(paykitSdkService) { syncPrivatePaymentListsWithReservations(any(), eq(false)) }
-        assertEquals(
-            true,
-            cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList,
-        )
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+        verify(addressReservationRepo, never()).currentOrRotatedAddress(any())
     }
 
     @Test

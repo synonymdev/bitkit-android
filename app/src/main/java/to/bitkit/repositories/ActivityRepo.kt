@@ -508,6 +508,7 @@ class ActivityRepo @Inject constructor(
                 return@runCatching
             }
 
+            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = false)
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(normalizedKey, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
@@ -539,6 +540,7 @@ class ActivityRepo @Inject constructor(
             }
             if (activity.contact() == null) return@runCatching
 
+            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = true)
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(null, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
