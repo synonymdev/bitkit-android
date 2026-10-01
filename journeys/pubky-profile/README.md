@@ -17,11 +17,12 @@ with the same file and journey names.
 - **Ring rows show at once.** The choice screen lists Ring's identities as soon as the shared pubky
   provider answers. Each row is captioned and titled with its truncated key, and a row's title
   becomes the profile name when that row's lookup finishes, rather than the screen waiting for all
-  of them.
-- **Adoption marks one row.** Tapping a row shows a spinner on that row only and disables every row
-  until the adoption succeeds or fails. On Android the other rows' lookups keep running during an
-  adoption, so a name can still fill in on a disabled row; the journey does not assert on that
-  either way.
+  of them. While a row's lookup runs, a spinner (`PubkyChoiceIdentityLookup`) stands in for its
+  avatar, so a row still looking up does not look like a row whose identity has no profile.
+- **Adoption marks one row.** Tapping a row shows a spinner in place of that row's key icon only,
+  keeps its avatar, and disables every row until the adoption succeeds or fails. On Android the
+  other rows' lookups keep running during an adoption, so a name can still fill in on a disabled
+  row; the journey does not assert on that either way.
 
 ## Setup
 
@@ -55,4 +56,6 @@ with the same file and journey names.
 - Profile, loaded: `ProfileViewName`, `ProfileEdit`, `ProfileQRCode`, `ProfileShare`,
   `ProfileViewTagsHeader`; failed load `ProfileRetry`.
 - Profile intro: `ProfileIntro`, `ProfileIntro-button`.
-- Pubky choice: `PubkyChoiceIdentity` for each Ring row, `PubkyChoiceCreate` when Ring has none.
+- Pubky choice: `PubkyChoiceIdentity` for each Ring row, `PubkyChoiceIdentityLookup` for a row's
+  lookup spinner and `PubkyContactAvatar` for the avatar that replaces it, `PubkyChoiceCreate` when
+  Ring has none.

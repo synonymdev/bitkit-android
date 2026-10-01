@@ -182,15 +182,21 @@ private fun Content(
 
                     else -> uiState.identities.forEachIndexed { index, identity ->
                         if (index > 0) VerticalSpacer(8.dp)
+                        val isAdopting = identity.pubky == uiState.adoptingPubky
                         OptionCard(
                             iconResId = R.drawable.ic_lock_key,
                             text = identity.name,
                             onClick = { onIdentityClick(identity.pubky) },
                             enabled = uiState.adoptingPubky == null,
+                            isLoading = isAdopting,
                             caption = identity.caption,
                             trailing = {
-                                if (identity.pubky == uiState.adoptingPubky) {
-                                    AdoptingIndicator()
+                                if (identity.isLookingUp && !isAdopting) {
+                                    LoadingIndicator(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .testTag("PubkyChoiceIdentityLookup")
+                                    )
                                 } else {
                                     PubkyContactAvatar(
                                         profile = PubkyProfile.forDisplay(
@@ -218,6 +224,7 @@ private fun OptionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    isLoading: Boolean = false,
     caption: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
@@ -236,12 +243,16 @@ private fun OptionCard(
                 .size(40.dp)
                 .background(Colors.Black, CircleShape)
         ) {
-            Icon(
-                painter = painterResource(iconResId),
-                contentDescription = null,
-                tint = Colors.PubkyGreen,
-                modifier = Modifier.size(20.dp)
-            )
+            if (isLoading) {
+                LoadingIndicator()
+            } else {
+                Icon(
+                    painter = painterResource(iconResId),
+                    contentDescription = null,
+                    tint = Colors.PubkyGreen,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
         HorizontalSpacer(16.dp)
         Column(modifier = Modifier.weight(1f)) {
@@ -255,13 +266,11 @@ private fun OptionCard(
 }
 
 @Composable
-private fun AdoptingIndicator() {
+private fun LoadingIndicator(modifier: Modifier = Modifier) {
     val description = stringResource(R.string.profile__choice_loading_profile)
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(32.dp)
-            .semantics { contentDescription = description }
+        modifier = modifier.semantics { contentDescription = description }
     ) {
         GradientCircularProgressIndicator(modifier = Modifier.size(20.dp))
     }
@@ -304,13 +313,39 @@ private fun PreviewIdentities() {
 
 @Preview(showBackground = true)
 @Composable
+private fun PreviewLookingUp() {
+    val pubky = "a967rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roimbr4"
+    AppThemeSurface {
+        Content(
+            uiState = PubkyChoiceUiState(
+                isLoading = false,
+                identities = persistentListOf(
+                    RingIdentity(
+                        pubky = pubky,
+                        profile = PubkyProfile.forDisplay(pubky, name = "Satoshi Nakamoto", imageUrl = null),
+                    ),
+                    RingIdentity(pubky = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy", isLookingUp = true),
+                ),
+            ),
+            onBackClick = {},
+            onCreateProfile = {},
+            onIdentityClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
 private fun PreviewAdopting() {
     val pubky = "a967rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roimbr4"
     AppThemeSurface {
         Content(
             uiState = PubkyChoiceUiState(
                 isLoading = false,
-                identities = persistentListOf(RingIdentity(pubky = pubky)),
+                identities = persistentListOf(
+                    RingIdentity(pubky = pubky, isLookingUp = true),
+                    RingIdentity(pubky = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy", isLookingUp = true),
+                ),
                 adoptingPubky = pubky,
             ),
             onBackClick = {},

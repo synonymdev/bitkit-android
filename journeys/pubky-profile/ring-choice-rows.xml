@@ -2,8 +2,10 @@
   <description>
     The Pubky Ring choice screen lists one row per Ring identity as soon as Ring answers, each
     showing its truncated public key, and fills in a row's name when that row's profile lookup
-    finishes. Tapping a row adopts that identity: only the tapped row shows a spinner, and every row
-    is disabled until the adoption ends.
+    finishes. While a row's lookup runs, a spinner takes the place of its avatar, so a row still
+    looking up can be told apart from a row whose identity has no profile. Tapping a row adopts that
+    identity: only the tapped row shows a spinner, in place of its key icon, and every row is
+    disabled until the adoption ends.
 
     Precondition (not a listed capability): Pubky Ring (package app.pubkyring) installed on the same
     device with at least two identities, at least one of them with a published profile name.
@@ -17,17 +19,20 @@
     On a fast network the lookups and the adoption can finish before the screen is inspected, so
     the journey slows the emulator network with adb emu; a physical device needs another way to
     slow its connection. Every row carries the same testTag, so tell the rows apart by their key
-    caption. On Android the spinner takes the place of the row's avatar, and the tapped row's
-    accessibility description reads "Loading your profile…". A disabled row ignores taps, which the
-    step after the tap checks.
+    caption. The lookup spinner carries testTag "PubkyChoiceIdentityLookup" and the avatar that
+    replaces it testTag "PubkyContactAvatar"; the adoption spinner has no testTag. On Android both
+    spinners' accessibility description reads "Loading your profile…". A disabled row ignores taps,
+    which the step after the tap checks.
   </description>
   <actions>
     <action>Run adb emu network delay gprs and adb emu network speed edge</action>
     <action>Tap the profile button (testTag "ProfileButton") on the home screen; if the profile intro (testTag "ProfileIntro") shows, tap Continue (testTag "ProfileIntro-button")</action>
     <action>Verify the choice screen lists one row (testTag "PubkyChoiceIdentity") per Ring identity with no screen-wide "Loading your profile…" message, each row captioned with its truncated public key (its first four and last four characters) and titled with the same key until its name loads</action>
+    <action>Verify each row whose lookup is still running shows its key icon and a spinner (testTag "PubkyChoiceIdentityLookup") in place of its avatar. If every row already shows its avatar, the lookups finished first: report "already resolved" rather than failing</action>
     <action>Wait up to a minute and verify each identity with a published profile now shows its profile name as the row title, keeping its truncated key caption, while an identity without a profile keeps the truncated key as its title</action>
+    <action>Verify no row shows the lookup spinner (testTag "PubkyChoiceIdentityLookup") any more: every row shows its avatar (testTag "PubkyContactAvatar"), either its profile picture or the first character of its title</action>
     <action>Tap the row of an identity with a published profile name</action>
-    <action>Verify only the tapped row shows a spinner and every row (testTag "PubkyChoiceIdentity") is disabled</action>
+    <action>Verify only the tapped row shows a spinner, in place of its key icon, while it keeps its avatar (testTag "PubkyContactAvatar"), and every row (testTag "PubkyChoiceIdentity") is disabled</action>
     <action>Tap a different row and verify nothing changes: the spinner stays on the first row and no second adoption starts</action>
     <action>Wait for the adoption to finish and verify the choice screen closes and the next setup screen opens</action>
     <action>Run adb emu network delay none and adb emu network speed full</action>

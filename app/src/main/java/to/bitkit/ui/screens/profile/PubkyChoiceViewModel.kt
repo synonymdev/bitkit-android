@@ -97,7 +97,8 @@ class PubkyChoiceViewModel @Inject constructor(
                 Logger.warn("Failed to list ring identities", it, context = TAG)
                 persistentListOf()
             }
-            _uiState.update { it.copy(isLoading = false, identities = pubkys.map(::RingIdentity).toImmutableList()) }
+            val identities = pubkys.map { RingIdentity(pubky = it, isLookingUp = true) }.toImmutableList()
+            _uiState.update { it.copy(isLoading = false, identities = identities) }
             pubkys.forEach { launch { lookUpProfile(it) } }
         }
     }
@@ -106,18 +107,20 @@ class PubkyChoiceViewModel @Inject constructor(
         _uiState.value.identities.firstOrNull { it.pubky == pubky }?.profile
 
     private suspend fun lookUpProfile(pubky: String) {
-        val profile = pubkyRepo.fetchDisplayProfile(pubky)
-            .onFailure { Logger.warn("Failed to look up ring identity profile", it, context = TAG) }
-            .getOrNull()
-            ?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, pubky) }
-            ?: return
-        if (!currentCoroutineContext().isActive) return
-        _uiState.update { state ->
-            state.copy(
-                identities = state.identities
-                    .map { if (it.pubky == pubky) it.copy(profile = profile) else it }
-                    .toImmutableList(),
-            )
+        var profile: PubkyProfile? = null
+        try {
+            profile = pubkyRepo.fetchDisplayProfile(pubky)
+                .onFailure { Logger.warn("Failed to look up ring identity profile", it, context = TAG) }
+                .getOrNull()
+                ?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, pubky) }
+                ?.takeIf { currentCoroutineContext().isActive }
+        } finally {
+            _uiState.update { state ->
+                val identities = state.identities.map {
+                    if (it.pubky == pubky) it.copy(profile = profile ?: it.profile, isLookingUp = false) else it
+                }
+                state.copy(identities = identities.toImmutableList())
+            }
         }
     }
 }
@@ -134,6 +137,7 @@ data class PubkyChoiceUiState(
 data class RingIdentity(
     val pubky: String,
     val profile: PubkyProfile? = null,
+    val isLookingUp: Boolean = false,
 ) {
     val caption: String get() = PubkyPublicKeyFormat.display(pubky).uppercase()
     val name: String get() = profile?.name?.takeIf { it.isNotBlank() } ?: PubkyPublicKeyFormat.display(pubky)

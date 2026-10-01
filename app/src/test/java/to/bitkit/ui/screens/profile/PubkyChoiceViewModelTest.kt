@@ -33,6 +33,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val OTHER_RING_PUBKY = "1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+        private const val THIRD_RING_PUBKY = "5rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
     }
 
     private val context: Context = mock()
@@ -88,6 +89,67 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
             sut.uiState.value.identities,
         )
         assertEquals("https://image", sut.uiState.value.identities.first().imageUrl)
+    }
+
+    @Test
+    fun `rows show their lookup as running until it finds a profile`() = test {
+        val ringLookup = CompletableDeferred<Result<PubkyProfile?>>()
+        val otherLookup = CompletableDeferred<Result<PubkyProfile?>>()
+        whenever(pubkyRepo.ringIdentities())
+            .thenReturn(Result.success(persistentListOf(RING_PUBKY, OTHER_RING_PUBKY)))
+        whenever(pubkyRepo.fetchDisplayProfile(RING_PUBKY)).doSuspendableAnswer { ringLookup.await() }
+        whenever(pubkyRepo.fetchDisplayProfile(OTHER_RING_PUBKY)).doSuspendableAnswer { otherLookup.await() }
+        createSut()
+        advanceUntilIdle()
+
+        assertEquals(listOf(true, true), sut.uiState.value.identities.map { it.isLookingUp })
+
+        val otherProfile = PubkyProfile.forDisplay(OTHER_RING_PUBKY, name = "Hal", imageUrl = null)
+        otherLookup.complete(Result.success(otherProfile))
+        advanceUntilIdle()
+        assertEquals(listOf(true, false), sut.uiState.value.identities.map { it.isLookingUp })
+        assertEquals(otherProfile, sut.uiState.value.identities.last().profile)
+
+        ringLookup.complete(Result.success(PubkyProfile.forDisplay(RING_PUBKY, name = "Satoshi", imageUrl = null)))
+        advanceUntilIdle()
+        assertEquals(listOf(false, false), sut.uiState.value.identities.map { it.isLookingUp })
+        assertEquals(listOf("Satoshi", "Hal"), sut.uiState.value.identities.map { it.name })
+    }
+
+    @Test
+    fun `rows stop showing their lookup when it finds nothing, fails or returns another key`() = test {
+        val notFoundLookup = CompletableDeferred<Result<PubkyProfile?>>()
+        val failedLookup = CompletableDeferred<Result<PubkyProfile?>>()
+        val mismatchedLookup = CompletableDeferred<Result<PubkyProfile?>>()
+        whenever(pubkyRepo.ringIdentities())
+            .thenReturn(Result.success(persistentListOf(RING_PUBKY, OTHER_RING_PUBKY, THIRD_RING_PUBKY)))
+        whenever(pubkyRepo.fetchDisplayProfile(RING_PUBKY)).doSuspendableAnswer { notFoundLookup.await() }
+        whenever(pubkyRepo.fetchDisplayProfile(OTHER_RING_PUBKY)).doSuspendableAnswer { failedLookup.await() }
+        whenever(pubkyRepo.fetchDisplayProfile(THIRD_RING_PUBKY)).doSuspendableAnswer { mismatchedLookup.await() }
+        createSut()
+        advanceUntilIdle()
+
+        assertEquals(listOf(true, true, true), sut.uiState.value.identities.map { it.isLookingUp })
+
+        notFoundLookup.complete(Result.success(null))
+        advanceUntilIdle()
+        assertEquals(listOf(false, true, true), sut.uiState.value.identities.map { it.isLookingUp })
+
+        failedLookup.complete(Result.failure(PubkyChoiceTestAppError("lookup failed")))
+        advanceUntilIdle()
+        assertEquals(listOf(false, false, true), sut.uiState.value.identities.map { it.isLookingUp })
+
+        val ringProfile = PubkyProfile.forDisplay(RING_PUBKY, name = "Satoshi", imageUrl = null)
+        mismatchedLookup.complete(Result.success(ringProfile))
+        advanceUntilIdle()
+        assertEquals(
+            persistentListOf(
+                RingIdentity(pubky = RING_PUBKY),
+                RingIdentity(pubky = OTHER_RING_PUBKY),
+                RingIdentity(pubky = THIRD_RING_PUBKY),
+            ),
+            sut.uiState.value.identities,
+        )
     }
 
     @Test
