@@ -619,20 +619,10 @@ class ActivityService(
         for (activity in activities) {
             if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
             if (cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) continue
-            val contact = when (activity) {
-                is Activity.Lightning -> receivedPaykitContact(activity.v1, contacts)
-                is Activity.Onchain -> {
-                    val (contact, hydrated) = receivedPaykitContact(activity.v1)
-                    complete = complete && hydrated
-                    contact
-                }
-            }
+            val (updated, hydrated) = attributedPaykitActivity(activity, contacts)
+            complete = complete && hydrated
             if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
-            if (contact != null && !cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) {
-                val updated = when (activity) {
-                    is Activity.Lightning -> Activity.Lightning(activity.v1.copy(contact = contact))
-                    is Activity.Onchain -> Activity.Onchain(activity.v1.copy(contact = contact))
-                }
+            if (updated != null && !cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) {
                 updateActivity(activityId = activity.rawId(), activity = updated)
                 changed = true
             }
@@ -650,6 +640,20 @@ class ActivityService(
         resolver.receivedPaymentContactsGeneration == snapshot.generation &&
         paykitActivityRevision == snapshot.activityRevision &&
         resolver.reservationVersion == snapshot.reservationVersion
+
+    private suspend fun attributedPaykitActivity(
+        activity: Activity,
+        contacts: PaykitReceivedPaymentContacts,
+    ): Pair<Activity?, Boolean> = when (activity) {
+        is Activity.Lightning -> {
+            val contact = receivedPaykitContact(activity.v1, contacts)
+            contact?.let { Activity.Lightning(activity.v1.copy(contact = it)) } to true
+        }
+        is Activity.Onchain -> {
+            val (contact, hydrated) = receivedPaykitContact(activity.v1)
+            contact?.let { Activity.Onchain(activity.v1.copy(contact = it)) } to hydrated
+        }
+    }
 
     private fun receivedPaykitContact(row: LightningActivity, contacts: PaykitReceivedPaymentContacts): String? {
         if (row.contact != null || row.txType != PaymentType.RECEIVED || row.status == PaymentState.FAILED) return null
