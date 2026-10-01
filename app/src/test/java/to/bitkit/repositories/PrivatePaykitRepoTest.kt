@@ -113,7 +113,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             cacheData.value = PrivatePaykitCacheData()
         }
         whenever(settingsStore.data).thenReturn(settingsData)
-        whenever { settingsStore.update(any()) }.thenAnswer {
+        whenever(settingsStore.update(any())).thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsData.value = transform(settingsData.value)
         }
