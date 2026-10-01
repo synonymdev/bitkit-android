@@ -45,6 +45,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.satsToMsat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitPaymentRequestRecurrenceTerms
+import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
@@ -456,7 +457,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     val context = targetContext(savedPublicKeys, expectedIdentity)
                     if (!force && context == cachedTargetContext) return@discovery
                     val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
-                    val discovery = context?.let { eligibleTargets(it, previousTargets) }
+                    val discovery = context?.let { eligibleTargets(it, previousTargets, PaykitReadLane.Bulk) }
                         ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
                     operationMutex.withLock operation@{
                         if (!isCurrentState(generation, expectedIdentity)) return@operation
@@ -1081,13 +1082,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun eligibleTargets(
         context: PaykitPaymentRequestTargetContext,
         previousTargets: Map<String, PaykitPaymentRequestTarget> = emptyMap(),
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
     ): PaykitPaymentRequestTargetDiscovery {
         var isComplete = true
         val failedPublicKeys = mutableSetOf<String>()
         val targets = context.savedPublicKeys.mapNotNull { publicKey ->
             val linked = context.linkedReceiverPaths[publicKey] ?: return@mapNotNull null
             val lookup = withTimeoutOrNull(TARGET_DISCOVERY_TIMEOUT) {
-                runSuspendCatching { paykitSdkService.paymentRequestReceiverPaths(publicKey) }
+                runSuspendCatching { paykitSdkService.paymentRequestReceiverPaths(publicKey, lane) }
             }
             if (lookup == null) {
                 isComplete = false

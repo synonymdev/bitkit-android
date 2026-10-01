@@ -433,8 +433,12 @@ class PaykitSdkServiceTest {
             listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER),
             service.discoverRelevantReceiverPaths(RING_PUBKY, PaykitReadLane.Bulk),
         )
-        assertEquals(listOf(PaykitReceiverPaths.WALLET), service.paymentRequestReceiverPaths(RING_PUBKY))
-        val selection = service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER))
+        assertEquals(
+            listOf(PaykitReceiverPaths.WALLET),
+            service.paymentRequestReceiverPaths(RING_PUBKY, PaykitReadLane.Bulk),
+        )
+        val selection =
+            service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER), PaykitReadLane.Bulk)
         assertEquals(listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER), selection.linkableReceiverPaths)
         assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.publishableReceiverPaths)
         assertEquals(emptyList(), selection.cleanupProtectedReceiverPaths)
@@ -454,7 +458,8 @@ class PaykitSdkServiceTest {
             .thenReturn(receiverMarker(PaykitReceiverPaths.WALLET, paymentRequests = true, outgoingPayments = true))
         whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.SERVER)).thenAnswer { throw failure }
 
-        val selection = service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER))
+        val selection =
+            service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER), PaykitReadLane.Bulk)
 
         assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.linkableReceiverPaths)
         assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.publishableReceiverPaths)

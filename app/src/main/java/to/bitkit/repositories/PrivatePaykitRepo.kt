@@ -638,6 +638,7 @@ class PrivatePaykitRepo @Inject constructor(
         publishLocalEndpoints(
             publicKeys = listOf(publicKey),
             reason = "payment",
+            lane = PaykitReadLane.Interactive,
         ).onFailure {
             Logger.warn(
                 "Failed to refresh private Paykit endpoints before payment for '${redacted(publicKey)}'",
@@ -788,6 +789,7 @@ class PrivatePaykitRepo @Inject constructor(
         reason: String,
         forceRefreshLightning: Boolean = false,
         requireImmediatePublication: Boolean = false,
+        lane: PaykitReadLane = PaykitReadLane.Bulk,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             val keys = publicKeys.mapNotNull { normalizedPublicKey(it) }.distinct()
@@ -804,6 +806,7 @@ class PrivatePaykitRepo @Inject constructor(
                     publicKeys = keys,
                     reason = reason,
                     forceRefreshLightning = forceRefreshLightning,
+                    lane = lane,
                 )
 
                 if (preparation.updates.isEmpty()) {
@@ -837,6 +840,7 @@ class PrivatePaykitRepo @Inject constructor(
         publicKeys: Collection<String>,
         reason: String,
         forceRefreshLightning: Boolean,
+        lane: PaykitReadLane,
     ): PrivatePublicationPreparation {
         var firstError: Throwable? = null
         var receiverPathSelectionError: Throwable? = null
@@ -847,7 +851,7 @@ class PrivatePaykitRepo @Inject constructor(
         firstError = linkedReceiverPathsSnapshot.error
 
         for (publicKey in publicKeys) {
-            val receiverPaths = runSuspendCatching { receiverPathsForSavedContact(publicKey) }
+            val receiverPaths = runSuspendCatching { receiverPathsForSavedContact(publicKey, lane) }
                 .onFailure {
                     firstError = firstError ?: it
                     Logger.warn(
@@ -856,7 +860,7 @@ class PrivatePaykitRepo @Inject constructor(
                         context = TAG,
                     )
                 }.getOrNull() ?: continue
-            val receiverPathSelection = paykitSdkService.privateReceiverPathSelection(publicKey, receiverPaths)
+            val receiverPathSelection = paykitSdkService.privateReceiverPathSelection(publicKey, receiverPaths, lane)
             val linkableReceiverPaths = receiverPathSelection.linkableReceiverPaths
             val publicationReceiverPaths = receiverPathSelection.publishableReceiverPaths
             receiverPathSelection.error?.let {
@@ -901,7 +905,7 @@ class PrivatePaykitRepo @Inject constructor(
 
         val retryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
         for (publicKey in publicKeys) {
-            val receiverPaths = runSuspendCatching { receiverPathsForSavedContact(publicKey) }
+            val receiverPaths = runSuspendCatching { receiverPathsForSavedContact(publicKey, PaykitReadLane.Bulk) }
                 .onFailure {
                     Logger.warn(
                         "Failed to read saved Paykit receivers for '${redacted(publicKey)}' during '$reason'",
@@ -909,7 +913,7 @@ class PrivatePaykitRepo @Inject constructor(
                         context = TAG,
                     )
                 }.getOrNull() ?: continue
-            val selection = paykitSdkService.privateReceiverPathSelection(publicKey, receiverPaths)
+            val selection = paykitSdkService.privateReceiverPathSelection(publicKey, receiverPaths, PaykitReadLane.Bulk)
             selection.error?.let {
                 Logger.warn(
                     "Failed to inspect private Paykit receiver markers for '${redacted(publicKey)}' during '$reason'",
@@ -1490,12 +1494,12 @@ class PrivatePaykitRepo @Inject constructor(
         )
     }
 
-    private suspend fun receiverPathsForSavedContact(publicKey: String): List<String> {
+    private suspend fun receiverPathsForSavedContact(publicKey: String, lane: PaykitReadLane): List<String> {
         val record = paykitSdkService.contactRecord(publicKey)
         val savedPaths = supportedReceiverPaths(record?.receiverPaths.orEmpty())
 
         return runSuspendCatching {
-            val discoveredPaths = pubkyService.discoverRelevantReceiverPaths(publicKey, PaykitReadLane.Bulk)
+            val discoveredPaths = pubkyService.discoverRelevantReceiverPaths(publicKey, lane)
             val currentRecord = paykitSdkService.contactRecord(publicKey)
                 ?: return@runSuspendCatching savedPaths
             val currentSavedPaths = supportedReceiverPaths(currentRecord.receiverPaths)

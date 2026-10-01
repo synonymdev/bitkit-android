@@ -625,7 +625,8 @@ class PaykitSdkService @Inject constructor(
     suspend fun privateReceiverPathSelection(
         publicKey: String,
         savedReceiverPaths: List<String>,
-    ): PaykitPrivateReceiverPathSelection = publicRead(PaykitReadLane.Bulk) { handle ->
+        lane: PaykitReadLane,
+    ): PaykitPrivateReceiverPathSelection = publicRead(lane) { handle ->
         val linkable = mutableListOf<String>()
         val publishable = mutableListOf<String>()
         val cleanupProtected = mutableListOf<String>()
@@ -772,8 +773,8 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun paymentRequestReceiverPaths(publicKey: String): List<String> =
-        publicRead(PaykitReadLane.Bulk) { handle ->
+    suspend fun paymentRequestReceiverPaths(publicKey: String, lane: PaykitReadLane): List<String> =
+        publicRead(lane) { handle ->
             handle.paykitReceiverPaths(publicKey)
                 .filter { it in PaykitReceiverPaths.supported }
                 .filter { handle.paykitReceiverMarker(publicKey, it)?.capabilities?.paymentRequests == true }

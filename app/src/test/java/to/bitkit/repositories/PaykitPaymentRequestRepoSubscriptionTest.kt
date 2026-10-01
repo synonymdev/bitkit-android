@@ -224,7 +224,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
         whenever(paykitSdkService.proposePaymentRequest(any(), any(), any(), eq(LOCAL_IDENTITY)))
@@ -287,7 +287,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any()))
             .thenReturn(listOf(PaykitReceiverPaths.SERVER))
 
         listOf(null, byteArrayOf(0, 1, 2)).forEach { icon ->
@@ -430,7 +430,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any()))
             .thenReturn(listOf(PaykitReceiverPaths.SERVER))
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         sut.refresh().getOrThrow()
