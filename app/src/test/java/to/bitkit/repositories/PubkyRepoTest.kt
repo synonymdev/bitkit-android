@@ -2860,7 +2860,9 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService) {
             saveContact(VALID_CONTACT_KEY_A, "Alice", listOf("bitkit/wallet", "bitkit/server"), true)
         }
-        verifyBlocking(pubkyService) { saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true) }
+        verifyBlocking(pubkyService) {
+            saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true)
+        }
         verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(eq(VALID_CONTACT_KEY_B), any()) }
     }
 
@@ -3020,7 +3022,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.contactRecords()).thenReturn(
             listOf(createContactRecord(VALID_CONTACT_KEY_A), createContactRecord(VALID_CONTACT_KEY_B)),
         )
-        val lookups = mapOf(VALID_CONTACT_KEY_A to CompletableDeferred<Unit>(), VALID_CONTACT_KEY_B to CompletableDeferred())
+        val lookups = listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B).associateWith { CompletableDeferred<Unit>() }
         lookups.forEach { (key, gate) ->
             whenever(pubkyService.resolveContactProfile(key, true, PaykitReadLane.Bulk)).doSuspendableAnswer {
                 gate.await()
