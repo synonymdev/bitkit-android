@@ -3240,6 +3240,32 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a screen lookup outlives a refresh that a later contact load replaces`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        val lookup = CompletableDeferred<ContactProfileResolution?>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
+            .doSuspendableAnswer { lookup.await() }
+        sut.loadContacts()
+        val resolve = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
+
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved"), createContactRecord(VALID_CONTACT_KEY_B, "Bob")),
+        )
+        sut.loadContacts()
+        val joined = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
+
+        assertFalse(resolve.isCompleted)
+        assertFalse(joined.isCompleted)
+        lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", bio = "Hi")))
+        listOf(resolve, joined).awaitAll()
+        assertEquals(listOf("Alice" to "Hi", "Bob" to ""), sut.contacts.value.map { it.name to it.bio })
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive)
+    }
+
+    @Test
     fun `repeated contact loads share one background profile refresh`() = test {
         authenticateForTesting()
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))

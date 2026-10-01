@@ -126,6 +126,7 @@ class PubkyRepo @Inject constructor(
     private val sessionContactProfiles = mutableMapOf<String, PubkyProfile>()
     private var sessionContactProfilesOwner: String? = null
     private var contactProfileRefresh: ContactProfileRefresh? = null
+    private val contactScreenLookups = mutableMapOf<String, Job>()
     private val adoptedSourceCheckMutex = Mutex()
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
@@ -206,16 +207,15 @@ class PubkyRepo @Inject constructor(
     private class ContactProfileRefresh(
         private val owner: String,
         contacts: List<SavedContact>,
-        private val scope: CoroutineScope,
-        private val lookUp: suspend (SavedContact, PaykitReadLane) -> Unit,
+        scope: CoroutineScope,
+        lookUp: suspend (SavedContact) -> Unit,
     ) {
         private val keys = contacts.mapTo(mutableSetOf()) { it.profile.publicKey }
         private val labelOnly = contacts.filter { it.showsLabelOnly }.associateBy { it.profile.publicKey }
-        private val screenLookups = mutableMapOf<String, Job>()
 
         val job = SupervisorJob(scope.coroutineContext.job)
         private val bulkLookups = contacts.associate {
-            it.profile.publicKey to scope.launch(job, CoroutineStart.LAZY) { lookUp(it, PaykitReadLane.Bulk) }
+            it.profile.publicKey to scope.launch(job, CoroutineStart.LAZY) { lookUp(it) }
         }
 
         fun start() {
@@ -226,15 +226,13 @@ class PubkyRepo @Inject constructor(
         fun covers(other: ContactProfileRefresh): Boolean =
             job.isActive && owner == other.owner && keys.containsAll(other.keys)
 
-        fun screenLookup(owner: String, publicKey: String, isShown: (SavedContact) -> Boolean): Job? {
+        fun takeOver(owner: String, publicKey: String, isShown: (SavedContact) -> Boolean): SavedContact? {
             if (this.owner != owner) return null
-            screenLookups[publicKey]?.let { return it }
             val contact = labelOnly[publicKey]?.takeIf(isShown) ?: return null
-            val bulkLookup = bulkLookups.getValue(publicKey).takeUnless { it.isCompleted } ?: return null
-            return scope.launch(job, CoroutineStart.LAZY) { lookUp(contact, PaykitReadLane.Interactive) }.also {
-                screenLookups[publicKey] = it
-                bulkLookup.cancel()
-            }
+            val bulkLookup = bulkLookups.getValue(publicKey).takeUnless { it.isCompleted || it.isCancelled }
+                ?: return null
+            bulkLookup.cancel()
+            return contact
         }
     }
 
@@ -985,13 +983,19 @@ class PubkyRepo @Inject constructor(
      * because the background refresh of [loadContacts] has not finished looking it up, so a screen showing that
      * contact does not wait behind bulk reads and an edit made there keeps the contact's avatar, bio and links. The
      * lookup takes the contact over from the refresh, which stops its own lookup and never applies a result for it,
-     * and a caller arriving meanwhile waits for the same lookup. It returns at once for any other row; when the
-     * lookup fails, the row keeps its label.
+     * and a caller arriving meanwhile waits for the same lookup. Only a sign-out or an identity change stops it, not a
+     * later refresh. It returns at once for any other row; when the lookup fails, the row keeps its label.
      */
     suspend fun resolvePendingContactProfile(publicKey: String) {
         val owner = _publicKey.value ?: return
+        val key = publicKey.ensurePubkyPrefix()
         val lookup = synchronized(contactsLock) {
-            contactProfileRefresh?.screenLookup(owner, publicKey.ensurePubkyPrefix()) { it.profile in _contacts.value }
+            contactScreenLookups[key]?.takeUnless { it.isCompleted }
+                ?: contactProfileRefresh?.takeOver(owner, key) { it.profile in _contacts.value }?.let { contact ->
+                    scope.launch(start = CoroutineStart.LAZY) {
+                        refreshContactProfile(owner, contact, PaykitReadLane.Interactive)
+                    }.also { contactScreenLookups[key] = it }
+                }
         } ?: return
         lookup.join()
     }
@@ -1495,8 +1499,8 @@ class PubkyRepo @Inject constructor(
 
     private fun refreshContactProfiles(owner: String, contacts: List<SavedContact>) {
         if (contacts.isEmpty()) return
-        val refresh = ContactProfileRefresh(owner, contacts, scope) { contact, lane ->
-            refreshContactProfile(owner, contact, lane)
+        val refresh = ContactProfileRefresh(owner, contacts, scope) {
+            refreshContactProfile(owner, it, PaykitReadLane.Bulk)
         }
         val replaced = synchronized(contactsLock) {
             val active = contactProfileRefresh
@@ -1548,6 +1552,8 @@ class PubkyRepo @Inject constructor(
         synchronized(contactsLock) {
             contactProfileRefresh?.job?.cancel()
             contactProfileRefresh = null
+            contactScreenLookups.values.forEach { it.cancel() }
+            contactScreenLookups.clear()
             sessionContactProfiles.clear()
             sessionContactProfilesOwner = null
         }
