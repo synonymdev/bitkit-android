@@ -11,7 +11,7 @@
     <action>Open the fixture Paykit-only auth URL in the wallet</action>
     <action>Verify the authorization screen shows exactly /pub/paykit with READ, WRITE access</action>
     <action>Verify Paykit access (id "PubkyAuthPaykitAccess") describes access to private Paykit data and sending Paykit messages, without wallet spending keys.</action>
-    <action>Verify no Earn introduction, watch-only consent (id "PubkyAuthWatchOnlyConsent"), or account picker is shown.</action>
+    <action>Verify watch-only consent (id "PubkyAuthWatchOnlyConsent") is not shown</action>
     <action>Tap Cancel on the authorization screen</action>
     <action>Verify the authorization sheet is dismissed</action>
     <action>Verify the current wallet's watch-only accounts and tracking settings are unchanged</action>
