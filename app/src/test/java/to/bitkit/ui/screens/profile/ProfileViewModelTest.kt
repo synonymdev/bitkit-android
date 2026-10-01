@@ -22,6 +22,7 @@ import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -43,7 +44,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             InitLoadCase("loaded for the current key", profile = loaded, isLoading = false, loads = 1),
             InitLoadCase("loaded for another key", loaded.copy(publicKey = "pubkybob"), isLoading = false, loads = 1),
             InitLoadCase("load in flight", profile = null, isLoading = true, loads = 0),
-        ).forEach { case ->
+        ).forEachCase({ it.name }) { case ->
             clearInvocations(pubkyRepo)
             val sut = createSut(case.profile, isLoading = case.isLoading)
             advanceUntilIdle()
@@ -55,7 +56,10 @@ class ProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `init loads once more only when the in-flight load fails`() = test {
-        listOf(Triple("succeeds", createProfile(), 0), Triple("fails", null, 1)).forEach { (case, loaded, loads) ->
+        listOf(
+            Triple("succeeds", createProfile(), 0),
+            Triple("fails", null, 1),
+        ).forEachCase({ it.first }) { (case, loaded, loads) ->
             clearInvocations(pubkyRepo)
             val profileFlow = MutableStateFlow<PubkyProfile?>(null)
             val isLoadingFlow = MutableStateFlow(true)
@@ -104,7 +108,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             Triple("same owner", "pubkyalice" to "pubkyalice", true),
             Triple("other owner", "pubkyalice" to "pubkybob", false),
             Triple("no public key", null to "pubkyalice", false),
-        ).forEach { (case, keys, shown) ->
+        ).forEachCase({ it.first }) { (case, keys, shown) ->
             clearInvocations(pubkyRepo)
             val (publicKey, owner) = keys
             val cachedProfile = createCachedProfile(publicKey = owner)

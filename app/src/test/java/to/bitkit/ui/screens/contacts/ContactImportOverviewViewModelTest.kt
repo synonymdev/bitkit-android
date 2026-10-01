@@ -17,6 +17,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.forEachCase
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -58,7 +59,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     @Test
     fun `an import started from select completes the overview only once it succeeds`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
-        listOf("succeeds" to true, "fails" to false).forEach { (case, succeeds) ->
+        listOf("succeeds" to true, "fails" to false).forEachCase({ it.first }) { (case, succeeds) ->
             reset(pubkyRepo)
             isImportingContacts.value = false
             stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)

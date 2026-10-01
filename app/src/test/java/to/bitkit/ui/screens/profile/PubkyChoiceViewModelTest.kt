@@ -23,6 +23,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.forEachCase
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -141,7 +142,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
             RingRow("found", RING_PUBKY, Result.success(satoshi), rowName = "Satoshi", handoff = satoshi),
             RingRow("failed", RING_PUBKY, failure, rowName = "3rsd...w5xg", handoff = null),
             RingRow("another key", OTHER_RING_PUBKY, Result.success(satoshi), rowName = "1rsd...w5xy", handoff = null),
-        ).forEach { case ->
+        ).forEachCase({ it.name }) { case ->
             reset(pubkyRepo)
             setUp()
             whenever(pubkyRepo.ringIdentities()).thenReturn(Result.success(persistentListOf(case.pubky)))

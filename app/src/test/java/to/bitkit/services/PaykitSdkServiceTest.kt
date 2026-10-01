@@ -59,6 +59,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.repositories.PubkyContactError
+import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertContentEquals
@@ -600,7 +601,7 @@ class PaykitSdkServiceTest {
 
     @Test
     fun `activation returns while identity publication runs and approval republish joins it until the cap`() = runTest {
-        listOf("publication finishes" to true, "cap" to false).forEach { (case, gateOpens) ->
+        listOf("publication finishes" to true, "cap" to false).forEachCase({ it.first }) { (case, gateOpens) ->
             val keychain = mock<Keychain>()
             stubReceiverNoiseSecret(keychain)
             val store = mock<PubkyStore>()

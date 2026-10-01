@@ -73,6 +73,7 @@ import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PubkyRingAuthTimeoutError
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -754,7 +755,7 @@ class PubkyRepoTest : BaseUnitTest() {
         listOf(
             ProfileOvertake("save", profileName = "New", owner = VALID_SELF_KEY) { saveNewProfile() },
             ProfileOvertake("deletion", profileName = null, owner = null) { sut.deleteProfile() },
-        ).forEach { case ->
+        ).forEachCase({ it.name }) { case ->
             resetForCase()
             val store = stubGatedPubkyStore()
             authenticateForTesting(publicKey = VALID_SELF_KEY, profileName = "Old")
@@ -804,7 +805,7 @@ class PubkyRepoTest : BaseUnitTest() {
                 ProfileOvertake("sign out writing right after its reset", null, null, resetReleasesWrite = true) {
                     sut.signOut()
                 },
-            ).forEach { case ->
+            ).forEachCase({ it.name }) { case ->
                 resetForCase()
                 val store = stubGatedPubkyStore()
                 if (case.resetReleasesWrite) {
@@ -862,7 +863,7 @@ class PubkyRepoTest : BaseUnitTest() {
                 val keys = sut.contacts.value.map { it.publicKey }.toSet()
                 assertEquals(setOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B), keys, case)
             },
-        ).forEach { (case, lane, readAndAssert) ->
+        ).forEachCase({ it.first }) { (case, lane, readAndAssert) ->
             resetForCase()
             whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, lane)).thenReturn(null)
             whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, lane))
@@ -1021,7 +1022,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `signOut advances the pubky image cache epoch before clearing the disk cache and survives a failed clear`() =
         test {
-            listOf("clear succeeds" to false, "clear fails" to true).forEach { (case, clearFails) ->
+            listOf("clear succeeds" to false, "clear fails" to true).forEachCase({ it.first }) { (case, clearFails) ->
                 resetForCase()
                 authenticateForTesting()
                 val diskCache = mock<DiskCache>()
@@ -1046,7 +1047,7 @@ class PubkyRepoTest : BaseUnitTest() {
         listOf(
             Triple("another identity", VALID_CONTACT_KEY_A, times(1)),
             Triple("same identity", VALID_SELF_KEY, never()),
-        ).forEach { (case, previousKey, clears) ->
+        ).forEachCase({ it.first }) { (case, previousKey, clears) ->
             resetForCase()
             authenticateForTesting(publicKey = previousKey, profileName = "Previous")
             val diskCache = mock<DiskCache>()
@@ -1474,7 +1475,7 @@ class PubkyRepoTest : BaseUnitTest() {
             RingHandoff("another key", null, remoteName = null, adopted = false, resolves = atLeastOnce()) {
                 PubkyProfile.forDisplay(VALID_CONTACT_KEY_A, name = "Other", imageUrl = null)
             },
-        ).forEach { case ->
+        ).forEachCase({ it.name }) { case ->
             resetForCase()
             val ringPubky = stubRingCredential()
             var signedIn = false
@@ -2277,7 +2278,7 @@ class PubkyRepoTest : BaseUnitTest() {
         listOf(
             Triple("missing", false, PubkyIdentityReadiness.Missing),
             Triple("unreadable", true, PubkyIdentityReadiness.Unavailable),
-        ).forEach { (case, keychainFails, readiness) ->
+        ).forEachCase({ it.first }) { (case, keychainFails, readiness) ->
             resetForCase()
             sut.awaitInitialization()
             if (keychainFails) {

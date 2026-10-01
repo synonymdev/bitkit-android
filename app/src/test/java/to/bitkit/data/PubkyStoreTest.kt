@@ -3,6 +3,7 @@ package to.bitkit.data
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import to.bitkit.data.serializers.PubkyStoreSerializer
+import to.bitkit.test.forEachCase
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -18,7 +19,7 @@ class PubkyStoreTest {
         listOf(
             Triple("with owner", withOwner, PubkyCachedProfile("pubkyalice", "Alice", "pubky://avatar")),
             Triple("without owner", PubkyStoreData(ownerPublicKey = "pubkyalice", cachedName = "Alice"), null),
-        ).forEach { (case, data, expected) -> assertEquals(expected, data.cachedProfile(), case) }
+        ).forEachCase({ it.first }) { (case, data, expected) -> assertEquals(expected, data.cachedProfile(), case) }
     }
 
     @Test

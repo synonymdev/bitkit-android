@@ -28,6 +28,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
 import java.io.IOException
 import java.util.concurrent.CancellationException
@@ -187,7 +188,7 @@ class PubkyImageFetcherTest : BaseUnitTest() {
                 key = "custom-key",
                 stored = mapOf("custom-key" to IMAGE_BYTES, IMAGE_URI to null),
             ),
-        ).forEach { case ->
+        ).forEachCase({ it.name }) { case ->
             reset(pubkyService)
             val epoch = PubkyImageCacheEpoch()
             val diskCache = createDiskCache()
@@ -232,7 +233,7 @@ class PubkyImageFetcherTest : BaseUnitTest() {
         listOf<Pair<String, (DiskCache) -> Unit>>(
             "read" to { whenever(it.openSnapshot(IMAGE_URI)).thenAnswer { throw IOException("journal unreadable") } },
             "editor" to { whenever(it.openEditor(IMAGE_URI)).thenAnswer { throw IOException("journal write failed") } },
-        ).forEach { (name, fail) ->
+        ).forEachCase({ it.first }) { (name, fail) ->
             reset(pubkyService)
             val diskCache = mock<DiskCache>()
             fail(diskCache)

@@ -18,6 +18,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.forEachCase
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -80,7 +81,7 @@ class EditContactViewModelTest : BaseUnitTest() {
         listOf(
             Triple("same contact", listOf(alice), listOf(alice.copy(name = "Alice Resolved", bio = "Updated"))),
             Triple("another contact", listOf(alice, bob), listOf(alice, bob.copy(name = "Bob Resolved"))),
-        ).forEach { (case, initial, updated) ->
+        ).forEachCase({ it.first }) { (case, initial, updated) ->
             reset(pubkyRepo)
             val contacts = MutableStateFlow(initial)
             whenever(pubkyRepo.contacts).thenReturn(contacts)
