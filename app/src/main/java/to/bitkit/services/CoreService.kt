@@ -588,7 +588,7 @@ class ActivityService(
             if (resolver.receivedPaymentContacts !== contacts) break
             val contact = when (activity) {
                 is Activity.Lightning -> receivedPaykitContact(activity.v1, contacts)
-                is Activity.Onchain -> receivedPaykitContact(activity.v1, contacts)
+                is Activity.Onchain -> receivedPaykitContact(activity.v1)
             }
             if (contact != null && resolver.receivedPaymentContacts === contacts) {
                 val updated = when (activity) {
@@ -607,12 +607,13 @@ class ActivityService(
         return contacts.contactsForPaymentHash(row.id).singleOrNull()
     }
 
-    private fun receivedPaykitContact(row: OnchainActivity, contacts: PaykitReceivedPaymentContacts): String? {
+    private suspend fun receivedPaykitContact(row: OnchainActivity): String? {
         if (row.contact != null || row.txType != PaymentType.RECEIVED) return null
         val details = getBitkitCoreTransactionDetails(walletId = row.walletId, txId = row.txId) ?: return null
-        if (details.outputs.isEmpty()) return null
-        val addresses = listOfNotNull(row.address) + details.outputs.mapNotNull { it.scriptpubkeyAddress }
-        return contacts.contactsForAddresses(addresses).singleOrNull()
+        return privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
+            receivingAddress = row.address,
+            addresses = details.outputs.mapNotNull { it.scriptpubkeyAddress },
+        )
     }
 
     suspend fun delete(id: String, walletId: String = defaultWalletId): Boolean = ServiceQueue.CORE.background {
@@ -921,11 +922,10 @@ class ActivityService(
     private suspend fun resolveAddressForInboundPayment(
         kind: PaymentKind.Onchain,
         payment: PaymentDetails,
-        transactionDetails: BitkitCoreTransactionDetails? = null,
+        details: BitkitCoreTransactionDetails?,
     ): String? {
         if (payment.direction != PaymentDirection.INBOUND) return null
 
-        val details = transactionDetails ?: fetchTransactionDetails(kind.txid)
         if (details == null) {
             Logger.verbose(
                 "Skipped address resolution because transaction details are unavailable for '${kind.txid}'",
@@ -950,7 +950,7 @@ class ActivityService(
     private suspend fun findPrivateReservedAddress(details: BitkitCoreTransactionDetails): String? {
         for (output in details.outputs) {
             val address = output.scriptpubkeyAddress ?: continue
-            if (privatePaykitContactPublicKeyForReservedAddress(address) != null) return address
+            if (privatePaykitContactResolver.get().contactPublicKeyForReservedAddress(address) != null) return address
         }
         return null
     }
@@ -977,23 +977,45 @@ class ActivityService(
             }
         }
 
+        val accounts = runSuspendCatching { lightningService.listOnchainWalletAccounts() }
+            .onFailure { Logger.warn("Failed to list onchain wallet accounts", it, context = TAG) }
+            .getOrDefault(emptyList())
+            .filter { it.accountIndex != 0u }
+        for (isChange in listOf(false, true)) {
+            for (account in accounts) {
+                searchReceivingAddressForType(
+                    details = details,
+                    value = value,
+                    currentWalletAddress = "",
+                    addressType = account.addressType.toBitkitAddressType(),
+                    isChange = isChange,
+                    accountIndex = account.accountIndex,
+                )?.let { return it }
+            }
+        }
+
         return null
     }
 
+    @Suppress("LongParameterList")
     private suspend fun searchReceivingAddressForType(
         details: BitkitCoreTransactionDetails,
         value: ULong,
         currentWalletAddress: String,
         addressType: AddressType,
         isChange: Boolean,
+        accountIndex: UInt = 0u,
     ): String? {
-        val addressTypeKey = addressType.toSettingsString()
+        val addressTypeKey = addressType.toSettingsString().let {
+            if (accountIndex == 0u) it else "$it:account:$accountIndex"
+        }
         val endIndex = addressSearchEndIndex(lastUsedAddressSearchIndex(addressTypeKey, isChange))
 
         var index = 0
         var currentAddressBatch: Int? = null
         while (index < endIndex) {
-            val addresses = fetchAddressSearchBatch(addressType, isChange, index, addressTypeKey) ?: return null
+            val addresses = fetchAddressSearchBatch(addressType, isChange, index, addressTypeKey, accountIndex)
+                ?: return null
 
             if (
                 currentWalletAddress.isNotBlank() &&
@@ -1021,14 +1043,16 @@ class ActivityService(
         isChange: Boolean,
         index: Int,
         addressTypeKey: String,
+        accountIndex: UInt,
     ): List<String>? {
         val scope = if (isChange) "change" else "receive"
-        return runCatching {
+        return runSuspendCatching {
             lightningService.addressInfosForType(
                 addressType = addressType,
                 isChange = isChange,
                 startIndex = index,
                 count = ADDRESS_SEARCH_BATCH_SIZE,
+                accountIndex = accountIndex,
             ).map { it.address }
         }.onFailure {
             Logger.warn(
@@ -1250,15 +1274,17 @@ class ActivityService(
             }
         }
 
-        val resolvedAddress = resolveAddressForInboundPayment(kind, payment, transactionDetails)
+        val details = transactionDetails ?: payment.takeIf { it.direction == PaymentDirection.INBOUND }
+            ?.let { fetchTransactionDetails(kind.txid) }
+        val resolvedAddress = resolveAddressForInboundPayment(kind, payment, details)
         val existingContact = existingOnchainActivity?.v1?.contact
         val contact = existingContact ?: if (
             payment.direction == PaymentDirection.INBOUND && payment.status != PaymentStatus.FAILED &&
-            !transactionDetails?.outputs.isNullOrEmpty()
+            !details?.outputs.isNullOrEmpty()
         ) {
             privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
-                listOfNotNull(resolvedAddress) +
-                    transactionDetails.outputs.mapNotNull { it.scriptpubkeyAddress },
+                receivingAddress = resolvedAddress,
+                addresses = details.outputs.mapNotNull { it.scriptpubkeyAddress },
             )
         } else {
             null
@@ -1309,9 +1335,6 @@ class ActivityService(
         if (direction != PaymentDirection.INBOUND) return null
         return privatePaykitContactResolver.get().contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)
     }
-
-    private suspend fun privatePaykitContactPublicKeyForReservedAddress(address: String): String? =
-        privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(listOf(address))
 
     // MARK: - Test Data Generation (regtest only)
 

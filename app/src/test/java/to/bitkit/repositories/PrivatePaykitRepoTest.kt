@@ -361,7 +361,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 privateListDeliveryReport()
             }.whenever(paykitSdkService).clearPrivatePaymentList(CONTACT_KEY)
 
-            sut.disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+            val result = sut.disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+
+            assertTrue(result.isFailure, failureStage)
             assertTrue(failed, failureStage)
             assertTrue(cacheData.value.cleanupPending, failureStage)
             publicRepo.syncPaykitApp(privateSharingEnabled = false).getOrThrow()
@@ -392,13 +394,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `disable sharing defers unavailable endpoint cleanup`() = test {
+    fun `disable sharing reports unavailable endpoint cleanup and retains retry state`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
         sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+        settingsData.value = settingsData.value.copy(sharesPrivatePaykitEndpoints = false)
         whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY) }.thenReturn(
             privateListDeliveryReport(
                 failedToQueue = listOf(
@@ -413,8 +416,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val result = sut.disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
 
-        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        assertEquals(PrivatePaykitError.PrivateUnavailable, result.exceptionOrNull())
         assertTrue(cacheData.value.cleanupPending)
+        assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList)
+        verifyBlocking(addressReservationRepo, never()) { clearContactAssignments(excludingPublicKeys = any()) }
     }
 
     @Test
