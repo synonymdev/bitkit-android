@@ -638,6 +638,7 @@ class PubkyRepo @Inject constructor(
      */
     suspend fun fetchDisplayProfile(publicKey: String): Result<PubkyProfile?> =
         resolveContactProfile(publicKey, retry = false)
+            .onFailure { Logger.warn("Failed to fetch display profile '${redacted(publicKey)}'", it, context = TAG) }
 
     // endregion
 

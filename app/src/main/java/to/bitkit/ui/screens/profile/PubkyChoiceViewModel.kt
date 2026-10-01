@@ -110,7 +110,6 @@ class PubkyChoiceViewModel @Inject constructor(
         var profile: PubkyProfile? = null
         try {
             profile = pubkyRepo.fetchDisplayProfile(pubky)
-                .onFailure { Logger.warn("Failed to look up ring identity profile", it, context = TAG) }
                 .getOrNull()
                 ?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, pubky) }
                 ?.takeIf { currentCoroutineContext().isActive }
