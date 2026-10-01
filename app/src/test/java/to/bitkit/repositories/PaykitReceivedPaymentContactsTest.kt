@@ -22,6 +22,70 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class PaykitReceivedPaymentContactsTest {
+    companion object {
+        /** Synthetic payer identity shared by request fixtures. */
+        const val BUYER = "pubky7don8zi885feihpjsyx7t53srod6z1n4xjiyaaxucpqarm6sh85o"
+
+        /** Second payer identity for ambiguous attribution checks. */
+        const val OTHER_BUYER = "pubkya3mduedw686dysw8ndr5c1dyry5h8k6i8hzbbmx9gf9k43zq4s9o"
+
+        /** Valid regtest receiving address used by request fixtures. */
+        const val ADDRESS = "bcrt1qfn50lqawrce0evh66qrnlt8j447lwmeyqp5gmd"
+
+        /** Distinct regtest address for unrelated-output checks. */
+        const val OTHER_ADDRESS = "bcrt1qpsps9chsjnnd3veems9phzlvw42em682rsj8hh"
+
+        /** Mainnet address sentinel accepted by the mocked decoder. */
+        const val MAINNET_ADDRESS = "bc1qexample"
+
+        /** Testnet address sentinel accepted by the mocked decoder. */
+        const val TESTNET_ADDRESS = "tb1qexample"
+
+        /** Network-ambiguous prefixes reported as testnet by the mocked decoder. */
+        val LEGACY_ADDRESSES = listOf("mlegacy", "nlegacy", "2legacy")
+
+        /** Regtest on-chain endpoint identifier for address fixtures. */
+        const val METHOD = "btc-regtest-p2wpkh"
+
+        /** Endpoint identifier for the invoice fixtures. */
+        const val BOLT11_METHOD = "btc-lightning-bolt11"
+
+        /** Regtest invoice sentinel accepted by the test invoice parser. */
+        const val INVOICE = "lnbcrt1example"
+
+        /** Mainnet invoice sentinel for wrong-network checks. */
+        const val MAINNET_INVOICE = "lnbc1example"
+
+        /** Payment hash returned by the test invoice parser. */
+        val HASH = "ab".repeat(32)
+
+        fun payload(value: String) = "{\"value\":\"$value\"}"
+
+        @Suppress("LongParameterList")
+        fun receivedRequest(
+            counterparty: String = BUYER,
+            role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYEE,
+            state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED,
+            invalidReason: String? = null,
+            asset: String = "btc",
+            endpoints: Map<String, String>? = mapOf(METHOD to payload(ADDRESS)),
+            accepted: List<String> = listOf(METHOD, BOLT11_METHOD),
+            terms: PaymentRequestTerms? = PaymentRequestTerms(
+                amount = PaymentRequestAmount("0.00015", asset), paymentReference = mock(),
+                proposalExpiresAt = null, recurrence = null, acceptedPaymentEndpointIdentifiers = accepted,
+                paymentEndpoints = endpoints, requiredAppId = "marketplace", conversion = null,
+                paymentDeadline = null, metadata = mock(),
+            ),
+        ): PaymentRequestRecord = mock {
+            on { this.counterparty }.thenReturn(counterparty)
+            on { this.localRole }.thenReturn(role)
+            on { this.state }.thenReturn(state)
+            on { this.invalidReason }.thenReturn(invalidReason)
+            on { this.terms }.thenReturn(terms)
+            on { proposalAppId }.thenReturn("marketplace")
+        }
+    }
+
     @Test
     fun `shared app immutable address attributes received payment`() = withDecoder {
         val contacts = index(receivedRequest())
@@ -69,7 +133,7 @@ class PaykitReceivedPaymentContactsTest {
         )
         assertTrue(
             index(*records.toTypedArray())
-                .contactsForAddresses(listOf(ADDRESS, MAINNET_ADDRESS, TESTNET_ADDRESS)).isEmpty()
+                .contactsForAddresses(listOf(ADDRESS, MAINNET_ADDRESS, TESTNET_ADDRESS)).isEmpty(),
         )
     }
 
@@ -78,7 +142,7 @@ class PaykitReceivedPaymentContactsTest {
         val identifier = "btc-signet-p2wpkh"
         val record = receivedRequest(
             accepted = listOf(identifier),
-            endpoints = mapOf(identifier to payload(TESTNET_ADDRESS))
+            endpoints = mapOf(identifier to payload(TESTNET_ADDRESS)),
         )
         val contacts = PaykitReceivedPaymentContacts.from(listOf(record), Network.SIGNET)
         assertEquals(setOf(BUYER), contacts.contactsForAddresses(listOf(TESTNET_ADDRESS)))
@@ -91,7 +155,7 @@ class PaykitReceivedPaymentContactsTest {
             val identifier = if (address.startsWith("2")) "btc-regtest-p2sh" else "btc-regtest-p2pkh"
             val record = receivedRequest(
                 accepted = listOf(identifier),
-                endpoints = mapOf(identifier to payload(address))
+                endpoints = mapOf(identifier to payload(address)),
             )
             assertEquals(setOf(BUYER), index(record).contactsForAddresses(listOf(address)))
         }
@@ -178,47 +242,6 @@ class PaykitReceivedPaymentContactsTest {
                 )
             }
             block()
-        }
-    }
-
-    companion object {
-        const val BUYER = "pubky7don8zi885feihpjsyx7t53srod6z1n4xjiyaaxucpqarm6sh85o"
-        const val OTHER_BUYER = "pubkya3mduedw686dysw8ndr5c1dyry5h8k6i8hzbbmx9gf9k43zq4s9o"
-        const val ADDRESS = "bcrt1qfn50lqawrce0evh66qrnlt8j447lwmeyqp5gmd"
-        const val OTHER_ADDRESS = "bcrt1qpsps9chsjnnd3veems9phzlvw42em682rsj8hh"
-        const val MAINNET_ADDRESS = "bc1qexample"
-        const val TESTNET_ADDRESS = "tb1qexample"
-        val LEGACY_ADDRESSES = listOf("mlegacy", "nlegacy", "2legacy")
-        const val METHOD = "btc-regtest-p2wpkh"
-        const val BOLT11_METHOD = "btc-lightning-bolt11"
-        const val INVOICE = "lnbcrt1example"
-        const val MAINNET_INVOICE = "lnbc1example"
-        val HASH = "ab".repeat(32)
-
-        fun payload(value: String) = "{\"value\":\"$value\"}"
-
-        @Suppress("LongParameterList")
-        fun receivedRequest(
-            counterparty: String = BUYER,
-            role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYEE,
-            state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED,
-            invalidReason: String? = null,
-            asset: String = "btc",
-            endpoints: Map<String, String>? = mapOf(METHOD to payload(ADDRESS)),
-            accepted: List<String> = listOf(METHOD, BOLT11_METHOD),
-            terms: PaymentRequestTerms? = PaymentRequestTerms(
-                amount = PaymentRequestAmount("0.00015", asset), paymentReference = mock(),
-                proposalExpiresAt = null, recurrence = null, acceptedPaymentEndpointIdentifiers = accepted,
-                paymentEndpoints = endpoints, requiredAppId = "marketplace", conversion = null,
-                paymentDeadline = null, metadata = mock(),
-            ),
-        ): PaymentRequestRecord = mock {
-            on { this.counterparty }.thenReturn(counterparty)
-            on { this.localRole }.thenReturn(role)
-            on { this.state }.thenReturn(state)
-            on { this.invalidReason }.thenReturn(invalidReason)
-            on { this.terms }.thenReturn(terms)
-            on { proposalAppId }.thenReturn("marketplace")
         }
     }
 }

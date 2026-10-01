@@ -1242,16 +1242,16 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun `bound requests keep their own addresses after contact list updates without consuming the list`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         sut.consumePrivatePaymentList(CONTACT_KEY, PrivatePaykitPaymentContext(emptyMap(), 7uL)).getOrThrow()
-        whenever {
-            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, 7uL)
-        }.thenReturn(resolution(resolvedEndpoint(MethodId.P2wpkh, "latest-address"), version = 8uL))
+        whenever(
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, 7uL),
+        ).thenReturn(resolution(resolvedEndpoint(MethodId.P2wpkh, "latest-address"), version = 8uL))
         whenever(coreService.isAddressUsed(any())).thenReturn(false)
         sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
         val cachedEndpoints = cacheData.value.contacts.getValue(CONTACT_KEY).remoteEndpoints
         val addresses = mapOf("invoice-a" to PRIVATE_ADDRESS, "invoice-b" to OTHER_PRIVATE_ADDRESS)
-        whenever {
-            paykitSdkService.prepareAndResolvePrivatePaymentRequest(eq(CONTACT_KEY), any(), eq(7uL))
-        }.thenAnswer {
+        whenever(
+            paykitSdkService.prepareAndResolvePrivatePaymentRequest(eq(CONTACT_KEY), any(), eq(7uL)),
+        ).thenAnswer {
             resolution(resolvedEndpoint(MethodId.P2wpkh, addresses.getValue(it.getArgument(1))), version = null)
         }
 
