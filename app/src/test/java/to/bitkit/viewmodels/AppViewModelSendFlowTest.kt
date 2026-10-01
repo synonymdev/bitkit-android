@@ -465,8 +465,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 true
             }
         }
-        whenever { privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()) }
-            .thenReturn(null)
         whenever { privatePaykitRepo.discardRemoteLightningEndpoints(any(), any()) }
             .thenReturn(Result.success(Unit))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
@@ -4815,11 +4813,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `received onchain payment preserves a replacement receive sheet`() = test {
         val processingStarted = CompletableDeferred<Unit>()
         val resumeProcessing = CompletableDeferred<Unit>()
-        whenever(privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()))
+        whenever(privatePaykitRepo.handleOnchainActivity(any<Collection<String>>()))
             .doSuspendableAnswer {
                 processingStarted.complete(Unit)
                 resumeProcessing.await()
-                null
+                Result.success(Unit)
             }
         val settledAddress = "bcrt1qsettled"
         walletState.value = WalletState(onchainAddress = settledAddress)

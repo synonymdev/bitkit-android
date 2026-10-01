@@ -303,17 +303,7 @@ class PrivatePaykitRepo @Inject constructor(
         withContext(serializedDispatcher) {
             runSuspendCatching {
                 updateContactSharingCleanupPending(true)
-                val removalError = removePublishedEndpoints().exceptionOrNull()
-                if (removalError != null) {
-                    updateContactSharingCleanupPending(true)
-                    Logger.warn(
-                        "Deferred private Paykit endpoint cleanup after disable failed",
-                        removalError,
-                        context = TAG,
-                    )
-                    return@runSuspendCatching
-                }
-
+                removePublishedEndpoints().getOrThrow()
                 clearUnsavedContactState(savedPublicKeys).getOrThrow()
                 updateContactSharingCleanupPending(false)
                 publicPaykitRepo.syncPaykitApp().onFailure {
@@ -516,13 +506,6 @@ class PrivatePaykitRepo @Inject constructor(
                     contactState.localInvoice?.paymentHash == paymentHash ||
                         paymentHash in contactState.receivedInvoicePaymentHashes
                 }
-            }
-        }
-
-    suspend fun contactPublicKeyForPrivateOnchainAddresses(addresses: Collection<String>): String? =
-        withContext(serializedDispatcher) {
-            addresses.firstNotNullOfOrNull {
-                addressReservationRepo.contactPublicKeyForReservedAddress(it)
             }
         }
 

@@ -61,7 +61,7 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(shared)
         whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).thenReturn(CONTACT_KEY)
 
-        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(listOf(PRIVATE_ADDRESS)))
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf(PRIVATE_ADDRESS)))
     }
 
     @Test
@@ -74,7 +74,7 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
             null
         }
 
-        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(listOf(PRIVATE_ADDRESS)))
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf(PRIVATE_ADDRESS)))
     }
 
     @Test
@@ -123,8 +123,29 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
             .thenReturn(CONTACT_KEY)
 
-        val result = sut.contactPublicKeyForPrivateOnchainAddresses(listOf(PRIVATE_ADDRESS))
+        val result = sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf(PRIVATE_ADDRESS))
 
         assertEquals(PubkyPublicKeyFormat.normalized(CONTACT_KEY), result)
+    }
+
+    @Test
+    fun `shared request is not a local address reservation`() = test {
+        val shared = mock<PaykitReceivedPaymentContacts>()
+        whenever(shared.contactsForAddresses(listOf(PRIVATE_ADDRESS))).thenReturn(setOf(CONTACT_KEY))
+        whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(shared)
+
+        assertNull(sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+        whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).thenReturn(CONTACT_KEY)
+        assertEquals(CONTACT_KEY, sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+    }
+
+    @Test
+    fun `unrelated output cannot supply a contact for the receiving address`() = test {
+        val outputs = listOf("wallet-address", PRIVATE_ADDRESS)
+        whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).thenReturn(CONTACT_KEY)
+
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses("wallet-address", outputs))
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(null, outputs))
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf("wallet-address")))
     }
 }
