@@ -744,6 +744,65 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `a contact save queued behind an identity change is not saved to the new identity`() = runTest {
+        val originalIdentity = "pubky$RING_PUBKY"
+        val newIdentity = "pubky5${RING_PUBKY.drop(1)}"
+        val contactKey = "pubky8${RING_PUBKY.drop(1)}"
+        val keychain = mock<Keychain>()
+        stubReceiverNoiseSecret(keychain)
+        val identityChangeGate = CompletableDeferred<Unit>()
+        whenever(keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)).doSuspendableAnswer { identityChangeGate.await() }
+        val store = mock<PubkyStore>()
+        whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+        val bootstrap = mock<PubkySessionBootstrap>()
+        whenever(bootstrap.republishIdentity(any())).thenReturn(true)
+        val access = mock<PubkySessionAccess>()
+        val noise = mock<ReceiverNoiseSecretKey>()
+        whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+        whenever(access.exportSessionSecret()).thenReturn("new-session")
+        whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+        val originalSdk = mock<PaykitSdk>()
+        whenever(originalSdk.identityStatus()).thenReturn(IdentityStatus(originalIdentity, true))
+        val newSdk = mock<PaykitSdk>()
+        whenever(newSdk.identityStatus()).thenReturn(IdentityStatus(newIdentity, true))
+        whenever(newSdk.linkedPeers()).thenReturn(emptyList())
+        whenever(newSdk.saveContact(any())).thenReturn(mock())
+        val handles = ArrayDeque(listOf(originalSdk, newSdk))
+        val service = PaykitSdkService(
+            context = mock(),
+            keychain = keychain,
+            pubkyStore = store,
+            bootstrapFactory = { bootstrap },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            sdkFactory = { handles.removeFirst() },
+        )
+
+        val identityChange = async {
+            service.activateRegisteredIdentity(PubkySessionBootstrapResult(access, newIdentity))
+        }
+        runCurrent()
+        val save = async {
+            assertFailsWith<IllegalStateException> {
+                service.saveContact(
+                    contactKey,
+                    "Contact",
+                    restorePrivateConnection = true,
+                    expectedIdentity = originalIdentity,
+                )
+            }
+        }
+        runCurrent()
+        assertFalse(save.isCompleted)
+        identityChangeGate.complete(Unit)
+        identityChange.await()
+        save.await()
+
+        verify(newSdk, never()).saveContact(any())
+        service.saveContact(contactKey, "Contact", restorePrivateConnection = true, expectedIdentity = newIdentity)
+        verify(newSdk).saveContact(any())
+    }
+
+    @Test
     fun `blocked peer cleanup does not attempt network delivery`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED)))

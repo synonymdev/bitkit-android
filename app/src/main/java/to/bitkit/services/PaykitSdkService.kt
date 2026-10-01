@@ -564,10 +564,16 @@ class PaykitSdkService @Inject constructor(
         label: String?,
         receiverPaths: List<String>? = null,
         restorePrivateConnection: Boolean = false,
+        expectedIdentity: String? = null,
     ): ContactRecord {
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
+                if (expectedIdentity != null) {
+                    check(PubkyPublicKeyFormat.matches(handle.identityStatus()?.publicKey, expectedIdentity)) {
+                        "Paykit identity changed before saving the contact"
+                    }
+                }
                 val existing = handle.contactRecord(publicKey)
                 check(restorePrivateConnection || existing != null) { "Contact no longer exists" }
                 val existingPaths = existing?.receiverPaths.orEmpty()

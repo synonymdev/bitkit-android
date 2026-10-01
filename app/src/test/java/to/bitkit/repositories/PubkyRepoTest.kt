@@ -2789,10 +2789,10 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals(setOf("Alice", placeholder.name), sut.contacts.value.map { it.name }.toSet())
         verify(pubkyService, never()).resolveContactProfile(any(), any(), any())
         verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_A, "Alice", listOf("bitkit/wallet", "bitkit/server"), true)
+            saveContact(VALID_CONTACT_KEY_A, "Alice", listOf("bitkit/wallet", "bitkit/server"), true, VALID_SELF_KEY)
         }
         verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true)
+            saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true, VALID_SELF_KEY)
         }
         verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(eq(VALID_CONTACT_KEY_B), any()) }
     }
@@ -2809,9 +2809,11 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
 
-        verifyBlocking(pubkyService) { saveContact(VALID_CONTACT_KEY_A, "Alice", listOf("bitkit/wallet"), true) }
         verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true)
+            saveContact(VALID_CONTACT_KEY_A, "Alice", listOf("bitkit/wallet"), true, VALID_SELF_KEY)
+        }
+        verifyBlocking(pubkyService) {
+            saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true, VALID_SELF_KEY)
         }
     }
 
@@ -2825,7 +2827,13 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.importContacts(listOf(placeholder)).isSuccess)
 
         verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_A, placeholder.name, listOf("bitkit/wallet", "bitkit/server"), true)
+            saveContact(
+                VALID_CONTACT_KEY_A,
+                placeholder.name,
+                listOf("bitkit/wallet", "bitkit/server"),
+                true,
+                VALID_SELF_KEY,
+            )
         }
     }
 
@@ -2835,7 +2843,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
         val saveStarted = CompletableDeferred<Unit>()
         val finishSave = CompletableDeferred<Unit>()
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), any(), any())).doSuspendableAnswer {
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), any(), any(), any())).doSuspendableAnswer {
             saveStarted.complete(Unit)
             finishSave.await()
             createContactRecord(VALID_CONTACT_KEY_A)
@@ -2871,7 +2879,7 @@ class PubkyRepoTest : BaseUnitTest() {
         finishDiscovery.complete(Unit)
 
         assertTrue(import.await().isFailure)
-        verifyBlocking(pubkyService, never()) { saveContact(any(), any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { saveContact(any(), any(), any(), any(), any()) }
         assertTrue(sut.contacts.value.isEmpty())
         assertFalse(sut.isImportingContacts.value)
     }
@@ -2895,7 +2903,7 @@ class PubkyRepoTest : BaseUnitTest() {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
         val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_B), any(), any(), any()))
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_B), any(), any(), any(), any()))
             .thenAnswer { throw TestAppError("Save failed") }
 
         val result = sut.importContacts(listOf(alice, bob))

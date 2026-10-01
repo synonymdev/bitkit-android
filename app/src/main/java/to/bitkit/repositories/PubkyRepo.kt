@@ -1154,7 +1154,13 @@ class PubkyRepo @Inject constructor(
             listOf(PaykitReceiverPaths.WALLET)
         }
         check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
-        pubkyService.saveContact(profile.publicKey, label, receiverPaths, restorePrivateConnection = true)
+        pubkyService.saveContact(
+            profile.publicKey,
+            label,
+            receiverPaths,
+            restorePrivateConnection = true,
+            expectedIdentity = owner,
+        )
         profile
     }.onFailure {
         Logger.warn("Failed to import contact '${redacted(profile.publicKey)}'", it, context = TAG)
