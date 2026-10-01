@@ -1199,7 +1199,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         sut.addContact(existingContact.publicKey, existingProfile = existingContact)
         whenever(pubkyService.getContacts(publicKey)).thenReturn(listOf(pendingContactKey))
-        whenever(pubkyService.resolveContactProfile(pendingContactKey, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(pendingContactKey, true, PaykitReadLane.Interactive))
             .thenReturn(createResolution(pendingContactKey, paykitProfile = createPaykitProfile("Pending Contact")))
 
         val prepareResult = sut.prepareImport()
@@ -1233,8 +1233,9 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `prepareImport resolves each follow once without retrying a missing profile or an error`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)).thenReturn(null)
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
+            .thenReturn(null)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Interactive))
             .thenAnswer { throw TestAppError("Unreachable") }
 
         val result = sut.prepareImport()
@@ -1244,8 +1245,28 @@ class PubkyRepoTest : BaseUnitTest() {
             setOf(PubkyProfile.placeholder(VALID_CONTACT_KEY_A), PubkyProfile.placeholder(VALID_CONTACT_KEY_B)),
             sut.pendingImportContacts.value.toSet(),
         )
-        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
-        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Interactive)
+    }
+
+    @Test
+    fun `prepareImport looks up the follows and the own profile on the interactive lane`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+        whenever(pubkyService.importSession("test_secret")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.contactRecords()).thenReturn(emptyList())
+        sut.initialize()
+        assertNull(sut.profile.value)
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
+        listOf(VALID_SELF_KEY to "Me", VALID_CONTACT_KEY_A to "Alice").forEach { (key, name) ->
+            whenever(pubkyService.resolveContactProfile(key, true, PaykitReadLane.Interactive))
+                .thenReturn(createResolution(key, paykitProfile = createPaykitProfile(name)))
+        }
+
+        assertTrue(sut.prepareImport().isSuccess)
+
+        assertEquals("Me", sut.pendingImportProfile.value?.name)
+        assertEquals(listOf("Alice"), sut.pendingImportContacts.value.map { it.name })
+        verify(pubkyService, never()).resolveContactProfile(any(), any(), eq(PaykitReadLane.Bulk))
     }
 
     @Test
@@ -1258,7 +1279,7 @@ class PubkyRepoTest : BaseUnitTest() {
             finishFollows.await()
             listOf(VALID_CONTACT_KEY_A)
         }
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
             .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Bob")))
         val preparation = async { sut.prepareImport() }
         followsStarted.await()
@@ -2842,9 +2863,9 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `importContacts saves the prepared profiles and keeps unresolved follows as placeholders`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
             .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Interactive))
             .thenAnswer { throw TestAppError("Unreachable") }
         whenever(pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_A, PaykitReadLane.Bulk))
             .thenReturn(listOf("bitkit/wallet", "bitkit/server"))
@@ -3008,7 +3029,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `loadContacts shows a profile resolved earlier in the session while it refreshes`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
             .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
         assertTrue(sut.prepareImport().isSuccess)
         val lookup = CompletableDeferred<ContactProfileResolution?>()
@@ -3027,7 +3048,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `sign out drops session contact profiles and stops their refresh`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
             .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
         assertTrue(sut.prepareImport().isSuccess)
         val lookup = CompletableDeferred<ContactProfileResolution?>()
@@ -3092,9 +3113,10 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `resolvePendingContactProfile leaves a contact showing a profile alone`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
             .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
         assertTrue(sut.prepareImport().isSuccess)
+        clearInvocations(pubkyService)
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
             .doSuspendableAnswer { awaitCancellation() }
         whenever(pubkyService.contactRecords()).thenReturn(
@@ -3249,7 +3271,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val publicKey = checkNotNull(sut.publicKey.value)
         val pendingContactKey = "pubkypending-contact"
         whenever(pubkyService.getContacts(publicKey)).thenReturn(listOf(pendingContactKey))
-        whenever(pubkyService.resolveContactProfile(pendingContactKey, true, PaykitReadLane.Bulk))
+        whenever(pubkyService.resolveContactProfile(pendingContactKey, true, PaykitReadLane.Interactive))
             .thenReturn(createResolution(pendingContactKey, paykitProfile = createPaykitProfile("Pending Contact")))
 
         sut.prepareImport()

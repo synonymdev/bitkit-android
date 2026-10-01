@@ -177,7 +177,7 @@ internal object PaykitReceiverPaths {
 
 /** Which public read slots a public Pubky read may use. */
 enum class PaykitReadLane {
-    /** A read for what the user is looking at; it takes only a shared read slot. */
+    /** A read for what the user is looking at or waiting on; it takes only a shared read slot. */
     Interactive,
 
     /** A background read over many keys; it also takes a bulk slot, so bulk reads never fill every read slot. */

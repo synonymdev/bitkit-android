@@ -1136,6 +1136,11 @@ class PubkyRepo @Inject constructor(
             .onFailure { Logger.warn("Failed to read saved contact labels", it, context = TAG) }
             .getOrDefault(emptyMap())
 
+    /**
+     * Looks up the signed-in identity's follows for the import overview, resolving each follow's profile once and
+     * keeping a follow it cannot resolve as a placeholder. Its lookups use the interactive read lane, since the user
+     * waits on the Pubky Ring choice row until it returns.
+     */
     suspend fun prepareImport(): Result<Unit> = runSuspendCatching {
         clearPendingImport()
         val pk = requireNotNull(_publicKey.value) { "Not authenticated" }
@@ -1147,11 +1152,13 @@ class PubkyRepo @Inject constructor(
                 contactKeys.map { contactPk ->
                     val prefixedKey = contactPk.ensurePubkyPrefix()
                     async {
-                        prefixedKey to resolveContactProfile(prefixedKey, retry = false, lane = PaykitReadLane.Bulk)
-                            .onFailure {
-                                Logger.warn("Failed to resolve follow '${redacted(prefixedKey)}'", it, context = TAG)
-                            }
-                            .getOrNull()
+                        prefixedKey to resolveContactProfile(
+                            prefixedKey,
+                            retry = false,
+                            lane = PaykitReadLane.Interactive,
+                        ).onFailure {
+                            Logger.warn("Failed to resolve follow '${redacted(prefixedKey)}'", it, context = TAG)
+                        }.getOrNull()
                     }
                 }.awaitAll()
             }
