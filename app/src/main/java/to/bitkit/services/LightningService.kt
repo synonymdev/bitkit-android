@@ -37,6 +37,7 @@ import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OnchainWalletAccount
 import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
@@ -113,6 +114,13 @@ internal fun enabledOnchainWalletAccountConfigs(
             xpub = record.xpub,
         )
     }
+
+internal fun LdkAddressType.toBitkitAddressType(): AddressType = when (this) {
+    LdkAddressType.LEGACY -> AddressType.P2PKH
+    LdkAddressType.NESTED_SEGWIT -> AddressType.P2SH
+    LdkAddressType.NATIVE_SEGWIT -> AddressType.P2WPKH
+    LdkAddressType.TAPROOT -> AddressType.P2TR
+}
 
 private fun accountKey(addressType: LdkAddressType, accountIndex: UInt): String =
     "${addressType.name}:$accountIndex"
@@ -679,20 +687,27 @@ class LightningService internal constructor(
         isChange: Boolean,
         startIndex: Int,
         count: Int,
+        accountIndex: UInt = 0u,
     ): List<AddressDerivationInfo> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         val keychain = if (isChange) KeychainKind.INTERNAL else KeychainKind.EXTERNAL
 
         return ServiceQueue.LDK.background(ldkQueue) {
             node.onchainPayment()
-                .addressInfosForType(
+                .addressInfosForAccount(
                     addressType.toLdkAddressType(),
+                    accountIndex,
                     keychain,
                     startIndex.toUInt(),
                     count.toUInt(),
                 )
                 .map { AddressDerivationInfo(address = it.address, index = it.index.toInt()) }
         }
+    }
+
+    suspend fun listOnchainWalletAccounts(): List<OnchainWalletAccount> = ServiceQueue.LDK.background(ldkQueue) {
+        val n = node ?: throw ServiceError.NodeNotSetup()
+        n.listOnchainWalletAccounts()
     }
 
     suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType) {
@@ -1328,13 +1343,6 @@ class LightningService internal constructor(
     suspend fun listMonitoredAddressTypes(): List<AddressType> = ServiceQueue.LDK.background(ldkQueue) {
         val n = node ?: throw ServiceError.NodeNotSetup()
         n.listMonitoredAddressTypes().map { it.toBitkitAddressType() }
-    }
-
-    private fun LdkAddressType.toBitkitAddressType(): AddressType = when (this) {
-        LdkAddressType.LEGACY -> AddressType.P2PKH
-        LdkAddressType.NESTED_SEGWIT -> AddressType.P2SH
-        LdkAddressType.NATIVE_SEGWIT -> AddressType.P2WPKH
-        LdkAddressType.TAPROOT -> AddressType.P2TR
     }
 
     private fun AddressType.toLdkAddressType(): LdkAddressType = when (this) {

@@ -152,7 +152,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
 
     @Test
     fun `contact picker lists only contacts that can receive payment requests`() = test {
-        targets.value = listOf(PaykitPaymentRequestTarget(LEO_KEY, "bitkit/wallet"))
+        targets.value = listOf(PaykitPaymentRequestTarget(LEO_KEY))
 
         assertEquals(listOf("Leo"), loadedState().contacts.map { it.name })
     }
@@ -210,7 +210,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
         id = "entry-1",
         allowances = listOf(
             PaykitAllowance(
-                id = PaykitAllowance.Id(LEO_KEY, "bitkit/wallet", "allowance-1"),
+                id = PaykitAllowance.Id(LEO_KEY, "allowance-1"),
                 role = PaykitAllowance.Role.ALLOWER,
                 lifecycleState = state,
                 isProposedByMe = true,

@@ -1,0 +1,18 @@
+<journey name="paykit reconnect">
+  <description>
+    Verifies Paykit-only reconnect consent and cancellation without a new watch-only account.
+    Precondition: an isolated wallet with one known service account that is active and tracked,
+    and a valid fresh pubkyauth://signin URL with exactly /pub/paykit/:rw and
+    x-bitkit-claim=paykit-access-v1. The cancel steps need no live authorization relay.
+    Successful reconnect is a separate fixture-backed README check.
+  </description>
+  <actions>
+    <action>Record the known service account's name, derivation path, xpub, and tracking setting</action>
+    <action>Open the fixture Paykit-only reconnect auth URL in the wallet</action>
+    <action>Verify the authorization screen is visible without watch-only consent</action>
+    <action>Verify Paykit access (testTag "PubkyAuthPaykitAccess") describes private Paykit data and messages without sharing identity or spending keys</action>
+    <action>Tap Cancel on the authorization screen</action>
+    <action>Verify the authorization sheet is dismissed</action>
+    <action>Verify the known service account's name, derivation path, xpub, and tracking setting are unchanged and no new account was created</action>
+  </actions>
+</journey>

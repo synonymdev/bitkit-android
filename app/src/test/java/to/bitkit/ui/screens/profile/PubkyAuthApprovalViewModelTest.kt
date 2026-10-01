@@ -23,10 +23,12 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.same
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.PreparedWatchOnlyAccountClaim
 import to.bitkit.models.PubkyAuthClaim
+import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
@@ -41,6 +43,7 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass")
 class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     private val clientId = "paykit.test"
     private val context: Context = mock()
@@ -70,6 +73,135 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         val sut = createSut()
 
         assertEquals(ApprovalState.Loading, sut.uiState.value.state)
+    }
+
+    @Test
+    fun `Paykit-only reconnect never prepares or tracks a wallet account`() = test {
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
+        val authUrl = "pubkyauth://signin?x-bitkit-claim=paykit-access-v1"
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(
+            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim(Item.PAYKIT_ACCESS_V1))),
+        )
+        whenever(pubkyRepo.approveAuthWithCompanionClaim(eq(authUrl), eq(clientId), argThat { isEmpty() }))
+            .thenReturn(Result.success(Unit))
+        val sut = createSut()
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo) { approveAuthWithCompanionClaim(eq(authUrl), eq(clientId), argThat { isEmpty() }) }
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+        verifyNoInteractions(watchOnlyAccountRepo)
+    }
+
+    @Test
+    fun `combined authorization prepares and activates a new watch-only account`() = test {
+        val authUrl = "pubkyauth://signin?x-bitkit-claim=paykit-access-v1.watch-only-account-v1"
+        val request = authRequest(
+            authUrl,
+            PubkyAuthClaim.REQUIRED_CAPABILITIES,
+            PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
+        )
+        val pending = watchOnlyAccount()
+        val prepared = PreparedWatchOnlyAccountClaim(pending, ByteArray(84))
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+        whenever(watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server")).thenReturn(prepared)
+        whenever(watchOnlyAccountRepo.beginAuthorization(pending.id)).thenReturn(false)
+        whenever(pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload))
+            .thenReturn(Result.success(Unit))
+        val sut = createSut()
+
+        mockStatic(Log::class.java).use {
+            sut.load(authUrl)
+            advanceUntilIdle()
+            assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
+            sut.approveWatchOnlyConsent(authUrl)
+            sut.confirmAuthorize(authUrl)
+            advanceUntilIdle()
+        }
+
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        verifyBlocking(watchOnlyAccountRepo) { prepareUnsignedClaim(authUrl, "paykit server") }
+        verifyBlocking(watchOnlyAccountRepo, never()) { cancelAuthorization(any(), any()) }
+        verifyBlocking(watchOnlyAccountRepo) { markActive(pending.id) }
+    }
+
+    @Test
+    fun `canceling local auth does not allocate or change a watch-only account`() = test {
+        val authUrl = "pubkyauth://signin?x-bitkit-claim=watch-only-account-v1"
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(
+            Result.success(
+                authRequest(
+                    authUrl,
+                    PubkyAuthClaim.REQUIRED_CAPABILITIES,
+                    PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
+                ),
+            ),
+        )
+        val sut = createSut()
+        sut.load(authUrl)
+        advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
+        sut.requestAuthorize(authUrl)
+        advanceUntilIdle()
+        sut.cancelLocalAuth(authUrl)
+        sut.dismiss()
+        advanceUntilIdle()
+
+        verifyNoInteractions(watchOnlyAccountRepo)
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
+    }
+
+    @Test
+    fun `authorization rejects a claim type that differs from the displayed consent`() = test {
+        val authUrl = "pubkyauth://signin?x-bitkit-claim=paykit-access-v1"
+        val shown = authRequest(
+            authUrl,
+            PubkyAuthClaim.REQUIRED_CAPABILITIES,
+            PubkyAuthClaim(Item.PAYKIT_ACCESS_V1),
+        )
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(
+            Result.success(shown),
+            Result.success(shown.copy(bitkitClaim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1))),
+        )
+        val sut = createSut()
+        mockStatic(Log::class.java).use {
+            sut.load(authUrl)
+            advanceUntilIdle()
+            sut.confirmAuthorize(authUrl)
+            advanceUntilIdle()
+        }
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        verifyNoInteractions(watchOnlyAccountRepo)
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
+    }
+
+    @Test
+    fun `authorization rejects item order changed after consent`() = test {
+        val claim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1)
+        val authUrl = "pubkyauth://signin?x-bitkit-claim=${claim.wireValue}"
+        val shown = authRequest(authUrl, PubkyAuthClaim.REQUIRED_CAPABILITIES, claim)
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(
+            Result.success(shown),
+            Result.success(
+                shown.copy(bitkitClaim = PubkyAuthClaim.fromWireValue("watch-only-account-v1.paykit-access-v1")),
+            ),
+        )
+        val sut = createSut()
+        mockStatic(Log::class.java).use {
+            sut.load(authUrl)
+            advanceUntilIdle()
+            sut.approveWatchOnlyConsent(authUrl)
+            sut.confirmAuthorize(authUrl)
+            advanceUntilIdle()
+        }
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        verifyBlocking(watchOnlyAccountRepo, never()) { prepareUnsignedClaim(any(), any()) }
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
     }
 
     @Test
@@ -294,13 +426,13 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `load exposes watch-only account claim for approval`() = test {
-        val authUrl = "pubkyauth://signin?caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
+        val authUrl = "pubkyauth://signin?caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(
                 authRequest(
                     authUrl = authUrl,
-                    capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
-                    bitkitClaim = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1,
+                    capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES,
+                    bitkitClaim = PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
                 ),
             ),
         )
@@ -310,7 +442,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
-        assertEquals(PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1, sut.uiState.value.bitkitClaim)
+        assertEquals(PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1), sut.uiState.value.bitkitClaim)
 
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
@@ -331,15 +463,15 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `watch-only authorization uses combined companion approval`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+    fun `watch-only authorization delivers the account companion claim`() = test {
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
-            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
+            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1))),
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false)
@@ -366,14 +498,14 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `duplicate confirmations start one companion authorization`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
-            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
+            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1))),
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false)
@@ -399,8 +531,8 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `switching requests and reopening during companion approval does not start another authorization`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val secondAuthUrl = "pubkyauth://signin?caps=/pub/second/:rw"
         val secondCapabilities = "/pub/second/:rw"
         val prepared = PreparedWatchOnlyAccountClaim(
@@ -409,7 +541,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         )
         val approvalResult = CompletableDeferred<Result<Unit>>()
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
-            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
+            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1))),
         )
         whenever { pubkyRepo.parseAuthUrl(secondAuthUrl) }.thenReturn(
             Result.success(authRequest(secondAuthUrl, secondCapabilities)),
@@ -456,8 +588,8 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `wrapped post-delivery authorization failure keeps account authorizing for retry`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount(),
             payload = ByteArray(84),
@@ -466,7 +598,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             "AuthToken delivery failed"
         )
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
-            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
+            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1))),
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false)
@@ -488,14 +620,14 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `companion delivery failure does not approve normal auth or activate account`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
-            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
+            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1))),
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false)
@@ -518,8 +650,8 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `retry delivery failure keeps a previously delivered account authorizing`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount().copy(
                 isTrackingEnabled = true,
@@ -528,7 +660,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             payload = ByteArray(84),
         )
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
-            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
+            Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1))),
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(true)
@@ -552,7 +684,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `tracking preparation failure unloads account without attempting approval`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount(),
             payload = ByteArray(84),
@@ -561,8 +693,8 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             Result.success(
                 authRequest(
                     authUrl,
-                    PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
-                    PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1,
+                    PubkyAuthClaim.REQUIRED_CAPABILITIES,
+                    PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
                 ),
             ),
         )
@@ -585,7 +717,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `tracking failure uses the current authorizing disposition`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount(),
             payload = ByteArray(84),
@@ -594,8 +726,8 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             Result.success(
                 authRequest(
                     authUrl,
-                    PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
-                    PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1,
+                    PubkyAuthClaim.REQUIRED_CAPABILITIES,
+                    PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
                 ),
             ),
         )
@@ -623,7 +755,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `retry after process restart reuses account and repeats authorization`() = test {
-        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
+        val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.REQUIRED_CAPABILITIES}"
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount(),
             payload = ByteArray(84),
@@ -638,8 +770,8 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             Result.success(
                 authRequest(
                     authUrl,
-                    PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
-                    PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1,
+                    PubkyAuthClaim.REQUIRED_CAPABILITIES,
+                    PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
                 ),
             ),
         )
@@ -694,7 +826,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         clientId = clientId,
         relay = "https://httprelay.pubky.app/inbox/",
         capabilities = capabilities,
-        permissions = listOf(PubkyAuthPermission(path = "/pub/paykit/v0/bitkit/server/", accessLevel = "rw")),
+        permissions = listOf(PubkyAuthPermission(path = "/pub/paykit/", accessLevel = "rw")),
         serviceNames = listOf("paykit"),
         bitkitClaim = bitkitClaim,
         homeserverPublicKey = if (PubkyAuthRequest.isSignupUrl(authUrl)) "homeserver" else null,

@@ -192,9 +192,16 @@ class SettingsViewModel @Inject constructor(
     val isDevModeEnabled = settingsStore.data.map { it.isDevModeEnabled }
         .asStateFlow(initialValue = false)
 
-    fun setIsDevModeEnabled(value: Boolean) {
+    suspend fun setIsDevModeEnabled(value: Boolean) {
+        settingsStore.update { it.copy(isDevModeEnabled = value) }
+    }
+
+    val disableAllToasts = settingsStore.data.map { it.disableAllToasts }
+        .asStateFlow(initialValue = false)
+
+    fun setDisableAllToasts(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.update { it.copy(isDevModeEnabled = value) }
+            settingsStore.update { it.copy(disableAllToasts = value) }
         }
     }
 
@@ -269,6 +276,11 @@ class SettingsViewModel @Inject constructor(
     private suspend fun removePaykitEndpoints(hadPublicPaykitState: Boolean, hadPrivatePaykitState: Boolean) {
         val contacts = pubkyRepo.contacts.value.map { it.publicKey }
 
+        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
+            .onFailure {
+                Logger.warn("Failed to remove private Paykit endpoints after disabling Paykit UI", it, context = TAG)
+            }
+
         if (hadPublicPaykitState) {
             publicPaykitRepo.syncPublishedEndpoints(publish = false)
                 .onSuccess {
@@ -279,17 +291,12 @@ class SettingsViewModel @Inject constructor(
                     Logger.warn("Failed to remove public Paykit endpoints after disabling Paykit UI", it, context = TAG)
                 }
         } else if (hadPrivatePaykitState) {
-            publicPaykitRepo.syncLocalReceiverMarker(publicSharingEnabled = false, privateSharingEnabled = false)
+            publicPaykitRepo.syncPaykitApp(privateSharingEnabled = false)
                 .onFailure {
                     settingsStore.update { settings -> settings.copy(publicPaykitCleanupPending = true) }
-                    Logger.warn("Failed to remove Paykit receiver marker after disabling Paykit UI", it, context = TAG)
+                    Logger.warn("Failed to update Paykit app capabilities after disabling Paykit UI", it, context = TAG)
                 }
         }
-
-        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
-            .onFailure {
-                Logger.warn("Failed to remove private Paykit endpoints after disabling Paykit UI", it, context = TAG)
-            }
     }
 
     val isPinEnabled = settingsStore.data.map { it.isPinEnabled }

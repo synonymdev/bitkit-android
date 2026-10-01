@@ -19,6 +19,7 @@ import com.synonym.paykit.PaymentOccurrenceKey
 import com.synonym.paykit.PaymentOccurrenceRecord
 import com.synonym.paykit.PaymentOutcome
 import com.synonym.paykit.PaymentOutcomeReport
+import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestScope
 import com.synonym.paykit.PrivateStreamIntakeReport
 import kotlinx.coroutines.CompletableDeferred
@@ -39,10 +40,9 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.repositories.PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID
+import to.bitkit.repositories.PaykitAllowanceFixtures.ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.JournalEntry
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -63,6 +63,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         private const val MANUAL_ATTEMPT_ID = "manual-1"
         private const val INVOICE = "lnbcrt10u1allowancetestinvoice"
         private const val ONCHAIN_ADDRESS = "bcrt1qallowancetestaddress"
+        private const val PAYMENT_APP_ID = "bitkit"
         private val PAYMENT_HASH = "ab".repeat(32)
         private val TXID = "c".repeat(64)
     }
@@ -145,9 +146,10 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
                 ),
             )
         }
-        whenever(sdk.processOutboundPrivateMessages(any(), any()))
+        whenever(sdk.claimPaymentRequestForExecution(any(), any())).thenReturn(mock<PaymentRequestRecord>())
+        whenever(sdk.processOutboundPrivateMessages(any()))
             .thenReturn(OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()))
-        whenever(sdk.receivePrivateMessages(any(), any()))
+        whenever(sdk.receivePrivateMessages(any()))
             .thenReturn(PrivateStreamIntakeReport(null, emptyList(), emptyList()))
     }
 
@@ -201,9 +203,12 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
     private suspend fun stubPayer() {
         whenever(payer.resolve(any(), any())).thenReturn(Result.success(lightningPayment()))
+        whenever(payer.acceptOnThisInstall<AllowanceAssociationRecord>(any(), any())).doSuspendableAnswer {
+            runCatching { it.getArgument<suspend () -> AllowanceAssociationRecord>(1).invoke() }
+        }
         whenever(payer.consumePaymentList(any(), any())).thenReturn(Result.success(Unit))
-        whenever(payer.prepareProof(any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
-        whenever(payer.associateLightningPayment(any(), any(), any())).thenReturn(Result.success(Unit))
+        whenever(payer.prepareProof(any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(payer.associateLightningPayment(any(), any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.markOnchainPaymentStarted(any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.payLightning(any(), anyOrNull())).thenReturn(Result.success(PAYMENT_HASH))
         whenever(payer.payOnchain(any(), any())).thenReturn(Result.success(TXID))
@@ -221,7 +226,6 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             listOf(fixtures.allowance(role = PaykitAllowance.Role.ALLOWEE)),
             listOf(fixtures.allowance(state = AllowanceLifecycleState.PROPOSED)),
             listOf(fixtures.allowance(state = AllowanceLifecycleState.ENDED)),
-            listOf(fixtures.allowance(receiverPath = PaykitReceiverPaths.SERVER)),
             listOf(fixtures.allowance(counterparty = fixtures.otherCounterpartyKey)),
         )
 
@@ -241,17 +245,24 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val order = inOrder(sdk, payer)
         order.verify(sdk).evaluateAllowanceCandidates(any(), any())
         order.verify(payer).resolve(eq(request), eq(listOf(fixtures.lightningIdentifier)))
+        order.verify(payer).acceptOnThisInstall<AllowanceAssociationRecord>(eq(request), any())
+        order.verify(sdk).claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
         order.verify(sdk).acceptPaymentRequestAutomatically(any(), any(), any())
         order.verify(sdk).reserveAutomaticPayment(any(), any(), any())
-        order.verify(sdk).receivePrivateMessages(request.counterparty, request.counterpartyReceiverPath)
+        order.verify(sdk).receivePrivateMessages(request.counterparty)
         order.verify(sdk).beginPaymentExecution(eq(AUTOMATIC_ATTEMPT_ID), any())
         order.verify(payer).consumePaymentList(request.counterparty, lightningPayment().context)
-        order.verify(payer).prepareProof(request, fixtures.lightningIdentifier, WALLET_ALLOWANCE_ID)
-        order.verify(payer).associateLightningPayment(request, PAYMENT_HASH, fixtures.lightningIdentifier)
+        order.verify(payer).prepareProof(request, fixtures.lightningIdentifier, PAYMENT_APP_ID, ALLOWANCE_ID)
+        order.verify(payer).associateLightningPayment(
+            request,
+            PAYMENT_HASH,
+            fixtures.lightningIdentifier,
+            PAYMENT_APP_ID,
+        )
         order.verify(payer).payLightning(eq(INVOICE), isNull())
         verify(sdk, never()).recordPaymentOutcome(any())
         assertEquals(listOf(PaykitAllowanceTime.format(fixtures.now)), evaluatedTrustedTimes)
-        assertEquals(listOf(WALLET_ALLOWANCE_ID), selections.map { it.allowanceId })
+        assertEquals(listOf(ALLOWANCE_ID), selections.map { it.allowanceId })
         assertEquals(listOf(fixtures.lightningIdentifier), acceptedChecks.map { it.paymentEndpointIdentifier })
         assertEquals(listOf(1uL), reservedAssociationRevisions)
 
@@ -260,7 +271,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(Stage.SENT, entry.stage)
         assertTrue(entry.isAutomatic)
         assertEquals(request.id, entry.requestId)
-        assertEquals(WALLET_ALLOWANCE_ID, entry.allowanceId)
+        assertEquals(ALLOWANCE_ID, entry.allowanceId)
         assertEquals(1_000uL, entry.amountSats)
         assertEquals(PAYMENT_HASH, entry.paymentHash)
         assertEquals(fixtures.lightningIdentifier, entry.paymentEndpointIdentifier)
@@ -334,6 +345,20 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `execution claim held by another app keeps the request manual before any acceptance`() = test {
+        whenever(sdk.claimPaymentRequestForExecution(any(), any())).doSuspendableAnswer {
+            error("Another app owns the execution claim")
+        }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
+        verify(payer, never()).payLightning(any(), anyOrNull())
+    }
+
+    @Test
     fun `blocked reservation marks the payment manual only`() = test {
         collectEvents()
         automaticReservation = PaymentAttemptDecision.Blocked(
@@ -345,11 +370,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         val limitReached: PaykitAllowanceEvent = PaykitAllowanceEvent.LimitReached(fixtures.counterpartyKey, 1_000uL)
-        val scope = PaymentRequestScope(
-            counterparty = request.counterparty,
-            counterpartyReceiverPath = request.counterpartyReceiverPath,
-            paymentRequestId = request.paymentRequestId,
-        )
+        val scope = PaymentRequestScope(request.counterparty, request.paymentRequestId)
         verify(sdk).markPaymentManualOnly(PaymentOccurrence(scope, billingPeriod = null))
         verify(sdk, never()).beginPaymentExecution(any(), any())
         verify(payer, never()).payLightning(any(), anyOrNull())
@@ -367,13 +388,13 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
         assertEquals(listOf(Stage.FAILED), sut.localState(identity).journal.map { it.stage })
         verify(payer, never()).consumePaymentList(any(), any())
-        verify(payer, never()).prepareProof(any(), any(), anyOrNull())
+        verify(payer, never()).prepareProof(any(), any(), any(), anyOrNull())
         verify(payer, never()).payLightning(any(), anyOrNull())
     }
 
     @Test
     fun `failed proof preparation releases the attempt before any payment`() = test {
-        whenever(payer.prepareProof(any(), any(), anyOrNull()))
+        whenever(payer.prepareProof(any(), any(), any(), anyOrNull()))
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
         val request = fixtures.paymentRequest()
 
@@ -412,10 +433,10 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(PaykitAllowanceAutoPayResult.COMPLETED, result)
         val order = inOrder(payer, sdk)
-        order.verify(payer).prepareProof(request, fixtures.onchainIdentifier, WALLET_ALLOWANCE_ID)
+        order.verify(payer).prepareProof(request, fixtures.onchainIdentifier, PAYMENT_APP_ID, ALLOWANCE_ID)
         order.verify(payer).markOnchainPaymentStarted(request, ONCHAIN_ADDRESS)
         order.verify(payer).payOnchain(eq(ONCHAIN_ADDRESS), any())
-        order.verify(payer).completeOnchainPayment(request, TXID, fixtures.onchainIdentifier)
+        order.verify(payer).completeOnchainPayment(request, TXID, fixtures.onchainIdentifier, PAYMENT_APP_ID)
         order.verify(sdk).recordPaymentOutcome(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.SUCCEEDED))
         val entry = sut.localState(identity).journal.single()
         assertEquals(Stage.SUCCEEDED, entry.stage)
@@ -442,7 +463,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(listOf(PaymentOutcome.FAILED, PaymentOutcome.UNKNOWN), recordedOutcomes.map { it.outcome })
         verify(payer).failOnchainPayment(definite)
         verify(payer, never()).failOnchainPayment(uncertain)
-        verify(payer, never()).completeOnchainPayment(any(), any(), any())
+        verify(payer, never()).completeOnchainPayment(any(), any(), any(), any())
     }
 
     @Test
@@ -458,7 +479,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         sendResult.complete(Result.success(TXID))
         caller.join()
 
-        verify(payer).completeOnchainPayment(request, TXID, fixtures.onchainIdentifier)
+        verify(payer).completeOnchainPayment(request, TXID, fixtures.onchainIdentifier, PAYMENT_APP_ID)
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.SUCCEEDED)), recordedOutcomes)
         assertEquals(Stage.SUCCEEDED, sut.localState(identity).journal.single().stage)
     }
@@ -739,7 +760,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     private fun candidate(blocked: AllowanceAccountingBlock? = null) = AllowanceCandidate(
-        allowanceId = WALLET_ALLOWANCE_ID,
+        allowanceId = ALLOWANCE_ID,
         eligiblePaymentEndpointIdentifiers = listOf(PaykitAllowanceFixtures.lightningIdentifier),
         blocked = blocked,
     )
@@ -750,7 +771,8 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             value = INVOICE,
             rawPayload = """{"value":"$INVOICE"}""",
         ),
-        context = PrivatePaykitPaymentContext(PaykitReceiverPaths.WALLET, 3uL),
+        appId = PAYMENT_APP_ID,
+        context = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to PAYMENT_APP_ID), 3uL),
         lightningPaymentHash = PAYMENT_HASH,
         lightningInvoiceHasAmount = true,
     )
@@ -761,7 +783,8 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             value = ONCHAIN_ADDRESS,
             rawPayload = """{"value":"$ONCHAIN_ADDRESS"}""",
         ),
-        context = PrivatePaykitPaymentContext(PaykitReceiverPaths.WALLET, 3uL),
+        appId = PAYMENT_APP_ID,
+        context = PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to PAYMENT_APP_ID), 3uL),
         lightningPaymentHash = null,
         lightningInvoiceHasAmount = false,
     )
@@ -809,7 +832,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         attemptId = attemptId,
         isAutomatic = true,
         requestId = request.id,
-        allowanceId = WALLET_ALLOWANCE_ID,
+        allowanceId = ALLOWANCE_ID,
         amountSats = request.amountSats,
         paymentEndpointIdentifier = fixtures.lightningIdentifier,
         paymentHash = paymentHash,

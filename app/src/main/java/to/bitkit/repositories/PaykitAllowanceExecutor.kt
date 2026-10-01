@@ -56,6 +56,7 @@ class PaykitAllowancePayer @Inject constructor(
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val paymentProofRepo: PaykitPaymentProofRepo,
     private val lightningRepo: LightningRepo,
+    private val paymentRequestRepo: PaykitPaymentRequestRepo,
 ) {
     suspend fun resolve(
         request: PaykitPaymentRequest,
@@ -65,21 +66,28 @@ class PaykitAllowancePayer @Inject constructor(
     suspend fun consumePaymentList(publicKey: String, context: PrivatePaykitPaymentContext): Result<Unit> =
         privatePaykitRepo.consumePrivatePaymentList(publicKey, context)
 
+    /** Accepts through [accept] with this install as the request's owner, so a failed payment stays payable here. */
+    suspend fun <T> acceptOnThisInstall(request: PaykitPaymentRequest, accept: suspend () -> T): Result<T> =
+        paymentRequestRepo.acceptOnThisInstall(request, accept)
+
     suspend fun prepareProof(
         request: PaykitPaymentRequest,
         paymentEndpointIdentifier: String,
+        paymentAppId: String,
         allowanceId: String?,
     ): Result<Unit> {
         val kind = PaykitPaymentProofKind.fromPaymentEndpointIdentifier(paymentEndpointIdentifier)
             ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
-        return paymentProofRepo.prepare(request, paymentEndpointIdentifier, kind, allowanceId)
+        return paymentProofRepo.prepare(request, paymentEndpointIdentifier, paymentAppId, kind, allowanceId)
     }
 
     suspend fun associateLightningPayment(
         request: PaykitPaymentRequest,
         paymentHash: String,
         paymentEndpointIdentifier: String,
-    ): Result<Unit> = paymentProofRepo.associateLightningPayment(request, paymentHash, paymentEndpointIdentifier)
+        paymentAppId: String,
+    ): Result<Unit> =
+        paymentProofRepo.associateLightningPayment(request, paymentHash, paymentEndpointIdentifier, paymentAppId)
 
     suspend fun markOnchainPaymentStarted(request: PaykitPaymentRequest, address: String): Result<Unit> =
         paymentProofRepo.markOnchainPaymentStarted(request, address)
@@ -111,8 +119,9 @@ class PaykitAllowancePayer @Inject constructor(
         request: PaykitPaymentRequest,
         txid: String,
         paymentEndpointIdentifier: String,
+        paymentAppId: String,
     ) {
-        paymentProofRepo.completeOnchainPayment(request, txid, paymentEndpointIdentifier)
+        paymentProofRepo.completeOnchainPayment(request, txid, paymentEndpointIdentifier, paymentAppId)
     }
 
     /** Clears the proof when [error] proves the payment never left; returns whether it did. */
@@ -247,7 +256,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun recoverOpenAttempts(identity: String) {
         runSuspendCatching {
-            // No ledger means nothing was ever admitted. Creating one here would also end the rc55 storage layout.
+            // No ledger means nothing was ever admitted, so there is nothing to recover.
             paykitSdkService.allowanceAccountingState() ?: return@runSuspendCatching
             val state = ensureReconciled(identity)
             for (attempt in state.history.occurrences.flatMap { it.attempts }) {
@@ -342,8 +351,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             allowances.any {
                 it.isAllower &&
                     it.lifecycleState == AllowanceLifecycleState.ACCEPTED &&
-                    PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty) &&
-                    it.counterpartyReceiverPath == request.counterpartyReceiverPath
+                    PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
             }
         if (!isCovered || !inFlightRequestIds.add(request.id)) {
             return@withContext PaykitAllowanceAutoPayResult.NOT_COVERED
@@ -397,15 +405,19 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
 
         val endpointIdentifier = payment.endpoint.methodId.rawValue
-        val association = paykitSdkService.acceptPaymentRequestAutomatically(
-            scope = scope,
-            selection = AllowanceSelectionInput(
-                allowanceId = candidate.allowanceId,
-                expectedRevision = null,
-                trustedTime = selectionTime,
-            ),
-            checks = checks(request, endpointIdentifier, selectionTime),
-        )
+        val association = payer.acceptOnThisInstall(request) {
+            // Every identity-wide execution step needs this app to own the request's execution claim first.
+            paykitSdkService.claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
+            paykitSdkService.acceptPaymentRequestAutomatically(
+                scope = scope,
+                selection = AllowanceSelectionInput(
+                    allowanceId = candidate.allowanceId,
+                    expectedRevision = null,
+                    trustedTime = selectionTime,
+                ),
+                checks = checks(request, endpointIdentifier, selectionTime),
+            )
+        }.getOrThrow()
         sendQueuedMessages(request)
 
         val occurrence = PaymentOccurrence(scope, billingPeriod = null)
@@ -457,7 +469,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
         // Begin fetches nothing, so pull the link first: an End or a cancellation must be seen before the handoff.
         runSuspendCatching {
-            paykitSdkService.receivePrivateMessages(request.counterparty, request.counterpartyReceiverPath)
+            paykitSdkService.receivePrivateMessages(request.counterparty)
         }.onFailure { Logger.warn("Failed to receive private messages before an allowance payment", it, context = TAG) }
         val handoff = paykitSdkService.beginPaymentExecution(
             attemptId = prepared.attemptId,
@@ -474,7 +486,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
         runSuspendCatching {
             payer.consumePaymentList(request.counterparty, payment.context).getOrThrow()
-            payer.prepareProof(request, endpointIdentifier, submitted.allowanceId).getOrThrow()
+            payer.prepareProof(request, endpointIdentifier, payment.appId, submitted.allowanceId).getOrThrow()
         }.exceptionOrNull()?.let {
             payer.cancelProofPreparation(request)
             record(submitted.attemptId, PaymentOutcome.FAILED, identity)
@@ -493,7 +505,12 @@ class PaykitAllowanceExecutor @Inject constructor(
         attemptId: String,
         identity: String,
     ): PaykitAllowanceAutoPayResult {
-        payer.associateLightningPayment(request, paymentHash, payment.endpoint.methodId.rawValue).onFailure {
+        payer.associateLightningPayment(
+            request,
+            paymentHash,
+            payment.endpoint.methodId.rawValue,
+            payment.appId,
+        ).onFailure {
             payer.cancelProofPreparation(request)
             record(attemptId, PaymentOutcome.FAILED, identity)
             throw it
@@ -538,7 +555,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
 
         updateJournalEntry(attemptId, identity) { it.copy(transactionId = txid) }
-        payer.completeOnchainPayment(request, txid, payment.endpoint.methodId.rawValue)
+        payer.completeOnchainPayment(request, txid, payment.endpoint.methodId.rawValue, payment.appId)
         record(attemptId, PaymentOutcome.SUCCEEDED, identity)
         _events.tryEmit(PaykitAllowanceEvent.PaidAutomatically(request.counterparty, request.amountSats, txid))
         Logger.info("Paid an allowance payment on-chain", context = TAG)
@@ -705,7 +722,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun sendQueuedMessages(request: PaykitPaymentRequest) {
         runSuspendCatching {
-            paykitSdkService.processOutboundPrivateMessages(request.counterparty, request.counterpartyReceiverPath)
+            paykitSdkService.processOutboundPrivateMessages(request.counterparty)
         }.onFailure { Logger.warn("Failed to send the automatic acceptance right away", it, context = TAG) }
     }
 
@@ -744,8 +761,7 @@ class PaykitAllowanceExecutor @Inject constructor(
     // endregion
 }
 
-private fun PaykitPaymentRequest.scope() =
-    PaymentRequestScope(counterparty, counterpartyReceiverPath, paymentRequestId)
+private fun PaykitPaymentRequest.scope() = PaymentRequestScope(counterparty, paymentRequestId)
 
 private fun Throwable.isDefiniteOnchainPreBroadcastFailure(): Boolean =
     generateSequence(this as Throwable?) { it.cause }
