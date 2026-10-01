@@ -158,7 +158,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun showDeleteConfirmation() {
-        if (_uiState.value.isSaving) return
+        if (_uiState.value.isBusy) return
         _uiState.update { it.copy(showDeleteDialog = true) }
     }
 
@@ -168,7 +168,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun save() {
         viewModelScope.launch {
-            if (_uiState.value.isSaving) return@launch
+            if (_uiState.value.isBusy) return@launch
             _uiState.update { it.copy(isSaving = true) }
             val state = _uiState.value
 
@@ -231,8 +231,8 @@ class EditProfileViewModel @Inject constructor(
 
     fun disconnectProfile() {
         viewModelScope.launch {
-            if (_uiState.value.isSaving) return@launch
-            _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
+            if (_uiState.value.isBusy) return@launch
+            _uiState.update { it.copy(showDeleteFailureDialog = false, isDeleting = true) }
             try {
                 val result = runSuspendCatching {
                     withContext(NonCancellable) {
@@ -253,18 +253,18 @@ class EditProfileViewModel @Inject constructor(
                     )
                 }
             } finally {
-                _uiState.update { it.copy(isSaving = false) }
+                _uiState.update { it.copy(isDeleting = false) }
             }
         }
     }
 
     private suspend fun attemptDeleteProfile() {
-        if (_uiState.value.isSaving) return
+        if (_uiState.value.isBusy) return
         _uiState.update {
             it.copy(
                 showDeleteDialog = false,
                 showDeleteFailureDialog = false,
-                isSaving = true,
+                isDeleting = true,
             )
         }
         try {
@@ -283,7 +283,7 @@ class EditProfileViewModel @Inject constructor(
                 _uiState.update { it.copy(showDeleteFailureDialog = true) }
             }
         } finally {
-            _uiState.update { it.copy(isSaving = false) }
+            _uiState.update { it.copy(isDeleting = false) }
         }
     }
 }
@@ -300,11 +300,14 @@ data class EditProfileUiState(
     val newAvatarBytes: ByteArray? = null,
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
+    val isDeleting: Boolean = false,
     val showDeleteDialog: Boolean = false,
     val showDeleteFailureDialog: Boolean = false,
     val showAddLinkSheet: Boolean = false,
     val showAddTagSheet: Boolean = false,
-)
+) {
+    val isBusy: Boolean get() = isSaving || isDeleting
+}
 
 sealed interface EditProfileEffect {
     data object SaveSuccess : EditProfileEffect

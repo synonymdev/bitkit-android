@@ -112,7 +112,7 @@ private fun Content(
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
 ) {
-    BackHandler(enabled = uiState.isSaving) {}
+    BackHandler(enabled = uiState.isBusy) {}
 
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -134,8 +134,8 @@ private fun Content(
     val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__edit_nav_title),
-            onBackClick = { if (!uiState.isSaving) onBackClick() },
-            actions = { if (!uiState.isSaving) DrawerNavIcon() },
+            onBackClick = { if (!uiState.isBusy) onBackClick() },
+            actions = { if (!uiState.isBusy) DrawerNavIcon() },
             modifier = modifier,
         )
     }
@@ -165,15 +165,16 @@ private fun Content(
                 onAddTag = onAddTag,
                 onSave = onSave,
                 onCancel = onBackClick,
-                isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
+                isSaveEnabled = uiState.name.isNotBlank() && !uiState.isBusy,
                 topBar = topBar,
                 isSaving = uiState.isSaving,
+                isDeleting = uiState.isDeleting,
                 avatarContent = {
                     AvatarSection(
                         imageUrl = uiState.imageUrl,
                         newAvatarUri = uiState.newAvatarUri,
                         onClick = launchPhotoPicker,
-                        enabled = !uiState.isSaving,
+                        enabled = !uiState.isBusy,
                     )
                 },
                 onDelete = onDelete,

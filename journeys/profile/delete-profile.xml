@@ -3,6 +3,7 @@
     Precondition: an onboarded disposable test wallet with Paykit enabled and a profile created
     through Bitkit. The profile and its contacts will be deleted; do not use a personal identity.
     Record the sequence so progress can be checked even when deletion completes quickly.
+    During deletion, check the indicator on Delete Profile. Save stays disabled with its label visible.
   </description>
   <actions>
     <action>Open the existing profile from the Home header</action>

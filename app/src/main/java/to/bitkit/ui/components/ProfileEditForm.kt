@@ -79,6 +79,7 @@ fun ProfileEditForm(
     topBar: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
     isSaving: Boolean = false,
+    isDeleting: Boolean = false,
     avatarContent: @Composable () -> Unit = {},
     publicKeyLabel: String? = null,
     bioPlaceholder: String? = null,
@@ -87,6 +88,7 @@ fun ProfileEditForm(
     onDelete: (() -> Unit)? = null,
     deleteLabel: String = "",
 ) {
+    val isBusy = isSaving || isDeleting
     val resolvedPublicKeyLabel = publicKeyLabel ?: stringResource(R.string.profile__your_pubky)
     val resolvedBioPlaceholder = bioPlaceholder ?: stringResource(R.string.profile__edit_bio_placeholder)
     val resolvedFooterNote = footerNote ?: stringResource(R.string.profile__edit_public_note)
@@ -114,7 +116,7 @@ fun ProfileEditForm(
                 publicKeyLabel = resolvedPublicKeyLabel,
                 avatarContent = avatarContent,
                 nameTestTag = "ProfileEditName",
-                enabled = !isSaving,
+                enabled = !isBusy,
             )
             VerticalSpacer(16.dp)
 
@@ -125,7 +127,7 @@ fun ProfileEditForm(
                 HorizontalDivider()
                 FieldLabel(text = stringResource(R.string.profile__edit_bio)) {
                     TextInput(
-                        enabled = !isSaving,
+                        enabled = !isBusy,
                         value = bio,
                         onValueChange = { onBioChange(it.take(BIO_MAX_LENGTH)) },
                         placeholder = resolvedBioPlaceholder,
@@ -141,7 +143,7 @@ fun ProfileEditForm(
                 links.forEachIndexed { index, link ->
                     FieldLabel(text = link.label) {
                         TextInput(
-                            enabled = !isSaving,
+                            enabled = !isBusy,
                             value = link.url,
                             onValueChange = { onLinkUrlChange(index, it) },
                             placeholder = stringResource(R.string.profile__add_link_url_placeholder),
@@ -149,7 +151,7 @@ fun ProfileEditForm(
                             trailingIcon = {
                                 IconButton(
                                     onClick = { onRemoveLink(index) },
-                                    enabled = !isSaving,
+                                    enabled = !isBusy,
                                     modifier = Modifier.testTag("ProfileEditLinkRemove_$index")
                                 ) {
                                     Icon(
@@ -168,7 +170,7 @@ fun ProfileEditForm(
                 }
                 PrimaryButton(
                     text = stringResource(R.string.profile__add_link),
-                    enabled = !isSaving,
+                    enabled = !isBusy,
                     onClick = {
                         focusManager.clearFocus(force = true)
                         keyboardController?.hide()
@@ -197,7 +199,7 @@ fun ProfileEditForm(
                             tags.forEachIndexed { index, tag ->
                                 TagButton(
                                     text = tag,
-                                    onClick = if (isSaving) null else ({ onRemoveTag(index) }),
+                                    onClick = if (isBusy) null else ({ onRemoveTag(index) }),
                                     displayIconClose = true,
                                 )
                             }
@@ -205,7 +207,7 @@ fun ProfileEditForm(
                     }
                     PrimaryButton(
                         text = stringResource(R.string.profile__add_tag),
-                        enabled = !isSaving,
+                        enabled = !isBusy,
                         onClick = {
                             focusManager.clearFocus(force = true)
                             keyboardController?.hide()
@@ -238,7 +240,8 @@ fun ProfileEditForm(
                     FieldLabel(text = stringResource(R.string.profile__edit_delete_section)) {
                         PrimaryButton(
                             text = deleteLabel,
-                            isLoading = isSaving,
+                            isLoading = isDeleting,
+                            enabled = !isBusy,
                             onClick = onDelete,
                             size = ButtonSize.Small,
                             fullWidth = false,
@@ -277,7 +280,7 @@ fun ProfileEditForm(
         ) {
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
-                enabled = !isSaving,
+                enabled = !isBusy,
                 onClick = onCancel,
                 hazeState = hazeState,
                 modifier = Modifier
@@ -287,7 +290,7 @@ fun ProfileEditForm(
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
-                enabled = isSaveEnabled,
+                enabled = isSaveEnabled && !isBusy,
                 isLoading = isSaving,
                 modifier = Modifier
                     .weight(1f)

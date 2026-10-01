@@ -48,10 +48,26 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
         sut.disconnectProfile()
         advanceUntilIdle()
+        assertTrue(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.isSaving)
+        assertTrue(sut.uiState.value.isBusy)
+
+        sut.disconnectProfile()
+        sut.deleteProfile()
+        sut.save()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        verify(pubkyRepo, times(1)).forgetUnrestoredIdentity()
+        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        assertFalse(sut.uiState.value.showDeleteDialog)
+
         sut.viewModelScope.cancel()
         forget.complete(Result.success(true))
         advanceUntilIdle()
 
+        assertFalse(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.isBusy)
         verify(privatePaykitRepo).closeAndClear()
         verify(pubkyRepo, never()).signOut()
     }
@@ -70,7 +86,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
         }
 
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
         verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
         verify(pubkyRepo, never()).signOut()
         verify(privatePaykitRepo).closeAndClear()
@@ -85,7 +101,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         advanceUntilIdle()
 
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
         verify(privatePaykitRepo, never()).closeAndClear()
         verify(pubkyRepo, never()).signOut()
     }
@@ -100,7 +116,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.showDeleteConfirmation()
         sut.deleteProfile()
         advanceUntilIdle()
-        assertTrue(sut.uiState.value.isSaving)
+        assertTrue(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.isSaving)
+        assertTrue(sut.uiState.value.isBusy)
         assertFalse(sut.uiState.value.showDeleteDialog)
 
         sut.deleteProfile()
@@ -116,8 +134,39 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
         result.complete(Result.failure(TestAppError("Offline")))
         advanceUntilIdle()
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.isBusy)
         assertTrue(sut.uiState.value.showDeleteFailureDialog)
+    }
+
+    @Test
+    fun `pending save shows only save progress and blocks other actions`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        val result = CompletableDeferred<Result<Unit>>()
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any())).doSuspendableAnswer { result.await() }
+
+        sut.save()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
+        assertTrue(sut.uiState.value.isBusy)
+
+        sut.save()
+        sut.deleteProfile()
+        sut.retryDeleteProfile()
+        sut.disconnectProfile()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, never()).forgetUnrestoredIdentity()
+        assertFalse(sut.uiState.value.showDeleteDialog)
+
+        result.complete(Result.failure(TestAppError("Offline")))
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isBusy)
     }
 
     @Test
@@ -185,7 +234,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(sut.uiState.value.showDeleteFailureDialog)
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
     }
 
     @Test
@@ -226,7 +275,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         advanceUntilIdle()
 
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
         verify(pubkyRepo, never()).signOut()
         verify(privatePaykitRepo, never()).closeAndClear()
     }
@@ -240,7 +289,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         advanceUntilIdle()
 
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
         verify(privatePaykitRepo, never()).closeAndClear()
     }
 
@@ -259,7 +308,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
             verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
             verify(pubkyRepo).deleteProfileWithSessionRetry()
