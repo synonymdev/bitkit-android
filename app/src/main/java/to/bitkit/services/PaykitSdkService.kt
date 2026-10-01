@@ -1168,17 +1168,23 @@ class PaykitSdkService @Inject constructor(
      * Runs [block] on the SDK instance without [operationLock]. [block] may only call unauthenticated public
      * Pubky reads, never session, secret, state-blob or publishing APIs. Without an instance it builds one under
      * [operationLock], because building one outside it would race [resetRuntime] and a wallet wipe, but reads
-     * under the permit. A [PaykitReadLane.Bulk] read takes a bulk permit before its read permit, always in that
-     * order, so bulk reads hold at most [BULK_READ_PERMITS] read permits and the rest stay free for interactive reads.
+     * under the permit. Like a locked call, a read that starts during a wallet wipe is rejected, and one that the
+     * wipe overtakes fails instead of returning its result across the wipe. A [PaykitReadLane.Bulk] read takes a
+     * bulk permit before its read permit, always in that order, so bulk reads hold at most [BULK_READ_PERMITS]
+     * read permits and the rest stay free for interactive reads.
      */
     private suspend fun <T> publicRead(
         lane: PaykitReadLane = PaykitReadLane.Interactive,
         block: suspend (PaykitSdk) -> T,
     ): T {
         isSetup.await()
-        val existing = sdk ?: operationLock.withLock { handle() }
-        if (lane == PaykitReadLane.Interactive) return publicReadPermits.withPermit { block(existing) }
-        return bulkReadPermits.withPermit { publicReadPermits.withPermit { block(existing) } }
+        return operationLock.withoutLock {
+            val existing = sdk ?: operationLock.withLock { handle() }
+            when (lane) {
+                PaykitReadLane.Interactive -> publicReadPermits.withPermit { block(existing) }
+                PaykitReadLane.Bulk -> bulkReadPermits.withPermit { publicReadPermits.withPermit { block(existing) } }
+            }
+        }
     }
 
     private fun bootstrap() = cachedBootstrap
