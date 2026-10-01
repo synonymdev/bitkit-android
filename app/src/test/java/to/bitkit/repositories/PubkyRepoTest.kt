@@ -3149,7 +3149,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a failed screen lookup does not wait for the background lookup still queued`() = test {
+    fun `a failed screen lookup does not wait for the background lookup still in flight`() = test {
         authenticateForTesting()
         whenever(pubkyService.contactRecords()).thenReturn(
             listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved"), createContactRecord(VALID_CONTACT_KEY_B)),
