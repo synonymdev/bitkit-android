@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -332,7 +334,6 @@ private fun ContentRunning(
         modifier = modifier
             .padding(horizontal = 16.dp)
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
     ) {
         BalanceHeaderView(
             sats = uiState.amount.toLong(),
@@ -344,55 +345,68 @@ private fun ContentRunning(
                 .testTag("ReviewAmount")
         )
 
-        VerticalSpacer(if (uiState.isOneOffPaymentRequest && !isLnurlPay) 24.dp else 44.dp)
-
-        if (isLnurlPay) {
-            LnurlPayDetails(uiState = uiState, onEvent = onEvent)
-        } else if (showDetails) {
-            when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> {
-                    OnChainDetails(
-                        uiState = uiState,
-                        interactionsEnabled = !isHardwareFeeLoading,
-                        onEvent = onEvent,
-                    )
-                    VerticalSpacer(16.dp)
-                    TagsSection(uiState, onClickTag, onClickAddTag)
-                    uiState.oneOffPaymentRequestNote?.let {
-                        VerticalSpacer(16.dp)
-                        PaymentRequestInvoiceNote(note = it)
-                    }
-                }
-
-                SendMethod.LIGHTNING -> {
-                    LightningDetails(
-                        uiState = uiState,
-                        onEvent = onEvent,
-                        onClickTag = onClickTag,
-                        onClickAddTag = onClickAddTag,
-                    )
-                }
-            }
-        } else {
-            if (uiState.isOneOffPaymentRequest) {
-                PaymentRequestSummary(uiState = uiState, iconColor = accentColor)
-                VerticalSpacer(16.dp)
-            }
-            Image(
-                painter = painterResource(R.drawable.coin_stack_4),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .testTag("SendConfirmContent")
+        ) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth(IMAGE_FILL_PERCENTAGE)
-                    .align(Alignment.CenterHorizontally)
-                    .padding(bottom = 16.dp)
-                    .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
-            )
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+            ) {
+                VerticalSpacer(if (uiState.isOneOffPaymentRequest && !isLnurlPay) 24.dp else 44.dp)
+
+                if (isLnurlPay) {
+                    LnurlPayDetails(uiState = uiState, onEvent = onEvent)
+                } else if (showDetails) {
+                    when (uiState.payMethod) {
+                        SendMethod.ONCHAIN -> {
+                            OnChainDetails(
+                                uiState = uiState,
+                                interactionsEnabled = !isHardwareFeeLoading,
+                                onEvent = onEvent,
+                            )
+                            VerticalSpacer(16.dp)
+                            TagsSection(uiState, onClickTag, onClickAddTag)
+                            uiState.oneOffPaymentRequestNote?.let {
+                                VerticalSpacer(16.dp)
+                                PaymentRequestInvoiceNote(note = it)
+                            }
+                        }
+
+                        SendMethod.LIGHTNING -> {
+                            LightningDetails(
+                                uiState = uiState,
+                                onEvent = onEvent,
+                                onClickTag = onClickTag,
+                                onClickAddTag = onClickAddTag,
+                            )
+                        }
+                    }
+                } else {
+                    if (uiState.isOneOffPaymentRequest) {
+                        PaymentRequestSummary(uiState = uiState, iconColor = accentColor)
+                        VerticalSpacer(16.dp)
+                    }
+                    Image(
+                        painter = painterResource(R.drawable.coin_stack_4),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth(IMAGE_FILL_PERCENTAGE)
+                            .weight(1f)
+                            .align(Alignment.CenterHorizontally)
+                            .padding(bottom = 16.dp)
+                            .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
+                    )
+                }
+            }
         }
 
         if (!isLnurlPay) {
-            FillHeight(min = 16.dp)
-
             PrimaryButton(
                 text = stringResource(
                     if (showDetails) R.string.common__hide_details else R.string.common__show_details
@@ -423,11 +437,9 @@ private fun ContentRunning(
                     .align(Alignment.CenterHorizontally)
                     .testTag("SendConfirmToggleDetails")
             )
-
-            VerticalSpacer(62.dp)
-        } else {
-            FillHeight(min = 16.dp)
         }
+
+        VerticalSpacer(16.dp)
 
         SwipeToConfirm(
             text = stringResource(

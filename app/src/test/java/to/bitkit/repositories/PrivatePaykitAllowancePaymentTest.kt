@@ -4,7 +4,6 @@ import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.LinkedPeerState
-import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PrivatePaymentResolutionState
 import com.synonym.paykit.PrivatePaymentResolutionStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +13,6 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
-import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -29,7 +27,6 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
@@ -45,6 +42,7 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
         private const val PRIVATE_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
         private const val PRIVATE_BOLT11 = "lnbcrt1private"
         private const val PRIVATE_LNURL = "lnurl1private"
+        private const val PAYMENT_APP_ID = "bitkit"
         private const val NOW_SECONDS = 1_700_000_000L
         private val PAYMENT_HASH = byteArrayOf(9, 9, 9)
     }
@@ -104,21 +102,19 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
         val invoiceEndpoint = PublicPaykitRepo.parseEndpoint(MethodId.Bolt11.rawValue, payload(PRIVATE_BOLT11))
         assertEquals(
             PrivatePaykitAllowancePayment(
-                endpoint = checkNotNull(invoiceEndpoint),
-                context = PrivatePaykitPaymentContext(PaykitReceiverPaths.SERVER, 7uL),
+                endpoint = checkNotNull(invoiceEndpoint).copy(appId = PAYMENT_APP_ID),
+                appId = PAYMENT_APP_ID,
+                context = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to PAYMENT_APP_ID), 7uL),
                 lightningPaymentHash = PAYMENT_HASH.toHex(),
                 lightningInvoiceHasAmount = true,
             ),
             payment,
         )
-        val amountCaptor = argumentCaptor<PaymentAmountContext>()
-        verify(paykitSdkService).prepareAndResolvePrivateContactPayment(
+        verify(paykitSdkService).prepareAndResolvePrivatePaymentRequest(
             eq(CONTACT_KEY),
-            eq(PaykitReceiverPaths.SERVER),
+            eq(request.paymentRequestId),
             eq(null),
-            amountCaptor.capture(),
         )
-        assertEquals(PaymentAmountContext("0.000025", "btc"), amountCaptor.firstValue)
     }
 
     @Test
@@ -201,7 +197,7 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
         val expired = paymentRequest().copy(expiresAt = Instant.fromEpochSeconds(NOW_SECONDS - 1))
 
         assertNull(sut.resolveAllowancePayment(expired, eligible(MethodId.Bolt11)).getOrThrow())
-        verify(paykitSdkService, never()).prepareAndResolvePrivateContactPayment(any(), any(), anyOrNull(), anyOrNull())
+        verify(paykitSdkService, never()).prepareAndResolvePrivatePaymentRequest(any(), any(), anyOrNull())
     }
 
     private suspend fun stubResolution(
@@ -209,7 +205,7 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
         version: ULong? = 7uL,
         status: PrivatePaymentResolutionStatus = PrivatePaymentResolutionStatus.PAYABLE,
     ) {
-        whenever(paykitSdkService.prepareAndResolvePrivateContactPayment(any(), any(), anyOrNull(), anyOrNull()))
+        whenever(paykitSdkService.prepareAndResolvePrivatePaymentRequest(any(), any(), anyOrNull()))
             .thenReturn(
                 PaykitPreparedPrivateContactPayment(
                     resolution = PaykitPrivateContactPaymentResolution(
@@ -246,6 +242,7 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
     private fun payload(value: String) = PublicPaykitRepo.serializePayload(value)
 
     private fun resolvedEndpoint(methodId: MethodId, value: String) = PaykitResolvedPaymentEndpoint(
+        appId = PAYMENT_APP_ID,
         identifier = methodId.rawValue,
         payload = payload(value),
     )
@@ -254,7 +251,6 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
         PaykitPaymentRequest(
             paymentRequestId = "request-id",
             counterparty = CONTACT_KEY,
-            counterpartyReceiverPath = PaykitReceiverPaths.SERVER,
             amountValue = "0.000025",
             amountSats = 2_500uL,
             expiresAt = Instant.fromEpochSeconds(NOW_SECONDS + 60),

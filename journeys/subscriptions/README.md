@@ -7,7 +7,7 @@ Payments tab inside Subscriptions is covered here too, because it shares the scr
 ## Setup
 
 Run Bitkit against regtest with Paykit UI enabled on two instances that have each other saved as
-contacts and linked on receiver path `bitkit/wallet`. One instance plays the creator, the other the
+contacts with an established Paykit Encrypted Link. One instance plays the creator, the other the
 payer. Fund the payer with enough on-chain or spending balance to cover the subscription amount when
 the proposal is accepted with payment due on acceptance.
 

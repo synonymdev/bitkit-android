@@ -6,6 +6,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import to.bitkit.repositories.PaykitPaymentProofKind
+import to.bitkit.repositories.PaykitPaymentRequestId
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -18,7 +19,7 @@ class PaykitPaymentStateBackupTest {
     fun `payment backup accepts shared wire format and retains pending payment`() {
         WalletScope.pushTestOverride("wallet0").use {
             val fixture = """
-                {"subscriptions":{"alice":{"acceptances":[{"id":{"paymentRequestId":"request","counterparty":"bob","counterpartyReceiverPath":"bitkit/server"},"acceptedAt":"2026-09-24T10:00:00.123Z"}],"presentedProposalIds":[]}},"pendingProofs":[{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob","counterpartyReceiverPath":"bitkit/server","billingPeriodStartsAt":"2026-09-24T10:00:00.100Z"},"paymentEndpointIdentifier":"bitcoin-onchain","kind":"bitcoin-onchain-txid","paymentStarted":true,"billingPeriod":{"startsAt":"2026-09-24T10:00:00.100Z","endsAt":"2026-09-25T10:00:00.100Z"},"onchainMatchingTransactionIdsBeforeAttempt":[]}]}
+                {"subscriptions":{"alice":{"acceptances":[{"id":{"paymentRequestId":"request","counterparty":"bob"},"acceptedAt":"2026-09-24T10:00:00.123Z"}],"presentedProposalIds":[]}},"pendingProofs":[{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob","billingPeriodStartsAt":"2026-09-24T10:00:00.100Z"},"paymentAppId":"bitkit","paymentEndpointIdentifier":"bitcoin-onchain","kind":"bitcoin-onchain-txid","paymentStarted":true,"billingPeriod":{"startsAt":"2026-09-24T10:00:00.100Z","endsAt":"2026-09-25T10:00:00.100Z"},"onchainMatchingTransactionIdsBeforeAttempt":[]}]}
             """.trimIndent()
             val backup = Json.decodeFromString<PaykitPaymentStateBackup>(fixture)
             val restored = backup.pendingProofs.single().restored()
@@ -36,10 +37,12 @@ class PaykitPaymentStateBackupTest {
                     )
                 },
                 pendingProofs = listOf(PaykitPaymentStateBackup.Proof(restored)),
+                acceptedOneTimeRequests = mapOf("alice" to setOf(PaykitPaymentRequestId("one-time", "bob"))),
             )
             val decoded = Json.decodeFromString<PaykitPaymentStateBackup>(Json.encodeToString(rebuilt))
             assertEquals(restored, decoded.pendingProofs.single().restored())
             assertEquals(backup.subscriptions, decoded.subscriptions)
+            assertEquals(rebuilt.acceptedOneTimeRequests, decoded.acceptedOneTimeRequests)
 
             val hardwareProof = restored.copy(onchainWalletId = "hardware-wallet")
             val hardwareBackup = PaykitPaymentStateBackup.Proof(hardwareProof)

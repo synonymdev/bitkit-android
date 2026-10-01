@@ -1,0 +1,20 @@
+<journey name="definite pre-broadcast payment request failure can retry">
+  <description>
+    Verifies that a private Payment Request remains payable after its first send fails before
+    Lightning dispatch. Requires the linked fixture issuer, a funded regtest Lightning wallet, and
+    the local LNURL server configured as described in README.md. Keep the same Paykit payment list
+    published for both attempts.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled, the fixture issuer saved and linked, and the LNURL-pay invoice callback configured to fail</action>
+    <action>Have the issuer publish the failing LNURL-pay endpoint under identifier "btc-lightning-lnurl" and send a proposed one-time Payment Request for 21,000 sats</action>
+    <action>Verify the LNURL payment review shows 21,000 sats (testTag "ReviewAmount-primary" or "ReviewAmount-secondary", depending on the primary display setting)</action>
+    <action>Swipe the send control (testTag "GRAB")</action>
+    <action>Verify the send failure screen (testTag "SendFailure") appears</action>
+    <action>Configure the same LNURL-pay invoice callback to succeed without publishing a new Paykit payment list</action>
+    <action>Tap Try Again (testTag "Retry")</action>
+    <action>Verify the LNURL payment review appears again with 21,000 sats (testTag "ReviewAmount-primary" or "ReviewAmount-secondary", depending on the primary display setting)</action>
+    <action>Swipe the send control (testTag "GRAB")</action>
+    <action>Verify the payment success screen (testTag "SendSuccess") appears</action>
+  </actions>
+</journey>

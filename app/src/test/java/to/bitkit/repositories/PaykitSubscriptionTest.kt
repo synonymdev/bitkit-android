@@ -168,7 +168,7 @@ class PaykitSubscriptionTest {
     }
 
     @Test
-    fun `subscription payment matching includes counterparty and receiver path`() {
+    fun `subscription payment matching includes counterparty`() {
         val recurrence = PaykitSubscriptionRecurrence(
             every = 1,
             unit = PaykitRecurrenceUnit.Month,
@@ -179,7 +179,6 @@ class PaykitSubscriptionTest {
         val subscription = PaykitSubscription(
             paymentRequestId = "shared",
             counterparty = "counterparty-a",
-            counterpartyReceiverPath = "bitkit/server",
             amountValue = "0.001",
             amountSats = 100_000uL,
             note = null,
@@ -198,6 +197,5 @@ class PaykitSubscriptionTest {
 
         assertTrue(request.belongsTo(subscription))
         assertFalse(request.copy(counterparty = "counterparty-b").belongsTo(subscription))
-        assertFalse(request.copy(counterpartyReceiverPath = "bitkit/wallet").belongsTo(subscription))
     }
 }

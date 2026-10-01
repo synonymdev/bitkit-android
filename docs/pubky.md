@@ -27,10 +27,21 @@ Delegates Pubky operations to `PaykitSdkService`, which uses:
 
 - **paykit-ffi** (`com.synonym:paykit-android`) — session management, auth approval, profile/contact resolution, and bounded file fetching
   - `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, `fetchPubkyFileBounded()`
-- **bitkit-core** (`com.synonym:bitkit-core-android`) — mnemonic-to-seed conversion for receiver noise-key derivation
-  - `mnemonicToSeed()`
+
+Paykit derives the delegated Paykit key from the active Pubky identity secret and the App Registry's current key generation. Authorized apps share encrypted Pubky-hosted Paykit state; Bitkit retains wallet-owned address reservations and pending payment proofs locally.
+
+The Android dependency is `com.synonym:paykit-android` from GitHub Packages, pinned in `gradle/libs.versions.toml`. Paykit is excluded from Maven-local resolution. Companion authorization and key-sharing consent are described in [Pubky Auth companion claims](pubky-auth-companion-claims.md).
 
 All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensure serial access to the underlying Rust state.
+
+### Received Payment Attribution
+
+Shared Payment Requests can identify a received payment's payer even when another authorized app
+created the request. Attribution uses the request's immutable, accepted Bitcoin destinations, not
+current contact endpoints or unverified payment proofs. Bitkit validates the network, checks every
+known transaction output or the received Lightning payment hash, and leaves ambiguous matches
+unlabelled. A successful shared-state refresh backfills only incoming activity with no contact;
+existing labels and notes remain unchanged. Snapshots are scoped to the active Pubky identity.
 
 ## Repository Layer (`PubkyRepo`)
 

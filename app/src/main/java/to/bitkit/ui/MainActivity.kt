@@ -307,13 +307,11 @@ class MainActivity : FragmentActivity() {
     private fun Intent.paykitPaymentRequestId(): PaykitPaymentRequestId? {
         val requestId = getStringExtra(EXTRA_PAYKIT_PAYMENT_REQUEST_ID) ?: return null
         val counterparty = getStringExtra(EXTRA_PAYKIT_COUNTERPARTY) ?: return null
-        val receiverPath = getStringExtra(EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH) ?: return null
         val billingPeriodStartsAt = getStringExtra(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT) ?: return null
 
         return PaykitPaymentRequestId(
             paymentRequestId = requestId,
             counterparty = counterparty,
-            counterpartyReceiverPath = receiverPath,
             billingPeriodStartsAt = billingPeriodStartsAt,
         )
     }

@@ -22,6 +22,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -222,6 +223,12 @@ class EditContactViewModel @Inject constructor(
                     _effects.emit(EditContactEffect.DeleteSuccess)
                 }
                 .onFailure {
+                    if (it == PubkyContactError.ActiveSubscription) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.contacts__delete_active_subscription),
+                        )
+                    }
                     Logger.error("Failed to delete contact '$publicKey'", it, context = TAG)
                     _uiState.update { it.copy(isSaving = false) }
                 }

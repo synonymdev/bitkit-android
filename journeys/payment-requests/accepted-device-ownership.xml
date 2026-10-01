@@ -1,0 +1,21 @@
+<journey name="one-time payment request acceptance stays on its accepting install">
+  <description>
+    Requires two separate Bitkit installs A and B authenticated as the same Pubky identity,
+    both using App ID bitkit, and the linked LNURL fixture from definite-pre-broadcast-retry.xml.
+    This covers one-time requests only. Do not copy app-private storage between installs.
+  </description>
+  <actions>
+    <action>Configure the fixture LNURL-pay invoice callback to fail before Lightning dispatch</action>
+    <action>Have the issuer send a proposed one-time Payment Request for 21,000 sats and record its request id</action>
+    <action>Open the request payment review on both installs before either install swipes to send</action>
+    <action>On install A swipe the send control (testTag "GRAB") and verify the failure screen (testTag "SendFailure")</action>
+    <action>Using the fixture's shared-runtime request inspection, verify the recorded request is ACCEPTED with no payment proof and no wallet dispatch; stop if acceptance has not committed</action>
+    <action>Configure the same LNURL-pay invoice callback to succeed without publishing a new Paykit payment list</action>
+    <action>On install B swipe the stale review's send control and verify that no wallet payment is dispatched</action>
+    <action>Restart install B and wait for Paykit synchronization; verify the request is not automatically presented or offered as payable</action>
+    <action>Open Payment Requests on install B and verify the recorded request remains in history without a Pay action</action>
+    <action>Restart install A and wait for Paykit synchronization</action>
+    <action>Open Payment Requests on install A and pay the recorded request</action>
+    <action>Verify the payment success screen (testTag "SendSuccess") and exactly one wallet payment to the issuer</action>
+  </actions>
+</journey>

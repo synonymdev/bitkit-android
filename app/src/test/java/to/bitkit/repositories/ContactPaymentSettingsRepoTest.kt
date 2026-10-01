@@ -7,6 +7,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -43,7 +44,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
             Unit
         }
         whenever { publicPaykitRepo.syncPublishedEndpoints(any()) }.thenReturn(Result.success(Unit))
-        whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
+        whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
@@ -105,7 +106,10 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        inOrder(privatePaykitRepo, publicPaykitRepo) {
+            verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        }
     }
 
     @Test
@@ -134,8 +138,10 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
-        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+        inOrder(privatePaykitRepo, publicPaykitRepo) {
+            verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        }
     }
 
     @Test

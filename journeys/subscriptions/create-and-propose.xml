@@ -5,7 +5,7 @@
     the two linked Bitkit instances described in README.md.
   </description>
   <actions>
-    <action>Launch the E2E Bitkit app with Paykit UI enabled and the payer instance saved as a contact linked on receiver path "bitkit/wallet"</action>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled and the payer instance saved as a contact linked as identities</action>
     <action>Open the drawer menu and tap Subscriptions</action>
     <action>Verify the Subscriptions screen (testTag "SubscriptionsScreen") appears with the Overview tab (testTag "Tab-overview") selected</action>
     <action>Tap Create (testTag "SubscriptionCreate")</action>

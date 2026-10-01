@@ -70,7 +70,8 @@ class HwSendViewModel @Inject constructor(
 
     fun signAndBroadcast(
         request: HwSendRequest,
-        beforeBroadcast: suspend () -> Boolean = { true },
+        prepareContactPayment: suspend () -> Boolean = { true },
+        authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
     ) {
         if (_uiState.value.isSigning || signingJob?.isActive == true) return
         if (pendingBroadcast?.matches(request) == false) return
@@ -97,11 +98,14 @@ class HwSendViewModel @Inject constructor(
                     }
                     var payment = checkNotNull(pending) { "Hardware payment was not prepared" }
                     if (payment.isPreparedForBroadcast.not()) {
-                        if (!beforeBroadcast()) return@runCatching
+                        if (!prepareContactPayment()) return@runCatching
                         payment = payment.copy(isPreparedForBroadcast = true)
                         pendingBroadcast = payment
                     }
+                    if (!authorizeContactPayment(payment.hasAttemptedBroadcast)) return@runCatching
                     _uiState.update { it.copy(isBroadcastUnresolved = true) }
+                    payment = payment.copy(hasAttemptedBroadcast = true)
+                    pendingBroadcast = payment
                     val result = withTimeout(BROADCAST_TIMEOUT) {
                         hwWalletRepo.broadcastFunding(payment.signedTx).getOrThrow()
                     }
@@ -122,7 +126,8 @@ class HwSendViewModel @Inject constructor(
     fun submitPassphrase(
         request: HwSendRequest,
         passphrase: String,
-        beforeBroadcast: suspend () -> Boolean = { true },
+        prepareContactPayment: suspend () -> Boolean = { true },
+        authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
     ) {
         if (passphrase.isEmpty()) return
         val state = _uiState.value
@@ -137,7 +142,7 @@ class HwSendViewModel @Inject constructor(
                     .onSuccess {
                         if (!_uiState.value.isPassphraseRequired) return@onSuccess
                         _uiState.update { it.copy(isPassphraseRequired = false) }
-                        signAndBroadcast(request, beforeBroadcast)
+                        signAndBroadcast(request, prepareContactPayment, authorizeContactPayment)
                     }
                     .onFailure { error ->
                         if (error is HwPassphraseMismatchError) {
@@ -333,6 +338,7 @@ private data class PendingHwSendBroadcast(
     val request: HwSendRequest,
     val signedTx: HwFundingSignedTx,
     val isPreparedForBroadcast: Boolean = false,
+    val hasAttemptedBroadcast: Boolean = false,
 ) {
     fun matches(request: HwSendRequest): Boolean = this.request == request
 }

@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PrivatePaymentEndpointReservationInput
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
@@ -36,13 +37,13 @@ import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
+import to.bitkit.ext.isPaykitRecoveryRequired
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.Logger
@@ -103,7 +104,7 @@ class PrivatePaykitRepo @Inject constructor(
     private val knownSavedContactKeys = mutableSetOf<String>()
     private var state: PrivatePaykitState? = null
     private val pendingMessageDrainRetryLock = Any()
-    private val pendingMessageDrainRetryKeys = mutableSetOf<PrivateMessageDrainRetryKey>()
+    private val pendingMessageDrainRetryKeys = mutableSetOf<String>()
     private var pendingMessageDrainRetryJob: Job? = null
     private var pendingMessageDrainRetryGeneration = 0
     private val _initialLinkBurstStarted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -115,12 +116,12 @@ class PrivatePaykitRepo @Inject constructor(
 
     private data class PrivatePublicationPreparation(
         val updates: List<PrivatePaymentListReservationUpdateInput>,
-        val linkRetryKeys: List<PrivateMessageDrainRetryKey>,
+        val linkRetryKeys: List<String>,
         val firstError: Throwable?,
     )
 
     private data class PrivateEndpointCleanupPreparation(
-        val clearedRetryKeys: List<PrivateMessageDrainRetryKey>,
+        val clearedRetryKeys: List<String>,
         val failedPublicKeys: Set<String>,
         val firstError: Throwable?,
     )
@@ -130,20 +131,10 @@ class PrivatePaykitRepo @Inject constructor(
         val invalidKeys: Set<String>,
     )
 
-    private data class LinkedReceiverPathsSnapshot(
-        val pathsByPublicKey: Map<String, Set<String>>,
-        val error: Throwable?,
-    )
-
     private data class PublishedEndpointCleanupState(
         val remoteEndpoints: List<StoredPaymentEntry>,
-        val localInvoicesByReceiverPath: Map<String, StoredInvoice>,
-        val publishedPrivatePaymentReceiverPaths: Set<String>,
-    )
-
-    private data class PrivateMessageDrainRetryKey(
-        val publicKey: String,
-        val receiverPath: String,
+        val localInvoice: StoredInvoice?,
+        val hasPublishedPrivatePaymentList: Boolean,
     )
 
     private val _backupStateVersion = MutableStateFlow(0L)
@@ -269,6 +260,9 @@ class PrivatePaykitRepo @Inject constructor(
                 removePublishedEndpoints().getOrThrow()
                 clearUnsavedContactState(savedPublicKeys).getOrThrow()
                 updateContactSharingCleanupPending(false)
+                publicPaykitRepo.syncPaykitApp().onFailure {
+                    updateContactSharingCleanupPending(true)
+                }.getOrThrow()
             }
             retryPendingDeletedContactEndpointRemoval(savedPublicKeys).getOrThrow()
         }.onFailure {
@@ -308,19 +302,13 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun disableSharingAndPruneUnsavedContactState(savedPublicKeys: Collection<String>): Result<Unit> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                val removalError = removePublishedEndpoints().exceptionOrNull()
-                if (removalError != null) {
-                    updateContactSharingCleanupPending(true)
-                    Logger.warn(
-                        "Deferred private Paykit endpoint cleanup after disable failed",
-                        removalError,
-                        context = TAG,
-                    )
-                    return@runSuspendCatching
-                }
-
+                updateContactSharingCleanupPending(true)
+                removePublishedEndpoints().getOrThrow()
                 clearUnsavedContactState(savedPublicKeys).getOrThrow()
                 updateContactSharingCleanupPending(false)
+                publicPaykitRepo.syncPaykitApp().onFailure {
+                    updateContactSharingCleanupPending(true)
+                }.getOrThrow()
             }
         }
 
@@ -332,14 +320,15 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
     suspend fun removePublishedEndpointsForCleanup(context: String): Result<Unit> = withContext(serializedDispatcher) {
-        removePublishedEndpoints()
-            .onSuccess {
-                updateContactSharingCleanupPending(false)
-            }
-            .onFailure {
-                updateContactSharingCleanupPending(true)
-                Logger.warn("Failed to remove private Paykit endpoints during '$context'", it, context = TAG)
-            }
+        runSuspendCatching {
+            updateContactSharingCleanupPending(true)
+            removePublishedEndpoints().getOrThrow()
+            updateContactSharingCleanupPending(false)
+            publicPaykitRepo.syncPaykitApp().getOrThrow()
+        }.onFailure {
+            updateContactSharingCleanupPending(true)
+            Logger.warn("Failed to remove private Paykit endpoints during '$context'", it, context = TAG)
+        }
     }
 
     suspend fun closeAndClear(): Result<Unit> = withContext(serializedDispatcher) {
@@ -400,14 +389,11 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             if (request.isExpired(clock.now())) return@runSuspendCatching null
             val publicKey = normalizedPublicKey(request.counterparty) ?: return@runSuspendCatching null
-            val consumedVersion = ensureState().contacts[publicKey]
-                ?.consumedPrivatePaymentListVersionsByReceiverPath
-                ?.get(request.counterpartyReceiverPath)
-            val prepared = paykitSdkService.prepareAndResolvePrivateContactPayment(
+            val consumedVersion = ensureState().contacts[publicKey]?.consumedPrivatePaymentListVersion
+            val prepared = paykitSdkService.prepareAndResolvePrivatePaymentRequest(
                 counterparty = publicKey,
-                receiverPath = request.counterpartyReceiverPath,
+                paymentRequestId = request.paymentRequestId,
                 afterPrivatePaymentListVersion = consumedVersion,
-                amount = PaymentAmountContext(request.amountValue, PaykitIssuerInterop.BITCOIN_ASSET),
             )
             val resolution = prepared.resolution
             if (
@@ -417,7 +403,7 @@ class PrivatePaykitRepo @Inject constructor(
                 // The last list was already paid from; a new one arrives once the payee sees that payment settle.
                 schedulePendingPrivateMessageDrainRetries(
                     reason = "allowance payment",
-                    retryKeys = listOf(PrivateMessageDrainRetryKey(publicKey, request.counterpartyReceiverPath)),
+                    retryKeys = listOf(publicKey),
                 )
                 throw PaykitAllowanceError.PaymentListPending
             }
@@ -425,14 +411,15 @@ class PrivatePaykitRepo @Inject constructor(
 
             val eligible = eligibleIdentifiers.toSet() intersect request.acceptedPaymentEndpointIdentifiers.toSet()
             val candidates = prepared.resolution.payableEndpoints
-                .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload) }
+                .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload)?.copy(appId = it.appId) }
                 .filter {
                     it.methodId.rawValue in eligible && (it.methodId == MethodId.Bolt11 || it.methodId.isOnchain)
                 }
+            val payable = privatePayableEndpoints(candidates, publicKey)
             allowancePayment(
                 request = request,
-                payable = privatePayableEndpoints(candidates, publicKey),
-                context = PrivatePaykitPaymentContext(request.counterpartyReceiverPath, paymentListVersion),
+                payable = payable,
+                paymentListVersion = paymentListVersion,
             )
         }
     }
@@ -440,19 +427,25 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun allowancePayment(
         request: PaykitPaymentRequest,
         payable: List<Endpoint>,
-        context: PrivatePaykitPaymentContext,
+        paymentListVersion: ULong,
     ): PrivatePaykitAllowancePayment? = PublicPaykitRepo.payablePreferenceOrder
         .mapNotNull { methodId -> payable.firstOrNull { it.methodId == methodId } }
-        .firstNotNullOfOrNull { allowancePayment(request, it, context) }
+        .firstNotNullOfOrNull { allowancePayment(request, it, paymentListVersion) }
 
     private suspend fun allowancePayment(
         request: PaykitPaymentRequest,
         endpoint: Endpoint,
-        context: PrivatePaykitPaymentContext,
+        paymentListVersion: ULong,
     ): PrivatePaykitAllowancePayment? {
+        val appId = endpoint.appId ?: return null
+        val context = PrivatePaykitPaymentContext(
+            paymentAppsByEndpoint = mapOf(endpoint.methodId.rawValue to appId),
+            paymentListVersion = paymentListVersion,
+        )
         if (endpoint.methodId != MethodId.Bolt11) {
             return PrivatePaykitAllowancePayment(
                 endpoint = endpoint,
+                appId = appId,
                 context = context,
                 lightningPaymentHash = null,
                 lightningInvoiceHasAmount = false,
@@ -464,6 +457,7 @@ class PrivatePaykitRepo @Inject constructor(
         if (!request.acceptsLightningInvoiceAmountSats(invoice.amountSatoshis)) return null
         return PrivatePaykitAllowancePayment(
             endpoint = endpoint,
+            appId = appId,
             context = context,
             lightningPaymentHash = invoice.paymentHash.toHex().lowercase(),
             lightningInvoiceHasAmount = invoice.amountSatoshis != 0uL,
@@ -476,25 +470,47 @@ class PrivatePaykitRepo @Inject constructor(
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             val normalizedKey = normalizedPublicKey(publicKey) ?: throw PrivatePaykitError.InvalidPublicKey
+            val paymentListVersion = context.paymentListVersion ?: return@runSuspendCatching
             val contactState = ensureState().contacts.getOrPut(normalizedKey) { ContactState() }
-            val consumedVersion = contactState.consumedPrivatePaymentListVersionsByReceiverPath[context.receiverPath]
-            if (consumedVersion != null && context.paymentListVersion <= consumedVersion) {
+            val consumedVersion = contactState.consumedPrivatePaymentListVersion
+            if (consumedVersion != null && paymentListVersion <= consumedVersion) {
                 throw PrivatePaykitError.PaymentListAlreadyConsumed
             }
 
-            contactState.consumedPrivatePaymentListVersionsByReceiverPath =
-                contactState.consumedPrivatePaymentListVersionsByReceiverPath +
-                (context.receiverPath to context.paymentListVersion)
+            contactState.consumedPrivatePaymentListVersion = paymentListVersion
             contactState.remoteEndpoints = emptyList()
             persistState(markWalletBackup = true)
             Logger.info(
-                "Consumed private Paykit payment list version ${context.paymentListVersion} " +
+                "Consumed private Paykit payment list version $paymentListVersion " +
                     "for '${redacted(normalizedKey)}'",
                 context = TAG,
             )
         }
     }.onFailure {
         Logger.warn("Failed to consume private Paykit payment details", it, context = TAG)
+    }
+
+    suspend fun releasePrivatePaymentList(
+        publicKey: String,
+        context: PrivatePaykitPaymentContext,
+    ): Result<Unit> = withContext(serializedDispatcher) {
+        runSuspendCatching {
+            val normalizedKey = normalizedPublicKey(publicKey) ?: throw PrivatePaykitError.InvalidPublicKey
+            val paymentListVersion = context.paymentListVersion ?: return@runSuspendCatching
+            val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
+            val consumedVersion = contactState.consumedPrivatePaymentListVersion
+            if (consumedVersion != paymentListVersion) return@runSuspendCatching
+
+            contactState.consumedPrivatePaymentListVersion = null
+            persistState(markWalletBackup = true)
+            Logger.info(
+                "Released private Paykit payment list version '$paymentListVersion' " +
+                    "for '${redacted(normalizedKey)}'",
+                context = TAG,
+            )
+        }
+    }.onFailure {
+        Logger.warn("Failed to release private Paykit payment details", it, context = TAG)
     }
 
     suspend fun discardRemoteLightningEndpoints(
@@ -536,7 +552,7 @@ class PrivatePaykitRepo @Inject constructor(
             val matches = buildList {
                 ensureState().contacts.forEach { (publicKey, contactState) ->
                     if (publicKey !in knownSavedContactKeys) return@forEach
-                    contactState.localInvoicesByReceiverPath.values.forEach { invoice ->
+                    contactState.localInvoice?.let { invoice ->
                         if (invoice.paymentHash in paymentHashes) add(publicKey to invoice.paymentHash)
                     }
                 }
@@ -574,16 +590,9 @@ class PrivatePaykitRepo @Inject constructor(
             if (paymentHash.isBlank()) return@withContext null
             ensureState().contacts.firstNotNullOfOrNull { (publicKey, contactState) ->
                 publicKey.takeIf {
-                    contactState.localInvoices().any { invoice -> invoice.paymentHash == paymentHash } ||
+                    contactState.localInvoice?.paymentHash == paymentHash ||
                         paymentHash in contactState.receivedInvoicePaymentHashes
                 }
-            }
-        }
-
-    suspend fun contactPublicKeyForPrivateOnchainAddresses(addresses: Collection<String>): String? =
-        withContext(serializedDispatcher) {
-            addresses.firstNotNullOfOrNull {
-                addressReservationRepo.contactPublicKeyForReservedAddress(it)
             }
         }
 
@@ -596,9 +605,7 @@ class PrivatePaykitRepo @Inject constructor(
                         sdkState = paykitSdkService.exportBackupState(),
                         consumedPrivatePaymentListVersions = ensureState().contacts
                             .mapNotNull { (publicKey, contactState) ->
-                                contactState.consumedPrivatePaymentListVersionsByReceiverPath
-                                    .takeIf { it.isNotEmpty() }
-                                    ?.let { publicKey to it }
+                                contactState.consumedPrivatePaymentListVersion?.let { publicKey to it }
                             }.toMap(),
                     )
                 )
@@ -608,17 +615,17 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun restoreBackup(backup: String?): Result<Unit> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
+                val decoded = backup?.let { json.decodeFromString<PrivatePaykitBackup>(it) }
+                decoded?.let { paykitSdkService.retainRecoveryBackup(it.sdkState) }
                 clearPendingMessageDrainRetries()
                 state = PrivatePaykitState()
                 knownSavedContactKeys.clear()
                 if (backup == null) {
                     paykitSdkService.clearState()
                 } else {
-                    val decoded = json.decodeFromString<PrivatePaykitBackup>(backup)
-                    paykitSdkService.restoreBackupState(decoded.sdkState)
-                    decoded.consumedPrivatePaymentListVersions.forEach { (publicKey, versions) ->
+                    requireNotNull(decoded).consumedPrivatePaymentListVersions.forEach { (publicKey, versions) ->
                         ensureState().contacts.getOrPut(publicKey) { ContactState() }
-                            .consumedPrivatePaymentListVersionsByReceiverPath = versions
+                            .consumedPrivatePaymentListVersion = versions
                     }
                 }
                 persistState(preserveCleanupMarkers = false)
@@ -632,32 +639,38 @@ class PrivatePaykitRepo @Inject constructor(
     ): Result<PublicPaykitPaymentResult> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                val receiverPath = paymentRequest?.counterpartyReceiverPath ?: PaykitReceiverPaths.WALLET
-                val consumedVersion = ensureState().contacts[publicKey]
-                    ?.consumedPrivatePaymentListVersionsByReceiverPath
-                    ?.get(receiverPath)
+                val consumedVersion = ensureState().contacts[publicKey]?.consumedPrivatePaymentListVersion
                 val amount = paymentRequest?.let {
                     PaymentAmountContext(it.amountValue, PaykitIssuerInterop.BITCOIN_ASSET)
                 }
-                val prepared = preparePrivateContactPayment(
-                    publicKey = publicKey,
-                    receiverPath = receiverPath,
-                    consumedVersion = consumedVersion,
-                    amount = amount,
-                    allowPublicResolution = paymentRequest == null,
-                ) ?: return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
+                val prepared = runSuspendCatching {
+                    preparePrivateContactPayment(
+                        publicKey = publicKey,
+                        consumedVersion = consumedVersion,
+                        amount = amount,
+                        paymentRequest = paymentRequest,
+                    )
+                }.getOrElse {
+                    if (paymentRequest == null || !it.isPaykitRecoveryRequired()) throw it
+                    if (paymentRequest.isExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
+                    return@runSuspendCatching privateLinkPendingResult(publicKey)
+                } ?: return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
                 val resolution = prepared.resolution
-                val linkState = currentLinkState(publicKey, receiverPath, prepared.linkState)
+                val linkState = currentLinkState(publicKey, prepared.linkState)
                 if (paymentRequest == null && canUsePublicPayment(linkState, resolution.status, resolution.state)) {
                     return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
                 }
 
-                val result = privatePaymentResult(
+                val result = unresolvedPrivateLinkResult(
                     publicKey = publicKey,
-                    receiverPath = receiverPath,
+                    paymentRequest = paymentRequest,
+                    resolution = resolution,
+                    linkState = linkState,
+                ) ?: privatePaymentResult(
+                    publicKey = publicKey,
                     resolution = resolution,
                     consumedVersion = consumedVersion,
-                    acceptedEndpointIdentifiers = paymentRequest?.acceptedPaymentEndpointIdentifiers?.toSet(),
+                    paymentRequest = paymentRequest,
                 )
                 if (paymentRequest?.isExpired(clock.now()) == true) {
                     throw PaykitPaymentRequestError.RequestExpired
@@ -695,22 +708,28 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun preparePrivateContactPayment(
         publicKey: String,
-        receiverPath: String,
         consumedVersion: ULong?,
         amount: PaymentAmountContext?,
-        allowPublicResolution: Boolean,
+        paymentRequest: PaykitPaymentRequest?,
     ): PaykitPreparedPrivateContactPayment? {
         val result = runSuspendCatching {
-            paykitSdkService.prepareAndResolvePrivateContactPayment(
-                counterparty = publicKey,
-                receiverPath = receiverPath,
-                afterPrivatePaymentListVersion = consumedVersion,
-                amount = amount,
-            )
+            if (paymentRequest != null) {
+                paykitSdkService.prepareAndResolvePrivatePaymentRequest(
+                    counterparty = publicKey,
+                    paymentRequestId = paymentRequest.paymentRequestId,
+                    afterPrivatePaymentListVersion = consumedVersion,
+                )
+            } else {
+                paykitSdkService.prepareAndResolvePrivateContactPayment(
+                    counterparty = publicKey,
+                    afterPrivatePaymentListVersion = consumedVersion,
+                    amount = amount,
+                )
+            }
         }
         val error = result.exceptionOrNull() ?: return result.getOrThrow()
-        if (!allowPublicResolution) throw error
-        if (!canUsePublicPayment(currentLinkState(publicKey, receiverPath))) throw error
+        if (paymentRequest != null) throw error
+        if (!canUsePublicPayment(currentLinkState(publicKey))) throw error
 
         Logger.warn(
             "Using public Paykit resolution for '${redacted(publicKey)}'",
@@ -722,42 +741,43 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun privatePaymentResult(
         publicKey: String,
-        receiverPath: String,
         resolution: PaykitPrivateContactPaymentResolution,
         consumedVersion: ULong?,
-        acceptedEndpointIdentifiers: Set<String>? = null,
+        paymentRequest: PaykitPaymentRequest?,
     ): PublicPaykitPaymentResult {
         val privateEndpoints = resolution.payableEndpoints
-            .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload) }
-        cacheResolvedPrivateEndpoints(publicKey, privateEndpoints)
+            .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload)?.copy(appId = it.appId) }
+        if (resolution.privatePaymentListVersion != null) {
+            cacheResolvedPrivateEndpoints(publicKey, privateEndpoints)
+        }
+        val acceptedEndpointIdentifiers = paymentRequest?.acceptedPaymentEndpointIdentifiers?.toSet()
         val acceptedEndpoints = privateEndpoints.filter {
             acceptedEndpointIdentifiers?.contains(it.methodId.rawValue) ?: true
         }
 
         val privatePayable = privatePayableEndpoints(acceptedEndpoints, publicKey)
         val paymentListVersion = resolution.privatePaymentListVersion
-        if (privatePayable.isNotEmpty() && paymentListVersion != null) {
+        if (privatePayable.isNotEmpty() && (paymentListVersion != null || paymentRequest != null)) {
             Logger.info(
                 "Opened private Paykit payment for '${redacted(publicKey)}' using payment list version " +
-                    "$paymentListVersion after ${consumedVersion ?: "none"}",
+                    "${paymentListVersion ?: "none"} after ${consumedVersion ?: "none"}",
                 context = TAG,
             )
             return PublicPaykitPaymentResult.Opened(
                 paymentRequest = PublicPaykitRepo.paymentRequest(privatePayable),
-                privatePaymentContext = PrivatePaykitPaymentContext(receiverPath, paymentListVersion),
+                privatePaymentContext = PrivatePaykitPaymentContext(
+                    paymentAppsByEndpoint = privatePayable.distinctBy { it.methodId }
+                        .associate { it.methodId.rawValue to requireNotNull(it.appId) },
+                    paymentListVersion = paymentListVersion,
+                ),
             )
         }
 
-        if (
-            resolution.state == PrivatePaymentResolutionState.RECOVERY_PENDING ||
-            resolution.status == PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST
-        ) {
+        if (resolution.status == PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST) {
             schedulePendingPrivateMessageDrainRetries(
                 reason = "payment recovery",
-                retryKeys = listOf(PrivateMessageDrainRetryKey(publicKey, receiverPath)),
+                retryKeys = listOf(publicKey),
             )
-        }
-        if (resolution.status == PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST) {
             Logger.info(
                 "Waiting for a private Paykit payment list newer than ${consumedVersion ?: "none"} " +
                     "for '${redacted(publicKey)}'; public resolution is disabled for this request",
@@ -773,12 +793,40 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
+    private fun unresolvedPrivateLinkResult(
+        publicKey: String,
+        paymentRequest: PaykitPaymentRequest?,
+        resolution: PaykitPrivateContactPaymentResolution,
+        linkState: LinkedPeerState?,
+    ): PublicPaykitPaymentResult? = when {
+        resolution.state == PrivatePaymentResolutionState.RECOVERY_PENDING ->
+            privateLinkPendingResult(publicKey)
+        paymentRequest == null -> null
+        linkState == LinkedPeerState.LINKING || linkState == LinkedPeerState.RECOVERY_REQUIRED ->
+            privateLinkPendingResult(publicKey)
+        linkState != LinkedPeerState.LINKED -> PublicPaykitPaymentResult.NoEndpoint
+        else -> null
+    }
+
+    private fun privateLinkPendingResult(
+        publicKey: String,
+    ): PublicPaykitPaymentResult {
+        schedulePendingPrivateMessageDrainRetries(
+            reason = "payment link recovery",
+            retryKeys = listOf(publicKey),
+        )
+        Logger.info(
+            "Waiting for private Paykit link recovery for '${redacted(publicKey)}'",
+            context = TAG,
+        )
+        return PublicPaykitPaymentResult.PrivateLinkPending
+    }
+
     private suspend fun currentLinkState(
         publicKey: String,
-        receiverPath: String,
         preparedState: LinkedPeerState? = null,
     ): LinkedPeerState? = preparedState ?: paykitSdkService.linkedPeers().firstOrNull {
-        PubkyPublicKeyFormat.matches(it.counterparty, publicKey) && it.counterpartyReceiverPath == receiverPath
+        PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
     }?.state
 
     private fun canUsePublicPayment(
@@ -859,113 +907,34 @@ class PrivatePaykitRepo @Inject constructor(
         forceRefreshLightning: Boolean,
     ): PrivatePublicationPreparation {
         var firstError: Throwable? = null
-        var receiverPathSelectionError: Throwable? = null
-        var hasPublicationUpdate = false
         val updates = mutableListOf<PrivatePaymentListReservationUpdateInput>()
-        val linkRetryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
-        val linkedReceiverPathsSnapshot = linkedReceiverPathsSnapshot(reason)
-        firstError = linkedReceiverPathsSnapshot.error
-
-        for (publicKey in publicKeys) {
-            val receiverPaths = runSuspendCatching { receiverPathsForSavedContact(publicKey) }
+        val linkRetryKeys = mutableListOf<String>()
+        for (publicKey in publicKeys.distinct()) {
+            val link = runSuspendCatching { paykitSdkService.ensureLinkWithPeer(publicKey) }
+                .onFailure { Logger.warn("Failed to prepare private Paykit link during '$reason'", it, context = TAG) }
+            if (link.isFailure) {
+                if (link.exceptionOrNull() !is PaykitException.NotFound) linkRetryKeys += publicKey
+                continue
+            }
+            linkRetryKeys += publicKey
+            runSuspendCatching { privatePaymentListUpdate(publicKey, forceRefreshLightning) }
+                .onSuccess { updates += it }
                 .onFailure {
-                    firstError = firstError ?: it
-                    Logger.warn(
-                        "Failed to read saved Paykit receivers for '${redacted(publicKey)}' during '$reason'",
-                        it,
-                        context = TAG,
-                    )
-                }.getOrNull() ?: continue
-            val receiverPathSelection = paykitSdkService.privateReceiverPathSelection(publicKey, receiverPaths)
-            val linkableReceiverPaths = receiverPathSelection.linkableReceiverPaths
-            val publicationReceiverPaths = receiverPathSelection.publishableReceiverPaths
-            receiverPathSelection.error?.let {
-                logPrivateReceiverPathSelectionFailure(publicKey, reason, it)
-                receiverPathSelectionError = receiverPathSelectionError ?: it
-            }
-            val cleanupReceiverPaths = receiverPathsForPrivateEndpointCleanup(
-                publicKey = publicKey,
-                excludedReceiverPaths = publicationReceiverPaths + receiverPathSelection.cleanupProtectedReceiverPaths,
-                linkedReceiverPaths = linkedReceiverPathsSnapshot.pathsByPublicKey[publicKey].orEmpty(),
-            )
-
-            linkRetryKeys += preparePrivateLinks(publicKey, linkableReceiverPaths + cleanupReceiverPaths, reason)
-
-            cleanupReceiverPaths.forEach { receiverPath ->
-                updates += PrivatePaymentListReservationUpdateInput(
-                    counterparty = publicKey,
-                    counterpartyReceiverPath = receiverPath,
-                    reservations = emptyList(),
-                )
-            }
-
-            publicationReceiverPaths.forEach { receiverPath ->
-                runSuspendCatching {
-                    privatePaymentListUpdate(publicKey, receiverPath, forceRefreshLightning)
-                }.onSuccess {
-                    updates += it
-                    hasPublicationUpdate = true
-                }.onFailure {
                     firstError = firstError ?: it
                     logPrivatePublicationPreparationFailure(publicKey, reason, it)
                 }
-            }
         }
-
-        if (!hasPublicationUpdate) firstError = firstError ?: receiverPathSelectionError
-        return PrivatePublicationPreparation(updates, linkRetryKeys.distinct(), firstError)
+        return PrivatePublicationPreparation(updates, linkRetryKeys, firstError)
     }
 
     private suspend fun prepareRelevantPrivateLinksIfAvailable(publicKeys: Collection<String>, reason: String) {
         if (!hasPrivatePaymentAccessForCurrentProfile()) return
-
-        val retryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
-        for (publicKey in publicKeys) {
-            val receiverPaths = runSuspendCatching { receiverPathsForSavedContact(publicKey) }
-                .onFailure {
-                    Logger.warn(
-                        "Failed to read saved Paykit receivers for '${redacted(publicKey)}' during '$reason'",
-                        it,
-                        context = TAG,
-                    )
-                }.getOrNull() ?: continue
-            val selection = paykitSdkService.privateReceiverPathSelection(publicKey, receiverPaths)
-            selection.error?.let {
-                Logger.warn(
-                    "Failed to inspect private Paykit receiver markers for '${redacted(publicKey)}' during '$reason'",
-                    it,
-                    context = TAG,
-                )
-            }
-            retryKeys += selection.linkableReceiverPaths.map { PrivateMessageDrainRetryKey(publicKey, it) }
-        }
-
-        drainAndSchedulePrivateLinkRetries(reason, retryKeys.distinct())
-    }
-
-    private suspend fun preparePrivateLinks(
-        publicKey: String,
-        receiverPaths: Collection<String>,
-        reason: String,
-    ): List<PrivateMessageDrainRetryKey> {
-        val retryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
-        for (receiverPath in receiverPaths.distinct()) {
-            runSuspendCatching { paykitSdkService.ensureLinkWithPeer(publicKey, receiverPath) }.onFailure {
-                Logger.warn(
-                    "Failed to prepare private Paykit link for '${redacted(publicKey)}' during '$reason'",
-                    it,
-                    context = TAG,
-                )
-            }
-            retryKeys += PrivateMessageDrainRetryKey(publicKey, receiverPath)
-        }
-
-        return retryKeys
+        drainAndSchedulePrivateLinkRetries(reason, publicKeys.distinct())
     }
 
     private suspend fun drainAndSchedulePrivateLinkRetries(
         reason: String,
-        retryKeys: Collection<PrivateMessageDrainRetryKey>,
+        retryKeys: Collection<String>,
     ) {
         if (retryKeys.isEmpty()) return
 
@@ -978,15 +947,13 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun privatePaymentListUpdate(
         publicKey: String,
-        receiverPath: String,
         forceRefreshLightning: Boolean,
     ): PrivatePaymentListReservationUpdateInput {
-        val endpoints = buildLocalEndpoints(publicKey, receiverPath, forceRefreshLightning).getOrThrow()
+        val endpoints = buildLocalEndpoints(publicKey, forceRefreshLightning).getOrThrow()
         if (endpoints.isEmpty()) throw PrivatePaykitError.PrivateUnavailable
         return PrivatePaymentListReservationUpdateInput(
             counterparty = publicKey,
-            counterpartyReceiverPath = receiverPath,
-            reservations = endpoints.map { endpoint -> privateReservation(publicKey, receiverPath, endpoint) },
+            reservations = endpoints.map { endpoint -> privateReservation(publicKey, endpoint) },
         )
     }
 
@@ -1009,18 +976,6 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private fun logPrivateReceiverPathSelectionFailure(
-        publicKey: String,
-        reason: String,
-        error: Throwable,
-    ) {
-        Logger.warn(
-            "Failed to inspect private Paykit receiver markers for '${redacted(publicKey)}' during '$reason'",
-            error,
-            context = TAG,
-        )
-    }
-
     private suspend fun applyPrivatePaymentListDeliveryReport(
         report: PrivatePaymentListDeliveryReport,
         reason: String,
@@ -1028,14 +983,14 @@ class PrivatePaykitRepo @Inject constructor(
         report.failedToQueue.forEach {
             Logger.warn(
                 "Failed to queue private Paykit endpoints for '${redacted(it.counterparty)}' during '$reason': " +
-                    (it.error ?: "unknown error"),
+                    (it.error?.redactedContext() ?: "unknown error"),
                 context = TAG,
             )
         }
         report.failedToDeliver.forEach {
             Logger.warn(
                 "Failed to deliver private Paykit endpoints for '${redacted(it.counterparty)}' during '$reason': " +
-                    it.error,
+                    it.error.redactedContext(),
                 context = TAG,
             )
         }
@@ -1043,14 +998,13 @@ class PrivatePaykitRepo @Inject constructor(
         var didUpdateCache = false
         for (change in report.queued) {
             val publicKey = normalizedPublicKey(change.counterparty) ?: continue
-            recordPublishedPrivatePaymentListCache(publicKey, change.counterpartyReceiverPath)
+            recordPublishedPrivatePaymentListCache(publicKey)
             didUpdateCache = true
         }
 
         for (change in report.cleared) {
             didUpdateCache = clearPublishedPrivatePaymentListCache(
                 counterparty = change.counterparty,
-                receiverPath = change.counterpartyReceiverPath,
             ) || didUpdateCache
         }
 
@@ -1065,32 +1019,29 @@ class PrivatePaykitRepo @Inject constructor(
 
     private fun privatePaymentListDeliveryRetryKeys(
         report: PrivatePaymentListDeliveryReport,
-    ): List<PrivateMessageDrainRetryKey> {
-        val changes = report.queued.map { it.counterparty to it.counterpartyReceiverPath } +
-            report.cleared.map { it.counterparty to it.counterpartyReceiverPath } +
-            report.failedToDeliver.map { it.counterparty to it.counterpartyReceiverPath }
-
-        return changes
-            .mapNotNull { (counterparty, receiverPath) ->
-                normalizedPublicKey(counterparty)?.let { PrivateMessageDrainRetryKey(it, receiverPath) }
-            }
+    ): List<String> {
+        return (
+            report.queued.map { it.counterparty } +
+                report.cleared.map { it.counterparty } +
+                report.failedToDeliver.map { it.counterparty }
+            )
+            .mapNotNull(::normalizedPublicKey)
             .distinct()
     }
 
     private suspend fun drainPendingPrivateMessages(
         reason: String,
-        advancingLinksFor: List<PrivateMessageDrainRetryKey> = emptyList(),
+        advancingLinksFor: List<String> = emptyList(),
     ) {
         runSuspendCatching {
             advancingLinksFor.distinct().forEach { retryKey ->
                 runSuspendCatching {
                     paykitSdkService.ensureLinkWithPeer(
-                        counterparty = retryKey.publicKey,
-                        receiverPath = retryKey.receiverPath,
+                        counterparty = retryKey,
                     )
                 }.onFailure {
                     Logger.warn(
-                        "Failed to advance private Paykit link for '${redacted(retryKey.publicKey)}' during '$reason'",
+                        "Failed to advance private Paykit link for '${redacted(retryKey)}' during '$reason'",
                         it,
                         context = TAG,
                     )
@@ -1107,7 +1058,7 @@ class PrivatePaykitRepo @Inject constructor(
 
     private fun schedulePendingPrivateMessageDrainRetries(
         reason: String,
-        retryKeys: Collection<PrivateMessageDrainRetryKey>,
+        retryKeys: Collection<String>,
     ) {
         val retryKeys = retryKeys.toSet()
         if (retryKeys.isEmpty()) return
@@ -1156,7 +1107,7 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private suspend fun updatePendingMessageDrainRetryKeys(retryKeys: Collection<PrivateMessageDrainRetryKey>) {
+    private suspend fun updatePendingMessageDrainRetryKeys(retryKeys: Collection<String>) {
         val remainingKeys = pendingPrivateMessageDrainKeys(retryKeys)
         synchronized(pendingMessageDrainRetryLock) {
             pendingMessageDrainRetryKeys.removeAll(retryKeys.toSet())
@@ -1165,8 +1116,8 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun pendingPrivateMessageDrainKeys(
-        retryKeys: Collection<PrivateMessageDrainRetryKey>,
-    ): Set<PrivateMessageDrainRetryKey> {
+        retryKeys: Collection<String>,
+    ): Set<String> {
         val retryKeys = retryKeys.toSet()
         if (retryKeys.isEmpty()) return emptySet()
 
@@ -1177,7 +1128,7 @@ class PrivatePaykitRepo @Inject constructor(
             }
             .mapNotNull { peer ->
                 normalizedPublicKey(peer.counterparty)?.let { publicKey ->
-                    PrivateMessageDrainRetryKey(publicKey, peer.counterpartyReceiverPath) to peer.state
+                    publicKey to peer.state
                 }
             }
             .toMap()
@@ -1186,11 +1137,7 @@ class PrivatePaykitRepo @Inject constructor(
                 Logger.warn("Failed to inspect pending private Paykit messages", it, context = TAG)
                 return retryKeys
             }
-            .mapNotNull { receiver ->
-                normalizedPublicKey(receiver.counterparty)?.let {
-                    PrivateMessageDrainRetryKey(it, receiver.counterpartyReceiverPath)
-                }
-            }
+            .mapNotNull(::normalizedPublicKey)
             .toSet()
 
         return retryKeys.filterTo(mutableSetOf()) { retryKey ->
@@ -1211,21 +1158,18 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private suspend fun recordPublishedPrivatePaymentListCache(publicKey: String, receiverPath: String) {
+    private suspend fun recordPublishedPrivatePaymentListCache(publicKey: String) {
         val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
-        contactState.publishedPrivatePaymentReceiverPaths =
-            (contactState.publishedPrivatePaymentReceiverPaths + receiverPath).toSortedSet()
+        contactState.hasPublishedPrivatePaymentList = true
     }
 
     private suspend fun clearPublishedPrivatePaymentListCache(
         counterparty: String,
-        receiverPath: String,
     ): Boolean {
         val publicKey = normalizedPublicKey(counterparty) ?: return false
         ensureState().contacts[publicKey]?.let { contactState ->
-            contactState.publishedPrivatePaymentReceiverPaths =
-                contactState.publishedPrivatePaymentReceiverPaths.filterTo(mutableSetOf()) { it != receiverPath }
-            contactState.localInvoicesByReceiverPath = contactState.localInvoicesByReceiverPath - receiverPath
+            contactState.hasPublishedPrivatePaymentList = false
+            contactState.localInvoice = null
             if (!contactState.hasCacheState) {
                 state?.contacts?.remove(publicKey)
             }
@@ -1235,7 +1179,6 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun buildLocalEndpoints(
         publicKey: String,
-        receiverPath: String,
         forceRefreshLightning: Boolean = false,
     ): Result<List<Endpoint>> = withContext(serializedDispatcher) {
         runSuspendCatching {
@@ -1244,7 +1187,6 @@ class PrivatePaykitRepo @Inject constructor(
             if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
                 val reservedAddress = addressReservationRepo.currentOrRotatedAddress(
                     publicKey,
-                    receiverPath,
                 ).getOrThrow()
                 walletRepo.refreshReusableReceiveAddressIfReserved().getOrThrow()
                 endpoints += Endpoint(
@@ -1257,7 +1199,6 @@ class PrivatePaykitRepo @Inject constructor(
             if (PublicPaykitRepo.isLightningPaymentOptionEnabled(settings) && lightningRepo.canReceive()) {
                 currentOrRotatedInvoice(
                     publicKey,
-                    receiverPath,
                     forceRefresh = forceRefreshLightning,
                 ).onSuccess { invoice ->
                     endpoints += Endpoint(
@@ -1280,18 +1221,17 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun currentOrRotatedInvoice(
         publicKey: String,
-        receiverPath: String,
         forceRefresh: Boolean = false,
     ): Result<StoredInvoice> = withContext(serializedDispatcher) {
         runSuspendCatching {
-            if (!forceRefresh) reusablePrivateInvoice(publicKey, receiverPath)?.let { return@runSuspendCatching it }
+            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
 
             val bolt11 = lightningRepo.createInvoice(
                 amountSats = null,
                 description = "",
                 expirySeconds = privateInvoiceExpiry.inWholeSeconds.toUInt(),
             ).getOrThrow()
-            if (!forceRefresh) reusablePrivateInvoice(publicKey, receiverPath)?.let { return@runSuspendCatching it }
+            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
 
             val decoded = (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice
                 ?: throw PublicPaykitError.InvalidPayload
@@ -1304,7 +1244,7 @@ class PrivatePaykitRepo @Inject constructor(
                 paymentHash = decoded.paymentHash.toHex(),
                 expiresAt = expiresAt,
             )
-            setLocalInvoice(publicKey, receiverPath, invoice)
+            setLocalInvoice(publicKey, invoice)
             persistState()
             invoice
         }
@@ -1312,9 +1252,8 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun reusablePrivateInvoice(
         publicKey: String,
-        receiverPath: String,
     ): StoredInvoice? {
-        val invoice = localInvoice(publicKey, receiverPath) ?: return null
+        val invoice = localInvoice(publicKey) ?: return null
         val refreshAt = clock.now().epochSeconds + invoiceRefreshBuffer.inWholeSeconds
         val decoded = (coreService.decode(invoice.bolt11) as? Scanner.Lightning)?.invoice ?: return null
         val isReusable = invoice.expiresAt > refreshAt &&
@@ -1327,31 +1266,28 @@ class PrivatePaykitRepo @Inject constructor(
 
     private fun privateReservation(
         publicKey: String,
-        receiverPath: String,
         endpoint: Endpoint,
     ): PrivatePaymentEndpointReservationInput {
         val contactState = state?.contacts?.get(publicKey)
         val attribution = if (endpoint.methodId == MethodId.Bolt11) {
-            val paymentHash = localInvoice(publicKey, receiverPath)?.takeIf { it.bolt11 == endpoint.value }?.paymentHash
+            val paymentHash = localInvoice(publicKey)?.takeIf { it.bolt11 == endpoint.value }?.paymentHash
             mapOf(
                 "type" to "private_paykit",
                 "counterparty" to publicKey,
-                "receiver_path" to receiverPath,
             ) + listOfNotNull(paymentHash?.let { "payment_hash" to it }).toMap()
         } else {
             mapOf(
                 "type" to "private_paykit",
                 "counterparty" to publicKey,
-                "receiver_path" to receiverPath,
             )
         }
         val expiresAt = contactState
-            ?.let { localInvoice(publicKey, receiverPath) }
+            ?.let { localInvoice(publicKey) }
             ?.takeIf { endpoint.methodId == MethodId.Bolt11 && it.bolt11 == endpoint.value }
             ?.let { Instant.ofEpochSecond(it.expiresAt).toString() }
 
         return PrivatePaymentEndpointReservationInput(
-            reservationId = privateReservationId(publicKey, receiverPath, endpoint),
+            reservationId = privateReservationId(publicKey, endpoint),
             identifier = endpoint.methodId.rawValue,
             payload = endpoint.rawPayload,
             expiresAt = expiresAt,
@@ -1359,12 +1295,12 @@ class PrivatePaykitRepo @Inject constructor(
         )
     }
 
-    private fun privateReservationId(publicKey: String, receiverPath: String, endpoint: Endpoint): String {
+    private fun privateReservationId(publicKey: String, endpoint: Endpoint): String {
         val payloadHashPrefix = MessageDigest.getInstance("SHA-256")
             .digest(endpoint.rawPayload.toByteArray(Charsets.UTF_8))
             .copyOfRange(0, 8)
             .toHex()
-        return "$publicKey:$receiverPath:${endpoint.methodId.rawValue}:$payloadHashPrefix"
+        return "$publicKey:${endpoint.methodId.rawValue}:$payloadHashPrefix"
     }
 
     private suspend fun cacheResolvedPrivateEndpoints(publicKey: String, endpoints: List<Endpoint>) {
@@ -1374,10 +1310,13 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun removePublishedEndpoints(): Result<Unit> = withContext(serializedDispatcher) {
-        publicationMutex.withLock {
-            val keys = (knownSavedContactKeys + ensureState().contacts.keys + pendingDeletedContactCleanupPublicKeys())
-                .distinct()
-            removePublishedEndpointsLocked(keys)
+        runSuspendCatching {
+            publicationMutex.withLock {
+                val keys = (
+                    knownSavedContactKeys + ensureState().contacts.keys + pendingDeletedContactCleanupPublicKeys()
+                    ).distinct()
+                removePublishedEndpointsLocked(keys).getOrThrow()
+            }
         }
     }
 
@@ -1400,8 +1339,7 @@ class PrivatePaykitRepo @Inject constructor(
 
             ensureState()
             val cleanupStateByPublicKey = normalizedKeys.associateWith(::publishedEndpointCleanupState)
-            val linkedReceiverPathsSnapshot = linkedReceiverPathsSnapshot("private endpoint cleanup")
-            val preparation = clearPrivatePaymentLists(normalizedKeys, linkedReceiverPathsSnapshot)
+            val preparation = clearPrivatePaymentLists(normalizedKeys)
             val failedPublicKeys = preparation.failedPublicKeys.toMutableSet()
             var firstError = preparation.firstError
 
@@ -1412,7 +1350,7 @@ class PrivatePaykitRepo @Inject constructor(
                 )
                 val pendingRetryKeys = pendingPrivateMessageDrainKeys(preparation.clearedRetryKeys)
                 if (pendingRetryKeys.isNotEmpty()) {
-                    failedPublicKeys += pendingRetryKeys.map { it.publicKey }
+                    failedPublicKeys += pendingRetryKeys
                     firstError = firstError ?: PrivatePaykitError.PrivateUnavailable
                 }
             }
@@ -1430,39 +1368,42 @@ class PrivatePaykitRepo @Inject constructor(
 
             clearPublishedEndpointCache(normalizedKeys.filterNot { it in failedPublicKeys })
             firstError?.let { throw it }
+            publicPaykitRepo.syncPaykitApp().getOrThrow()
+        }.onFailure {
+            runSuspendCatching { settingsStore.update { it.copy(publicPaykitCleanupPending = true) } }
+                .onFailure(it::addSuppressed)
         }
 
     private suspend fun clearPrivatePaymentLists(
         publicKeys: Collection<String>,
-        linkedReceiverPathsSnapshot: LinkedReceiverPathsSnapshot,
     ): PrivateEndpointCleanupPreparation {
-        val failedPublicKeys = if (linkedReceiverPathsSnapshot.error == null) {
-            mutableSetOf()
-        } else {
-            publicKeys.toMutableSet()
-        }
-        val clearedRetryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
-        var firstError = linkedReceiverPathsSnapshot.error
-
+        val linkedPublicKeys = paykitSdkService.linkedPeers()
+            .filter { it.state != LinkedPeerState.NOT_LINKED }
+            .mapNotNull { normalizedPublicKey(it.counterparty) }
+            .toSet()
+        val failedPublicKeys = mutableSetOf<String>()
+        val clearedRetryKeys = mutableListOf<String>()
+        var firstError: Throwable? = null
         publicKeys.forEach { publicKey ->
-            receiverPathsForCleanup(
-                publicKey = publicKey,
-                linkedReceiverPaths = linkedReceiverPathsSnapshot.pathsByPublicKey[publicKey].orEmpty(),
-            ).forEach { receiverPath ->
-                runSuspendCatching {
-                    val report = paykitSdkService.clearPrivatePaymentList(publicKey, receiverPath)
-                    if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
-                        throw PrivatePaykitError.PrivateUnavailable
-                    }
-                }.onSuccess {
-                    clearedRetryKeys += PrivateMessageDrainRetryKey(publicKey, receiverPath)
-                }.onFailure {
-                    failedPublicKeys += publicKey
-                    firstError = firstError ?: it
+            if (publicKey !in linkedPublicKeys &&
+                state?.contacts?.get(publicKey)?.hasPublishedPrivatePaymentList != true
+            ) {
+                return@forEach
+            }
+            runSuspendCatching {
+                val report = paykitSdkService.clearPrivatePaymentList(publicKey)
+                    ?: return@runSuspendCatching false
+                if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
+                    throw PrivatePaykitError.PrivateUnavailable
                 }
+                true
+            }.onSuccess {
+                if (it) clearedRetryKeys += publicKey
+            }.onFailure {
+                failedPublicKeys += publicKey
+                firstError = firstError ?: it
             }
         }
-
         return PrivateEndpointCleanupPreparation(clearedRetryKeys, failedPublicKeys, firstError)
     }
 
@@ -1472,8 +1413,8 @@ class PrivatePaykitRepo @Inject constructor(
         publicKeys.forEach { publicKey ->
             state?.contacts?.get(publicKey)?.let { contactState ->
                 contactState.remoteEndpoints = emptyList()
-                contactState.localInvoicesByReceiverPath = emptyMap()
-                contactState.publishedPrivatePaymentReceiverPaths = emptySet()
+                contactState.localInvoice = null
+                contactState.hasPublishedPrivatePaymentList = false
                 if (!contactState.hasCacheState) {
                     state?.contacts?.remove(publicKey)
                 }
@@ -1503,41 +1444,10 @@ class PrivatePaykitRepo @Inject constructor(
         val contactState = state?.contacts?.get(publicKey)
         return PublishedEndpointCleanupState(
             remoteEndpoints = contactState?.remoteEndpoints.orEmpty(),
-            localInvoicesByReceiverPath = contactState?.localInvoicesByReceiverPath.orEmpty(),
-            publishedPrivatePaymentReceiverPaths = contactState?.publishedPrivatePaymentReceiverPaths.orEmpty(),
+            localInvoice = contactState?.localInvoice,
+            hasPublishedPrivatePaymentList = contactState?.hasPublishedPrivatePaymentList == true,
         )
     }
-
-    private suspend fun receiverPathsForSavedContact(publicKey: String): List<String> {
-        val record = paykitSdkService.contactRecord(publicKey)
-        val savedPaths = supportedReceiverPaths(record?.receiverPaths.orEmpty())
-
-        return runSuspendCatching {
-            val discoveredPaths = pubkyService.discoverRelevantReceiverPaths(publicKey)
-            val currentRecord = paykitSdkService.contactRecord(publicKey)
-                ?: return@runSuspendCatching savedPaths
-            val currentSavedPaths = supportedReceiverPaths(currentRecord.receiverPaths)
-            val mergedPaths = supportedReceiverPaths(currentSavedPaths + discoveredPaths)
-            if (mergedPaths == currentSavedPaths) return@runSuspendCatching currentSavedPaths
-
-            val updatedRecord = pubkyService.saveContact(publicKey, currentRecord.label, mergedPaths)
-            _initialLinkBurstStarted.tryEmit(Unit)
-            Logger.info("Discovered new Paykit receiver paths for '${redacted(publicKey)}'", context = TAG)
-            supportedReceiverPaths(updatedRecord.receiverPaths)
-        }.getOrElse {
-            if (it is CancellationException) throw it
-            Logger.warn(
-                "Failed to refresh Paykit receiver paths for '${redacted(publicKey)}'; using saved paths",
-                it,
-                context = TAG,
-            )
-            savedPaths
-        }
-    }
-
-    private fun supportedReceiverPaths(receiverPaths: Collection<String>): List<String> =
-        PaykitReceiverPaths.supported.filter { it in receiverPaths }
-            .ifEmpty { listOf(PaykitReceiverPaths.WALLET) }
 
     private suspend fun refreshSavedContactEndpointsDuringInitialLinkBurst(
         publicKeys: Collection<String>,
@@ -1560,57 +1470,6 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private fun receiverPathsForPrivateEndpointCleanup(
-        publicKey: String,
-        excludedReceiverPaths: List<String>,
-        linkedReceiverPaths: Collection<String>,
-    ): List<String> {
-        val publishedPaths = publishedPrivatePaymentReceiverPaths(publicKey)
-        return (publishedPaths + linkedReceiverPaths)
-            .filter { it in PaykitReceiverPaths.supported }
-            .filterNot { it in excludedReceiverPaths }
-            .distinct()
-            .sorted()
-    }
-
-    private fun receiverPathsForCleanup(
-        publicKey: String,
-        linkedReceiverPaths: Collection<String>,
-    ): List<String> {
-        return (linkedReceiverPaths + publishedPrivatePaymentReceiverPaths(publicKey))
-            .filter { it in PaykitReceiverPaths.supported }
-            .distinct()
-            .sorted()
-    }
-
-    private suspend fun linkedReceiverPathsByPublicKey(): Map<String, Set<String>> {
-        val linkedPaths = mutableMapOf<String, MutableSet<String>>()
-        paykitSdkService.linkedPeers().forEach { peer ->
-            val publicKey = normalizedPublicKey(peer.counterparty) ?: return@forEach
-            if (peer.counterpartyReceiverPath in PaykitReceiverPaths.supported) {
-                linkedPaths.getOrPut(publicKey, ::mutableSetOf) += peer.counterpartyReceiverPath
-            }
-        }
-        return linkedPaths
-    }
-
-    private suspend fun linkedReceiverPathsSnapshot(reason: String): LinkedReceiverPathsSnapshot {
-        repeat(2) { attempt ->
-            val result = runSuspendCatching { linkedReceiverPathsByPublicKey() }
-            result.getOrNull()?.let { return LinkedReceiverPathsSnapshot(it, null) }
-            val error = result.exceptionOrNull() ?: PrivatePaykitError.PrivateUnavailable
-            val suffix = if (attempt == 0) "; retrying once" else " after retry"
-            Logger.warn(
-                "Failed to inspect private Paykit links during '$reason'$suffix",
-                error,
-                context = TAG,
-            )
-            if (attempt == 1) return LinkedReceiverPathsSnapshot(emptyMap(), error)
-        }
-
-        return LinkedReceiverPathsSnapshot(emptyMap(), PrivatePaykitError.PrivateUnavailable)
-    }
-
     private fun normalizedPublicKeyBatch(publicKeys: Collection<String>): NormalizedPublicKeyBatch {
         val invalidKeys = mutableSetOf<String>()
         val normalizedKeys = publicKeys.mapNotNull { publicKey ->
@@ -1620,11 +1479,6 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }.distinct()
         return NormalizedPublicKeyBatch(normalizedKeys, invalidKeys)
-    }
-
-    private fun publishedPrivatePaymentReceiverPaths(publicKey: String): List<String> {
-        val contactState = state?.contacts?.get(publicKey) ?: return emptyList()
-        return contactState.publishedPrivatePaymentReceiverPaths.toList()
     }
 
     private suspend fun clearUnsavedContactState(savedPublicKeys: Collection<String>): Result<Unit> =
@@ -1734,7 +1588,7 @@ class PrivatePaykitRepo @Inject constructor(
         cacheStore.data.first().cleanupPending
 
     private suspend fun hasPublishedPrivateEndpoints(): Boolean =
-        ensureState().contacts.values.any { it.publishedPrivatePaymentReceiverPaths.isNotEmpty() }
+        ensureState().contacts.values.any { it.hasPublishedPrivatePaymentList }
 
     private suspend fun updateContactSharingCleanupPending(isPending: Boolean) {
         cacheStore.update { it.copy(cleanupPending = isPending) }
@@ -1785,7 +1639,7 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun settledPrivateInvoicePaymentHashes(): List<String> {
         val settled = receivedSettledPaymentHashes()
         return ensureState().contacts.values
-            .flatMap { it.localInvoices() }
+            .mapNotNull { it.localInvoice }
             .map { it.paymentHash }
             .filter(settled::contains)
     }
@@ -1834,18 +1688,14 @@ class PrivatePaykitRepo @Inject constructor(
         persistState()
     }
 
-    private fun localInvoice(publicKey: String, receiverPath: String): StoredInvoice? {
+    private fun localInvoice(publicKey: String): StoredInvoice? {
         val contactState = state?.contacts?.get(publicKey) ?: return null
-        return contactState.localInvoicesByReceiverPath[receiverPath]
+        return contactState.localInvoice
     }
 
-    private suspend fun setLocalInvoice(publicKey: String, receiverPath: String, invoice: StoredInvoice) {
+    private suspend fun setLocalInvoice(publicKey: String, invoice: StoredInvoice) {
         val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
-        contactState.localInvoicesByReceiverPath = contactState.localInvoicesByReceiverPath + (receiverPath to invoice)
-    }
-
-    private fun ContactState.localInvoices(): List<StoredInvoice> {
-        return localInvoicesByReceiverPath.values.toList()
+        contactState.localInvoice = invoice
     }
 
     private fun rememberSavedContacts(publicKeys: Collection<String>, replacing: Boolean): List<String> {

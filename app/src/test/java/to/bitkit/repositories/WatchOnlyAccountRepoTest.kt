@@ -42,6 +42,47 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class WatchOnlyAccountRepoTest : BaseUnitTest() {
     @Test
+    fun `explicit watch-only request allocates a new account instead of reusing an active account`() = test {
+        val active = account()
+        val store = mock<WatchOnlyAccountStore>()
+        val lightningService = mock<LightningService>()
+        val node = mock<Node>()
+        whenever(store.data).thenReturn(flowOf(WatchOnlyAccountData(accounts = listOf(active))))
+        whenever(store.load()).thenReturn(listOf(active))
+        whenever(store.reserveAccountIndex(any(), any())).thenReturn(2)
+        whenever(lightningService.node).thenReturn(node)
+        whenever(node.exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 2u)).thenReturn(TEST_XPUB_ALTERNATE)
+
+        val prepared = repository(store, lightningService).prepareUnsignedClaim(
+            "pubkyauth://signin?secret=new&x-bitkit-claim=watch-only-account-v1",
+            "New service account",
+        )
+
+        assertNotEquals(active.id, prepared.account.id)
+        assertEquals(2, prepared.account.accountIndex)
+        assertEquals(TEST_XPUB_ALTERNATE, prepared.account.xpub)
+        assertEquals(WatchOnlyAccountSetupState.PendingDelivery, prepared.account.setupState)
+        assertFalse(prepared.account.isTrackingEnabled)
+        verify(store).save(listOf(active, prepared.account))
+        verify(node, never()).addOnchainWalletAccount(any(), any(), any())
+    }
+
+    @Test
+    fun `authorization rejects an active account before tracking`() = test {
+        val active = account()
+        val store = mock<WatchOnlyAccountStore>()
+        val lightningService = mock<LightningService>()
+        whenever(store.data).thenReturn(flowOf(WatchOnlyAccountData(accounts = listOf(active))))
+        whenever(store.load()).thenReturn(listOf(active))
+
+        assertFailsWith<WatchOnlyAccountError.AuthorizationAccountMissing> {
+            repository(store, lightningService).beginAuthorization(active.id)
+        }
+        verify(lightningService, never()).node
+        verify(store, never()).update(any())
+    }
+
+    @Test
     fun `current wallet accounts exclude records from other wallets`() = test {
         val currentWalletAccount = account().copy(walletIndex = 1)
         val otherWalletAccount = account().copy(id = "other-account", walletIndex = 0)

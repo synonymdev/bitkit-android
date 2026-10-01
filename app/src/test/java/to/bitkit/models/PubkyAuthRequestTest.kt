@@ -1,14 +1,102 @@
 package to.bitkit.models
 
+import to.bitkit.models.PubkyAuthClaim.Item
 import java.net.URLEncoder
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PubkyAuthRequestTest {
+
+    @Test
+    fun `parse preserves each companion selection and received item order`() {
+        val expected = mapOf(
+            "watch-only-account-v1" to listOf(Item.WATCH_ONLY_ACCOUNT_V1),
+            "paykit-access-v1" to listOf(Item.PAYKIT_ACCESS_V1),
+            "paykit-access-v1.watch-only-account-v1" to listOf(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
+            "watch-only-account-v1.paykit-access-v1" to listOf(Item.WATCH_ONLY_ACCOUNT_V1, Item.PAYKIT_ACCESS_V1),
+        )
+        for ((wireValue, items) in expected) {
+            val claim = requireNotNull(
+                PubkyAuthRequest.parseBitkitClaim(
+                    authUrl("/pub/paykit/:rw", wireValue),
+                    "/pub/paykit/:rw",
+                ).getOrThrow(),
+            )
+            assertEquals(items, claim.items)
+            assertEquals(wireValue, claim.wireValue)
+            assertEquals(Item.PAYKIT_ACCESS_V1 in items, claim.includesPaykitAccess)
+            assertEquals(Item.WATCH_ONLY_ACCOUNT_V1 in items, claim.includesWatchOnlyAccount)
+        }
+    }
+
+    @Test
+    fun `constructor copies items in canonical order and rejects empty or duplicate selections`() {
+        val items = arrayOf(Item.WATCH_ONLY_ACCOUNT_V1, Item.PAYKIT_ACCESS_V1)
+        val claim = PubkyAuthClaim(*items)
+        items[0] = Item.PAYKIT_ACCESS_V1
+
+        assertEquals(listOf(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1), claim.items)
+        assertEquals("paykit-access-v1.watch-only-account-v1", claim.wireValue)
+        assertFailsWith<IllegalArgumentException> { PubkyAuthClaim() }
+        for (item in Item.entries) {
+            assertFailsWith<IllegalArgumentException> { PubkyAuthClaim(item, item) }
+        }
+    }
+
+    @Test
+    fun `parse rejects empty duplicate unknown and combined identifiers`() {
+        val invalid = listOf(
+            "", ".", ".paykit-access-v1", "paykit-access-v1.",
+            "paykit-access-v1..watch-only-account-v1",
+            "paykit-access-v1.paykit-access-v1", "watch-only-account-v1.watch-only-account-v1",
+            "paykit-access-v1.watch-only-account-v1.paykit-access-v1",
+            "unknown-v1", "paykit-access-v1.unknown-v1", "unknown-v1.watch-only-account-v1",
+            "paykit-access-and-watch-only-account-v1", "PAYKIT-ACCESS-V1", "paykit-access-v1%20",
+        )
+        for (wireValue in invalid) {
+            assertIs<PubkyAuthRequestError.UnsupportedBitkitClaim>(
+                PubkyAuthRequest.parseBitkitClaim(authUrl("/pub/paykit/:rw", wireValue), "/pub/paykit/:rw")
+                    .exceptionOrNull(),
+                wireValue,
+            )
+        }
+    }
+
+    @Test
+    fun `parse rejects duplicate mixed or encoded companion parameters`() {
+        for (claim in companionSelections()) {
+            for (other in companionSelections()) {
+                val url = authUrl("/pub/paykit/:rw", claim.wireValue) + "&x-bitkit-%63laim=${other.wireValue}"
+                assertIs<PubkyAuthRequestError.DuplicateBitkitClaim>(
+                    PubkyAuthRequest.parseBitkitClaim(url, "/pub/paykit/:rw").exceptionOrNull(),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `all companion claims require the exact Paykit scope`() {
+        val invalidCapabilities = listOf(
+            "/pub/paykit/:r",
+            "/pub/paykit/v0/:rw",
+            "/pub/:rw",
+            "/pub/paykit/:rw,/pub/other/:rw",
+            "/pub/paykit/:rw,/pub/paykit/:rw",
+        )
+        for (claim in companionSelections()) {
+            for (capabilities in invalidCapabilities) {
+                assertIs<PubkyAuthRequestError.InvalidBitkitClaimCapabilities>(
+                    PubkyAuthRequest.parseBitkitClaim(authUrl(capabilities, claim.wireValue), capabilities)
+                        .exceptionOrNull(),
+                )
+            }
+        }
+    }
 
     @Test
     fun `parse authorized signup preserves registration and authorization details`() {
@@ -57,35 +145,22 @@ class PubkyAuthRequestTest {
 
     @Test
     fun `parse recognizes watch-only account claim`() {
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val request = PubkyAuthRequest.parse(
-            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            rawUrl = authUrl(capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1).wireValue),
             clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
 
-        assertEquals(PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1, request.bitkitClaim)
+        assertEquals(PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1), request.bitkitClaim)
     }
 
     @Test
-    fun `parse recognizes watch-only account claim with reordered capabilities`() {
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES.split(",").reversed().joinToString(",")
-        val request = PubkyAuthRequest.parse(
-            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
-            clientId = "paykit.test",
-            relay = "https://httprelay.pubky.app/inbox/",
-            capabilities = capabilities,
-        ).getOrThrow()
+    fun `matcher recognizes the Paykit scope with surrounding whitespace`() {
+        val capabilities = " ${PubkyAuthClaim.REQUIRED_CAPABILITIES} "
 
-        assertEquals(PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1, request.bitkitClaim)
-    }
-
-    @Test
-    fun `matcher recognizes watch-only account claim with capability whitespace`() {
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES.replace(",", " , ")
-
-        assertTrue(PubkyAuthClaim.matchesWatchOnlyAccountCapabilities(capabilities))
+        assertTrue(PubkyAuthClaim.matchesRequiredCapabilities(capabilities))
     }
 
     @Test
@@ -134,8 +209,8 @@ class PubkyAuthRequestTest {
     }
 
     @Test
-    fun `parse rejects watch-only capability without Bitkit claim`() {
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+    fun `parse permits Paykit authorization without a companion claim`() {
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities),
             clientId = "paykit.test",
@@ -143,17 +218,17 @@ class PubkyAuthRequestTest {
             capabilities = capabilities,
         )
 
-        assertIs<PubkyAuthRequestError.MissingBitkitClaim>(result.exceptionOrNull())
+        assertEquals(null, result.getOrThrow().bitkitClaim)
     }
 
     @Test
     fun `parse rejects duplicate Bitkit claim`() {
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(
                 capabilities,
-                PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
-                PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
+                PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1).wireValue,
+                PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1).wireValue,
             ),
             clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
@@ -165,7 +240,7 @@ class PubkyAuthRequestTest {
 
     @Test
     fun `parse rejects unknown Bitkit claim`() {
-        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val capabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, "unknown-v1"),
             clientId = "paykit.test",
@@ -181,7 +256,7 @@ class PubkyAuthRequestTest {
     fun `parse rejects watch-only claim with other capabilities`() {
         val capabilities = "/pub/paykit/v0/:rw"
         val result = PubkyAuthRequest.parse(
-            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            rawUrl = authUrl(capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1).wireValue),
             clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
@@ -191,10 +266,10 @@ class PubkyAuthRequestTest {
     }
 
     @Test
-    fun `parse rejects watch-only claim without private capability`() {
-        val capabilities = "/pub/paykit/v0/bitkit/server/:rw"
+    fun `parse rejects watch-only claim without write capability`() {
+        val capabilities = "/pub/paykit/:r"
         val result = PubkyAuthRequest.parse(
-            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            rawUrl = authUrl(capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1).wireValue),
             clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
@@ -205,9 +280,9 @@ class PubkyAuthRequestTest {
 
     @Test
     fun `parse rejects watch-only claim with empty capability`() {
-        val capabilities = "${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES},"
+        val capabilities = "${PubkyAuthClaim.REQUIRED_CAPABILITIES},"
         val result = PubkyAuthRequest.parse(
-            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            rawUrl = authUrl(capabilities, PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1).wireValue),
             clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
@@ -272,8 +347,8 @@ class PubkyAuthRequestTest {
 
     @Test
     fun `displayPath removes capability separator`() {
-        val perm = PubkyAuthPermission(path = "/pub/paykit/v0/bitkit/server/", accessLevel = "rw")
-        assertEquals("/pub/paykit/v0/bitkit/server", perm.displayPath)
+        val perm = PubkyAuthPermission(path = "/pub/paykit/", accessLevel = "rw")
+        assertEquals("/pub/paykit", perm.displayPath)
     }
 
     @Test
@@ -302,6 +377,13 @@ class PubkyAuthRequestTest {
             PubkyAuthRequest.extractServiceName("/pub/staging.bitkit.to/profile.json"),
         )
     }
+
+    private fun companionSelections() = listOf(
+        PubkyAuthClaim(Item.PAYKIT_ACCESS_V1),
+        PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
+        PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
+        requireNotNull(PubkyAuthClaim.fromWireValue("watch-only-account-v1.paykit-access-v1")),
+    )
 
     private fun authUrl(capabilities: String, vararg claimValues: String): String {
         val claims = claimValues.joinToString(separator = "") {

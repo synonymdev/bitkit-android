@@ -3,8 +3,8 @@ package to.bitkit.repositories
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import coil3.ImageLoader
-import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -46,13 +46,13 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HomegateResponse
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -65,7 +65,11 @@ sealed class PubkyContactError(message: String) : AppError(message) {
     data object AlreadyExists : PubkyContactError("Contact already exists")
     data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
+    data object ActiveSubscription : PubkyContactError("Contact has an active subscription")
 }
+
+private fun Throwable.containsActiveSubscriptionError(): Boolean =
+    generateSequence(this) { it.cause }.any { it is PubkyContactError.ActiveSubscription }
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
 
@@ -94,7 +98,10 @@ class PubkyRepo @Inject constructor(
     private val initializeMutex = Mutex()
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
+    private val contactsLock = Any()
+    private var contactsRevision = 0L
     private val adoptedSourceCheckMutex = Mutex()
+    private val adoptionMutex = Mutex()
     private var isServiceInitialized = false
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
@@ -344,42 +351,56 @@ class PubkyRepo @Inject constructor(
 
     suspend fun adoptRingIdentity(pubky: String): Result<Boolean> = withContext(ioDispatcher) {
         val reference = "${SharedPubkyContract.RING_SOURCE_PREFIX}$pubky"
-        var identityInstalled = false
-        try {
-            runSuspendCatching {
-                val publicKey = initializeMutex.withLock {
-                    ensureServiceInitialized()
-                    val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
-                    val rawPublicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
-                    require(PubkyPublicKeyFormat.matches(rawPublicKey, pubky)) {
-                        "Ring credential does not match '${redacted(pubky)}'"
+        adoptionMutex.withLock {
+            var sessionInstalled = false
+            var completed = false
+            try {
+                runSuspendCatching {
+                    val publicKey = initializeMutex.withLock {
+                        ensureServiceInitialized()
+                        val secretKeyHex = sharedPubkyClient.ringCredential(pubky).getOrThrow()
+                        val rawPublicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
+                        require(PubkyPublicKeyFormat.matches(rawPublicKey, pubky)) {
+                            "Ring credential does not match '${redacted(pubky)}'"
+                        }
+                        keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)
+                        signInOrSignUpAdoptedIdentity(secretKeyHex, rawPublicKey)
+                        sessionInstalled = true
+
+                        val prefixedPublicKey = rawPublicKey.ensurePubkyPrefix()
+                        clearProfileIfIdentityChanged(prefixedPublicKey)
+                        _publicKey.update { prefixedPublicKey }
+                        notifyBackupStateChanged()
+                        Logger.info("Adopted ring identity for '${redacted(rawPublicKey)}'", context = TAG)
+                        prefixedPublicKey
                     }
-                    keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)
-                    signInOrSignUpAdoptedIdentity(secretKeyHex, rawPublicKey)
 
-                    val prefixedPublicKey = rawPublicKey.ensurePubkyPrefix()
-                    clearProfileIfIdentityChanged(prefixedPublicKey)
-                    _publicKey.update { prefixedPublicKey }
-                    identityInstalled = true
-                    notifyBackupStateChanged()
-                    Logger.info("Adopted ring identity for '${redacted(rawPublicKey)}'", context = TAG)
-                    prefixedPublicKey
-                }
+                    loadProfile()
+                    loadContacts()
 
-                loadProfile()
-                loadContacts()
+                    initializeMutex.withLock {
+                        check(_publicKey.value == publicKey) { "Adopted Pubky identity changed before setup completed" }
+                        val hasProfile = _profile.value?.publicKey == publicKey
+                        runSuspendCatching { settingsStore.setPubkyProfileSetupPending(!hasProfile) }
+                            .onFailure { Logger.warn("Failed to save pending profile setup", it, context = TAG) }
+                        completed = true
+                        hasProfile
+                    }
+                }.onFailure { clearAdoptedSourceIfMatches(reference) }
+            } catch (error: CancellationException) {
+                if (!completed) rollBackInterruptedAdoption(reference, sessionInstalled)
+                throw error
+            }
+        }
+    }
 
-                initializeMutex.withLock {
-                    check(_publicKey.value == publicKey) { "Adopted Pubky identity changed before setup completed" }
-                    val hasProfile = _profile.value?.publicKey == publicKey
-                    runSuspendCatching { settingsStore.setPubkyProfileSetupPending(!hasProfile) }
-                        .onFailure { Logger.warn("Failed to save pending profile setup", it, context = TAG) }
-                    hasProfile
-                }
-            }.onFailure { clearAdoptedSourceIfMatches(reference) }
-        } catch (error: CancellationException) {
-            if (!identityInstalled) clearAdoptedSourceIfMatches(reference)
-            throw error
+    private suspend fun rollBackInterruptedAdoption(reference: String, sessionInstalled: Boolean) {
+        withContext(NonCancellable + ioDispatcher) {
+            initializeMutex.withLock {
+                if (keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) != reference) return@withLock
+                if (sessionInstalled && !discardAbandonedSession()) clearLocalState()
+                clearAdoptedSourceIfMatches(reference)
+            }
         }
     }
 
@@ -399,7 +420,7 @@ class PubkyRepo @Inject constructor(
                 val hasIdentityRecord = runSuspendCatching { pubkyService.hasIdentityRecord(publicKey) }
                     .onFailure { Logger.warn("Failed to check ring identity record", it, context = TAG) }
                     .getOrNull()
-                if (hasIdentityRecord != false) throw it
+                if (hasIdentityRecord != false || hasNewSession(previousSession)) throw it
                 Logger.warn("Signing up ring identity without a published record", it, context = TAG)
                 val homegate = fetchHomegateSignupCode()
                 pubkyService.signUp(secretKeyHex, homegate.homeserverPubky, homegate.signupCode)
@@ -408,17 +429,18 @@ class PubkyRepo @Inject constructor(
         } finally {
             if (!completed) {
                 withContext(NonCancellable + ioDispatcher) {
-                    val installedSession = runSuspendCatching {
-                        val currentSession = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
-                        currentSession != null && currentSession != previousSession
-                    }.onFailure {
-                        Logger.warn("Failed to identify incomplete adopted Pubky session", it, context = TAG)
-                    }.getOrDefault(false)
-                    if (installedSession) discardAbandonedSession()
+                    if (hasNewSession(previousSession)) discardAbandonedSession()
                 }
             }
         }
     }
+
+    private suspend fun hasNewSession(previousSession: String?): Boolean = runSuspendCatching {
+        val currentSession = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+        currentSession != null && currentSession != previousSession
+    }.onFailure {
+        Logger.warn("Failed to identify incomplete adopted Pubky session", it, context = TAG)
+    }.getOrDefault(false)
 
     private suspend fun clearProfileIfIdentityChanged(publicKey: String) {
         if (_publicKey.value == publicKey) return
@@ -614,14 +636,15 @@ class PubkyRepo @Inject constructor(
         discardAbandonedSession()
     }
 
-    private suspend fun discardAbandonedSession() {
+    private suspend fun discardAbandonedSession(): Boolean {
         val revocationError = runSuspendCatching {
             withContext(NonCancellable + ioDispatcher) {
                 pubkyService.signOut()
             }
-        }.exceptionOrNull() ?: return
+        }.exceptionOrNull() ?: return false
 
         Logger.warn("Failed to revoke abandoned Pubky session", revocationError, context = TAG)
+        var clearedLocalState = false
         runSuspendCatching {
             withContext(NonCancellable + ioDispatcher) {
                 pubkyService.forgetSessionAccess()
@@ -631,7 +654,9 @@ class PubkyRepo @Inject constructor(
             withContext(NonCancellable + ioDispatcher) {
                 clearLocalState(publicPaykitCleanupPending = true)
             }
+            clearedLocalState = true
         }
+        return clearedLocalState
     }
 
     suspend fun uploadAvatar(imageBytes: ByteArray): Result<String> = runSuspendCatching {
@@ -717,7 +742,7 @@ class PubkyRepo @Inject constructor(
         }
         pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
         notifyBackupStateChanged()
-        _contacts.update { emptyList() }
+        updateContacts { emptyList() }
         markContactsLoaded()
         Logger.info("Deleted all contacts", context = TAG)
     }
@@ -776,41 +801,52 @@ class PubkyRepo @Inject constructor(
         _isLoadingContacts.update { true }
         var shouldMarkLoadCompleted = false
         try {
-            runSuspendCatching {
-                withContext(ioDispatcher) {
-                    val records = pubkyService.contactRecords()
-                    val overrides = pubkyStore.data.first().contactProfileOverrides
+            var reload: Boolean
+            do {
+                val revision = synchronized(contactsLock) { contactsRevision }
+                reload = false
+                runSuspendCatching {
+                    withContext(ioDispatcher) {
+                        val records = pubkyService.contactRecords()
+                        val overrides = pubkyStore.data.first().contactProfileOverrides
 
-                    coroutineScope {
-                        records.map { record ->
-                            async {
-                                runSuspendCatching {
-                                    contactProfile(record.publicKey, record.label, record.profile, overrides)
-                                }.onFailure {
-                                    Logger.warn(
-                                        "Failed to load contact '${redacted(record.publicKey)}'",
-                                        it,
-                                        context = TAG,
-                                    )
-                                }.getOrElse {
-                                    PubkyProfile.placeholder(record.publicKey.ensurePubkyPrefix())
+                        coroutineScope {
+                            records.map { record ->
+                                async {
+                                    runSuspendCatching {
+                                        contactProfile(record.publicKey, record.label, record.profile, overrides)
+                                    }.onFailure {
+                                        Logger.warn(
+                                            "Failed to load contact '${redacted(record.publicKey)}'",
+                                            it,
+                                            context = TAG,
+                                        )
+                                    }.getOrElse {
+                                        PubkyProfile.placeholder(record.publicKey.ensurePubkyPrefix())
+                                    }
                                 }
-                            }
-                        }.awaitAll().sortedBy { it.name.lowercase() }
+                            }.awaitAll().sortedBy { it.name.lowercase() }
+                        }
                     }
+                }.onSuccess { loadedContacts ->
+                    if (_publicKey.value != pk) {
+                        Logger.debug("Skipped stale contacts load for '${redacted(pk)}'", context = TAG)
+                        return@onSuccess
+                    }
+                    synchronized(contactsLock) {
+                        if (contactsRevision != revision) {
+                            reload = true
+                            return@onSuccess
+                        }
+                        _contacts.update { loadedContacts }
+                    }
+                    markContactsLoaded()
+                    shouldMarkLoadCompleted = true
+                }.onFailure {
+                    shouldMarkLoadCompleted = _publicKey.value == pk
+                    Logger.error("Failed to load contacts", it, context = TAG)
                 }
-            }.onSuccess { loadedContacts ->
-                if (_publicKey.value != pk) {
-                    Logger.debug("Skipped stale contacts load for '${redacted(pk)}'", context = TAG)
-                    return@onSuccess
-                }
-                _contacts.update { loadedContacts }
-                markContactsLoaded()
-                shouldMarkLoadCompleted = true
-            }.onFailure {
-                shouldMarkLoadCompleted = _publicKey.value == pk
-                Logger.error("Failed to load contacts", it, context = TAG)
-            }
+            } while (reload && _publicKey.value == pk)
         } finally {
             _isLoadingContacts.update { false }
             loadContactsMutex.unlock()
@@ -844,23 +880,17 @@ class PubkyRepo @Inject constructor(
             val profile = existingProfile?.copy(publicKey = prefixedKey)
                 ?: resolveContactProfile(prefixedKey).getOrThrow()
                 ?: PubkyProfile.placeholder(prefixedKey)
-            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
-            _contacts.update { current ->
+            pubkyService.saveContact(
+                prefixedKey,
+                profile.name,
+                restorePrivateConnection = true,
+            )
+            updateContacts { current ->
                 (current.filter { it.publicKey != prefixedKey } + profile)
                     .sortedBy { it.name.lowercase() }
             }
             markContactsLoaded()
             Logger.info("Added contact '${redacted(prefixedKey)}'", context = TAG)
-        }
-    }
-
-    suspend fun refreshContactReceiverPaths(publicKey: String): Result<Unit> = runSuspendCatching {
-        withContext(ioDispatcher) {
-            val prefixedKey = requireAddableContactPublicKey(publicKey = publicKey, allowExisting = true)
-            val contact = _contacts.value.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, prefixedKey) }
-                ?: return@withContext
-            pubkyService.saveContact(prefixedKey, contact.name, relevantReceiverPaths(prefixedKey))
-            Logger.info("Refreshed contact receiver paths for '${redacted(prefixedKey)}'", context = TAG)
         }
     }
 
@@ -886,7 +916,7 @@ class PubkyRepo @Inject constructor(
             )
             pubkyService.saveContact(prefixedKey, name)
             upsertContactProfileOverride(updatedProfile)
-            _contacts.update { current ->
+            updateContacts { current ->
                 current.map { if (it.publicKey == prefixedKey) updatedProfile else it }
                     .sortedBy { it.name.lowercase() }
             }
@@ -900,10 +930,13 @@ class PubkyRepo @Inject constructor(
             val prefixedKey = publicKey.ensurePubkyPrefix()
             pubkyService.removeContact(prefixedKey)
             removeContactProfileOverride(prefixedKey)
-            _contacts.update { current -> current.filter { it.publicKey != prefixedKey } }
+            updateContacts { current -> current.filter { it.publicKey != prefixedKey } }
             markContactsLoaded()
             Logger.info("Removed contact '${redacted(prefixedKey)}'", context = TAG)
         }
+    }.recoverCatching {
+        if (it.containsActiveSubscriptionError()) throw PubkyContactError.ActiveSubscription
+        throw it
     }
 
     suspend fun importContacts(publicKeys: List<String>): Result<Unit> = runSuspendCatching {
@@ -915,7 +948,11 @@ class PubkyRepo @Inject constructor(
                         runSuspendCatching {
                             val profile = resolveContactProfile(prefixedKey).getOrThrow()
                                 ?: PubkyProfile.placeholder(prefixedKey)
-                            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
+                            pubkyService.saveContact(
+                                prefixedKey,
+                                profile.name,
+                                restorePrivateConnection = true,
+                            )
                             profile
                         }.onFailure {
                             Logger.warn("Failed to import contact '${redacted(prefixedKey)}'", it, context = TAG)
@@ -923,7 +960,7 @@ class PubkyRepo @Inject constructor(
                     }
                 }.awaitAll().filterNotNull()
             }
-            _contacts.update { current ->
+            updateContacts { current ->
                 val existing = current.map { it.publicKey }.toSet()
                 (current + imported.filter { it.publicKey !in existing })
                     .sortedBy { it.name.lowercase() }
@@ -1072,17 +1109,21 @@ class PubkyRepo @Inject constructor(
         unsignedPayload: ByteArray,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
+            val claim = PubkyAuthRequest.parseBitkitClaim(
+                authUrl,
+                PubkyAuthClaim.REQUIRED_CAPABILITIES,
+            ).getOrThrow() ?: throw PubkyAuthRequestError.MissingBitkitClaim
             val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
                 "No secret key available — use Ring to manage authorizations"
             }
             pubkyService.approveAuthWithCompanionClaim(
                 authUrl = authUrl,
-                expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
+                expectedCapabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES,
                 approvedClientId = approvedClientId,
                 secretKeyHex = secretKeyHex,
                 claim = PubkyAuthCompanionClaim(
                     queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
-                    claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
+                    claimType = claim.wireValue,
                     unsignedPayload = unsignedPayload,
                 ),
             )
@@ -1286,7 +1327,7 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private fun profileFromResolution(resolution: ContactProfileResolution): PubkyProfile {
+    private fun profileFromResolution(resolution: ProfileResolution): PubkyProfile {
         val prefixedKey = resolution.publicKey.ensurePubkyPrefix()
         resolution.paykitProfile?.let {
             return PubkyProfile.fromPaykitProfile(prefixedKey, it)
@@ -1300,14 +1341,6 @@ class PubkyRepo @Inject constructor(
             imageUrl = resolution.imageUri,
         )
     }
-
-    private suspend fun relevantReceiverPaths(publicKey: String): List<String> =
-        runSuspendCatching {
-            pubkyService.discoverRelevantReceiverPaths(publicKey)
-        }.onFailure {
-            Logger.warn("Failed to discover Paykit receivers for '${redacted(publicKey)}'", it, context = TAG)
-        }.getOrNull()
-            ?: listOf(PaykitReceiverPaths.WALLET)
 
     private suspend fun upsertContactProfileOverride(profile: PubkyProfile) {
         val prefixedKey = profile.publicKey.ensurePubkyPrefix()
@@ -1407,11 +1440,18 @@ class PubkyRepo @Inject constructor(
         }
         _publicKey.update { null }
         _profile.update { null }
-        _contacts.update { emptyList() }
+        updateContacts { emptyList() }
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
         if (clearRestorationFailure) _sessionRestorationFailed.update { false }
+    }
+
+    private fun updateContacts(transform: (List<PubkyProfile>) -> List<PubkyProfile>) {
+        synchronized(contactsLock) {
+            contactsRevision++
+            _contacts.update(transform)
+        }
     }
 
     private fun markContactsLoaded() {
@@ -1446,20 +1486,11 @@ class PubkyRepo @Inject constructor(
         settingsStore.setPubkyProfileSetupPending(false)
     }
 
-    private fun requireAddableContactPublicKey(publicKey: String, allowExisting: Boolean = false): String {
-        val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
-        return requireValidAddableContactPublicKey(prefixedKey, allowExisting)
-    }
-
     private fun requireCanonicalAddableContactPublicKey(
         publicKey: String,
         allowExisting: Boolean = false,
     ): String {
         val prefixedKey = PubkyPublicKeyFormat.canonicalized(publicKey)
-        return requireValidAddableContactPublicKey(prefixedKey, allowExisting)
-    }
-
-    private fun requireValidAddableContactPublicKey(prefixedKey: String?, allowExisting: Boolean): String {
         contactValidationError(prefixedKey, allowExisting)?.let { throw it }
         return checkNotNull(prefixedKey) { "Normalized pubky key is required" }
     }

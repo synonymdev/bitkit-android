@@ -179,6 +179,7 @@ data class SettingsData(
     val isBiometricEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = Env.isDebug,
+    val disableAllToasts: Boolean = false,
     val isSavingsSwapEnabled: Boolean = false,
     val showWidgets: Boolean = true,
     val lastUsedTags: List<String> = emptyList(),

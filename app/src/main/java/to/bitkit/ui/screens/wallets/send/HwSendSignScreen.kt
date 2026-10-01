@@ -44,6 +44,7 @@ fun HwSendSignScreen(
     satsPerVByte: ULong,
     viewModel: HwSendViewModel,
     prepareContactPayment: suspend () -> Boolean,
+    authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
     onBack: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -72,14 +73,21 @@ fun HwSendSignScreen(
         isSigning = uiState.isSigning,
         hasPendingBroadcast = uiState.hasPendingBroadcast,
         onBack = onBackRequest,
-        onOpenConnect = { viewModel.signAndBroadcast(request, prepareContactPayment) },
+        onOpenConnect = {
+            viewModel.signAndBroadcast(request, prepareContactPayment, authorizeContactPayment)
+        },
     )
 
     if (uiState.isPassphraseRequired) {
         HwPassphrasePromptSheet(
             isVerifying = uiState.isVerifyingPassphrase,
             onSubmit = { passphrase ->
-                viewModel.submitPassphrase(request, passphrase, prepareContactPayment)
+                viewModel.submitPassphrase(
+                    request,
+                    passphrase,
+                    prepareContactPayment,
+                    authorizeContactPayment,
+                )
             },
             onDismiss = viewModel::dismissPassphrase,
         )

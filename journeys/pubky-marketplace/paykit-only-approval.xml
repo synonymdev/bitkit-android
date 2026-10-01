@@ -1,0 +1,19 @@
+<journey name="paykit only approval">
+  <description>
+    Verifies explicit Paykit-only consent and cancellation without allocating a Bitcoin account.
+    Precondition: an isolated wallet with a Bitkit-generated Pubky identity or an available Ring
+    root secret. The fixture supplies a valid fresh auth URL with exactly /pub/paykit/:rw and
+    x-bitkit-claim=paykit-access-v1. Consent and cancellation require no live authorization relay.
+    Successful delivery is a separate fixture-backed check described in the suite README.
+  </description>
+  <actions>
+    <action>Record the current wallet's watch-only account names, derivation paths, and tracking settings</action>
+    <action>Open the fixture Paykit-only auth URL in the wallet</action>
+    <action>Verify the authorization screen shows exactly /pub/paykit with READ, WRITE access</action>
+    <action>Verify Paykit access (id "PubkyAuthPaykitAccess") describes access to private Paykit data and sending Paykit messages, without wallet spending keys.</action>
+    <action>Verify watch-only consent (id "PubkyAuthWatchOnlyConsent") is not shown</action>
+    <action>Tap Cancel on the authorization screen</action>
+    <action>Verify the authorization sheet is dismissed</action>
+    <action>Verify the current wallet's watch-only accounts and tracking settings are unchanged</action>
+  </actions>
+</journey>

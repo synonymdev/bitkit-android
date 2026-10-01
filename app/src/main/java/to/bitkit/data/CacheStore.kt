@@ -59,6 +59,14 @@ class CacheStore internal constructor(
         store.updateData { it.copy(onchainAddress = address) }
     }
 
+    suspend fun setActivityContactDetached(activityId: String, walletId: String, detached: Boolean) {
+        val id = scopedActivityId(walletId, activityId)
+        store.updateData {
+            val contacts = it.detachedActivityContacts
+            it.copy(detachedActivityContacts = if (detached) contacts + id else contacts - id)
+        }
+    }
+
     suspend fun saveBolt11(bolt11: String, paymentHash: String) {
         store.updateData { it.copy(bolt11 = bolt11, bolt11PaymentHash = paymentHash) }
     }
@@ -171,6 +179,7 @@ data class AppCacheData(
     val balance: BalanceState? = null,
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
     val deletedActivities: List<String> = listOf(),
+    val detachedActivityContacts: Set<String> = emptySet(),
     val pendingBoostActivities: List<PendingBoostActivity> = listOf(),
     val backgroundReceive: NewTransactionSheetDetails? = null,
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
@@ -180,6 +189,9 @@ data class AppCacheData(
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
 ) {
+    fun isContactDetached(activityId: String, walletId: String): Boolean =
+        scopedActivityId(walletId, activityId) in detachedActivityContacts
+
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||
             walletId == WalletScope.default && activityId in deletedActivities

@@ -19,6 +19,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -45,6 +46,7 @@ class WipeWalletUseCase @Inject constructor(
     private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
+    private val paykitSdkService: PaykitSdkService,
 ) {
     private val wipeMutex = Mutex()
 
@@ -58,10 +60,12 @@ class WipeWalletUseCase @Inject constructor(
         lightningRepo.setWiping(true)
         val result = try {
             runSuspendCatching {
-                stopNode().getOrThrow()
-                cleanupRemote()
-                wipeLocal(walletIndex, resetWalletState).getOrThrow()
-                onSuccess()
+                paykitSdkService.withWalletWipe {
+                    stopNode().getOrThrow()
+                    cleanupRemote()
+                    wipeLocal(walletIndex, resetWalletState).getOrThrow()
+                    onSuccess()
+                }
             }
         } finally {
             lightningRepo.setWiping(false)

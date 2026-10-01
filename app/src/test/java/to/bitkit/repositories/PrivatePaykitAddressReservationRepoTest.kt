@@ -17,11 +17,12 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
     companion object {
@@ -58,22 +59,6 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
             coreService = coreService,
             lightningRepo = lightningRepo,
         )
-    }
-
-    @Test
-    fun `wallet assignment key keeps bare public key`() {
-        val key = ContactAssignmentKey(CONTACT_KEY, PaykitReceiverPaths.WALLET)
-
-        assertEquals(CONTACT_KEY, key.encoded())
-        assertEquals(CONTACT_KEY, ContactAssignmentKey.publicKeyOf(key.encoded()))
-    }
-
-    @Test
-    fun `server assignment key includes receiver path`() {
-        val key = ContactAssignmentKey(CONTACT_KEY, PaykitReceiverPaths.SERVER)
-
-        assertEquals("$CONTACT_KEY#${PaykitReceiverPaths.SERVER}", key.encoded())
-        assertEquals(CONTACT_KEY, ContactAssignmentKey.publicKeyOf(key.encoded()))
     }
 
     @Test
@@ -185,7 +170,7 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `clearContactAssignment removes private address attribution history`() = test {
+    fun `clearContactAssignment invalidates attribution even if persistence fails`() = test {
         reservationData.value = PrivatePaykitReservationData(
             contactAssignments = mapOf(
                 CONTACT_KEY to PrivatePaykitStoredAssignmentData(
@@ -205,9 +190,29 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
             ),
         )
 
-        sut.clearContactAssignment(CONTACT_KEY)
+        assertEquals(CONTACT_KEY, sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+        val version = sut.attributionVersion
+        whenever(reservationStore.update(any())).thenThrow(IllegalStateException("disk"))
+        assertFailsWith<IllegalStateException> { sut.clearContactAssignment(CONTACT_KEY) }
 
+        assertTrue(sut.attributionVersion > version)
         assertNull(sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+    }
+
+    @Test
+    fun `reservation derivation failure propagates and remains retryable`() = test {
+        reservationData.value = PrivatePaykitReservationData(
+            contactAssignments = mapOf(
+                CONTACT_KEY to PrivatePaykitStoredAssignmentData(addressType = "nativeSegwit", receiveIndex = 1),
+            ),
+        )
+        whenever(lightningRepo.addressInfoForType(any(), any())).thenReturn(
+            Result.failure(IllegalStateException("unavailable")),
+            Result.success(AddressDerivationInfo(address = PRIVATE_ADDRESS, index = 1)),
+        )
+
+        assertFailsWith<IllegalStateException> { sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS) }
+        assertEquals(CONTACT_KEY, sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
     }
 
     @Test
