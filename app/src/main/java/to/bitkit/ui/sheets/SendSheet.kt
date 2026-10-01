@@ -24,7 +24,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
@@ -112,12 +115,15 @@ fun SendSheet(
         hasAnyChannels && lightningState.channels.none { it.isUsable }
     }
 
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val isWaitingForUsableChannel = shouldShowSyncOverlay && lightningState.nodeLifecycleState.isRunning()
     LaunchedEffect(isWaitingForUsableChannel) {
         if (!isWaitingForUsableChannel) return@LaunchedEffect
-        while (isActive) {
-            walletViewModel.refreshChannelsAndPeers()
-            delay(CHANNELS_REFRESH_INTERVAL)
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                walletViewModel.refreshChannelsAndPeers()
+                delay(CHANNELS_REFRESH_INTERVAL)
+            }
         }
     }
 

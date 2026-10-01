@@ -1418,7 +1418,6 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    /** A peer reconnecting makes a channel usable again without any node event, so the node is polled. */
     private suspend fun awaitUsableChannels(): LightningState? = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
         refreshChannelsAndPeers()
         while (!_lightningState.value.shouldStopWaitingForUsableChannels()) {
@@ -1673,14 +1672,21 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    /** Re-reads channels and peers from the running node, leaving balances as they are (see [syncState]). */
-    suspend fun refreshChannelsAndPeers() = withContext(bgDispatcher) {
-        if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext
-        _lightningState.update {
-            it.copy(
-                peers = getPeers().orEmpty().toImmutableList(),
-                channels = getChannels().orEmpty().toImmutableList(),
-            )
+    /**
+     * Re-reads channels and peers from the running node, leaving balances as they are (see [syncState]).
+     * A peer reconnecting makes a channel usable again without any node event, so callers poll this.
+     */
+    suspend fun refreshChannelsAndPeers(): Result<Unit> = withContext(bgDispatcher) {
+        if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
+        runCatching {
+            _lightningState.update {
+                it.copy(
+                    peers = getPeers().orEmpty().toImmutableList(),
+                    channels = getChannels().orEmpty().toImmutableList(),
+                )
+            }
+        }.onFailure {
+            Logger.warn("Failed to re-read channels and peers", it, context = TAG)
         }
     }
 

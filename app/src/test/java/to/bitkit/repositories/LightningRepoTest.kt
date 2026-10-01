@@ -90,14 +90,20 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LargeClass")
 class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
-        private const val CHANNELS_USABLE_POLL_DELAY_MS = 1_000L
-        private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
+
+        /** Mirrors the interval at which `LightningRepo.waitForUsableChannels` re-reads the channels. */
+        private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
+
+        /** Mirrors how long `LightningRepo.waitForUsableChannels` polls before giving up. */
+        private val CHANNELS_USABLE_TIMEOUT = 15.seconds
+
         private const val BACKGROUND_STOP_DELAY_MS = 5_000L
 
         /** Mirrors the bounded start retry delay `LightningRepo.startNode` waits before its one retry. */
@@ -1304,24 +1310,37 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
 
         val wait = async { sut.waitForUsableChannels() }
-        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY_MS * 3)
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY * 3)
         assertFalse(wait.isCompleted)
 
         whenever(lightningService.channels).thenReturn(
             listOf(notUsable.copy(isUsable = true, nextOutboundHtlcLimitMsat = 2_000_000u)),
         )
-        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY_MS)
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY)
         testScheduler.runCurrent()
         assertTrue(wait.isCompleted)
 
         whenever(lightningService.channels).thenReturn(listOf(notUsable))
         sut.syncState()
         val timedOut = async { sut.waitForUsableChannels() }
-        testScheduler.advanceTimeBy(CHANNELS_USABLE_TIMEOUT_MS - 1)
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_TIMEOUT - 1.milliseconds)
         assertFalse(timedOut.isCompleted)
-        testScheduler.advanceTimeBy(1)
+        testScheduler.advanceTimeBy(1.milliseconds)
         testScheduler.runCurrent()
         assertTrue(timedOut.isCompleted)
+    }
+
+    @Test
+    fun `refreshChannelsAndPeers returns a failure and keeps the last channels when a read fails`() = test {
+        val channel = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenThrow(IllegalStateException("read failed"))
+
+        val result = sut.refreshChannelsAndPeers()
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf(channel), sut.lightningState.value.channels)
     }
 
     @Test

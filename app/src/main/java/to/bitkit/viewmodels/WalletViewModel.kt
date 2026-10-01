@@ -489,7 +489,9 @@ class WalletViewModel @Inject constructor(
             }
     }
 
-    suspend fun refreshChannelsAndPeers() = lightningRepo.refreshChannelsAndPeers()
+    suspend fun refreshChannelsAndPeers() {
+        lightningRepo.refreshChannelsAndPeers()
+    }
 
     /**
      * Refresh wallet balances and channel state from the running node without a chain sync, so a
