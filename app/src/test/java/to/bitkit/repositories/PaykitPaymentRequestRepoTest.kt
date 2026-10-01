@@ -576,6 +576,59 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `acceptance cleanup removes only confirmed finished requests`() = test {
+        val records = listOf(
+            paymentRequestRecord(id = "paid", state = PaymentRequestLifecycleState.PROOF_SUBMITTED),
+            paymentRequestRecord(id = "canceled", state = PaymentRequestLifecycleState.CANCELED),
+            paymentRequestRecord(id = "rejected", state = PaymentRequestLifecycleState.REJECTED),
+            paymentRequestRecord(
+                id = "retry",
+                state = PaymentRequestLifecycleState.ACCEPTED,
+                expiresAt = "2020-01-01T00:00:00Z",
+            ),
+            paymentRequestRecord(id = "recovery", state = PaymentRequestLifecycleState.RECOVERY_REQUIRED),
+            paymentRequestRecord(id = "conflict", state = PaymentRequestLifecycleState.INVALID_CONFLICT),
+        )
+        val ids = records.mapTo(mutableSetOf()) { PaykitPaymentRequestId(it.paymentRequestId, it.counterparty) } +
+            PaykitPaymentRequestId("missing", COUNTERPARTY)
+        val finished = setOf("paid", "canceled", "rejected")
+            .mapTo(mutableSetOf()) { PaykitPaymentRequestId(it, COUNTERPARTY) }
+        whenever(presentationStore.loadAcceptedOneTimeIds(LOCAL_IDENTITY)).thenReturn(ids)
+        sut.clear()
+        sut.activate(LOCAL_IDENTITY)
+        sut.refresh().getOrThrow()
+        verify(presentationStore, never()).removeAcceptedOneTimeIds(any(), any())
+
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(records)
+        whenever(presentationStore.removeAcceptedOneTimeIds(LOCAL_IDENTITY, finished)).thenReturn(ids - finished)
+        sut.refresh().getOrThrow()
+        verify(presentationStore).removeAcceptedOneTimeIds(LOCAL_IDENTITY, finished)
+        val retry = sut.pendingRequests.value.single()
+        assertEquals("retry", retry.paymentRequestId)
+        sut.ensurePaymentAllowed(retry).getOrThrow()
+        sut.refresh().getOrThrow()
+        verify(presentationStore, times(1)).removeAcceptedOneTimeIds(any(), any())
+    }
+
+    @Test
+    fun `failed acceptance cleanup retains ids and retries`() = test {
+        val record = paymentRequestRecord(state = PaymentRequestLifecycleState.PROOF_SUBMITTED)
+        val ids = setOf(PaykitPaymentRequestId(record.paymentRequestId, record.counterparty))
+        whenever(presentationStore.loadAcceptedOneTimeIds(LOCAL_IDENTITY)).thenReturn(ids)
+        whenever(presentationStore.removeAcceptedOneTimeIds(LOCAL_IDENTITY, ids))
+            .thenThrow(IllegalStateException("disk")).thenReturn(emptySet())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.clear()
+        sut.activate(LOCAL_IDENTITY)
+
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        sut.refresh().getOrThrow()
+        sut.refresh().getOrThrow()
+        verify(presentationStore, times(2)).removeAcceptedOneTimeIds(LOCAL_IDENTITY, ids)
+    }
+
+    @Test
     fun `final authorization rechecks identity after asynchronous peer lookup`() = test {
         restoreAcceptedRequest()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))

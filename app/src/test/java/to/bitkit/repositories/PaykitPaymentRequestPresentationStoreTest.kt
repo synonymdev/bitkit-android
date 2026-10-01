@@ -8,6 +8,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -123,6 +124,32 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `acceptance cleanup removes only specified ids from the current stored identity`() = test {
+        val keychain = mock<Keychain>()
+        val key = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
+        var stored: String? = null
+        whenever(keychain.loadString(key)).thenAnswer { stored }
+        whenever { keychain.upsertString(eq(key), any()) }.thenAnswer {
+            stored = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val finished = PaykitPaymentRequestId("finished", COUNTERPARTY)
+        val live = PaykitPaymentRequestId("live", COUNTERPARTY)
+        sut.addAcceptedOneTimeId(IDENTITY, finished)
+        sut.addAcceptedOneTimeId(COUNTERPARTY, finished)
+        sut.addAcceptedOneTimeId(IDENTITY, live)
+
+        assertEquals(setOf(live), sut.removeAcceptedOneTimeIds(IDENTITY, setOf(finished)))
+        val reopened = PaykitPaymentRequestPresentationStore(keychain)
+        assertEquals(setOf(live), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(finished), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
+        clearInvocations(keychain)
+        reopened.removeAcceptedOneTimeIds(IDENTITY, setOf(finished))
+        verify(keychain, never()).upsertString(any(), any())
+    }
+
+    @Test
     fun `unreadable accepted one time ownership is preserved and fails closed`() = test {
         val keychain = mock<Keychain>()
         val acceptedKey = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
@@ -132,6 +159,9 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
         assertFailsWith<PaykitPaymentStateUnreadableError> { sut.loadAcceptedOneTimeIds(IDENTITY) }
         assertFailsWith<PaykitPaymentStateUnreadableError> {
             sut.addAcceptedOneTimeId(IDENTITY, PaykitPaymentRequestId("request", COUNTERPARTY))
+        }
+        assertFailsWith<PaykitPaymentStateUnreadableError> {
+            sut.removeAcceptedOneTimeIds(IDENTITY, setOf(PaykitPaymentRequestId("request", COUNTERPARTY)))
         }
         verify(keychain, never()).upsertString(any(), any())
     }
