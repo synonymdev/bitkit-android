@@ -47,7 +47,15 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
     }
 
     private val mutex = Mutex()
+
+    @Volatile
+    internal var attributionVersion = 0L
+        private set
     private var ledger: PrivatePaykitReservationData? = null
+        set(value) {
+            if (field != value) attributionVersion++
+            field = value
+        }
 
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
@@ -153,7 +161,7 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
         assignments.firstOrNull { (_, assignment) ->
             assignment.addressType == addressType &&
-                (assignment.address == address || resolvedAddress(assignment).getOrNull() == address)
+                (assignment.address == address || resolvedAddress(assignment).getOrThrow() == address)
         }?.first
     }
 

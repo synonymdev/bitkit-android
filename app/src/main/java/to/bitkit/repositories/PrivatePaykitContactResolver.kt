@@ -20,6 +20,12 @@ class PrivatePaykitContactResolver @Inject constructor(
     internal val receivedPaymentContacts: PaykitReceivedPaymentContacts
         get() = paymentRequestRepo.get().receivedPaymentContacts
 
+    internal val receivedPaymentContactsGeneration: Long
+        get() = paymentRequestRepo.get().receivedPaymentContactsGeneration
+
+    internal val reservationVersion: Long
+        get() = addressReservationRepo.get().attributionVersion
+
     suspend fun contactPublicKeyForPrivateInvoicePaymentHash(paymentHash: String): String? =
         withContext(ioDispatcher) {
             if (paymentHash.isBlank()) return@withContext null

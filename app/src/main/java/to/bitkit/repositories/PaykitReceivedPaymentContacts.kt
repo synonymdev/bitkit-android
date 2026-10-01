@@ -10,7 +10,8 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.toLdkNetwork
 
-internal class PaykitReceivedPaymentContacts private constructor(
+@ConsistentCopyVisibility
+internal data class PaykitReceivedPaymentContacts private constructor(
     private val addresses: Map<String, Set<String>>,
     private val paymentHashes: Map<String, Set<String>>,
 ) {

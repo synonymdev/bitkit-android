@@ -6745,6 +6745,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    @Suppress("LongMethod")
     fun `failed LNURL request callback releases preparation and retry reopens request`() = test {
         val request = paymentRequest()
         val privateContext = privatePaymentContext(7uL)
@@ -6790,6 +6791,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        inOrder(paykitPaymentRequestRepo, lightningRepo).apply {
+            verify(paykitPaymentRequestRepo).accept(request)
+            verify(lightningRepo).fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(request.amountSats), null)
+        }
         verify(toastManager, never()).enqueue(any())
 
         pendingPaykitPaymentRequests.value = emptyList()

@@ -31,6 +31,7 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
 ) {
     companion object {
         private val KEY = Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name
+        private val ACCEPTED_KEY = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
     }
 
     private val mutex = Mutex()
@@ -71,6 +72,28 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
             val state = current.copy(idsByIdentity = current.idsByIdentity + (normalizedIdentity to ids.toList()))
             keychain.upsertString(KEY, Json.encodeToString(state))
         }
+    }
+
+    /** Local execution ownership is never exported or imported by wallet backups. */
+    fun loadAcceptedOneTimeIds(identity: String): Set<PaykitPaymentRequestId> {
+        val normalizedIdentity = PubkyPublicKeyFormat.normalized(identity) ?: return emptySet()
+        return loadAcceptedOneTimeIdsByIdentity()[normalizedIdentity].orEmpty()
+    }
+
+    suspend fun addAcceptedOneTimeId(identity: String, id: PaykitPaymentRequestId): Set<PaykitPaymentRequestId> =
+        mutex.withLock {
+            val normalizedIdentity = requireNotNull(PubkyPublicKeyFormat.normalized(identity))
+            val current = loadAcceptedOneTimeIdsByIdentity()
+            val ids = current[normalizedIdentity].orEmpty() + id
+            val state = current + (normalizedIdentity to ids)
+            keychain.upsertString(ACCEPTED_KEY, Json.encodeToString(state))
+            ids
+        }
+
+    private fun loadAcceptedOneTimeIdsByIdentity(): Map<String, Set<PaykitPaymentRequestId>> {
+        val value = keychain.loadString(ACCEPTED_KEY) ?: return emptyMap()
+        return runCatching { Json.decodeFromString<Map<String, Set<PaykitPaymentRequestId>>>(value) }
+            .getOrElse { throw PaykitPaymentStateUnreadableError(ACCEPTED_KEY, it) }
     }
 
     fun loadSubscriptionState(identity: String): PaykitSubscriptionPresentationState {
