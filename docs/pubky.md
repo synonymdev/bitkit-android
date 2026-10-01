@@ -30,7 +30,7 @@ Delegates Pubky operations to `PaykitSdkService`, which uses:
 
 Paykit derives the delegated Paykit key from the active Pubky identity secret and the App Registry's current key generation. Authorized apps share encrypted Pubky-hosted Paykit state; Bitkit retains wallet-owned address reservations and pending payment proofs locally.
 
-The Android dependency is `com.synonym:paykit-android:0.1.0-rc57` from GitHub Packages. Paykit is excluded from Maven-local resolution. Companion authorization and key-sharing consent are described in [Pubky Auth companion claims](pubky-auth-companion-claims.md).
+The Android dependency is `com.synonym:paykit-android` from GitHub Packages, pinned in `gradle/libs.versions.toml`. Paykit is excluded from Maven-local resolution. Companion authorization and key-sharing consent are described in [Pubky Auth companion claims](pubky-auth-companion-claims.md).
 
 All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensure serial access to the underlying Rust state.
 

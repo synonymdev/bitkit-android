@@ -1,7 +1,7 @@
 # Pubky marketplace wallet leg
 
-This suite covers the two-wallet Bitkit leg of a Pubky marketplace purchase: a seller grants a
-watch-only account claim, a linked buyer receives the resulting Payment Request, and the buyer pays
+This suite covers the two-wallet Bitkit leg of a Pubky marketplace purchase: a seller grants
+Paykit access and a watch-only account, a linked buyer receives the Payment Request, and the buyer pays
 the request on regtest through confirmation. It does not cover marketplace browsing, Locks content
 delivery, fiat payment, or Hypercolor.
 
@@ -27,9 +27,9 @@ bytes and no Paykit secret. Unknown, duplicate, mismatched, or wrong-sized claim
 The journey needs a controlled integration fixture runtime. It must provide:
 
 - A fresh Pubky testnet or isolated staging namespace reachable by both wallets.
-- A Paykit Server including the canonical request behavior from merged upstream
-  [`pubky/paykit-server#2`](https://github.com/pubky/paykit-server/pull/2), plus a `/setup` flow whose
-  auth URL carries `x-bitkit-claim=paykit-access-v1.watch-only-account-v1`.
+- A Paykit Server using the same shared-runtime SDK and the
+  [companion-claim contract](../../docs/pubky-auth-companion-claims.md), including a `/setup` auth
+  URL whose payload requests `x-bitkit-claim=paykit-access-v1.watch-only-account-v1`.
 - A regtest bitcoind and Electrum/Fulcrum endpoint on the same chain. Configure the endpoint in both
   wallets before their first launch so neither wallet retains a taller foreign regtest tip.
 - A clean seller wallet, a separate clean funded buyer wallet, and the seller Pubky public key.
@@ -51,41 +51,17 @@ adb -s <device> reverse tcp:15412 tcp:15412
 
 After creating each wallet, choose **Create profile with Bitkit** to create a Bitkit-generated Pubky
 identity in each wallet, or use a Ring identity whose root secret is available to Bitkit.
-The fixture must use the same shared-runtime SDK and the
-[companion claim contract](../../docs/pubky-auth-companion-claims.md).
 
-The request and endpoint must satisfy the issuer contract from Android issue
-[#1208](https://github.com/synonymdev/bitkit-android/issues/1208): lowercase `btc`, a
+The request and endpoint must satisfy the
+[issuer contract](../../docs/paykit-issuer-interoperability.md): lowercase `btc`, a
 network-correct `btc-regtest-*` endpoint identifier, and a JSON endpoint payload with a non-empty
 string `value`. The fixture must keep watch-only account material and spending authority separate.
 Evidence must show the claimed account xpub and account index while omitting wallet seed material
 and tokens.
 
-The pinned
-[`BitcoinErrorLog/pubky-marketplace/payments-env`](https://github.com/BitcoinErrorLog/pubky-marketplace/tree/ed03a32ecfe02deab40ad10ae1bac7fa18465c10/payments-env)
-runtime is a reference for the marketplace driver and Locks harness, not a shared-runtime
-acceptance fixture. Use a fixture revision updated for the companion claim contract above and
-record its exact revisions. The seller wallet fills the companion-auth role and the buyer wallet
-fills the reader role; the other fixture roles remain unchanged.
-
-## Required app changes
-
-The full journey depends on the sibling work from the parent epic:
-
-- [#1208](https://github.com/synonymdev/bitkit-android/issues/1208) defines the issuer interop
-  contract.
-- [#1209](https://github.com/synonymdev/bitkit-android/issues/1209) adds reason-specific parse
-  diagnostics and terminal feedback when an open-time Pay retry is exhausted.
-- [#1210](https://github.com/synonymdev/bitkit-android/issues/1210) owns the approved Payment Request
-  intake policy. This journey does not implement or widen that policy.
-- [#1211](https://github.com/synonymdev/bitkit-android/issues/1211) prevents an Electrum-rejected
-  broadcast from reaching `SendSuccess`.
-- [#1218](https://github.com/synonymdev/bitkit-android/issues/1218) tracks the incoming on-chain
-  request swipe requirement. The behavior is supplied by merged
-  [#1178](https://github.com/synonymdev/bitkit-android/pull/1178) at `9698dea4`.
-
-The linked-contact prerequisite is existing Paykit behavior: the buyer must save the seller before
-Bitkit's private-message poll can receive the request. The seller must also save the buyer when the
+The seller wallet authorizes the server; the buyer wallet receives and pays the request.
+The buyer must save the seller before Bitkit's private-message poll can receive the request.
+The seller must also save the buyer when the
 fixture exercises bilateral private delivery.
 
 ## Periodic payout detection
@@ -115,5 +91,4 @@ Keep these artifacts at each boundary:
 | Confirmation | Confirmed buyer activity snapshot | Transaction id at one or more confirmations and completed purchase status |
 
 `SendSuccess` is evidence of backend acceptance, not confirmation. The fixture's chain and purchase
-status are the confirmation authority. `PaymentRequestPay-<payment-request-id>` is shared with the
-iOS counterpart supplied by [`bitkit-ios#721`](https://github.com/synonymdev/bitkit-ios/pull/721).
+status are the confirmation authority. `PaymentRequestPay-<payment-request-id>` is shared with iOS.

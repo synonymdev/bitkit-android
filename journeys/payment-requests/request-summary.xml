@@ -8,7 +8,7 @@
     <action>Verify From (testTag "PaymentRequestFrom") shows the requester's contact name</action>
     <action>Verify For (testTag "PaymentRequestFor") shows "Lunch last week"</action>
     <action>Tap Show details (testTag "SendConfirmToggleDetails")</action>
-    <action>Verify From (testTag "PaymentRequestFrom") and For (testTag "PaymentRequestFor") are no longer shown, and the recipient (testTag "ReviewContactRecipient") under Contact is the requester's contact</action>
+    <action>Verify From (testTag "PaymentRequestFrom") and For (testTag "PaymentRequestFor") are hidden in details, and the recipient (testTag "ReviewContactRecipient") under Contact is the requester's contact</action>
     <action>Verify the invoice note (testTag "PaymentRequestInvoiceNote") shows "Lunch last week"</action>
     <action>Close the Payment Request confirmation screen without paying</action>
     <action>On the requester, send the payer contact a Payment Request for 5,000 sats with no note</action>
