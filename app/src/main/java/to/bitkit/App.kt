@@ -15,8 +15,8 @@ import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.services.BluetoothInit
 import to.bitkit.services.PubkyAuthHandlerRegistrar
-import to.bitkit.utils.SubscriptionClockOffsetSync
 import to.bitkit.utils.Logger
+import to.bitkit.utils.SubscriptionClockOffsetSync
 import javax.inject.Inject
 
 @HiltAndroidApp

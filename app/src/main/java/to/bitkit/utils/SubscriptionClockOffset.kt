@@ -1,11 +1,14 @@
 package to.bitkit.utils
 
+import dagger.Lazy
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import to.bitkit.BuildConfig
 import to.bitkit.async.appScope
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.repositories.PaykitPaymentRequestRepo
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -53,10 +56,14 @@ object SubscriptionClockOffset {
     }
 }
 
-/** Keeps [SubscriptionClockOffset.offsetDays] in step with the offset stored by Dev Settings. */
+/**
+ * Keeps [SubscriptionClockOffset.offsetDays] in step with the offset stored by Dev Settings, and refreshes the Paykit
+ * subscriptions when it changes so due periods, notifications and expirations follow the new offset right away.
+ */
 @Singleton
 class SubscriptionClockOffsetSync @Inject constructor(
     private val settingsStore: SettingsStore,
+    private val paykitPaymentRequestRepo: Lazy<PaykitPaymentRequestRepo>,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -68,9 +75,12 @@ class SubscriptionClockOffsetSync @Inject constructor(
     fun start() {
         if (!SubscriptionClockOffset.isAvailable) return
         scope.launch {
-            settingsStore.subscriptionClockOffsetDays.collect {
+            var isInitialOffset = true
+            settingsStore.subscriptionClockOffsetDays.distinctUntilChanged().collect {
                 SubscriptionClockOffset.setOffsetDays(it)
                 if (it != 0) Logger.info("Set the subscription clock offset to '$it' days", context = TAG)
+                if (!isInitialOffset) paykitPaymentRequestRepo.get().refresh()
+                isInitialOffset = false
             }
         }
     }
