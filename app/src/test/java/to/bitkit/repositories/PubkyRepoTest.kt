@@ -2867,6 +2867,24 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `importContacts keeps the saved label of a contact whose follow it could not resolve`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B))
+        whenever(pubkyService.resolveContactProfile(any(), any(), any()))
+            .thenAnswer { throw TestAppError("Unreachable") }
+        assertTrue(sut.prepareImport().isSuccess)
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Alice")))
+        val placeholder = PubkyProfile.placeholder(VALID_CONTACT_KEY_B)
+
+        assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
+
+        verifyBlocking(pubkyService) { saveContact(VALID_CONTACT_KEY_A, "Alice", listOf("bitkit/wallet"), true) }
+        verifyBlocking(pubkyService) {
+            saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true)
+        }
+    }
+
+    @Test
     fun `importContacts discovers receivers of a contact it has no record of resolving`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val placeholder = PubkyProfile.placeholder(VALID_CONTACT_KEY_A)

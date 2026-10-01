@@ -1044,9 +1044,10 @@ class PubkyRepo @Inject constructor(
 
     /**
      * Saves [contacts], the profiles [prepareImport] resolved, without resolving them again. A follow it could not
-     * resolve is saved as a placeholder with the wallet receiver path only; private sync discovers its other receiver
-     * paths later. Only a contact whose save fails is left out. The import runs in the repository scope, so it
-     * finishes even when the caller is cancelled, and stops saving once the identity changes.
+     * resolve is saved as a placeholder with the wallet receiver path only, keeping the label of a contact already
+     * saved for it; private sync discovers its other receiver paths later. Only a contact whose save fails is left
+     * out. The import runs in the repository scope, so it finishes even when the caller is cancelled, and stops
+     * saving once the identity changes.
      */
     suspend fun importContacts(contacts: List<PubkyProfile>): Result<Unit> =
         scope.async(start = CoroutineStart.UNDISPATCHED) {
@@ -1062,10 +1063,13 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             val owner = requireNotNull(_publicKey.value) { "Not authenticated" }
             val unresolvedKeys = pendingImportUnresolvedKeys.value
+            val profiles = contacts.map { it.copy(publicKey = it.publicKey.ensurePubkyPrefix()) }
+            val savedLabels = if (profiles.any { it.publicKey in unresolvedKeys }) savedContactLabels() else emptyMap()
             val imported = coroutineScope {
-                contacts.map { contact ->
-                    val profile = contact.copy(publicKey = contact.publicKey.ensurePubkyPrefix())
-                    async { importContact(owner, profile, isResolved = profile.publicKey !in unresolvedKeys) }
+                profiles.map {
+                    val isResolved = it.publicKey !in unresolvedKeys
+                    val label = if (isResolved || it.publicKey !in savedLabels) it.name else savedLabels[it.publicKey]
+                    async { importContact(owner, it, label, isResolved) }
                 }.awaitAll().filterNotNull()
             }
             synchronized(contactsLock) {
@@ -1082,19 +1086,28 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun importContact(owner: String, profile: PubkyProfile, isResolved: Boolean): PubkyProfile? =
-        runSuspendCatching {
-            val receiverPaths = if (isResolved) {
-                relevantReceiverPaths(profile.publicKey, PaykitReadLane.Bulk)
-            } else {
-                listOf(PaykitReceiverPaths.WALLET)
-            }
-            check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
-            pubkyService.saveContact(profile.publicKey, profile.name, receiverPaths, restorePrivateConnection = true)
-            profile
-        }.onFailure {
-            Logger.warn("Failed to import contact '${redacted(profile.publicKey)}'", it, context = TAG)
-        }.getOrNull()
+    private suspend fun importContact(
+        owner: String,
+        profile: PubkyProfile,
+        label: String?,
+        isResolved: Boolean,
+    ): PubkyProfile? = runSuspendCatching {
+        val receiverPaths = if (isResolved) {
+            relevantReceiverPaths(profile.publicKey, PaykitReadLane.Bulk)
+        } else {
+            listOf(PaykitReceiverPaths.WALLET)
+        }
+        check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
+        pubkyService.saveContact(profile.publicKey, label, receiverPaths, restorePrivateConnection = true)
+        profile
+    }.onFailure {
+        Logger.warn("Failed to import contact '${redacted(profile.publicKey)}'", it, context = TAG)
+    }.getOrNull()
+
+    private suspend fun savedContactLabels(): Map<String, String?> =
+        runSuspendCatching { pubkyService.contactRecords().associate { it.publicKey.ensurePubkyPrefix() to it.label } }
+            .onFailure { Logger.warn("Failed to read saved contact labels", it, context = TAG) }
+            .getOrDefault(emptyMap())
 
     suspend fun prepareImport(): Result<Unit> = runSuspendCatching {
         clearPendingImport()
