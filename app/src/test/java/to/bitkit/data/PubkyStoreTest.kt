@@ -8,22 +8,17 @@ import kotlin.test.assertNull
 
 class PubkyStoreTest {
     @Test
-    fun `cachedProfile exposes the cached name and image with their owner`() {
-        val data = PubkyStoreData(
+    fun `cachedProfile exposes the cached name and image only with their owner`() {
+        val withOwner = PubkyStoreData(
             ownerPublicKey = "pubkybob",
             cachedProfileOwner = "pubkyalice",
             cachedName = "Alice",
             cachedImageUri = "pubky://avatar",
         )
-
-        assertEquals(PubkyCachedProfile("pubkyalice", "Alice", "pubky://avatar"), data.cachedProfile())
-    }
-
-    @Test
-    fun `cachedProfile is null without a cached profile owner`() {
-        val data = PubkyStoreData(ownerPublicKey = "pubkyalice", cachedName = "Alice")
-
-        assertNull(data.cachedProfile())
+        listOf(
+            Triple("with owner", withOwner, PubkyCachedProfile("pubkyalice", "Alice", "pubky://avatar")),
+            Triple("without owner", PubkyStoreData(ownerPublicKey = "pubkyalice", cachedName = "Alice"), null),
+        ).forEach { (case, data, expected) -> assertEquals(expected, data.cachedProfile(), case) }
     }
 
     @Test

@@ -17,8 +17,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.mockito.kotlin.description
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -149,103 +151,64 @@ class PubkyImageFetcherTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fetch should write a fetched image to the disk cache`() = test {
-        val diskCache = createDiskCache()
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
+    fun `fetch should write the network bytes to the disk cache only when the request allows it`() = test {
+        val httpsDescriptor = """{"src": "https://example.com/image.png"}""".toByteArray()
+        listOf(
+            DiskCacheWriteCase("fetched image", stored = mapOf(IMAGE_URI to IMAGE_BYTES)),
+            DiskCacheWriteCase(
+                "followed descriptor blob",
+                image = DESCRIPTOR_BYTES,
+                blob = BLOB_BYTES,
+                bytes = BLOB_BYTES,
+                stored = mapOf(IMAGE_URI to BLOB_BYTES, BLOB_URI to null),
+            ),
+            DiskCacheWriteCase(
+                "descriptor whose blob fetch fails",
+                image = DESCRIPTOR_BYTES,
+                bytes = DESCRIPTOR_BYTES,
+                stored = mapOf(IMAGE_URI to null),
+            ),
+            DiskCacheWriteCase(
+                "json without a pubky src",
+                image = httpsDescriptor,
+                bytes = httpsDescriptor,
+                stored = mapOf(IMAGE_URI to null),
+            ),
+            DiskCacheWriteCase(
+                "read policy off",
+                policy = CachePolicy.WRITE_ONLY,
+                cached = BLOB_BYTES,
+                stored = mapOf(IMAGE_URI to IMAGE_BYTES),
+            ),
+            DiskCacheWriteCase("cleared during the fetch", clearsCache = true, stored = mapOf(IMAGE_URI to null)),
+            DiskCacheWriteCase("write policy off", policy = CachePolicy.READ_ONLY, stored = mapOf(IMAGE_URI to null)),
+            DiskCacheWriteCase(
+                "request disk cache key",
+                key = "custom-key",
+                stored = mapOf("custom-key" to IMAGE_BYTES, IMAGE_URI to null),
+            ),
+        ).forEach { case ->
+            reset(pubkyService)
+            val epoch = PubkyImageCacheEpoch()
+            val diskCache = createDiskCache()
+            case.cached?.let { diskCache.put(IMAGE_URI, it) }
+            whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenAnswer {
+                if (case.clearsCache) {
+                    epoch.advance()
+                    diskCache.clear()
+                }
+                case.image
+            }
+            whenever(pubkyService.fetchFile(BLOB_URI, PUBKY_IMAGE_MAX_BYTES))
+                .thenAnswer { case.blob ?: throw FetcherTestError("blob fetch failed") }
+            val requestOptions = options.copy(diskCachePolicy = case.policy, diskCacheKey = case.key)
 
-        val result = createFetcher(diskCache).fetch()
+            val result = createFetcher(diskCache, requestOptions, epoch).fetch()
 
-        assertEquals(DataSource.NETWORK, result.dataSource())
-        assertContentEquals(IMAGE_BYTES, diskCache.read(IMAGE_URI))
-    }
-
-    @Test
-    fun `fetch should cache a followed descriptor blob under the descriptor uri`() = test {
-        val diskCache = createDiskCache()
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(DESCRIPTOR_BYTES)
-        whenever(pubkyService.fetchFile(BLOB_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(BLOB_BYTES)
-
-        createFetcher(diskCache).fetch()
-
-        assertContentEquals(BLOB_BYTES, diskCache.read(IMAGE_URI))
-        assertNull(diskCache.read(BLOB_URI))
-    }
-
-    @Test
-    fun `fetch should not cache a descriptor whose blob fetch fails`() = test {
-        val diskCache = createDiskCache()
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(DESCRIPTOR_BYTES)
-        whenever(pubkyService.fetchFile(BLOB_URI, PUBKY_IMAGE_MAX_BYTES))
-            .thenAnswer { throw FetcherTestError("blob fetch failed") }
-
-        val result = createFetcher(diskCache).fetch()
-
-        assertContentEquals(DESCRIPTOR_BYTES, result.bytes())
-        assertNull(diskCache.read(IMAGE_URI))
-    }
-
-    @Test
-    fun `fetch should not cache json without a pubky src`() = test {
-        val diskCache = createDiskCache()
-        val descriptor = """{"src": "https://example.com/image.png"}""".toByteArray()
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(descriptor)
-
-        createFetcher(diskCache).fetch()
-
-        assertNull(diskCache.read(IMAGE_URI))
-    }
-
-    @Test
-    fun `fetch should skip the disk cache read when the read policy is disabled`() = test {
-        val diskCache = createDiskCache()
-        diskCache.put(IMAGE_URI, BLOB_BYTES)
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
-        val fetcher = createFetcher(diskCache, options.copy(diskCachePolicy = CachePolicy.WRITE_ONLY))
-
-        val result = fetcher.fetch()
-
-        assertEquals(DataSource.NETWORK, result.dataSource())
-        assertContentEquals(IMAGE_BYTES, result.bytes())
-        assertContentEquals(IMAGE_BYTES, diskCache.read(IMAGE_URI))
-    }
-
-    @Test
-    fun `fetch should not write to the disk cache when it is cleared during the fetch`() = test {
-        val diskCache = createDiskCache()
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenAnswer {
-            cacheEpoch.advance()
-            diskCache.clear()
-            IMAGE_BYTES
+            assertEquals(DataSource.NETWORK, result.dataSource(), case.name)
+            assertContentEquals(case.bytes, result.bytes(), case.name)
+            case.stored.forEach { assertContentEquals(it.value, diskCache.read(it.key), "${case.name}: ${it.key}") }
         }
-
-        val result = createFetcher(diskCache).fetch()
-
-        assertEquals(DataSource.NETWORK, result.dataSource())
-        assertContentEquals(IMAGE_BYTES, result.bytes())
-        assertNull(diskCache.read(IMAGE_URI))
-    }
-
-    @Test
-    fun `fetch should not write to the disk cache when the write policy is disabled`() = test {
-        val diskCache = createDiskCache()
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
-        val fetcher = createFetcher(diskCache, options.copy(diskCachePolicy = CachePolicy.READ_ONLY))
-
-        fetcher.fetch()
-
-        assertNull(diskCache.read(IMAGE_URI))
-    }
-
-    @Test
-    fun `fetch should use the request disk cache key when set`() = test {
-        val diskCache = createDiskCache()
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
-        val fetcher = createFetcher(diskCache, options.copy(diskCacheKey = "custom-key"))
-
-        fetcher.fetch()
-
-        assertContentEquals(IMAGE_BYTES, diskCache.read("custom-key"))
-        assertNull(diskCache.read(IMAGE_URI))
     }
 
     @Test
@@ -265,38 +228,33 @@ class PubkyImageFetcherTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fetch should use the network when the disk cache read fails`() = test {
-        val diskCache = mock<DiskCache>()
-        whenever(diskCache.openSnapshot(IMAGE_URI)).thenAnswer { throw IOException("journal unreadable") }
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
+    fun `fetch should return the network bytes when the disk cache fails`() = test {
+        listOf<Pair<String, (DiskCache) -> Unit>>(
+            "read" to { whenever(it.openSnapshot(IMAGE_URI)).thenAnswer { throw IOException("journal unreadable") } },
+            "editor" to { whenever(it.openEditor(IMAGE_URI)).thenAnswer { throw IOException("journal write failed") } },
+        ).forEach { (name, fail) ->
+            reset(pubkyService)
+            val diskCache = mock<DiskCache>()
+            fail(diskCache)
+            whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
 
-        val result = createFetcher(diskCache).fetch()
+            val result = createFetcher(diskCache).fetch()
 
-        assertEquals(DataSource.NETWORK, result.dataSource())
-        assertContentEquals(IMAGE_BYTES, result.bytes())
-        verify(pubkyService).fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)
-    }
-
-    @Test
-    fun `fetch should return the network bytes when opening the disk cache editor fails`() = test {
-        val diskCache = mock<DiskCache>()
-        whenever(diskCache.openEditor(IMAGE_URI)).thenAnswer { throw IOException("journal write failed") }
-        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(IMAGE_BYTES)
-
-        val result = createFetcher(diskCache).fetch()
-
-        assertEquals(DataSource.NETWORK, result.dataSource())
-        assertContentEquals(IMAGE_BYTES, result.bytes())
-        verify(diskCache).openEditor(IMAGE_URI)
+            assertEquals(DataSource.NETWORK, result.dataSource(), name)
+            assertContentEquals(IMAGE_BYTES, result.bytes(), name)
+            verify(pubkyService, description(name)).fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)
+            verify(diskCache, description(name)).openEditor(IMAGE_URI)
+        }
     }
 
     private fun createFetcher(
         diskCache: DiskCache? = null,
         options: Options = this.options,
-    ) = PubkyImageFetcher(IMAGE_URI, options, pubkyService, diskCache, cacheEpoch)
+        epoch: PubkyImageCacheEpoch = cacheEpoch,
+    ) = PubkyImageFetcher(IMAGE_URI, options, pubkyService, diskCache, epoch)
 
     private fun createDiskCache() = DiskCache.Builder()
-        .directory(tempFolder.newFolder("pubky-images"))
+        .directory(tempFolder.newFolder())
         .build()
 
     private fun DiskCache.put(key: String, bytes: ByteArray) {
@@ -312,6 +270,19 @@ class PubkyImageFetcherTest : BaseUnitTest() {
     private fun FetchResult?.dataSource() = (this as SourceFetchResult).dataSource
 
     private fun FetchResult?.bytes() = (this as SourceFetchResult).source.use { it.source().readByteArray() }
+
+    @Suppress("LongParameterList")
+    private class DiskCacheWriteCase(
+        val name: String,
+        val image: ByteArray = IMAGE_BYTES,
+        val blob: ByteArray? = null,
+        val bytes: ByteArray = IMAGE_BYTES,
+        val policy: CachePolicy = CachePolicy.ENABLED,
+        val key: String? = null,
+        val cached: ByteArray? = null,
+        val clearsCache: Boolean = false,
+        val stored: Map<String, ByteArray?>,
+    )
 }
 
 private class FetcherTestError(message: String) : AppError(message)
