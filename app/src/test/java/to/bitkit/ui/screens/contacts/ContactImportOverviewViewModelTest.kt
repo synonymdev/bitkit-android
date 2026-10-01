@@ -23,6 +23,8 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val isImportingContacts = MutableStateFlow(false)
+    private val pendingImportProfile = MutableStateFlow<PubkyProfile?>(null)
+    private val pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
 
     @Test
     fun `missing pending import redirects to pay contacts`() = test {
@@ -35,23 +37,52 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `importAll clears pending import and completes`() = test {
+    fun `importAll completes once the import succeeds`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
         stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
         whenever(pubkyRepo.importContacts(contacts)).thenReturn(Result.success(Unit))
         val sut = createSut()
-
-        val effects = mutableListOf<ContactImportOverviewEffect>()
-        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
         advanceUntilIdle()
+        assertFalse(sut.uiState.value.shouldRedirectToPayContacts)
 
         sut.importAll()
         advanceUntilIdle()
 
-        verify(pubkyRepo).clearPendingImport()
-        assertEquals(ContactImportOverviewEffect.ImportComplete, effects.last())
+        verify(pubkyRepo).importContacts(contacts)
+        assertTrue(sut.uiState.value.shouldRedirectToPayContacts)
+    }
 
-        effectsJob.cancel()
+    @Test
+    fun `an import started from select completes the overview once it succeeds`() = test {
+        val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
+        stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
+        val sut = createSut()
+        advanceUntilIdle()
+        isImportingContacts.value = true
+        advanceUntilIdle()
+
+        pendingImportProfile.value = null
+        pendingImportContacts.value = emptyList()
+        isImportingContacts.value = false
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.shouldRedirectToPayContacts)
+    }
+
+    @Test
+    fun `an import started from select that fails leaves the overview open`() = test {
+        val contacts = listOf(createProfile(publicKey = "pubkyalice"))
+        stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
+        val sut = createSut()
+        advanceUntilIdle()
+        isImportingContacts.value = true
+        advanceUntilIdle()
+
+        isImportingContacts.value = false
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isImporting)
+        assertFalse(sut.uiState.value.shouldRedirectToPayContacts)
     }
 
     @Test
@@ -109,8 +140,10 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     )
 
     private fun stubPendingImport(profile: PubkyProfile?, contacts: List<PubkyProfile>) {
-        whenever(pubkyRepo.pendingImportProfile).thenReturn(MutableStateFlow(profile))
-        whenever(pubkyRepo.pendingImportContacts).thenReturn(MutableStateFlow(contacts))
+        pendingImportProfile.value = profile
+        pendingImportContacts.value = contacts
+        whenever(pubkyRepo.pendingImportProfile).thenReturn(pendingImportProfile)
+        whenever(pubkyRepo.pendingImportContacts).thenReturn(pendingImportContacts)
         whenever(pubkyRepo.isImportingContacts).thenReturn(isImportingContacts)
     }
 

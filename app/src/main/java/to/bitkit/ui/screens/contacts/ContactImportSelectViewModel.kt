@@ -102,7 +102,6 @@ class ContactImportSelectViewModel @Inject constructor(
 
             pubkyRepo.importContacts(selected.map { it.profile })
                 .onSuccess {
-                    pubkyRepo.clearPendingImport()
                     _uiState.update { it.copy(isImporting = false) }
                     _effects.emit(ContactImportSelectEffect.ImportComplete)
                 }

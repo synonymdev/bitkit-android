@@ -56,7 +56,7 @@ class ContactImportSelectViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `importSelected success clears pending import and completes`() = test {
+    fun `importSelected completes once the import succeeds`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
         stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
         whenever(pubkyRepo.importContacts(contacts)).thenReturn(Result.success(Unit))
@@ -69,7 +69,7 @@ class ContactImportSelectViewModelTest : BaseUnitTest() {
         sut.importSelected()
         advanceUntilIdle()
 
-        verify(pubkyRepo).clearPendingImport()
+        verify(pubkyRepo).importContacts(contacts)
         assertEquals(ContactImportSelectEffect.ImportComplete, effects.last())
 
         effectsJob.cancel()

@@ -79,7 +79,6 @@ fun ContactImportOverviewScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                ContactImportOverviewEffect.ImportComplete -> onImportComplete()
                 ContactImportOverviewEffect.NavigateBack -> onBackClick()
                 ContactImportOverviewEffect.NavigateToSelect -> onNavigateToSelect()
             }

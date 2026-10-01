@@ -1068,8 +1068,8 @@ class PubkyRepo @Inject constructor(
      * Saves [contacts], the profiles [prepareImport] resolved, without resolving them again. A follow it could not
      * resolve is saved as a placeholder with the wallet receiver path only, keeping the label of a contact already
      * saved for it; private sync discovers its other receiver paths later. Only a contact whose save fails is left
-     * out. The import runs in the repository scope, so it finishes even when the caller is cancelled, and stops
-     * saving once the identity changes.
+     * out. The import runs in the repository scope, so it finishes even when the caller is cancelled, stops saving
+     * once the identity changes, and clears the pending import once it succeeds.
      */
     suspend fun importContacts(contacts: List<PubkyProfile>): Result<Unit> =
         scope.async(start = CoroutineStart.UNDISPATCHED) {
@@ -1104,6 +1104,7 @@ class PubkyRepo @Inject constructor(
                 }
             }
             markContactsLoaded()
+            clearPendingImport()
             Logger.info("Imported '${imported.size}' contacts", context = TAG)
         }
     }

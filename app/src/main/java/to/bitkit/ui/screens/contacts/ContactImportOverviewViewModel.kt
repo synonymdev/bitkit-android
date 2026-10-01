@@ -57,7 +57,14 @@ class ContactImportOverviewViewModel @Inject constructor(
         }
         viewModelScope.launch {
             pubkyRepo.isImportingContacts.collect { isImporting ->
-                _uiState.update { it.copy(isImporting = isImporting) }
+                val isImported = _uiState.value.isImporting && !isImporting &&
+                    pubkyRepo.pendingImportContacts.value.isEmpty()
+                _uiState.update {
+                    it.copy(
+                        isImporting = isImporting,
+                        shouldRedirectToPayContacts = it.shouldRedirectToPayContacts || isImported,
+                    )
+                }
             }
         }
     }
@@ -70,9 +77,7 @@ class ContactImportOverviewViewModel @Inject constructor(
         viewModelScope.launch {
             pubkyRepo.importContacts(contacts)
                 .onSuccess {
-                    pubkyRepo.clearPendingImport()
-                    _uiState.update { it.copy(isImporting = false) }
-                    _effects.emit(ContactImportOverviewEffect.ImportComplete)
+                    _uiState.update { it.copy(isImporting = false, shouldRedirectToPayContacts = true) }
                 }
                 .onFailure {
                     Logger.error("Failed to import all contacts", it, context = TAG)
@@ -110,7 +115,6 @@ data class ContactImportOverviewUiState(
 )
 
 sealed interface ContactImportOverviewEffect {
-    data object ImportComplete : ContactImportOverviewEffect
     data object NavigateToSelect : ContactImportOverviewEffect
     data object NavigateBack : ContactImportOverviewEffect
 }

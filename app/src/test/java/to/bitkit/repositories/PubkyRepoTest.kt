@@ -2946,6 +2946,20 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `importContacts clears the pending import once it succeeds`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
+        assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(1, sut.pendingImportContacts.value.size)
+
+        assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
+
+        assertNull(sut.pendingImportProfile.value)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+    }
+
+    @Test
     fun `importContacts leaves out only a contact whose save fails`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
