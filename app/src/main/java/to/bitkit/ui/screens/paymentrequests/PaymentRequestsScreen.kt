@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -332,13 +333,17 @@ internal fun PaymentRequestsContent(
                             PaymentRequestCard(
                                 request = request,
                                 contact = contacts.contactFor(request),
-                                compactSubtitle = paymentRequestHistorySubtitle(
-                                    subtitle = subscriptions.nameFor(request)
-                                        ?: request.note?.takeIf(String::isNotBlank)
-                                        ?: paymentRequestDate(request),
-                                    isAutoPaid = request.id in autoPaidRequestIds,
-                                ),
-                                showSignedAmount = true,
+                                compactSubtitle = if (request.hasPaymentEvidence) {
+                                    paymentRequestHistorySubtitle(
+                                        subtitle = subscriptions.nameFor(request)
+                                            ?: request.note?.takeIf(String::isNotBlank)
+                                            ?: paymentRequestDate(request),
+                                        isAutoPaid = request.id in autoPaidRequestIds,
+                                    )
+                                } else {
+                                    paymentRequestStatus(request)
+                                },
+                                showSignedAmount = request.hasPaymentEvidence,
                                 onClick = { onDetails(request.id) },
                             )
                         }
@@ -484,21 +489,13 @@ internal fun paymentRequestDate(request: PaykitPaymentRequest): String = request
 } ?: paymentRequestStatus(request)
 
 @Composable
-private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
+internal fun paymentRequestStatus(request: PaykitPaymentRequest, isPending: Boolean = false): String {
     if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(Clock.System.now())) {
         return stringResource(R.string.wallet__payment_request_status_expired)
     }
 
     return when (request.lifecycleState) {
-        PaymentRequestLifecycleState.PROPOSED -> {
-            if (request.direction == PaykitPaymentRequestDirection.Incoming) {
-                stringResource(R.string.wallet__payment_request_status_unavailable)
-            } else if (request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
-                stringResource(R.string.wallet__payment_request_waiting)
-            } else {
-                stringResource(R.string.wallet__payment_request_sending)
-            }
-        }
+        PaymentRequestLifecycleState.PROPOSED -> stringResource(proposedPaymentRequestStatusRes(request, isPending))
         PaymentRequestLifecycleState.PROPOSAL_EXPIRED ->
             stringResource(R.string.wallet__payment_request_status_expired)
         PaymentRequestLifecycleState.ACCEPTED ->
@@ -516,6 +513,17 @@ private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
         PaymentRequestLifecycleState.UNKNOWN,
         -> stringResource(R.string.wallet__payment_request_status_unavailable)
     }
+}
+
+@StringRes
+internal fun proposedPaymentRequestStatusRes(request: PaykitPaymentRequest, isPending: Boolean): Int = when {
+    request.direction == PaykitPaymentRequestDirection.Incoming && isPending ->
+        R.string.wallet__payment_request_waiting
+    request.direction == PaykitPaymentRequestDirection.Incoming ->
+        R.string.wallet__payment_request_status_unavailable
+    request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent ->
+        R.string.wallet__payment_request_waiting
+    else -> R.string.wallet__payment_request_sending
 }
 
 @Composable
@@ -648,7 +656,10 @@ internal fun PaymentRequestCard(
     }
 }
 
-private fun PaykitPaymentRequest.amountPrefix(isOutgoingPayment: Boolean, showSignedAmount: Boolean): String = when {
+internal val PaykitPaymentRequest.hasPaymentEvidence: Boolean
+    get() = lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
+
+internal fun PaykitPaymentRequest.amountPrefix(isOutgoingPayment: Boolean, showSignedAmount: Boolean): String = when {
     isOutgoingPayment -> "-"
     showSignedAmount && direction == PaykitPaymentRequestDirection.Incoming -> "-"
     showSignedAmount -> "+"
@@ -666,7 +677,7 @@ private fun List<PaykitSubscription>.nameFor(request: PaykitPaymentRequest): Str
 }
 
 private val PaykitPaymentRequest.lazyListKey: String
-    get() = "$paymentRequestId|$counterparty|$counterpartyReceiverPath|${billingPeriod?.startsAt ?: ""}"
+    get() = "$paymentRequestId|$counterparty|${billingPeriod?.startsAt ?: ""}"
 
 internal val PaykitPaymentRequest.paymentRailIconColor
     get() = if (paymentProofKind == PaykitPaymentProofKind.Lightning) Colors.Purple else Colors.Brand
@@ -675,7 +686,7 @@ internal val PaykitPaymentRequest.paymentRailBackgroundColor
     get() = if (paymentProofKind == PaykitPaymentProofKind.Lightning) Colors.Purple16 else Colors.Brand16
 
 private fun PaykitPaymentRequest.showsPaymentRailIcon(isOutgoingPayment: Boolean): Boolean =
-    isOutgoingPayment || lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
+    isOutgoingPayment || hasPaymentEvidence
 
 private fun PaykitPaymentRequest.paymentWasSent(isOutgoingPayment: Boolean): Boolean =
     isOutgoingPayment || direction == PaykitPaymentRequestDirection.Incoming
@@ -693,7 +704,6 @@ private fun PaymentRailIcon(request: PaykitPaymentRequest, paymentWasSent: Boole
 private val previewRequest = PaykitPaymentRequest(
     paymentRequestId = "payment-request",
     counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-    counterpartyReceiverPath = "bitkit/wallet",
     amountValue = "0.00025",
     amountSats = 25_000uL,
     note = "Dinner",

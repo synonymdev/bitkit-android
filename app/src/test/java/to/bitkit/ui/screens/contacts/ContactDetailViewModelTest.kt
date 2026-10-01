@@ -52,7 +52,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         override fun now() = now
     }
     private val eligibleTargets = MutableStateFlow<List<PaykitPaymentRequestTarget>>(emptyList())
-    private val target = PaykitPaymentRequestTarget(TEST_PUBLIC_KEY, "bitkit/wallet")
+    private val target = PaykitPaymentRequestTarget(TEST_PUBLIC_KEY)
     private val openedPayment = PublicPaykitPaymentResult.Opened(
         paymentRequest = "bitcoin:bcrt1qtest",
         privatePaymentContext = null,
@@ -608,6 +608,30 @@ class ContactDetailViewModelTest : BaseUnitTest() {
 
             assertFalse(sut.uiState.value.showRequestOrPaySheet)
             assertFalse(sut.uiState.value.isPayLoading)
+        }
+    }
+
+    @Test
+    fun `pending private link closes request or pay sheet without opening payment`() = test {
+        whenever(context.getString(any())).thenReturn("")
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.PrivateLinkPending))
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.payContact()
+            advanceUntilIdle()
+
+            assertFalse(sut.uiState.value.isPayLoading)
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+            expectNoEvents()
         }
     }
 

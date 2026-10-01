@@ -23,7 +23,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
+import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -32,7 +32,7 @@ class AddContactViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
-    private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
+    private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -96,7 +96,7 @@ class AddContactViewModel @Inject constructor(
                         )
                     }
                     if (error == PubkyContactError.AlreadyExists) {
-                        refreshContactPaykitReceivers(publicKey)
+                        refreshContactPaykitLink(publicKey)
                     }
                 }
         }
@@ -126,7 +126,9 @@ class AddContactViewModel @Inject constructor(
                             showPayError(R.string.slashtags__error_pay_empty_msg)
                         PublicPaykitPaymentResult.NotOpened ->
                             showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
+                        PublicPaykitPaymentResult.PrivateLinkPending,
+                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
+                        ->
                             showPayError(R.string.slashtags__error_pay_waiting_msg)
                     }
                 }

@@ -67,6 +67,10 @@ class ContactPaymentSettingsRepo @Inject constructor(
                 )
             }
         }.onFailure(error::addSuppressed)
+        if (!previous.sharesPrivatePaykitEndpoints) {
+            privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
+                .onFailure(error::addSuppressed)
+        }
         publicPaykitRepo.syncPublishedEndpoints(publish = previous.sharesPublicPaykitEndpoints)
             .onFailure {
                 error.addSuppressed(it)
@@ -76,9 +80,6 @@ class ContactPaymentSettingsRepo @Inject constructor(
             privatePaykitRepo.enableSharingAndPrepareSavedContacts(
                 publicKeys = contacts,
             ).onFailure(error::addSuppressed)
-        } else {
-            privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
-                .onFailure(error::addSuppressed)
         }
     }
 
@@ -100,11 +101,11 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
         var publicCleanupError: Throwable? = null
         var privateCleanupError: Throwable? = null
-        publicPaykitRepo.syncPublishedEndpoints(publish = false)
-            .onFailure { publicCleanupError = it }
-
         privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
             .onFailure { privateCleanupError = it }
+
+        publicPaykitRepo.syncPublishedEndpoints(publish = false)
+            .onFailure { publicCleanupError = it }
 
         publicCleanupError?.let { error ->
             runSuspendCatching {

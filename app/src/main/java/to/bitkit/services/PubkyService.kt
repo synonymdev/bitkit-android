@@ -1,10 +1,10 @@
 package to.bitkit.services
 
 import com.synonym.bitkitcore.approvePubkyAuth
-import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitPublicKeys
+import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkySessionBootstrapResult
 import kotlinx.coroutines.withTimeoutOrNull
@@ -61,11 +61,11 @@ class PubkyService @Inject constructor(
             val report = paykitSdkService.syncPublicEndpoints(emptyList())
             if (report.failed.isNotEmpty()) throw AppError("Failed to remove Paykit payment endpoints")
         }.exceptionOrNull()
-        val markerError = runSuspendCatching {
-            paykitSdkService.syncLocalReceiverMarker(isDiscoverable = false)
+        val appError = runSuspendCatching {
+            paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false)
         }.exceptionOrNull()
-        val cleanupError = endpointError ?: markerError
-        if (endpointError != null && markerError != null) endpointError.addSuppressed(markerError)
+        val cleanupError = endpointError ?: appError
+        if (endpointError != null && appError != null) endpointError.addSuppressed(appError)
         cleanupError?.let { throw it }
     }
 
@@ -201,9 +201,9 @@ class PubkyService @Inject constructor(
     suspend fun saveContact(
         publicKey: String,
         label: String?,
-        receiverPaths: List<String>? = null,
+        restorePrivateConnection: Boolean = false,
     ): ContactRecord = ServiceQueue.CORE.background {
-        paykitSdkService.saveContact(publicKey, label, receiverPaths)
+        paykitSdkService.saveContact(publicKey, label, restorePrivateConnection)
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.CORE.background {
@@ -213,12 +213,8 @@ class PubkyService @Inject constructor(
     suspend fun resolveContactProfile(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
-    ): ContactProfileResolution? = ServiceQueue.CORE.background {
+    ): ProfileResolution? = ServiceQueue.CORE.background {
         paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback)
-    }
-
-    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> = ServiceQueue.CORE.background {
-        paykitSdkService.discoverRelevantReceiverPaths(publicKey)
     }
 
     // endregion

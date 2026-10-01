@@ -165,6 +165,35 @@ class PaymentRequestsScreenTest {
     }
 
     @Test
+    fun unpaidHistoryKeepsPrimaryFiatAmountAndShowsLifecycleStatus() {
+        val accepted = request(id = "accepted").copy(
+            createdAt = Clock.System.now(),
+            lifecycleState = PaymentRequestLifecycleState.ACCEPTED,
+        )
+
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface(CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)) {
+                PaymentRequestsContent(
+                    requests = persistentListOf(accepted),
+                    pending = persistentListOf(),
+                    contacts = persistentListOf(),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
+                    canRequestPayment = true,
+                    onBack = {},
+                    onRequestPayment = {},
+                    onPay = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("MoneyPrimary").assertTextContains("$", substring = true)
+        composeTestRule.onNodeWithText("Accepted").assertIsDisplayed()
+    }
+
+    @Test
     fun outgoingRequestShowsPendingOnFiatLineWhenBitcoinIsPrimary() {
         setOutgoingRequestContent(PrimaryDisplay.BITCOIN)
 
@@ -260,7 +289,6 @@ class PaymentRequestsScreenTest {
     private fun request(id: String = "request") = PaykitPaymentRequest(
         paymentRequestId = id,
         counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-        counterpartyReceiverPath = "bitkit/wallet",
         amountValue = "0.00025",
         amountSats = 25_000uL,
         note = "Dinner",
@@ -272,7 +300,6 @@ class PaymentRequestsScreenTest {
     private fun subscription(note: String) = PaykitSubscription(
         paymentRequestId = "subscription",
         counterparty = request().counterparty,
-        counterpartyReceiverPath = "bitkit/wallet",
         amountValue = "0.00025",
         amountSats = 25_000uL,
         note = note,

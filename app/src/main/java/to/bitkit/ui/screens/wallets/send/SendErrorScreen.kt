@@ -64,6 +64,7 @@ private fun Content(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag("SendFailure")
     ) {
         SheetTopBar(title)
 

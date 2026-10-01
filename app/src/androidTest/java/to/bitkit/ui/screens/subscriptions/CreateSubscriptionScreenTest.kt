@@ -93,7 +93,7 @@ class CreateSubscriptionScreenTest {
 
     @Test
     fun recipientAllowsExactlyOneSelectionAndChangesExpiry() {
-        val second = PaykitPaymentRequestTarget("pubky" + "z".repeat(52), "bitkit/wallet")
+        val second = PaykitPaymentRequestTarget("pubky" + "z".repeat(52))
         var selected by mutableStateOf<PaykitPaymentRequestTarget?>(null)
         var expiration by mutableStateOf(PaymentRequestExpiration.Week)
         var proposedTo: PaykitPaymentRequestTarget? = null
@@ -158,13 +158,12 @@ class CreateSubscriptionScreenTest {
         composeTestRule.onNodeWithText("OK").assertIsDisplayed()
     }
 
-    private val target = PaykitPaymentRequestTarget("pubky" + "y".repeat(52), "bitkit/wallet")
+    private val target = PaykitPaymentRequestTarget("pubky" + "y".repeat(52))
     private val contact = PubkyProfile.forDisplay(target.publicKey, "Anna", null)
     private val startsAt = Instant.parse("2027-01-15T08:00:00Z")
     private val subscription = PaykitSubscription(
         paymentRequestId = "creator-proposal",
         counterparty = target.publicKey,
-        counterpartyReceiverPath = target.receiverPath,
         amountValue = "0.00001",
         amountSats = 1000uL,
         note = "Support",
