@@ -226,28 +226,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
     @Test
     fun `creator proposal sends recurring terms and stays queued until delivery`() = test {
-        val target = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
-        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
-        whenever(paykitSdkService.linkedPeers()).thenReturn(
-            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
-        )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
-            listOf(PaykitReceiverPaths.SERVER),
-        )
-        whenever(paykitSdkService.proposePaymentRequest(any(), any(), any(), eq(LOCAL_IDENTITY)))
-            .thenAnswer { invocation ->
-                val proposal = invocation.getArgument<PaykitPaymentRequestProposalTerms>(2)
-                paymentRequestRecord(
-                    role = PaymentRequestLocalRole.PAYEE,
-                    expiresAt = proposal.proposalExpiresAt,
-                    recurrence = requireNotNull(proposal.recurrence).let {
-                        PaymentRequestRecurrence(it.every, it.unit, it.startsAt, it.anchor, it.endsAt)
-                    },
-                    metadata = mock {
-                        on { exportText() } doReturn proposal.metadataJson
-                    },
-                )
-            }
+        val target = stubSubscriptionProposal()
         val expiresAt = clock.now().plus(60.seconds)
 
         val creation = sut.proposeSubscription(
@@ -285,6 +264,31 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertTrue(creation.subscription.isCreatedByUser)
         assertEquals(PaykitPaymentRequestDeliveryStatus.Queued, creation.subscription.deliveryStatus)
         assertEquals(listOf(creation.subscription), sut.subscriptions.value)
+    }
+
+    @Test
+    fun `creator proposal publishes real time while the subscription clock offset is on`() = test {
+        val target = stubSubscriptionProposal()
+        subscriptionOffset = 31.days
+
+        sut.proposeSubscription(
+            draft = PaykitSubscriptionDraft(
+                amountSats = 100_000uL,
+                name = "Monthly support",
+                description = "Thank you",
+                frequency = PaykitRecurrenceUnit.Month,
+                expiresAt = subscriptionClock.now().plus(60.seconds),
+            ),
+            target = target,
+            savedPublicKeys = listOf(COUNTERPARTY),
+        ).getOrThrow()
+
+        val captured = argumentCaptor<PaykitPaymentRequestProposalTerms>()
+        verifyBlocking(paykitSdkService) {
+            proposePaymentRequest(any(), any(), captured.capture(), any())
+        }
+        assertEquals(clock.now().toString(), captured.firstValue.recurrence?.startsAt)
+        assertEquals(clock.now().toString(), captured.firstValue.recurrence?.anchor)
     }
 
     @Test
@@ -481,6 +485,39 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertEquals(
             listOf(Instant.parse("2027-01-01T08:00:00Z"), Instant.parse("2027-02-01T08:00:00Z")),
             sut.pendingRequests.value.mapNotNull { it.billingPeriod?.startsAt }.sorted(),
+        )
+    }
+
+    @Test
+    fun `accepting with the subscription clock offset on keeps the first period due`() = test {
+        val proposal = paymentRequestRecord()
+        val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(proposal), listOf(active))
+        whenever(
+            paykitSdkService.acceptPaymentRequest(
+                COUNTERPARTY,
+                PaykitReceiverPaths.SERVER,
+                PAYMENT_REQUEST_ID,
+            )
+        ).thenReturn(active)
+        sut.refresh().getOrThrow()
+        val subscription = sut.subscriptions.value.single()
+
+        subscriptionOffset = 31.days
+        sut.accept(subscription).getOrThrow()
+
+        assertEquals(clock.now(), sut.acceptedAt(sut.subscriptions.value.single()))
+        assertEquals(
+            listOf(Instant.parse("2027-01-01T08:00:00Z"), Instant.parse("2027-02-01T08:00:00Z")),
+            sut.pendingRequests.value.mapNotNull { it.billingPeriod?.startsAt }.sorted(),
+        )
+
+        subscriptionOffset = Duration.ZERO
+        sut.refresh().getOrThrow()
+
+        assertEquals(
+            listOf(Instant.parse("2027-01-01T08:00:00Z")),
+            sut.pendingRequests.value.mapNotNull { it.billingPeriod?.startsAt },
         )
     }
 
@@ -991,6 +1028,32 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             Instant.parse(requireNotNull(endingRecurrence.endsAt)),
             sut.pendingRequests.value.single().billingPeriod?.endsAt,
         )
+    }
+
+    private suspend fun stubSubscriptionProposal(): PaykitPaymentRequestTarget {
+        val target = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+            listOf(PaykitReceiverPaths.SERVER),
+        )
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), any(), eq(LOCAL_IDENTITY)))
+            .thenAnswer { invocation ->
+                val proposal = invocation.getArgument<PaykitPaymentRequestProposalTerms>(2)
+                paymentRequestRecord(
+                    role = PaymentRequestLocalRole.PAYEE,
+                    expiresAt = proposal.proposalExpiresAt,
+                    recurrence = requireNotNull(proposal.recurrence).let {
+                        PaymentRequestRecurrence(it.every, it.unit, it.startsAt, it.anchor, it.endsAt)
+                    },
+                    metadata = mock {
+                        on { exportText() } doReturn proposal.metadataJson
+                    },
+                )
+            }
+        return target
     }
 
     @Suppress("LongParameterList")

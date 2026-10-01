@@ -622,7 +622,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
         val endpoints = subscriptionProposalEndpoints(target, savedPublicKeys, expectedIdentity)
         val reservedIconUri = PaykitSubscriptionProposal.reservedIconUri.takeIf { draft.iconBytes != null }
-        val preflight = buildSubscriptionProposal(draft, name, description, reservedIconUri, endpoints, validationDate)
+        val preflight = buildSubscriptionProposal(draft, name, description, reservedIconUri, endpoints, clock.now())
         PaykitSubscriptionProposal.validate(preflight)
         val iconUri = draft.iconBytes?.let {
             paykitSdkService.uploadProfileAvatar(
@@ -631,9 +631,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 expectedIdentity = expectedIdentity,
             )
         }
-        val proposalDate = subscriptionClock.now()
-        validateProposalExpiration(draft.expiresAt, proposalDate)
-        val proposal = buildSubscriptionProposal(draft, name, description, iconUri, endpoints, proposalDate)
+        validateProposalExpiration(draft.expiresAt, subscriptionClock.now())
+        // The published recurrence start and anchor stay on real time, so the offset never leaves this device.
+        val proposal = buildSubscriptionProposal(draft, name, description, iconUri, endpoints, clock.now())
         PaykitSubscriptionProposal.validate(proposal)
         val record = paykitSdkService.proposePaymentRequest(
             counterparty = target.publicKey,
@@ -695,7 +695,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         description: String,
         iconUri: String?,
         endpointIdentifiers: List<String>,
-        proposalDate: Instant,
+        startsAt: Instant,
     ): PaykitPaymentRequestProposalTerms {
         val subscriptionMetadata = mutableMapOf<String, JsonElement>(
             "version" to JsonPrimitive(1),
@@ -703,7 +703,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             "benefits" to JsonArray(emptyList()),
         )
         iconUri?.let { subscriptionMetadata["icon_uri"] = JsonPrimitive(it) }
-        val timestamp = Instant.fromEpochSeconds(proposalDate.epochSeconds).toString()
+        val timestamp = Instant.fromEpochSeconds(startsAt.epochSeconds).toString()
         return PaykitPaymentRequestProposalTerms(
             amountValue = draft.amountSats.toBitcoinAmount(),
             paymentReference = "bitkit-${UUID.randomUUID()}",
@@ -853,10 +853,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     current.paymentRequestId,
                 )
                 processPendingMessages()
-                val acceptanceDate = subscriptionClock.now()
+                // Acceptance is stored on real time, so a period made due by the offset is not dropped when it turns Off.
+                val acceptanceDate = clock.now()
                 subscriptionAcceptedAt = subscriptionAcceptedAt + (current.id to acceptanceDate)
                 persistSubscriptionState(identity)
-                applySubscriptionRecordLocked(record, acceptanceDate)
+                applySubscriptionRecordLocked(record, subscriptionClock.now())
                 synchronizeAfterSubscriptionAction(identity)
                 _pendingRequests.value
                     .filter { it.belongsTo(current) }
@@ -955,7 +956,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .associate { subscription ->
                 val acceptedAt = subscription.paidPeriods.minOfOrNull { it.startsAt }
                     ?: subscription.createdAt
-                    ?: subscriptionNow
+                    ?: now
                 subscription.id to acceptedAt
             }
         val updatedSubscriptionAcceptedAt = subscriptionAcceptedAt + restoredAcceptances
