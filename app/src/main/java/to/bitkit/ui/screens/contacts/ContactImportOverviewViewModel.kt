@@ -63,7 +63,7 @@ class ContactImportOverviewViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isImporting = true) }
-            pubkyRepo.importContacts(contacts.map { it.publicKey })
+            pubkyRepo.importContacts(contacts)
                 .onSuccess {
                     pubkyRepo.clearPendingImport()
                     _uiState.update { it.copy(isImporting = false) }

@@ -74,7 +74,8 @@ Manages session lifecycle, identity adoption, and profile data. Singleton scoped
 
 - `loadContacts()` reads saved Paykit contact records, then concurrently resolves any missing profiles via `resolveContactProfile()`
 - Contact keys from the FFI may lack the `pubky` prefix; `ensurePubkyPrefix()` normalizes them before profile resolution
-- `prepareImport()` discovers followed keys via `fetchPubkyFollows()`, then resolves each profile
+- `prepareImport()` discovers followed keys via `fetchPubkyFollows()`, then resolves each profile once
+- `importContacts()` saves the profiles `prepareImport()` resolved without resolving them again, and discovers each one's receiver paths. A follow `prepareImport()` could not resolve is saved as a placeholder with only the wallet receiver path: private sync (`PrivatePaykitRepo`) discovers a saved contact's receiver paths and merges them into the record before it uses them, and nothing else reads them. Only a contact whose save fails is left out
 - If a contact profile fetch fails, a `PubkyProfile.placeholder()` is used to ensure the contact still appears in the list with a truncated public key
 - `fetchContactProfile()` fetches a single contact's profile on demand (used by the detail screen)
 

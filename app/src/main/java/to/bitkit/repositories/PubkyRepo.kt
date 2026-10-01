@@ -143,6 +143,8 @@ class PubkyRepo @Inject constructor(
     private val _pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     val pendingImportContacts: StateFlow<List<PubkyProfile>> = _pendingImportContacts.asStateFlow()
 
+    private val pendingImportUnresolvedKeys = MutableStateFlow<Set<String>>(emptySet())
+
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
 
@@ -987,26 +989,18 @@ class PubkyRepo @Inject constructor(
         throw it
     }
 
-    suspend fun importContacts(publicKeys: List<String>): Result<Unit> = runSuspendCatching {
+    /**
+     * Saves [contacts], the profiles [prepareImport] resolved, without resolving them again. A follow it could not
+     * resolve is saved as a placeholder with the wallet receiver path only; private sync discovers its other receiver
+     * paths later. Only a contact whose save fails is left out.
+     */
+    suspend fun importContacts(contacts: List<PubkyProfile>): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
+            val unresolvedKeys = pendingImportUnresolvedKeys.value
             val imported = coroutineScope {
-                publicKeys.map { contactPk ->
-                    val prefixedKey = contactPk.ensurePubkyPrefix()
-                    async {
-                        runSuspendCatching {
-                            val profile = resolveContactProfile(prefixedKey, retry = true).getOrThrow()
-                                ?: PubkyProfile.placeholder(prefixedKey)
-                            pubkyService.saveContact(
-                                prefixedKey,
-                                profile.name,
-                                relevantReceiverPaths(prefixedKey, PaykitReadLane.Bulk),
-                                restorePrivateConnection = true,
-                            )
-                            profile
-                        }.onFailure {
-                            Logger.warn("Failed to import contact '${redacted(prefixedKey)}'", it, context = TAG)
-                        }.getOrNull()
-                    }
+                contacts.map { contact ->
+                    val profile = contact.copy(publicKey = contact.publicKey.ensurePubkyPrefix())
+                    async { importContact(profile, isResolved = profile.publicKey !in unresolvedKeys) }
                 }.awaitAll().filterNotNull()
             }
             updateContacts { current ->
@@ -1019,6 +1013,19 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    private suspend fun importContact(profile: PubkyProfile, isResolved: Boolean): PubkyProfile? =
+        runSuspendCatching {
+            val receiverPaths = if (isResolved) {
+                relevantReceiverPaths(profile.publicKey, PaykitReadLane.Bulk)
+            } else {
+                listOf(PaykitReceiverPaths.WALLET)
+            }
+            pubkyService.saveContact(profile.publicKey, profile.name, receiverPaths, restorePrivateConnection = true)
+            profile
+        }.onFailure {
+            Logger.warn("Failed to import contact '${redacted(profile.publicKey)}'", it, context = TAG)
+        }.getOrNull()
+
     suspend fun prepareImport(): Result<Unit> = runSuspendCatching {
         clearPendingImport()
         val pk = requireNotNull(_publicKey.value) { "Not authenticated" }
@@ -1026,18 +1033,21 @@ class PubkyRepo @Inject constructor(
             val contactKeys = pubkyService.getContacts(pk)
             Logger.debug("Discovered '${contactKeys.size}' contacts for import", context = TAG)
 
-            val contacts = coroutineScope {
+            val resolvedFollows = coroutineScope {
                 contactKeys.map { contactPk ->
                     val prefixedKey = contactPk.ensurePubkyPrefix()
                     async {
-                        resolveContactProfile(prefixedKey, retry = false, lane = PaykitReadLane.Bulk)
+                        prefixedKey to resolveContactProfile(prefixedKey, retry = false, lane = PaykitReadLane.Bulk)
                             .onFailure {
                                 Logger.warn("Failed to resolve follow '${redacted(prefixedKey)}'", it, context = TAG)
                             }
-                            .getOrNull() ?: PubkyProfile.placeholder(prefixedKey)
+                            .getOrNull()
                     }
-                }.awaitAll().sortedBy { it.name.lowercase() }
+                }.awaitAll()
             }
+            val contacts = resolvedFollows.map { (key, profile) -> profile ?: PubkyProfile.placeholder(key) }
+                .sortedBy { it.name.lowercase() }
+            val unresolvedKeys = resolvedFollows.filter { it.second == null }.map { it.first }.toSet()
 
             val ownProfile = _profile.value?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, pk) }
                 ?: resolveContactProfile(pk, retry = true).getOrNull()
@@ -1045,12 +1055,14 @@ class PubkyRepo @Inject constructor(
 
             _pendingImportProfile.update { ownProfile }
             _pendingImportContacts.update { contacts }
+            pendingImportUnresolvedKeys.update { unresolvedKeys }
         }
     }
 
     suspend fun clearPendingImport() = withContext(ioDispatcher) {
         _pendingImportProfile.update { null }
         _pendingImportContacts.update { emptyList() }
+        pendingImportUnresolvedKeys.update { emptySet() }
     }
 
     // endregion

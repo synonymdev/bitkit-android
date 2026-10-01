@@ -34,7 +34,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     fun `importAll clears pending import and completes`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
         stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
-        whenever(pubkyRepo.importContacts(contacts.map { it.publicKey })).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.importContacts(contacts)).thenReturn(Result.success(Unit))
         val sut = createSut()
 
         val effects = mutableListOf<ContactImportOverviewEffect>()
