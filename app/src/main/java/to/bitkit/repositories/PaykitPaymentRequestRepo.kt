@@ -851,7 +851,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }.onFailure { error ->
                         // Acceptance may already be committed. Reconcile before discarding its owner.
                         val uncertain = when (error) {
-                            is PaykitException.Transport, is PaykitException.Storage, is PaykitException.Identity -> true
+                            is PaykitException.Transport,
+                            is PaykitException.Storage,
+                            is PaykitException.Identity -> true
                             else -> false
                         }
                         if (!alreadySaved && !uncertain) {
