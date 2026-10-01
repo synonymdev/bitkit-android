@@ -45,9 +45,8 @@ class RefreshContactPaykitLinkUseCaseTest : BaseUnitTest() {
 
     @Test
     fun `refreshes contact endpoints before starting the link burst`() = test {
-        whenever {
-            privatePaykitRepo.refreshSavedContactEndpoints(contactKeys.last(), contactKeys)
-        }.thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.refreshSavedContactEndpoints(contactKeys.last(), contactKeys))
+            .thenReturn(Result.success(Unit))
 
         val result = sut(contactKeys.last())
 
@@ -61,9 +60,8 @@ class RefreshContactPaykitLinkUseCaseTest : BaseUnitTest() {
     @Test
     fun `stops when endpoint refresh fails`() = test {
         val error = IllegalStateException("Endpoint refresh failed")
-        whenever {
-            privatePaykitRepo.refreshSavedContactEndpoints(contactKeys.last(), contactKeys)
-        }.thenReturn(Result.failure(error))
+        whenever(privatePaykitRepo.refreshSavedContactEndpoints(contactKeys.last(), contactKeys))
+            .thenReturn(Result.failure(error))
 
         val result = sut(contactKeys.last())
 

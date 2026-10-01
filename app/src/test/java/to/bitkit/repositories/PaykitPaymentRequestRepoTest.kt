@@ -135,12 +135,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).let {
             it.copy(
                 proposalAppId = "marketplace",
-                terms = it.terms!!.copy(
+                terms = requireNotNull(it.terms).copy(
                     acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
                     paymentEndpoints = mapOf(
-                        MethodId.P2wpkh.rawValue to PaykitReceivedPaymentContactsTest.payload(address)
+                        MethodId.P2wpkh.rawValue to PaykitReceivedPaymentContactsTest.payload(address),
                     ),
-                )
+                ),
             )
         }
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
@@ -151,7 +151,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         }
         assertEquals(
             setOf(PubkyPublicKeyFormat.normalized(COUNTERPARTY)),
-            sut.receivedPaymentContacts.contactsForAddresses(listOf(address))
+            sut.receivedPaymentContacts.contactsForAddresses(listOf(address)),
         )
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertTrue(sut.paymentRequestHistory.value.isEmpty())

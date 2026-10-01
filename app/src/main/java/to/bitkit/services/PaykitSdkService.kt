@@ -571,7 +571,7 @@ class PaykitSdkService @Inject constructor(
                         (endsAt == null || endsAt > now)
                 }
                 if (hasActiveSubscription) throw PubkyContactError.ActiveSubscription
-                peers.filter { it.state == LinkedPeerState.LINKED }.forEach { peer ->
+                peers.filter { it.state == LinkedPeerState.LINKED }.forEach {
                     runSuspendCatching {
                         val report = handle.clearPrivatePaymentListAndProcessOutbound(
                             publicKey,
