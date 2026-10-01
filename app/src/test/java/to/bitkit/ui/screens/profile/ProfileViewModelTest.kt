@@ -61,6 +61,38 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `init does not load again when the in-flight load succeeds`() = test {
+        val profileFlow = MutableStateFlow<PubkyProfile?>(null)
+        val isLoadingFlow = MutableStateFlow(true)
+        createSut(profileFlow = profileFlow, isLoadingFlow = isLoadingFlow)
+        advanceUntilIdle()
+
+        profileFlow.value = createProfile()
+        isLoadingFlow.value = false
+        advanceUntilIdle()
+
+        verify(pubkyRepo, never()).loadProfile()
+    }
+
+    @Test
+    fun `init loads once more when the in-flight load fails`() = test {
+        val isLoadingFlow = MutableStateFlow(true)
+        createSut(
+            isLoadingFlow = isLoadingFlow,
+            onLoadProfile = {
+                isLoadingFlow.value = true
+                isLoadingFlow.value = false
+            },
+        )
+        advanceUntilIdle()
+
+        isLoadingFlow.value = false
+        advanceUntilIdle()
+
+        verify(pubkyRepo, times(1)).loadProfile()
+    }
+
+    @Test
     fun `init loads the profile when the loaded one belongs to another key`() = test {
         createSut(createProfile().copy(publicKey = "pubkybob"))
         advanceUntilIdle()

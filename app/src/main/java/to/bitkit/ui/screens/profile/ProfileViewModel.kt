@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -58,7 +59,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     init {
-        if (!pubkyRepo.isLoadingProfile.value) loadProfile()
+        if (pubkyRepo.isLoadingProfile.value) loadProfileAfterInFlightLoad() else loadProfile()
     }
 
     val uiState: StateFlow<ProfileUiState> = combine(
@@ -86,6 +87,14 @@ class ProfileViewModel @Inject constructor(
 
     fun loadProfile() {
         viewModelScope.launch { pubkyRepo.loadProfile() }
+    }
+
+    private fun loadProfileAfterInFlightLoad() {
+        viewModelScope.launch {
+            pubkyRepo.isLoadingProfile.first { !it }
+            val publicKey = pubkyRepo.publicKey.value ?: return@launch
+            if (pubkyRepo.profile.value?.publicKey != publicKey) pubkyRepo.loadProfile()
+        }
     }
 
     fun showSignOutConfirmation() {
