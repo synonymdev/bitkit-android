@@ -42,7 +42,7 @@ class SettingsStore @Inject constructor(
     private val localStore = context.localSettingsDataStore
 
     val data: Flow<SettingsData> = store.data
-    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
+    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: true }
     val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
     }
@@ -61,7 +61,10 @@ class SettingsStore @Inject constructor(
             store.updateData { current ->
                 // The received-sheet hold is armed before the backup is read, so it has to survive the
                 // settings the backup brings with it - otherwise the replayed history raises sheets.
-                data.copy(pendingRestoreActivitySeenSince = current.pendingRestoreActivitySeenSince)
+                data.copy(
+                    pendingRestoreActivitySeenSince = current.pendingRestoreActivitySeenSince,
+                    restoreSyncedBlockHeight = current.restoreSyncedBlockHeight,
+                )
             }
 
             val monitored = data.addressTypesToMonitor
@@ -184,6 +187,7 @@ data class SettingsData(
     val isBiometricEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = Env.isDebug,
+    val disableAllToasts: Boolean = false,
     val isSavingsSwapEnabled: Boolean = false,
     val showWidgets: Boolean = true,
     val lastUsedTags: List<String> = emptyList(),
@@ -220,6 +224,14 @@ data class SettingsData(
      * them. Cleared by the first on-chain sync completion whose sweep succeeds.
      */
     val pendingRestoreActivitySeenSince: Long = 0,
+    /**
+     * Chain tip of the first on-chain sync after the latest seed restore, or 0 when none completed.
+     *
+     * Everything confirmed at or below it was already on chain when the restore scanned the wallet, so it outlives
+     * [pendingRestoreActivitySeenSince]: LDK events are handled concurrently, and a later rescan replays those
+     * confirmations too, so their received sheets must stay silent however late they are handled.
+     */
+    val restoreSyncedBlockHeight: Long = 0,
 ) {
     val pendingRestoreActivitySeen: Boolean get() = pendingRestoreActivitySeenSince > 0
 }

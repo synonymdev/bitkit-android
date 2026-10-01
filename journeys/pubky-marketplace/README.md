@@ -32,10 +32,9 @@ adb -s <device> reverse tcp:15411 tcp:15411
 adb -s <device> reverse tcp:15412 tcp:15412
 ```
 
-After creating each wallet, enable Paykit UI in Dev Settings (`PaykitUiToggle`), confirm the warning,
-and verify activation (`PaykitUiEnabledToast`). Then choose **Create profile with Bitkit** to create
-a Bitkit-generated Pubky identity in each wallet. Do not import the identity with Pubky Ring; an
-imported identity cannot approve the fixture setup auth URL.
+After creating each wallet, choose **Create profile with Bitkit** to create a Bitkit-generated Pubky
+identity in each wallet. Do not import the identity with Pubky Ring; an imported identity cannot
+approve the fixture setup auth URL.
 
 The request and endpoint must satisfy the issuer contract from Android issue
 [#1208](https://github.com/synonymdev/bitkit-android/issues/1208): lowercase `btc`, a
@@ -72,6 +71,16 @@ The full journey depends on the sibling work from the parent epic:
 The linked-contact prerequisite is existing Paykit behavior: the buyer must save the seller before
 Bitkit's private-message poll can receive the request. The seller must also save the buyer when the
 fixture exercises bilateral private delivery.
+
+## Periodic payout detection
+
+Use separate seller and buyer devices. Before creating the purchase, return the seller to Home,
+wait for any startup or foreground-triggered full-wallet sync to finish, and record its balance.
+Keep the seller app active and the device awake while completing the purchase on the buyer device.
+Do not background, restart, or manually refresh the seller before the payout appears. Capture
+seller lifecycle and sync logs from before purchase creation through payout detection, alongside
+the balance change and received activity for the fixture transaction. If the seller is resumed or
+restarted during that interval, the run does not prove periodic payout detection and must be repeated.
 
 ## Evidence contract
 

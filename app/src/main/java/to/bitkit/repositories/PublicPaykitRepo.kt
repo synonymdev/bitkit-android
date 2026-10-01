@@ -49,6 +49,7 @@ sealed interface PublicPaykitPaymentResult {
 
     data object NoEndpoint : PublicPaykitPaymentResult
     data object NotOpened : PublicPaykitPaymentResult
+    data object PrivateLinkPending : PublicPaykitPaymentResult
     data object WaitingForUpdatedPaymentList : PublicPaykitPaymentResult
 }
 
@@ -77,6 +78,7 @@ internal val PublicPaykitPaymentResult.incomingPaymentRequestFailureReason:
         is PublicPaykitPaymentResult.Opened -> null
         PublicPaykitPaymentResult.NoEndpoint -> IncomingPaykitPaymentRequestFailureReason.NoSupportedEndpoint
         PublicPaykitPaymentResult.NotOpened -> IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable
+        PublicPaykitPaymentResult.PrivateLinkPending,
         PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
             IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending
     }

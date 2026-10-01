@@ -188,6 +188,7 @@ data class PaykitSubscription(
     val lifecycleState: PaymentRequestLifecycleState,
     val paidPeriods: List<PaykitBillingPeriod>,
     val paymentProofKinds: Map<PaykitBillingPeriod, PaykitPaymentProofKind> = emptyMap(),
+    val hasPaymentDeadline: Boolean = false,
 ) {
     val id: PaykitSubscriptionId
         get() = PaykitSubscriptionId(paymentRequestId, counterparty, counterpartyReceiverPath)
@@ -205,6 +206,7 @@ data class PaykitSubscription(
 
     fun isProposalActionable(now: Instant): Boolean =
         isProposalVisible(now) &&
+            !hasPaymentDeadline &&
             recurrence.unit.isSupported &&
             recurrence.canMaterializePeriods &&
             acceptedPaymentEndpointIdentifiers.isNotEmpty()
@@ -260,7 +262,8 @@ data class PaykitSubscription(
         }
     }
 
-    fun paymentDueOnAcceptance(now: Instant): PaykitPaymentRequest? = requestsThrough(now, now).firstOrNull()
+    fun paymentDueOnAcceptance(now: Instant): PaykitPaymentRequest? =
+        if (hasPaymentDeadline) null else requestsThrough(now, now).firstOrNull()
 
     fun receivedPaymentRequests(): List<PaykitPaymentRequest> {
         if (!isCreatedByUser) return emptyList()
@@ -338,6 +341,7 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
         lifecycleState = state,
         paidPeriods = payments.map { it.first }.distinct(),
         paymentProofKinds = payments.mapNotNull { (period, kind) -> kind?.let { period to it } }.toMap(),
+        hasPaymentDeadline = requestTerms.paymentDeadline != null,
     )
 }
 

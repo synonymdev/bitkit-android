@@ -18,11 +18,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -34,14 +32,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.Job
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheet
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
@@ -69,23 +70,27 @@ import to.bitkit.ui.utils.withAccent
 fun ContactDetailScreen(
     viewModel: ContactDetailViewModel,
     onBackClick: () -> Unit,
-    onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Unit,
+    onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Job?,
     onActivityClick: (String) -> Unit,
-    canRequestPayment: Boolean = false,
-    onRequestPayment: () -> Unit = {},
+    onRequestPayment: (PaykitPaymentRequestTarget) -> Unit = {},
     showDeleteAction: Boolean = false,
     onContactDeleted: () -> Unit = {},
     onEditContact: (String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var showRequestOrPay by remember { mutableStateOf(false) }
+
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.dismissRequestOrPaySheet() }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is ContactDetailEffect.OpenPayment ->
-                    onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext)
+                is ContactDetailEffect.OpenPayment -> {
+                    val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext)
+                    viewModel.onPaymentOpening(scanJob)
+                }
                 ContactDetailEffect.ContactDeleted -> onContactDeleted()
             }
         }
@@ -98,13 +103,7 @@ fun ContactDetailScreen(
         showDeleteAction = showDeleteAction,
         onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickCopy = { viewModel.copyPublicKey() },
-        onClickPay = {
-            if (canRequestPayment) {
-                showRequestOrPay = true
-            } else {
-                viewModel.payContact()
-            }
-        },
+        onClickPay = { viewModel.onClickPay() },
         onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
         onClickRetry = { viewModel.loadContact() },
@@ -116,17 +115,18 @@ fun ContactDetailScreen(
         onConfirmDelete = { viewModel.deleteContact() },
     )
 
-    if (showRequestOrPay && uiState.profile != null) {
+    val requestOrPayContact = uiState.profile
+    val paymentRequestTarget = uiState.paymentRequestTarget
+    if (uiState.showRequestOrPaySheet && requestOrPayContact != null) {
         RequestOrPaySheet(
-            contact = requireNotNull(uiState.profile),
-            onDismiss = { showRequestOrPay = false },
-            onPay = {
-                showRequestOrPay = false
-                viewModel.payContact()
-            },
+            contact = requestOrPayContact,
+            isPayLoading = uiState.isPayLoading,
+            canRequest = paymentRequestTarget != null,
+            onDismiss = { viewModel.dismissRequestOrPaySheet() },
+            onPay = { viewModel.payContact() },
             onRequest = {
-                showRequestOrPay = false
-                onRequestPayment()
+                viewModel.dismissRequestOrPaySheet()
+                paymentRequestTarget?.let(onRequestPayment)
             },
         )
     }
@@ -136,6 +136,8 @@ fun ContactDetailScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun RequestOrPaySheet(
     contact: PubkyProfile,
+    isPayLoading: Boolean,
+    canRequest: Boolean,
     onDismiss: () -> Unit,
     onPay: () -> Unit,
     onRequest: () -> Unit,
@@ -173,6 +175,7 @@ private fun RequestOrPaySheet(
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
                     onClick = onPay,
+                    isLoading = isPayLoading,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_sent),
@@ -185,6 +188,7 @@ private fun RequestOrPaySheet(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_request),
                     onClick = onRequest,
+                    enabled = canRequest && !isPayLoading,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_received),
@@ -234,6 +238,7 @@ private fun Content(
                 profile = currentProfile,
                 tags = uiState.tags,
                 showPayButton = uiState.showPayButton,
+                isPayLoading = uiState.isPayLoading,
                 showDeleteAction = showDeleteAction,
                 onClickEdit = onClickEdit,
                 onClickDelete = onClickDelete,
@@ -272,6 +277,7 @@ private fun ContactBody(
     profile: PubkyProfile,
     tags: ImmutableList<String>,
     showPayButton: Boolean,
+    isPayLoading: Boolean,
     showDeleteAction: Boolean,
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
@@ -317,6 +323,7 @@ private fun ContactBody(
                 ActionButton(
                     onClick = onClickPay,
                     iconRes = R.drawable.ic_coins,
+                    isLoading = isPayLoading,
                     modifier = Modifier.testTag("ContactPay")
                 )
             }
@@ -327,7 +334,7 @@ private fun ContactBody(
             )
             ActionButton(
                 onClick = onClickCopy,
-                iconRes = R.drawable.ic_copy,
+                iconRes = R.drawable.ic_copy_simple,
                 modifier = Modifier.testTag("ContactCopy")
             )
             ActionButton(
@@ -344,7 +351,7 @@ private fun ContactBody(
             } else {
                 ActionButton(
                     onClick = onClickEdit,
-                    iconRes = R.drawable.ic_edit,
+                    iconRes = R.drawable.ic_pencil,
                     modifier = Modifier.testTag("ContactEdit")
                 )
             }
@@ -367,27 +374,36 @@ private fun ContactBody(
                 .testTag("ContactViewTagsHeader")
         )
         VerticalSpacer(8.dp)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            tags.forEach { tag ->
-                TagButton(
-                    text = tag,
-                    onClick = { onRemoveTag(tag) },
-                    accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
-                    displayIconClose = true,
-                )
+        if (tags.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                tags.forEach { tag ->
+                    TagButton(
+                        text = tag,
+                        onClick = { onRemoveTag(tag) },
+                        accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
+                        displayIconClose = true,
+                    )
+                }
             }
+            VerticalSpacer(8.dp)
         }
-        VerticalSpacer(8.dp)
         Row(modifier = Modifier.fillMaxWidth()) {
-            TagButton(
+            PrimaryButton(
                 text = stringResource(R.string.profile__add_tag),
                 onClick = onAddTag,
-                icon = painterResource(R.drawable.ic_tag),
-                displayIconClose = true,
+                size = ButtonSize.Small,
+                fullWidth = false,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_tag),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
                 modifier = Modifier.testTag("ContactAddTag")
             )
         }

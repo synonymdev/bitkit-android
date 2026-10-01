@@ -762,7 +762,7 @@ private fun SubscriptionReview(
         if (!subscription.recurrence.unit.isSupported) {
             VerticalSpacer(16.dp)
             BodyM(text = stringResource(R.string.subscriptions__unsupported_description), color = Colors.White64)
-        } else if (subscription.acceptedPaymentEndpointIdentifiers.isEmpty()) {
+        } else if (subscription.hasPaymentDeadline || subscription.acceptedPaymentEndpointIdentifiers.isEmpty()) {
             VerticalSpacer(16.dp)
             BodyM(
                 text = stringResource(R.string.subscriptions__unsupported_payment_description),

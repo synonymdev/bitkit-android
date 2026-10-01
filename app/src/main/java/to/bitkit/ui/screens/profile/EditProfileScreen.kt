@@ -128,14 +128,18 @@ private fun Content(
         }
     }
 
-    ScreenColumn {
+    val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__edit_nav_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
+            modifier = modifier,
         )
+    }
 
+    ScreenColumn {
         if (uiState.isLoading) {
+            topBar(Modifier)
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize()
@@ -159,6 +163,7 @@ private fun Content(
                 onSave = onSave,
                 onCancel = onBackClick,
                 isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
+                topBar = topBar,
                 avatarContent = {
                     AvatarSection(
                         imageUrl = uiState.imageUrl,
@@ -224,7 +229,7 @@ private fun AvatarSection(
         modifier = Modifier
             .size(96.dp)
             .clip(CircleShape)
-            .background(Colors.Gray5)
+            .background(Colors.Gray6)
             .testTag("EditProfileAvatar")
             .clickable(onClick = onClick)
     ) {
@@ -237,10 +242,10 @@ private fun AvatarSection(
             )
             imageUrl != null -> PubkyImage(uri = imageUrl, size = 96.dp)
             else -> Icon(
-                painter = painterResource(R.drawable.ic_user_square),
+                painter = painterResource(R.drawable.ic_image_square),
                 contentDescription = null,
                 tint = Colors.White32,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(32.dp)
             )
         }
     }

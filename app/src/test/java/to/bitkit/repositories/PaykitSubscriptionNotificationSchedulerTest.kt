@@ -5,17 +5,24 @@ package to.bitkit.repositories
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ListenableWorker
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.synonym.paykit.PaymentRequestLifecycleState
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
@@ -89,6 +96,17 @@ class PaykitSubscriptionNotificationSchedulerTest {
     }
 
     @Test
+    fun `worker defers a reminder when clock is before the billing period`() = runTest {
+        val params = mock<WorkerParameters>()
+        whenever(params.inputData).thenReturn(
+            workDataOf(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT to NEXT_PERIOD_START.toString()),
+        )
+        val worker = PaykitSubscriptionNotificationWorker(context, params, clock)
+
+        assertEquals(ListenableWorker.Result.retry(), worker.doWork())
+    }
+
+    @Test
     fun `synchronize cancels work no longer required`() {
         sut.synchronize(
             subscriptions = listOf(subscription()),
@@ -108,6 +126,19 @@ class PaykitSubscriptionNotificationSchedulerTest {
         )
 
         verify(workClient).cancelUniqueWork(WORK_NAME)
+    }
+
+    @Test
+    fun `deadline subscriptions do not schedule payment reminders`() {
+        sut.synchronize(
+            subscriptions = listOf(subscription().copy(hasPaymentDeadline = true)),
+            acceptedAt = { NOW },
+            pendingRequestIds = emptySet(),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+
+        verify(workClient, never()).enqueueUniqueWork(any(), any(), any())
     }
 
     @Test

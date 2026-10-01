@@ -120,10 +120,9 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyContactLink
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.models.PubkyRingAuthCallback
-import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.models.Suggestion
@@ -401,6 +400,7 @@ class AppViewModel @Inject constructor(
         registerSheet(highBalanceSheet)
     }
     private var isCompletingMigration = false
+    private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
@@ -461,6 +461,12 @@ class AppViewModel @Inject constructor(
     }
 
     private val toastManager = toastManagerProvider(viewModelScope)
+
+    // Toasts are hidden only while dev mode and the "Disable All Toasts" dev setting are both on
+    private val areToastsDisabled = settingsStore.data
+        .map { it.isDevModeEnabled && it.disableAllToasts }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
         viewModelScope.launch {
@@ -538,6 +544,18 @@ class AppViewModel @Inject constructor(
                         title = context.getString(R.string.profile__session_expired),
                     )
                     pubkyRepo.clearSessionRestorationFailed()
+                }
+            }
+        }
+        viewModelScope.launch {
+            pubkyRepo.adoptedSourceLost.collect { lost ->
+                if (lost) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__source_lost),
+                    )
+                    mainScreenEffect(MainScreenEffect.NavigateToPubkyChoice)
+                    pubkyRepo.clearAdoptedSourceLost()
                 }
             }
         }
@@ -654,6 +672,10 @@ class AppViewModel @Inject constructor(
 
     fun refreshPrivatePaykitEndpoints() {
         viewModelScope.launch { refreshPrivatePaykitEndpointsIfEnabled("foreground") }
+    }
+
+    fun checkAdoptedPubkySource() {
+        viewModelScope.launch { pubkyRepo.checkAdoptedSource() }
     }
 
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
@@ -777,6 +799,7 @@ class AppViewModel @Inject constructor(
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
                 .collect {
+                    pubkyRepo.restoreSessionIfNeeded()
                     if (paykitPaymentRequestPollingJob?.isActive == true) {
                         paykitPaymentRequestPollingJob?.cancel()
                         paykitPaymentRequestPollingJob = null
@@ -1081,11 +1104,15 @@ class AppViewModel @Inject constructor(
             return false
         }
         if (result !is PublicPaykitPaymentResult.Opened) {
-            deferPaymentRequestPresentation(
-                request = request,
-                reason = result?.incomingPaymentRequestFailureReason
-                    ?: IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
-            )
+            if (result == PublicPaykitPaymentResult.PrivateLinkPending) {
+                finishPrivateLinkPendingPaymentRequestPresentation(request)
+            } else {
+                deferPaymentRequestPresentation(
+                    request = request,
+                    reason = result?.incomingPaymentRequestFailureReason
+                        ?: IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+                )
+            }
             return false
         }
 
@@ -1098,6 +1125,27 @@ class AppViewModel @Inject constructor(
                 ?: persistentListOf(),
         )
         return true
+    }
+
+    private fun finishPrivateLinkPendingPaymentRequestPresentation(request: PaykitPaymentRequest) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending,
+        )
+        val isRequested = requestedPaymentRequestId == request.id
+        val restorePaymentRequestSheet = isRequested && shouldRestorePaymentRequestSheet
+        if (isRequested) {
+            paymentRequestPresentationGeneration++
+            clearRequestedPaymentRequest()
+        }
+        clearPaymentRequestPresentationRetry(request.id)
+        if (!isRequested) return
+        toast(
+            type = Toast.ToastType.INFO,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.slashtags__error_pay_waiting_msg),
+        )
+        if (restorePaymentRequestSheet && currentSheet.value == null) showSheet(Sheet.PaymentRequests)
     }
 
     private fun isCurrentPaymentRequestPresentation(request: PaykitPaymentRequest, generation: Long): Boolean =
@@ -1452,7 +1500,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleSyncCompleted(event: Event.SyncCompleted) {
-        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen()
+        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
 
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
@@ -1483,13 +1531,27 @@ class AppViewModel @Inject constructor(
             }
     }
 
-    private suspend fun completePendingRestoreActivitySeen() {
-        val restoreStartedAt = settingsStore.data.first().pendingRestoreActivitySeenSince
-        if (restoreStartedAt <= 0) return
-        Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
-        // Bounded by the restore start so a payment arriving mid-restore keeps its unseen state.
-        activityRepo.markAllUnseenActivitiesAsSeen(startedBefore = restoreStartedAt.toULong()).onSuccess {
-            settingsStore.update { settings -> settings.copy(pendingRestoreActivitySeenSince = 0) }
+    private suspend fun completePendingRestoreActivitySeen(syncedBlockHeight: UInt) {
+        // Claimed before the first suspension, so a later sync completing while this sweep runs cannot record its
+        // higher tip and silence a new receive confirmed in between.
+        if (isCompletingRestoreHold) return
+        isCompletingRestoreHold = true
+        try {
+            val restoreStartedAt = settingsStore.data.first().pendingRestoreActivitySeenSince
+            if (restoreStartedAt <= 0) return
+            Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
+            // Bounded by the restore start so a payment arriving mid-restore keeps its unseen state.
+            activityRepo.markAllUnseenActivitiesAsSeen(startedBefore = restoreStartedAt.toULong()).onSuccess {
+                settingsStore.update { settings ->
+                    if (!settings.pendingRestoreActivitySeen) return@update settings
+                    settings.copy(
+                        pendingRestoreActivitySeenSince = 0,
+                        restoreSyncedBlockHeight = syncedBlockHeight.toLong(),
+                    )
+                }
+            }
+        } finally {
+            isCompletingRestoreHold = false
         }
     }
 
@@ -2341,7 +2403,7 @@ class AppViewModel @Inject constructor(
         scheduledScan = nextScheduledScan
         nextJob.invokeOnCompletion {
             if (scheduledScan === nextScheduledScan) scheduledScan = null
-            if (nextJob.isCancelled) return@invokeOnCompletion
+            if (nextJob.isCancelled) return@invokeOnCompletion clearCancelledContactContext(contactPaymentContext)
             viewModelScope.launch { flushDeferredScan() }
         }
 
@@ -2359,25 +2421,48 @@ class AppViewModel @Inject constructor(
         data: String,
         allowPubkyAuth: Boolean,
     ): Boolean {
-        if (source != ScanSource.DEEPLINK || !allowPubkyAuth) return true
-        if (!PubkyAuthRequest.isProtocolUrl(data)) return true
+        if (source != ScanSource.DEEPLINK) return true
+        val uri = Uri.parse(data)
+        val isContactLink = PubkyContactLink.matches(uri)
+        if (isContactLink && PubkyContactLink.publicKey(uri) == null) return true
+        if (!isContactLink && (!allowPubkyAuth || !PubkyAuthRequest.isProtocolUrl(data))) return true
 
         if (!PubkyAuthRequest.isSignupUrl(data)) {
             val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
                 pubkyRepo.awaitInitialization()
-                true
+                awaitContactDataForDeeplink(isContactLink)
             } ?: false
             if (!isInitializationReady) {
-                Logger.warn("Timed out waiting for Pubky initialization", context = TAG)
+                Logger.warn("Failed to initialize Pubky deeplink", context = TAG)
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__auth_error_title),
-                    description = context.getString(R.string.profile__auth_error_timeout),
+                    title = context.getString(
+                        if (isContactLink) R.string.other__scan_err_decoding else R.string.profile__auth_error_title,
+                    ),
+                    description = context.getString(
+                        if (isContactLink) {
+                            R.string.other__scan__error__generic
+                        } else {
+                            R.string.profile__auth_error_timeout
+                        },
+                    ),
                 )
                 return false
             }
         }
         return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
+    }
+
+    private suspend fun awaitContactDataForDeeplink(isContactLink: Boolean): Boolean {
+        if (!isContactLink || pubkyRepo.publicKey.value == null) return true
+
+        pubkyRepo.contactsLoadCompletionVersion.first { it > 0 }
+        if (pubkyRepo.contactsLoadVersion.value > 0L) return true
+
+        val completionVersion = pubkyRepo.contactsLoadCompletionVersion.value
+        pubkyRepo.loadContacts()
+        pubkyRepo.contactsLoadCompletionVersion.first { it > completionVersion }
+        return pubkyRepo.contactsLoadVersion.value > 0L
     }
 
     private suspend fun isPaykitUiEnabledFromSettings() =
@@ -2880,7 +2965,18 @@ class AppViewModel @Inject constructor(
     ) = withContext(bgDispatcher) {
         if (rejectPubkyAuthScan(result, allowPubkyAuth, contactPaymentContext)) return@withContext
 
-        val input = result.removeLightningSchemes()
+        val input = if (routePubkyKeys && PubkyContactLink.matches(Uri.parse(result))) {
+            PubkyContactLink.publicKey(Uri.parse(result)) ?: run {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.other__scan__error__generic),
+                )
+                return@withContext
+            }
+        } else {
+            result.removeLightningSchemes()
+        }
 
         val contactPaymentProfile = activeContactPaymentProfile()
         val incomingPaymentRequest = activeIncomingPaymentRequest()
@@ -2889,6 +2985,7 @@ class AppViewModel @Inject constructor(
         resetSendState(
             contactPaymentProfile = contactPaymentProfile,
             isPaymentRequest = isPaymentRequest,
+            paymentRequestNote = incomingPaymentRequest?.note,
             isSubscriptionPayment = incomingPaymentRequest?.billingPeriod != null,
             isInitialSubscriptionPayment = synchronized(contactPaymentContextLock) {
                 activeContactPaymentContext?.isInitialSubscriptionPayment == true
@@ -2941,12 +3038,12 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        if (routePubkyKeys && isPaykitEnabled.value) {
+        if (routePubkyKeys && isPaykitUiEnabledFromSettings()) {
             val route = resolvePastedPubkyRoute(
                 input = input,
                 ownPublicKey = pubkyRepo.publicKey.value,
                 contacts = pubkyRepo.contacts.value,
-                isPaykitEnabled = isPaykitEnabled.value,
+                isPaykitEnabled = true,
             )
 
             if (route != null) {
@@ -3168,6 +3265,15 @@ class AppViewModel @Inject constructor(
         }
         clearPaymentRequestPresentationRetry(request.id)
         paykitPaymentRequestRepo.markPresented(request)
+    }
+
+    private fun clearCancelledContactContext(context: ContactPaymentContext?) {
+        if (context == null) return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext !== context) return
+            activeContactPaymentContext = null
+            preparedContactPaymentContext = null
+        }
     }
 
     private fun setActiveContactPaymentContext(context: ContactPaymentContext?) {
@@ -3938,6 +4044,7 @@ class AppViewModel @Inject constructor(
         }
 
         acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return
@@ -3959,9 +4066,22 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
+                releasePrivatePaymentListIfNeeded(contactPaymentContext)
                 cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 val message = getLnurlInvoiceFetchErrorMessage(it)
-                handlePaymentPreparationFailure(AppError(message, it), contactPaymentContext)
+                val error = AppError(message, it)
+                if (incomingPaymentRequest != null) {
+                    setSendEffect(
+                        SendEffect.NavigateToError(
+                            error.toSendFailureDetails(
+                                context,
+                                _sendUiState.value.currentLightningPaymentRequest(),
+                            ),
+                        ),
+                    )
+                } else {
+                    handlePaymentPreparationFailure(error, contactPaymentContext)
+                }
                 return
             }
         }
@@ -3977,6 +4097,7 @@ class AppViewModel @Inject constructor(
             SendMethod.LIGHTNING -> proceedWithLightningPayment(
                 incomingPaymentRequest,
                 preparedPaymentProofRequest,
+                contactPaymentContext,
                 amount,
             )
         }
@@ -3991,7 +4112,8 @@ class AppViewModel @Inject constructor(
         val address = _sendUiState.value.address
         val tags = _sendUiState.value.selectedTags
         var proofRequest = preparedPaymentProofRequest
-        var onchainPaymentStarted = false
+        var paymentProofStarted = false
+        var sendAttempted = false
         sendOnchain(
             address = address,
             amount = amount,
@@ -3999,8 +4121,10 @@ class AppViewModel @Inject constructor(
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
-                    onchainPaymentStarted = true
+                    paymentProofStarted = true
                 }
+                incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
+                sendAttempted = true
             },
             onBroadcast = { txId ->
                 proofRequest = null
@@ -4023,7 +4147,8 @@ class AppViewModel @Inject constructor(
         }.onFailure { error ->
             handleOnchainPaymentFailure(
                 error = error,
-                paymentStarted = onchainPaymentStarted,
+                sendAttempted = sendAttempted,
+                paymentProofStarted = paymentProofStarted,
                 incomingPaymentRequest = incomingPaymentRequest,
                 preparedPaymentProofRequest = proofRequest,
                 contactPaymentContext = contactPaymentContext,
@@ -4033,31 +4158,37 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleOnchainPaymentFailure(
         error: Throwable,
-        paymentStarted: Boolean,
+        sendAttempted: Boolean,
+        paymentProofStarted: Boolean,
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
         contactPaymentContext: ContactPaymentContext?,
     ) {
         val amount = _sendUiState.value.amount
-        if (paymentStarted && !error.isDefiniteOnchainPreBroadcastFailure()) {
+        if (
+            incomingPaymentRequest != null &&
+            sendAttempted &&
+            !error.isDefiniteOnchainPreBroadcastFailure()
+        ) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
-            uncertainOnchainPaymentRequestId = incomingPaymentRequest?.id
+            uncertainOnchainPaymentRequestId = incomingPaymentRequest.id
             paykitPaymentProofRepo.onchainPaymentResolutions.value
-                .firstOrNull { it.requestId == incomingPaymentRequest?.id }
+                .firstOrNull { it.requestId == incomingPaymentRequest.id }
                 ?.let(::handlePaykitOnchainPaymentResolution)
             if (uncertainOnchainPaymentRequestId == null) return
             setSendEffect(
                 SendEffect.NavigateToPending(
-                    paymentHash = incomingPaymentRequest?.paymentRequestId.orEmpty(),
+                    paymentHash = incomingPaymentRequest.paymentRequestId,
                     amount = amount.toLong(),
                     observeResolution = false,
                 )
             )
             return
         }
-        if (paymentStarted) {
+        if (paymentProofStarted) {
             incomingPaymentRequest?.let { paykitPaymentProofRepo.failOnchainPayment(it) }
         }
+        releasePrivatePaymentListIfNeeded(contactPaymentContext)
         cancelPaymentProofPreparation(preparedPaymentProofRequest)
         Logger.error("Error sending onchain payment", error, context = TAG)
         if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
@@ -4072,9 +4203,11 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun proceedWithLightningPayment(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
         amount: ULong,
     ) {
         val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
@@ -4103,7 +4236,23 @@ class AppViewModel @Inject constructor(
 
         val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
 
-        sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
+        var authorizationError: Throwable? = null
+        val result = sendLightning(decodedInvoice.bolt11, paymentAmount) {
+            authorizationError = incomingPaymentRequest?.let {
+                paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
+            }
+            authorizationError == null
+        }
+        authorizationError?.let {
+            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            cancelPaymentProofPreparation(proofRequest)
+            createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+        result.onSuccess { actualPaymentHash ->
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
             onSendSuccess(
@@ -4127,6 +4276,7 @@ class AppViewModel @Inject constructor(
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
             }
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
             lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
@@ -4173,6 +4323,7 @@ class AppViewModel @Inject constructor(
             return false
         }
         acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return false
         }
@@ -4442,8 +4593,9 @@ class AppViewModel @Inject constructor(
     private suspend fun sendLightning(
         bolt11: String,
         amount: ULong? = null,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
-        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
+        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount, onBeforeSend = onBeforeSend).onSuccess { hash ->
             // Wait until matching payment event is received (with timeout for hold invoices)
             val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
                 when (it) {
@@ -4645,6 +4797,7 @@ class AppViewModel @Inject constructor(
     suspend fun resetSendState(
         contactPaymentProfile: PubkyProfile? = null,
         isPaymentRequest: Boolean = false,
+        paymentRequestNote: String? = null,
         hardwareWalletId: String? = activeHardwareWalletId,
         isSubscriptionPayment: Boolean = false,
         isInitialSubscriptionPayment: Boolean = false,
@@ -4666,6 +4819,7 @@ class AppViewModel @Inject constructor(
                 onchainFeeUi = OnchainFeeUi(rate = FeeRate.fromSpeed(speed)),
                 contactPaymentProfile = contactPaymentProfile,
                 isPaymentRequest = isPaymentRequest,
+                paymentRequestNote = paymentRequestNote,
                 hardwareWalletId = hardwareWalletId,
                 hardwareWalletName = hardwareWalletId?.let { walletId ->
                     hwWalletRepo.wallets.value.find { it.id == walletId }?.name
@@ -4891,7 +5045,10 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    val currentToast: StateFlow<Toast?> = toastManager.currentToast
+    // Hidden at display time, not enqueue time, so a toast raised together with a dev mode change follows the new state
+    val currentToast: StateFlow<Toast?> = combine(toastManager.currentToast, areToastsDisabled) { toast, disabled ->
+        toast.takeUnless { disabled }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun toast(
         type: Toast.ToastType,
@@ -5098,12 +5255,31 @@ class AppViewModel @Inject constructor(
                 synchronized(contactPaymentContextLock) {
                     if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
                 }
+                releasePrivatePaymentListIfNeeded(contactPaymentContext)
                 cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 handlePaymentPreparationFailure(it, contactPaymentContext)
                 return false
             }
         }
         return true
+    }
+
+    suspend fun authorizeHardwareContactPayment(hasAttemptedBroadcast: Boolean): Boolean {
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        val request = contactPaymentContext?.incomingPaymentRequest ?: return true
+        val error = paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull() ?: return true
+        if (hasAttemptedBroadcast) {
+            toast(error)
+            return false
+        }
+
+        paykitPaymentProofRepo.failOnchainPayment(request)
+        releasePrivatePaymentListIfNeeded(contactPaymentContext)
+        synchronized(contactPaymentContextLock) {
+            if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
+        }
+        handlePaymentPreparationFailure(error, contactPaymentContext)
+        return false
     }
 
     fun completeHardwareContactPayment(txId: String) {
@@ -5190,6 +5366,12 @@ class AppViewModel @Inject constructor(
         context ?: return Result.success(Unit)
         val privatePaymentContext = context.privatePaymentContext ?: return Result.success(Unit)
         return privatePaykitRepo.consumePrivatePaymentList(context.publicKey, privatePaymentContext)
+    }
+
+    private suspend fun releasePrivatePaymentListIfNeeded(context: ContactPaymentContext?) {
+        if (context?.incomingPaymentRequest == null) return
+        val privatePaymentContext = context.privatePaymentContext ?: return
+        privatePaykitRepo.releasePrivatePaymentList(context.publicKey, privatePaymentContext)
     }
 
     private suspend fun acceptIncomingPaymentRequestIfNeeded(context: ContactPaymentContext?): Result<Unit> {
@@ -5579,6 +5761,7 @@ class AppViewModel @Inject constructor(
 
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
         val value = uri.toString()
+        val isContactLink = PubkyContactLink.matches(uri)
         if (SamRockSetupRequest.isProtocolUrl(value)) {
             if (!walletRepo.walletExists()) return@launch
 
@@ -5596,7 +5779,7 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        if (uri.isRecoveryModeDeeplink()) {
+        if (!isContactLink && uri.isRecoveryModeDeeplink()) {
             lightningRepo.setRecoveryMode(enabled = true)
             delay(SCREEN_TRANSITION_DELAY)
             mainScreenEffect(
@@ -5605,12 +5788,6 @@ class AppViewModel @Inject constructor(
                     clearStack = true,
                 )
             )
-            return@launch
-        }
-
-        PubkyRingAuthCallback.parse(uri)?.let {
-            if (!isPaykitEnabled.value) return@launch
-            handlePubkyRingAuthCallback(it)
             return@launch
         }
 
@@ -5626,7 +5803,12 @@ class AppViewModel @Inject constructor(
 
         if (!walletRepo.walletExists()) return@launch
 
-        launchScan(source = ScanSource.DEEPLINK, data = value, startDelay = SCREEN_TRANSITION_DELAY)
+        launchScan(
+            source = ScanSource.DEEPLINK,
+            data = value,
+            startDelay = SCREEN_TRANSITION_DELAY,
+            routePubkyKeys = isContactLink,
+        )
     }
 
     fun consumeScreenDeepLink() {
@@ -5657,7 +5839,8 @@ class AppViewModel @Inject constructor(
         if (!isSignup && !pubkyRepo.hasSecretKey()) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.profile__auth_approval_ring_only),
+                title = context.getString(R.string.pubky_auth__use_ring),
+                description = context.getString(R.string.pubky_auth__use_ring_desc),
             )
             return
         }
@@ -5682,27 +5865,18 @@ class AppViewModel @Inject constructor(
         return true
     }
 
-    private suspend fun handlePubkyRingAuthCallback(callback: PubkyRingAuthCallback) {
-        when (val result = pubkyRepo.handleAuthCallback(callback)) {
-            is PubkyRingAuthCallbackHandlingResult.TrustedError -> {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__auth_error_title),
-                    description = result.message ?: context.getString(R.string.other__qr_error_text),
-                )
-            }
-            PubkyRingAuthCallbackHandlingResult.Handled,
-            PubkyRingAuthCallbackHandlingResult.Ignored,
-            -> Unit
-        }
-    }
-
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
     private fun String.removeLightningSchemes(): String = LIGHTNING_SCHEME_PATTERNS.fold(this) { acc, regex ->
         acc.replace(regex, "")
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
+
+    fun onAppResumed() {
+        viewModelScope.launch {
+            if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.restoreSessionIfNeeded()
+        }
+    }
 
     fun onHomeResumed() {
         checkTimedSheets()
@@ -5831,6 +6005,7 @@ data class SendUiState(
     val lastLightningFee: Long = 0L,
     val contactPaymentProfile: PubkyProfile? = null,
     val isPaymentRequest: Boolean = false,
+    val paymentRequestNote: String? = null,
     val hardwareWalletId: String? = null,
     val hardwareWalletName: String? = null,
     val hardwareAvailableSats: ULong = 0uL,
@@ -5917,6 +6092,7 @@ sealed class MainScreenEffect {
         val clearStack: Boolean = false,
     ) : MainScreenEffect()
 
+    data object NavigateToPubkyChoice : MainScreenEffect()
     data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }
@@ -6008,7 +6184,7 @@ internal fun resolvePastedPubkyRoute(
 ): Routes? {
     if (!isPaykitEnabled) return null
 
-    val normalizedKey = PubkyPublicKeyFormat.normalized(input) ?: return null
+    val normalizedKey = PubkyPublicKeyFormat.canonicalized(input) ?: return null
 
     if (PubkyPublicKeyFormat.matches(normalizedKey, ownPublicKey)) {
         return Routes.Profile

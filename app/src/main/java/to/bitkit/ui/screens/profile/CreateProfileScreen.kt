@@ -10,17 +10,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,25 +27,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.Text13Up
-import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.ProfileEditHeader
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.theme.AppTextFieldDefaults
-import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -115,48 +109,26 @@ private fun Content(
         if (uiState.isLoading) {
             LoadingState(text = stringResource(R.string.profile__deriving_keys))
         } else {
+            val isNameInitiallyEmpty = remember { uiState.name.isEmpty() }
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 32.dp)
+                    .padding(horizontal = 16.dp)
             ) {
-                VerticalSpacer(32.dp)
-
-                AvatarPickerButton(
-                    avatarUri = uiState.avatarUri,
-                    onClick = launchPhotoPicker,
-                    modifier = Modifier.testTag("CreateProfileAvatar"),
-                )
-
-                VerticalSpacer(32.dp)
-
-                TextInput(
-                    value = uiState.name,
-                    onValueChange = onNameChange,
-                    placeholder = stringResource(R.string.profile__edit_name_placeholder),
-                    singleLine = true,
-                    textStyle = AppTextStyles.Display.copy(textAlign = TextAlign.Center),
-                    colors = AppTextFieldDefaults.transparent,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("CreateProfileUsername"),
-                )
-
-                VerticalSpacer(16.dp)
-                HorizontalDivider()
-                VerticalSpacer(16.dp)
-
-                Text13Up(
-                    text = stringResource(R.string.profile__your_pubky),
-                    color = Colors.White64,
-                )
-                VerticalSpacer(8.dp)
-                BodyMSB(
-                    text = uiState.derivedPublicKey ?: "...",
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                ProfileEditHeader(
+                    name = uiState.name,
+                    onNameChange = onNameChange,
+                    publicKey = uiState.derivedPublicKey ?: "...",
+                    nameTestTag = "CreateProfileUsername",
+                    autoFocusName = isNameInitiallyEmpty,
+                    avatarContent = {
+                        AvatarPickerButton(
+                            avatarUri = uiState.avatarUri,
+                            onClick = launchPhotoPicker,
+                            modifier = Modifier.testTag("CreateProfileAvatar"),
+                        )
+                    },
                 )
 
                 FillHeight()
@@ -167,7 +139,7 @@ private fun Content(
                     onClick = onSave,
                     enabled = uiState.name.isNotBlank() && !uiState.isSaving,
                     isLoading = uiState.isSaving,
-                    modifier = Modifier.testTag("CreateProfileSave"),
+                    modifier = Modifier.testTag("CreateProfileSave")
                 )
                 VerticalSpacer(16.dp)
             }
@@ -186,7 +158,7 @@ private fun AvatarPickerButton(
         modifier = modifier
             .size(96.dp)
             .clip(CircleShape)
-            .background(Colors.Gray5)
+            .background(Colors.Gray6)
             .clickable(onClick = onClick),
     ) {
         if (avatarUri != null) {
@@ -198,10 +170,10 @@ private fun AvatarPickerButton(
             )
         } else {
             Icon(
-                painter = painterResource(R.drawable.ic_user_square),
+                painter = painterResource(R.drawable.ic_image_square),
                 contentDescription = null,
                 tint = Colors.White32,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(32.dp),
             )
         }
     }

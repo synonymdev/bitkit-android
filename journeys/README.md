@@ -160,7 +160,8 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `onchain-receive/*` | port pending in synonymdev/bitkit-ios#588, which wires `onchainTransactionConfirmed` into the same received-sheet flow but carries no `journeys/` files. Two adaptations when it lands: iOS suppresses replayed historical receives with a `pendingRestoreActivitySeen` flag cleared by the first post-restore on-chain sync, not the one-hour block-timestamp guard used here, so a stale-confirmation step has to drive a restore instead of a clock; and iOS has no foreground-service path, so `confirmed-only-background-notification.xml` has no counterpart |
 | `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
-| `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
+| `deeplinks/pubky-contact.xml` | ported — same contact routing and unlock behavior |
+| `deeplinks/screen-deeplink.xml`, `deeplinks/sheet-deeplink.xml` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
 | `amount-limits/transfer-spending-preset-delete.xml` | not ported yet — the same fix shipped in synonymdev/bitkit-ios#289, so this one should port |
@@ -174,6 +175,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
+| `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; iOS has no app-log step, and closing the received sheet re-sizes its Spending Confirm, so the lower amounts can show before the swipe |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
@@ -208,6 +210,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
+| Payment Request detail screen | `PaymentRequestDetailsScreen` | `PaymentRequestDetailScreen` |
 
 Two of those are unreconciled rather than intentional: the Send screen emitting both
 `AvailableAmount` and `available_balance`, and the background-payments row name. Settling either is a
@@ -221,3 +224,5 @@ One asymmetry worth knowing when comparing: Android builds `Tab-*` from the enum
 (`CustomTabRowWithSpacing`), so `Tab-all` is stable in any locale, while iOS derives it from the
 tab's display name and becomes `Tab-todas` in Spanish. Journeys naming a `Tab-*` identifier assume an
 English device for iOS's sake.
+
+Device-clock fault injection requires a separate manual run: [Paykit clock changes](paykit-clock-changes.md).

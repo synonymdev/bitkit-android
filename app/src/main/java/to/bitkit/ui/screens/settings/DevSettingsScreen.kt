@@ -55,6 +55,7 @@ fun DevSettingsScreen(
     val settings = settingsViewModel ?: return
     val context = LocalContext.current
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    val disableAllToasts by settings.disableAllToasts.collectAsStateWithLifecycle()
     val isSavingsSwapEnabled by settings.isSavingsSwapEnabled.collectAsStateWithLifecycle()
     val demoClockOffsetDays by settings.demoClockOffsetDays.collectAsStateWithLifecycle()
     var showPaykitWarning by remember { mutableStateOf(false) }
@@ -75,6 +76,13 @@ fun DevSettingsScreen(
             SettingsButtonRow("LDK") { navController.navigateTo(Routes.LdkDebug) }
             SettingsButtonRow("VSS") { navController.navigateTo(Routes.VssDebug) }
             SettingsButtonRow("Probing Tool") { navController.navigateTo(Routes.ProbingTool) }
+
+            SettingsSwitchRow(
+                title = "Disable All Toasts",
+                isChecked = disableAllToasts,
+                onClick = { settings.setDisableAllToasts(!disableAllToasts) },
+                switchTestTag = "DisableAllToastsToggle",
+            )
 
             SectionHeader("SWAPS")
             SettingsButtonRow("Swaps") { navController.navigateTo(Routes.SwapsSettings) }
