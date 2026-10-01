@@ -4,7 +4,7 @@
   </description>
   <actions>
     <action>On the requester, send the payer contact a Payment Request for 21,000 sats with the note "Lunch last week"</action>
-    <action>On the payer, verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") appears with 21,000 sats</action>
+    <action>On the payer, verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") appears with 21,000 sats without opening the pending Payment Requests bell</action>
     <action>Verify From (testTag "PaymentRequestFrom") shows the requester's contact name</action>
     <action>Verify For (testTag "PaymentRequestFor") shows "Lunch last week"</action>
     <action>Tap Show details (testTag "SendConfirmToggleDetails")</action>
@@ -12,7 +12,7 @@
     <action>Verify the invoice note (testTag "PaymentRequestInvoiceNote") shows "Lunch last week"</action>
     <action>Close the Payment Request confirmation screen without paying</action>
     <action>On the requester, send the payer contact a Payment Request for 5,000 sats with no note</action>
-    <action>On the payer, verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") shows 5,000 sats, opening it from the pending Payment Requests bell (testTag "PaymentRequestsBell") if it does not open by itself</action>
+    <action>On the payer, verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") appears automatically with 5,000 sats</action>
     <action>Verify From (testTag "PaymentRequestFrom") shows the requester's contact name and For (testTag "PaymentRequestFor") shows "Not specified"</action>
   </actions>
 </journey>

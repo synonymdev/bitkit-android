@@ -931,6 +931,70 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `new pending request opens without another refresh or resume`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1newpendingrequest"
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(
+                PublicPaykitPaymentResult.Opened(
+                    paymentRequest = bolt11,
+                    privatePaymentContext = privatePaymentContext(version = 8uL),
+                ),
+            ),
+        )
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        clearInvocations(paykitPaymentRequestRepo)
+
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(request.id, sut.sendUiState.value.incomingPaymentRequestId)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        verify(paykitPaymentRequestRepo, never()).refresh()
+    }
+
+    @Test
+    fun `request arriving during another presentation is not left waiting for refresh`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        sut.showPaymentRequests()
+        runCurrent()
+        val firstRequest = paymentRequest()
+        val nextRequest = paymentRequest().copy(paymentRequestId = "next-request")
+        val firstResolutionStarted = CompletableDeferred<Unit>()
+        val finishFirstResolution = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.beginPaymentRequest(firstRequest)).doSuspendableAnswer {
+            firstResolutionStarted.complete(Unit)
+            finishFirstResolution.await()
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
+        }
+        val bolt11 = "lnbcrt1nextpendingrequest"
+        stubOpenedPaymentRequest(nextRequest, bolt11)
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(firstRequest)
+        runCurrent()
+        sut.hideSheet()
+        firstResolutionStarted.await()
+
+        pendingPaykitPaymentRequests.value = listOf(firstRequest, nextRequest)
+        runCurrent()
+        finishFirstResolution.complete(Unit)
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(nextRequest.id, sut.sendUiState.value.incomingPaymentRequestId)
+        verify(privatePaykitRepo).beginPaymentRequest(nextRequest)
+    }
+
+    @Test
     fun `opened request passes its note to the confirm sheet`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest().copy(note = "Lunch last week")

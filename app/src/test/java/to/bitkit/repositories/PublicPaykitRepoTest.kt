@@ -17,8 +17,6 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
-import to.bitkit.data.PrivatePaykitCacheData
-import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.services.CoreService
@@ -47,13 +45,11 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     private val coreService = mock<CoreService>()
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
-    private val privatePaykitCacheStore = mock<PrivatePaykitCacheStore>()
     private val clock = mock<Clock>()
 
     private val publicKey = MutableStateFlow<String?>("pubkyself")
     private val walletState = MutableStateFlow(WalletState())
     private val settingsFlow = MutableStateFlow(SettingsData())
-    private val privateCacheFlow = MutableStateFlow(PrivatePaykitCacheData())
 
     private lateinit var sut: PublicPaykitRepo
 
@@ -67,7 +63,6 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(settingsStore.data).thenReturn(settingsFlow)
-        whenever(privatePaykitCacheStore.data).thenReturn(privateCacheFlow)
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MILLIS))
         whenever(paykitSdkService.syncPublicEndpoints(any())).thenReturn(syncReport())
         whenever { walletRepo.refreshReusableReceiveAddress() }.thenReturn(Result.success(Unit))
@@ -84,18 +79,14 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private capability remains enabled until all pending cleanup is complete`() = test {
-        for (pending in listOf(
-            PrivatePaykitCacheData(cleanupPending = true),
-            PrivatePaykitCacheData(deletedContactCleanupPendingPublicKeys = setOf("pubkycontact")),
-            PrivatePaykitCacheData(),
-        )) {
-            privateCacheFlow.value = pending
-            sut.syncPaykitApp(privateSharingEnabled = false).getOrThrow()
+    fun `private capability follows sharing preference`() = test {
+        for (enabled in listOf(false, true)) {
+            settingsFlow.value = settingsFlow.value.copy(sharesPrivatePaykitEndpoints = enabled)
+            sut.syncPaykitApp().getOrThrow()
         }
         val capabilities = argumentCaptor<Boolean>()
-        verifyBlocking(paykitSdkService, times(3)) { syncPaykitApp(capabilities.capture()) }
-        assertEquals(listOf(true, true, false), capabilities.allValues)
+        verifyBlocking(paykitSdkService, times(2)) { syncPaykitApp(capabilities.capture()) }
+        assertEquals(listOf(false, true), capabilities.allValues)
     }
 
     @Test
@@ -311,7 +302,6 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         coreService = coreService,
         paykitSdkService = paykitSdkService,
         settingsStore = settingsStore,
-        privatePaykitCacheStore = privatePaykitCacheStore,
         clock = clock,
     )
 

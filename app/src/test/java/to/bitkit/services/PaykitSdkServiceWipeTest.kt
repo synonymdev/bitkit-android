@@ -100,7 +100,14 @@ class PaykitSdkServiceWipeTest {
         }
         val store = mock<PubkyStore> { on { data } doReturn flowOf(PubkyStoreData()) }
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val service = PaykitSdkService(mock(), keychain, store, { bootstrap }, dispatcher) { sdk }
+        val service = PaykitSdkService(
+            mock(),
+            keychain,
+            store,
+            { bootstrap },
+            dispatcher,
+            settingsStore = mock(),
+        ) { sdk }
 
         mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
             native.`when`<String> { requiredSessionCapabilities() }.thenReturn("capabilities")
