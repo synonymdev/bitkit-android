@@ -13,11 +13,11 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
 /**
- * Dev-only offset that moves Paykit subscription scheduling forward, so a recorded demo can show a renewal without
- * waiting a whole billing period. It covers subscription proposals, acceptance, due periods, renewal dates and due
- * notifications. One-time payment requests, invoices, payments and allowance checks keep real time.
+ * Dev-only offset that moves Paykit subscription scheduling forward, so a renewal can be tested on a debug build
+ * without waiting a whole billing period. It covers subscription proposals, acceptance, due periods, renewal dates and
+ * due notifications. One-time payment requests, invoices and payments keep real time.
  */
-object DemoClock {
+object SubscriptionClockOffset {
     /** Offsets the Dev Settings accept, in whole days. */
     val OFFSET_DAYS_RANGE = 0..400
 
@@ -53,24 +53,24 @@ object DemoClock {
     }
 }
 
-/** Keeps [DemoClock.offsetDays] in step with the offset stored by Dev Settings. */
+/** Keeps [SubscriptionClockOffset.offsetDays] in step with the offset stored by Dev Settings. */
 @Singleton
-class DemoClockSync @Inject constructor(
+class SubscriptionClockOffsetSync @Inject constructor(
     private val settingsStore: SettingsStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
-        private const val TAG = "DemoClockSync"
+        private const val TAG = "SubscriptionClockOffsetSync"
     }
 
     private val scope = appScope(ioDispatcher, TAG)
 
     fun start() {
-        if (!DemoClock.isAvailable) return
+        if (!SubscriptionClockOffset.isAvailable) return
         scope.launch {
-            settingsStore.demoClockOffsetDays.collect {
-                DemoClock.setOffsetDays(it)
-                if (it != 0) Logger.info("Set the demo clock offset to '$it' days", context = TAG)
+            settingsStore.subscriptionClockOffsetDays.collect {
+                SubscriptionClockOffset.setOffsetDays(it)
+                if (it != 0) Logger.info("Set the subscription clock offset to '$it' days", context = TAG)
             }
         }
     }

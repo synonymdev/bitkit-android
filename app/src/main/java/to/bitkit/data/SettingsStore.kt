@@ -46,7 +46,7 @@ class SettingsStore @Inject constructor(
     val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
     }
-    val demoClockOffsetDays: Flow<Int> = localStore.data.map { it[DEMO_CLOCK_OFFSET_DAYS_KEY] ?: 0 }
+    val subscriptionClockOffsetDays: Flow<Int> = localStore.data.map { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] ?: 0 }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
@@ -113,8 +113,8 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
     }
 
-    suspend fun setDemoClockOffsetDays(days: Int) {
-        localStore.edit { it[DEMO_CLOCK_OFFSET_DAYS_KEY] = days }
+    suspend fun setSubscriptionClockOffsetDays(days: Int) {
+        localStore.edit { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] = days }
     }
 
     suspend fun addLastUsedTag(newTag: String) {
@@ -150,7 +150,7 @@ class SettingsStore @Inject constructor(
         private const val MAX_LAST_USED_TAGS = 10
         private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
-        private val DEMO_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("demo_clock_offset_days")
+        private val SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("subscription_clock_offset_days")
     }
 }
 

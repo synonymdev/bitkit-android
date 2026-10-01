@@ -42,7 +42,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.shareZipFile
-import to.bitkit.utils.DemoClock
+import to.bitkit.utils.SubscriptionClockOffset
 import to.bitkit.viewmodels.DevSettingsViewModel
 
 @Composable
@@ -57,7 +57,7 @@ fun DevSettingsScreen(
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val disableAllToasts by settings.disableAllToasts.collectAsStateWithLifecycle()
     val isSavingsSwapEnabled by settings.isSavingsSwapEnabled.collectAsStateWithLifecycle()
-    val demoClockOffsetDays by settings.demoClockOffsetDays.collectAsStateWithLifecycle()
+    val subscriptionClockOffsetDays by settings.subscriptionClockOffsetDays.collectAsStateWithLifecycle()
     var showPaykitWarning by remember { mutableStateOf(false) }
 
     ScreenColumn {
@@ -115,10 +115,10 @@ fun DevSettingsScreen(
                     },
                     switchTestTag = "PaykitUiToggle",
                 )
-                if (DemoClock.isAvailable) {
-                    DemoClockOffsetRow(
-                        offsetDays = demoClockOffsetDays,
-                        onSelect = settings::setDemoClockOffsetDays,
+                if (SubscriptionClockOffset.isAvailable) {
+                    SubscriptionClockOffsetRow(
+                        offsetDays = subscriptionClockOffsetDays,
+                        onSelect = settings::setSubscriptionClockOffsetDays,
                     )
                 }
             }
@@ -293,34 +293,34 @@ fun DevSettingsScreen(
 }
 
 @Composable
-private fun DemoClockOffsetRow(
+private fun SubscriptionClockOffsetRow(
     offsetDays: Int,
     onSelect: (Int) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         SettingsButtonRow(
-            title = "Demo clock offset (days)",
-            value = SettingsButtonValue.StringValue(demoClockOffsetLabel(offsetDays)),
+            title = "Subscription clock offset (days)",
+            value = SettingsButtonValue.StringValue(subscriptionClockOffsetLabel(offsetDays)),
             onClick = { expanded = true },
-            modifier = Modifier.testTag("DemoClockOffset")
+            modifier = Modifier.testTag("SubscriptionClockOffset")
         )
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            DemoClock.OFFSET_DAYS_PRESETS.forEach { days ->
+            SubscriptionClockOffset.OFFSET_DAYS_PRESETS.forEach { days ->
                 DropdownMenuItem(
-                    text = { Text(demoClockOffsetLabel(days)) },
+                    text = { Text(subscriptionClockOffsetLabel(days)) },
                     onClick = {
                         expanded = false
                         onSelect(days)
                     },
-                    modifier = Modifier.testTag("DemoClockOffset-$days")
+                    modifier = Modifier.testTag("SubscriptionClockOffset-$days")
                 )
             }
         }
     }
 }
 
-private fun demoClockOffsetLabel(days: Int) = if (days == 0) "Off" else "$days"
+private fun subscriptionClockOffsetLabel(days: Int) = if (days == 0) "Off" else "$days"

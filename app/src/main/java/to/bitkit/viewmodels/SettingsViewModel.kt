@@ -34,7 +34,7 @@ import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.DemoClock
+import to.bitkit.utils.SubscriptionClockOffset
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -221,12 +221,13 @@ class SettingsViewModel @Inject constructor(
     val isPaykitStateLoaded = settingsStore.isPaykitEnabled.map { true }
         .asStateFlow(initialValue = false)
 
-    val demoClockOffsetDays = settingsStore.demoClockOffsetDays.map { DemoClock.clampedOffsetDays(it) }
+    val subscriptionClockOffsetDays = settingsStore.subscriptionClockOffsetDays
+        .map { SubscriptionClockOffset.clampedOffsetDays(it) }
         .asStateFlow(initialValue = 0)
 
-    fun setDemoClockOffsetDays(days: Int) {
+    fun setSubscriptionClockOffsetDays(days: Int) {
         viewModelScope.launch {
-            settingsStore.setDemoClockOffsetDays(DemoClock.clampedOffsetDays(days))
+            settingsStore.setSubscriptionClockOffsetDays(SubscriptionClockOffset.clampedOffsetDays(days))
         }
     }
 

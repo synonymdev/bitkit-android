@@ -1351,7 +1351,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .filter { it.lifecycleState == PaymentRequestLifecycleState.PROPOSED }
             .mapNotNull { it.expiresAt }
             .map { it - now }
-        // Subscription dates run on the subscription clock, which a demo offset can move ahead of real time.
+        // Subscription dates run on the subscription clock, which the offset can move ahead of real time.
         val subscriptionDelays = _subscriptions.value
             .filter {
                 it.lifecycleState == PaymentRequestLifecycleState.PROPOSED ||

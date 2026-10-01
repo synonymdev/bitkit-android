@@ -457,7 +457,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
-    fun `demo clock offset makes the next billing period due`() = test {
+    fun `subscription clock offset makes the next billing period due`() = test {
         val proposal = paymentRequestRecord()
         val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(proposal), listOf(active))
