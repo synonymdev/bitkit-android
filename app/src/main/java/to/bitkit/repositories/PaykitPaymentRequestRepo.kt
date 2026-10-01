@@ -983,7 +983,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             }
         val recurringHistory = allSubscriptions.filter { it.isPayer }.flatMap { subscription ->
             updatedSubscriptionAcceptedAt[subscription.id]
-                ?.let { subscription.requestsThrough(now, it) }
+                ?.let { subscription.requestsThrough(subscriptionNow, it) }
                 .orEmpty()
         }.mapNotNull { request ->
             when {

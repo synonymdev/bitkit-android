@@ -485,6 +485,41 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `subscription clock offset lists the paid next period in the payment history`() = test {
+        val proposal = paymentRequestRecord()
+        val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(proposal), listOf(active))
+        whenever(
+            paykitSdkService.acceptPaymentRequest(
+                COUNTERPARTY,
+                PaykitReceiverPaths.SERVER,
+                PAYMENT_REQUEST_ID,
+            )
+        ).thenReturn(active)
+        sut.refresh().getOrThrow()
+        sut.accept(sut.subscriptions.value.single()).getOrThrow()
+        val completedProofKinds = listOf("2027-01-01T08:00:00Z", "2027-02-01T08:00:00Z").associate {
+            PaykitPaymentRequestId(
+                paymentRequestId = PAYMENT_REQUEST_ID,
+                counterparty = COUNTERPARTY,
+                counterpartyReceiverPath = PaykitReceiverPaths.SERVER,
+                billingPeriodStartsAt = it,
+            ) to PaykitPaymentProofKind.Onchain
+        }
+        whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
+            .thenReturn(completedProofKinds)
+
+        subscriptionOffset = 31.days
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(
+            listOf(Instant.parse("2027-01-01T08:00:00Z"), Instant.parse("2027-02-01T08:00:00Z")),
+            sut.paymentRequestHistory.value.mapNotNull { it.billingPeriod?.startsAt }.sorted(),
+        )
+    }
+
+    @Test
     fun `accepting subscription rejects terms changed after review`() = test {
         val reviewedRecord = paymentRequestRecord()
         val changedRecord = paymentRequestRecord(amount = "0.002")
