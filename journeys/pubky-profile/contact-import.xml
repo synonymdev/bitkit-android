@@ -1,0 +1,33 @@
+<journey name="contact import">
+  <description>
+    Importing the follows of an adopted Pubky Ring identity saves every follow, including a follow
+    that has never published a profile, which is imported under its truncated public key. While the
+    import runs, Import All shows a spinner and Select is disabled, and leaving the screen does not
+    stop the import. Contacts then lists every saved contact at once, without a screen-wide loading
+    spinner, and fills in names as their profiles load.
+
+    Precondition (not a listed capability): Pubky Ring (package app.pubkyring) installed on the same
+    device and signed with this repository's app/debug.keystore, as for the ring choice rows
+    journey, with an identity that has a published profile and follows at least three keys, at
+    least one of which has never published a profile. Also needed: an onboarded dev wallet with
+    Paykit enabled (the default), PIN off and no active Pubky identity in Bitkit. The journey adopts
+    that identity, so sign out of it in Bitkit before running the journey again.
+
+    On a fast network the import can finish before the buttons are checked, so the journey slows
+    the emulator network with adb emu; a physical device needs another way to slow its connection.
+    If the import still finishes first, report "already finished" for that step rather than
+    failing. Contact rows carry testTag "Contact_" followed by the contact's public key.
+  </description>
+  <actions>
+    <action>Tap the profile button (testTag "ProfileButton") on the home screen; if the profile intro (testTag "ProfileIntro") shows, tap Continue (testTag "ProfileIntro-button")</action>
+    <action>Tap the row (testTag "PubkyChoiceIdentity") of the identity with follows and wait for the import overview, which shows how many friends were found</action>
+    <action>Note the number of friends shown</action>
+    <action>Run adb emu network delay gprs and adb emu network speed edge</action>
+    <action>Tap Import All (testTag "ContactImportOverviewImportAll")</action>
+    <action>Verify Import All shows a spinner and Select (testTag "ContactImportOverviewSelect") is disabled, then tap Select and verify the selection screen does not open</action>
+    <action>Wait up to two minutes for the import to finish and the next setup screen to open</action>
+    <action>Run adb emu network delay none and adb emu network speed full</action>
+    <action>Open the menu (testTag "HeaderMenu") and tap Contacts (testTag "DrawerContacts")</action>
+    <action>Verify the list shows one row (testTag "Contact_" followed by a public key) per noted friend with no screen-wide loading spinner, and the follow that never published a profile is listed under its truncated public key</action>
+  </actions>
+</journey>
