@@ -24,6 +24,13 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 
 `definite-pre-broadcast-retry.xml` uses the linked fixture issuer and the local regtest LNURL server. Configure its LNURL-pay metadata endpoint normally, but make its invoice callback fail the first request and succeed after it is switched back to the healthy response. Do not republish the Paykit payment list between attempts. This makes the first send fail before Lightning dispatch and proves that the same private payment details can be opened and paid on retry.
 
+## Accepting install
+
+`accepted-device-ownership.xml` extends the failing LNURL fixture to two separate installs sharing
+one Pubky identity and App ID. Only the accepting install may retry after restart; the other keeps
+the accepted request in history without payment controls. Confirm acceptance in shared request
+state after the callback failure, before testing the second install.
+
 ## Reference evidence
 
 The source wallet-leg run completed this path on regtest on 2026-08-22: Bitkit presented the incoming request, opened the on-chain payment, broadcast it, and confirmed transaction

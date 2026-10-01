@@ -158,6 +158,36 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `recurring final authorization survives in flight filtering but rejects identity switches`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)),
+        )
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        sut.accept(request).getOrThrow()
+        sut.ensurePaymentAllowed(request).getOrThrow()
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(setOf(request.id))
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        sut.ensurePaymentAllowed(request).getOrThrow()
+
+        val checking = CompletableDeferred<Unit>()
+        val checked = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            checking.complete(Unit)
+            checked.await()
+            emptyList()
+        }
+        val authorization = async { sut.ensurePaymentAllowed(request) }
+        checking.await()
+        sut.activate(SECOND_IDENTITY)
+        checked.complete(Unit)
+
+        assertTrue(authorization.await().isFailure)
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+    }
+
+    @Test
     fun `refresh keeps creator subscription without generating a payer payment`() = test {
         val metadataText = """
             {
