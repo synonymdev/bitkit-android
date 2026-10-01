@@ -152,6 +152,10 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.PaykitAllowanceEntry
+import to.bitkit.repositories.PaykitAllowanceError
+import to.bitkit.repositories.PaykitAllowanceEvent
+import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
 import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentProofRepo
@@ -161,10 +165,6 @@ import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
-import to.bitkit.repositories.PaykitAllowanceEntry
-import to.bitkit.repositories.PaykitAllowanceError
-import to.bitkit.repositories.PaykitAllowanceEvent
-import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitSubscription
