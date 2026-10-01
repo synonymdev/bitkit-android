@@ -1098,12 +1098,15 @@ internal fun PaykitSubscription.shouldShowTiming(now: Instant): Boolean =
     isActive(now) || expiryDate() != null
 
 internal fun PaykitSubscription.expiryDate(): Instant? =
-    recurrence.endsAt ?: paidPeriods.maxOfOrNull { it.endsAt }
+    canceledPaidThrough() ?: recurrence.endsAt ?: paidPeriods.maxOfOrNull { it.endsAt }
+
+/** A canceled subscription is paid for up to its last paid period, whatever its fixed end date. */
+private fun PaykitSubscription.canceledPaidThrough(): Instant? =
+    if (lifecycleState == PaymentRequestLifecycleState.CANCELED) paidPeriods.maxOfOrNull { it.endsAt } else null
 
 /** Active, or canceled with its last paid period still ahead: it keeps running until it is paid through. */
 internal fun PaykitSubscription.runsUntilPaidThrough(now: Instant): Boolean =
-    isActive(now) ||
-        (lifecycleState == PaymentRequestLifecycleState.CANCELED && expiryDate()?.let { it > now } == true)
+    isActive(now) || canceledPaidThrough()?.let { it > now } == true
 
 /** Shown as expired: it no longer runs, whether canceled, rejected or lapsed. */
 internal fun PaykitSubscription.hasEnded(now: Instant): Boolean = isExpired(now) && !runsUntilPaidThrough(now)
@@ -1153,8 +1156,7 @@ internal fun nextSubscriptionTransition(
     }.filterNotNull().toMutableList()
     dates += activeSubscriptions.mapNotNull { it.recurrence.nextPeriodAfter(now)?.startsAt }
     dates += subscriptions.mapNotNull { it.paymentDueOnAcceptance(now)?.billingPeriod?.endsAt }
-    dates += subscriptions.filter { it.lifecycleState == PaymentRequestLifecycleState.CANCELED }
-        .mapNotNull { it.expiryDate() }
+    dates += subscriptions.mapNotNull { it.canceledPaidThrough() }
     return dates.filter { it > now }.minOrNull()
 }
 

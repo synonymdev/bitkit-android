@@ -184,6 +184,19 @@ class SubscriptionsScreenTest {
     }
 
     @Test
+    fun `canceled subscription stops running at its last paid period even with a later end date`() {
+        val canceled = canceledWithPaidThrough().let {
+            it.copy(recurrence = it.recurrence.copy(endsAt = Instant.parse("2027-06-01T08:00:00Z")))
+        }
+
+        assertEquals(paidThrough, canceled.expiryDate())
+        assertTrue(canceled.runsUntilPaidThrough(now))
+        assertFalse(canceled.runsUntilPaidThrough(paidThrough))
+        assertEquals(R.string.subscriptions__expired, canceled.statusRes(paidThrough))
+        assertEquals(paidThrough, nextSubscriptionTransition(listOf(canceled), now))
+    }
+
+    @Test
     fun `canceled subscription without an end date shows no timing`() {
         val canceled = subscription(PaykitRecurrenceUnit.Month)
             .copy(lifecycleState = PaymentRequestLifecycleState.CANCELED)
