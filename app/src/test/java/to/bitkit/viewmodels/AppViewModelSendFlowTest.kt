@@ -745,6 +745,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `foreground maintenance retries a missing session until restored`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = null
+        var attempts = 0
+        whenever(pubkyRepo.restoreSessionIfNeeded()).thenAnswer {
+            if (++attempts == 2) pubkyPublicKey.value = testPublicKey
+            Unit
+        }
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        clearInvocations(pubkyRepo, paykitPaymentRequestRepo)
+
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(pubkyRepo).restoreSessionIfNeeded()
+            verify(paykitPaymentRequestRepo, never()).refresh()
+
+            advanceTimeBy(60.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(pubkyRepo, times(2)).restoreSessionIfNeeded()
+            verify(paykitPaymentRequestRepo).refresh()
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
     fun `offline periodic polling skips inbox and maintenance`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
@@ -764,6 +792,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCurrent()
             verify(pubkyRepo, never()).republishIdentityIfNeeded()
             verify(paykitPaymentRequestRepo, never()).refresh()
+            verify(pubkyRepo, never()).restoreSessionIfNeeded()
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
             verify(paykitPaymentProofRepo, never()).reconcile()
             verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints("payment request polling")

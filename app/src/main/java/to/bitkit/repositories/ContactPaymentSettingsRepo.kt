@@ -84,7 +84,6 @@ class ContactPaymentSettingsRepo @Inject constructor(
     }
 
     private suspend fun disable(contacts: List<String>): Result<Unit> {
-        val previous = settingsStore.data.first()
         runSuspendCatching {
             settingsStore.update {
                 it.copy(
@@ -108,16 +107,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
             .onFailure { publicCleanupError = it }
 
         publicCleanupError?.let { error ->
-            runSuspendCatching {
-                settingsStore.update { settings ->
-                    settings.copy(sharesPublicPaykitEndpoints = previous.sharesPublicPaykitEndpoints)
-                }
-            }.onFailure(error::addSuppressed)
-            publicPaykitRepo.syncPublishedEndpoints(publish = previous.sharesPublicPaykitEndpoints)
-                .onFailure {
-                    error.addSuppressed(it)
-                    markPublicPaykitRetry(error)
-                }
+            markPublicPaykitRetry(error)
         }
         val cleanupError = publicCleanupError ?: privateCleanupError
         publicCleanupError?.let { publicError ->

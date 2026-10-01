@@ -18,6 +18,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -158,6 +159,30 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+    }
+
+    @Test
+    fun `failed public cleanup keeps sharing disabled and retains its retry`() = test {
+        val cleanupResults = listOf(Result.success(Unit), Result.failure(ContactPaymentSettingsTestError("withdrawal")))
+        for (privateCleanup in cleanupResults) {
+            settingsFlow.value = SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                sharesPrivatePaykitEndpoints = true,
+            )
+            val failure = ContactPaymentSettingsTestError("app update failed")
+            whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).thenReturn(Result.failure(failure))
+            whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()))
+                .thenReturn(privateCleanup)
+
+            val result = createSut().setEnabled(false)
+
+            assertSame(failure, result.exceptionOrNull())
+            assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+            assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+            assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+            verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = true)
+            verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+        }
     }
 
     private fun createSut() = ContactPaymentSettingsRepo(
