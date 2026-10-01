@@ -820,7 +820,11 @@ class PubkyRepoTest : BaseUnitTest() {
                 store.gatedUpdateStarted.await()
 
                 val result = case.overtake()
-                store.releaseGatedUpdate.complete(Unit)
+                if (case.resetReleasesWrite) {
+                    assertTrue(store.releaseGatedUpdate.isCompleted, case.name)
+                } else {
+                    store.releaseGatedUpdate.complete(Unit)
+                }
                 load.await()
 
                 assertTrue(result.isSuccess, case.name)
