@@ -91,6 +91,8 @@ data class PrivatePaykitPaymentContext(
 /** The payee's current private endpoint for an automatic Allowance payment. */
 data class PrivatePaykitAllowancePayment(
     val endpoint: Endpoint,
+    /** The payee Paykit app that owns [endpoint]; the payment proof names it. */
+    val appId: String,
     val context: PrivatePaykitPaymentContext,
     val lightningPaymentHash: String?,
     val lightningInvoiceHasAmount: Boolean,

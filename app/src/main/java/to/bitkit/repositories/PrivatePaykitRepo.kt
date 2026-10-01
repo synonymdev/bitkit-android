@@ -389,14 +389,11 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             if (request.isExpired(clock.now())) return@runSuspendCatching null
             val publicKey = normalizedPublicKey(request.counterparty) ?: return@runSuspendCatching null
-            val consumedVersion = ensureState().contacts[publicKey]
-                ?.consumedPrivatePaymentListVersionsByReceiverPath
-                ?.get(request.counterpartyReceiverPath)
-            val prepared = paykitSdkService.prepareAndResolvePrivateContactPayment(
+            val consumedVersion = ensureState().contacts[publicKey]?.consumedPrivatePaymentListVersion
+            val prepared = paykitSdkService.prepareAndResolvePrivatePaymentRequest(
                 counterparty = publicKey,
-                receiverPath = request.counterpartyReceiverPath,
+                paymentRequestId = request.paymentRequestId,
                 afterPrivatePaymentListVersion = consumedVersion,
-                amount = PaymentAmountContext(request.amountValue, PaykitIssuerInterop.BITCOIN_ASSET),
             )
             val resolution = prepared.resolution
             if (
@@ -406,7 +403,7 @@ class PrivatePaykitRepo @Inject constructor(
                 // The last list was already paid from; a new one arrives once the payee sees that payment settle.
                 schedulePendingPrivateMessageDrainRetries(
                     reason = "allowance payment",
-                    retryKeys = listOf(PrivateMessageDrainRetryKey(publicKey, request.counterpartyReceiverPath)),
+                    retryKeys = listOf(publicKey),
                 )
                 throw PaykitAllowanceError.PaymentListPending
             }
@@ -414,14 +411,15 @@ class PrivatePaykitRepo @Inject constructor(
 
             val eligible = eligibleIdentifiers.toSet() intersect request.acceptedPaymentEndpointIdentifiers.toSet()
             val candidates = prepared.resolution.payableEndpoints
-                .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload) }
+                .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload)?.copy(appId = it.appId) }
                 .filter {
                     it.methodId.rawValue in eligible && (it.methodId == MethodId.Bolt11 || it.methodId.isOnchain)
                 }
+            val payable = privatePayableEndpoints(candidates, publicKey)
             allowancePayment(
                 request = request,
-                payable = privatePayableEndpoints(candidates, publicKey),
-                context = PrivatePaykitPaymentContext(request.counterpartyReceiverPath, paymentListVersion),
+                payable = payable,
+                paymentListVersion = paymentListVersion,
             )
         }
     }
@@ -429,19 +427,25 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun allowancePayment(
         request: PaykitPaymentRequest,
         payable: List<Endpoint>,
-        context: PrivatePaykitPaymentContext,
+        paymentListVersion: ULong,
     ): PrivatePaykitAllowancePayment? = PublicPaykitRepo.payablePreferenceOrder
         .mapNotNull { methodId -> payable.firstOrNull { it.methodId == methodId } }
-        .firstNotNullOfOrNull { allowancePayment(request, it, context) }
+        .firstNotNullOfOrNull { allowancePayment(request, it, paymentListVersion) }
 
     private suspend fun allowancePayment(
         request: PaykitPaymentRequest,
         endpoint: Endpoint,
-        context: PrivatePaykitPaymentContext,
+        paymentListVersion: ULong,
     ): PrivatePaykitAllowancePayment? {
+        val appId = endpoint.appId ?: return null
+        val context = PrivatePaykitPaymentContext(
+            paymentAppsByEndpoint = mapOf(endpoint.methodId.rawValue to appId),
+            paymentListVersion = paymentListVersion,
+        )
         if (endpoint.methodId != MethodId.Bolt11) {
             return PrivatePaykitAllowancePayment(
                 endpoint = endpoint,
+                appId = appId,
                 context = context,
                 lightningPaymentHash = null,
                 lightningInvoiceHasAmount = false,
@@ -453,6 +457,7 @@ class PrivatePaykitRepo @Inject constructor(
         if (!request.acceptsLightningInvoiceAmountSats(invoice.amountSatoshis)) return null
         return PrivatePaykitAllowancePayment(
             endpoint = endpoint,
+            appId = appId,
             context = context,
             lightningPaymentHash = invoice.paymentHash.toHex().lowercase(),
             lightningInvoiceHasAmount = invoice.amountSatoshis != 0uL,

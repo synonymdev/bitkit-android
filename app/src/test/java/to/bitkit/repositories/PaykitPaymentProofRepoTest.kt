@@ -239,15 +239,16 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(record)
         val sut = paymentProofRepo()
 
-        sut.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning, ALLOWANCE_ID).getOrThrow()
-        sut.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
+        sut.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning, ALLOWANCE_ID)
+            .getOrThrow()
+        sut.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
         assertEquals(ALLOWANCE_ID, storedProofs.single().allowanceId)
         sut.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         verify(paykitSdkService).submitPaymentProof(
             counterparty = any(),
-            counterpartyReceiverPath = any(),
             paymentRequestId = any(),
+            paymentAppId = eq("bitkit"),
             paymentEndpointIdentifier = eq(MethodId.Bolt11.rawValue),
             proofJson = any(),
             billingPeriod = isNull(),

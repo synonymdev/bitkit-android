@@ -26,7 +26,6 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -53,8 +52,7 @@ class PaykitAllowanceTest : BaseUnitTest() {
         val allowance = checkNotNull(PaykitAllowance.from(record))
 
         assertEquals(fixtures.counterpartyKey, allowance.counterparty)
-        assertEquals(PaykitReceiverPaths.WALLET, allowance.counterpartyReceiverPath)
-        assertEquals(PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID, allowance.allowanceId)
+        assertEquals(PaykitAllowanceFixtures.ALLOWANCE_ID, allowance.allowanceId)
         assertEquals(PaykitAllowance.Role.ALLOWER, allowance.role)
         assertTrue(allowance.isAllower)
         assertTrue(allowance.isProposedByMe)
@@ -269,7 +267,7 @@ class PaykitAllowanceTest : BaseUnitTest() {
             fixtures.capacityAttempt(sats = 45_000uL, at = "2026-09-05T10:00:00Z", isLive = false),
             fixtures.capacityAttempt(sats = 50_000uL, at = "2026-08-31T23:59:59Z"),
             fixtures.capacityAttempt(
-                allowanceId = PaykitAllowanceFixtures.SERVER_ALLOWANCE_ID,
+                allowanceId = PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID,
                 sats = 50_000uL,
                 at = "2026-09-10T10:00:00Z",
             ),
@@ -339,7 +337,7 @@ class PaykitAllowanceTest : BaseUnitTest() {
 
         val attempts = PaykitAllowanceCapacity.attempts(history)
 
-        val walletId = PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID
+        val walletId = PaykitAllowanceFixtures.ALLOWANCE_ID
         assertEquals(
             listOf(
                 PaykitAllowanceCapacity.Attempt(walletId, 10_000uL, Instant.parse("2026-09-02T10:00:00Z"), false),
@@ -366,46 +364,27 @@ class PaykitAllowanceTest : BaseUnitTest() {
     // region Grouping and terms
 
     @Test
-    fun `ordered receiver paths keep supported links with the wallet link first`() {
-        assertEquals(
-            listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER),
-            PaykitAllowanceRepo.orderedReceiverPaths(
-                listOf(PaykitReceiverPaths.SERVER, "a/other", PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER),
-            ),
-        )
-        assertEquals(
-            listOf(PaykitReceiverPaths.SERVER),
-            PaykitAllowanceRepo.orderedReceiverPaths(listOf(PaykitReceiverPaths.SERVER)),
-        )
-        assertEquals(emptyList(), PaykitAllowanceRepo.orderedReceiverPaths(emptyList()))
-    }
-
-    @Test
-    fun `entry primary prefers an accepted link, then the wallet link`() {
-        val server = fixtures.allowance(
-            allowanceId = PaykitAllowanceFixtures.SERVER_ALLOWANCE_ID,
-            receiverPath = PaykitReceiverPaths.SERVER,
+    fun `entry primary prefers an accepted allowance`() {
+        val first = fixtures.allowance(perPaymentMaxSats = 5_000uL)
+        val second = fixtures.allowance(
+            allowanceId = PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID,
             perPaymentMaxSats = 1uL,
         )
-        val wallet = fixtures.allowance()
 
-        val entry = PaykitAllowanceEntry(id = "group", allowances = listOf(server, wallet), limits = fixtures.limits)
-        assertEquals(PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID, entry.primary.allowanceId)
+        val entry = PaykitAllowanceEntry(id = "group", allowances = listOf(first, second), limits = fixtures.limits)
+        assertEquals(PaykitAllowanceFixtures.ALLOWANCE_ID, entry.primary.allowanceId)
         assertEquals(5_000uL, entry.perPaymentMaxSats)
 
-        val serverOnly = PaykitAllowanceEntry(id = "server", allowances = listOf(server), limits = null)
-        assertEquals(PaykitAllowanceFixtures.SERVER_ALLOWANCE_ID, serverOnly.primary.allowanceId)
-
-        val walletDeclined = wallet.copy(lifecycleState = AllowanceLifecycleState.REJECTED)
-        val acceptedOnServer = PaykitAllowanceEntry(id = "g", listOf(walletDeclined, server), limits = null)
-        assertEquals(PaykitAllowanceFixtures.SERVER_ALLOWANCE_ID, acceptedOnServer.primary.allowanceId)
+        val firstDeclined = first.copy(lifecycleState = AllowanceLifecycleState.REJECTED)
+        val acceptedSecond = PaykitAllowanceEntry(id = "g", allowances = listOf(firstDeclined, second), limits = null)
+        assertEquals(PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID, acceptedSecond.primary.allowanceId)
 
         val bothProposed = listOf(
-            server.copy(lifecycleState = AllowanceLifecycleState.PROPOSED),
-            wallet.copy(lifecycleState = AllowanceLifecycleState.PROPOSED),
+            first.copy(lifecycleState = AllowanceLifecycleState.PROPOSED),
+            second.copy(lifecycleState = AllowanceLifecycleState.PROPOSED),
         )
         val proposed = PaykitAllowanceEntry(id = "p", allowances = bothProposed, limits = null)
-        assertEquals(PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID, proposed.primary.allowanceId)
+        assertEquals(PaykitAllowanceFixtures.ALLOWANCE_ID, proposed.primary.allowanceId)
     }
 
     @Test
@@ -437,7 +416,7 @@ class PaykitAllowanceTest : BaseUnitTest() {
             attemptId = "attempt-1",
             isAutomatic = true,
             requestId = fixtures.paymentRequest().id,
-            allowanceId = PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID,
+            allowanceId = PaykitAllowanceFixtures.ALLOWANCE_ID,
             amountSats = 1_000uL,
             paymentEndpointIdentifier = fixtures.lightningIdentifier,
             paymentHash = "ab".repeat(32),
@@ -448,7 +427,7 @@ class PaykitAllowanceTest : BaseUnitTest() {
             id = "group-1",
             counterparty = fixtures.counterpartyKey,
             limits = fixtures.limits,
-            allowanceIds = listOf(PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID),
+            allowanceIds = listOf(PaykitAllowanceFixtures.ALLOWANCE_ID),
             createdAtMillis = 1L,
         )
         val state = PaykitAllowanceLocalState(
@@ -464,7 +443,7 @@ class PaykitAllowanceTest : BaseUnitTest() {
         assertEquals(state, store.load(fixtures.identityKey))
         assertEquals(PaykitAllowanceLocalState(), store.load(fixtures.otherCounterpartyKey))
         val loaded = store.load(fixtures.identityKey)
-        assertEquals(group, loaded.group(containing = PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID))
+        assertEquals(group, loaded.group(containing = PaykitAllowanceFixtures.ALLOWANCE_ID))
 
         stored = "{not json"
         assertEquals(PaykitAllowanceLocalState(), store.load(fixtures.identityKey))
@@ -475,8 +454,8 @@ class PaykitAllowanceTest : BaseUnitTest() {
 
 /** Shared builders for the Allowance suites. */
 internal object PaykitAllowanceFixtures {
-    const val WALLET_ALLOWANCE_ID = "allowance-wallet"
-    const val SERVER_ALLOWANCE_ID = "allowance-server"
+    const val ALLOWANCE_ID = "allowance-1"
+    const val SECOND_ALLOWANCE_ID = "allowance-second"
     val identityKey = "pubky" + "z".repeat(52)
     val counterpartyKey = "pubky" + "y".repeat(52)
     val otherCounterpartyKey = "pubky" + "x".repeat(52)
@@ -536,9 +515,8 @@ internal object PaykitAllowanceFixtures {
 
     @Suppress("LongParameterList")
     fun record(
-        allowanceId: String = WALLET_ALLOWANCE_ID,
+        allowanceId: String = ALLOWANCE_ID,
         counterparty: String = counterpartyKey,
-        receiverPath: String = PaykitReceiverPaths.WALLET,
         localRole: AllowanceLocalRole? = AllowanceLocalRole.ALLOWER,
         state: AllowanceLifecycleState = AllowanceLifecycleState.ACCEPTED,
         historyStatus: AllowanceHistoryStatus = AllowanceHistoryStatus.CONSISTENT,
@@ -547,7 +525,6 @@ internal object PaykitAllowanceFixtures {
         lastEventAt: String? = "2026-09-02T10:00:00Z",
     ) = AllowanceRecord(
         counterparty = counterparty,
-        counterpartyReceiverPath = receiverPath,
         allowanceId = allowanceId,
         localRole = localRole,
         state = state,
@@ -574,9 +551,8 @@ internal object PaykitAllowanceFixtures {
 
     @Suppress("LongParameterList")
     fun allowance(
-        allowanceId: String = WALLET_ALLOWANCE_ID,
+        allowanceId: String = ALLOWANCE_ID,
         counterparty: String = counterpartyKey,
-        receiverPath: String = PaykitReceiverPaths.WALLET,
         role: PaykitAllowance.Role = PaykitAllowance.Role.ALLOWER,
         state: AllowanceLifecycleState = AllowanceLifecycleState.ACCEPTED,
         perPaymentMaxSats: ULong? = 5_000uL,
@@ -585,7 +561,7 @@ internal object PaykitAllowanceFixtures {
         expiresAt: Instant? = null,
         lastEventAt: Instant? = null,
     ) = PaykitAllowance(
-        id = PaykitAllowance.Id(counterparty, receiverPath, allowanceId),
+        id = PaykitAllowance.Id(counterparty, allowanceId),
         role = role,
         lifecycleState = state,
         isProposedByMe = role == PaykitAllowance.Role.ALLOWER,
@@ -598,14 +574,14 @@ internal object PaykitAllowanceFixtures {
     )
 
     fun capacityAttempt(
-        allowanceId: String = WALLET_ALLOWANCE_ID,
+        allowanceId: String = ALLOWANCE_ID,
         sats: ULong,
         at: String,
         isLive: Boolean = true,
     ) = PaykitAllowanceCapacity.Attempt(allowanceId, sats, Instant.parse(at), isLive)
 
     fun usedSats(attempts: List<PaykitAllowanceCapacity.Attempt>): ULong =
-        PaykitAllowanceCapacity.usedSats(WALLET_ALLOWANCE_ID, attempts, septemberAnchor, now)
+        PaykitAllowanceCapacity.usedSats(ALLOWANCE_ID, attempts, septemberAnchor, now)
 
     fun accountingAmount(amount: String, currency: String = PaykitIssuerInterop.BITCOIN_ASSET): AccountingAmount =
         mock {
@@ -617,7 +593,7 @@ internal object PaykitAllowanceFixtures {
     fun attemptRecord(
         id: String,
         mode: PaymentExecutionMode = PaymentExecutionMode.AUTOMATIC,
-        allowanceId: String? = WALLET_ALLOWANCE_ID,
+        allowanceId: String? = ALLOWANCE_ID,
         amount: String = "0.00001",
         admittedAt: String = "2026-09-24T12:00:00Z",
         status: PaymentExecutionStatus,
@@ -635,16 +611,14 @@ internal object PaykitAllowanceFixtures {
 
     fun accountingScope(paymentRequestId: String) = PaymentAccountingScope(
         localPublicKey = identityKey,
-        localReceiverPath = PaykitReceiverPaths.WALLET,
         counterparty = counterpartyKey,
-        counterpartyReceiverPath = PaykitReceiverPaths.WALLET,
         paymentRequestId = paymentRequestId,
     )
 
     fun occurrence(
         requestId: String,
         attempts: List<PaymentAttemptRecord>,
-        allowanceId: String? = WALLET_ALLOWANCE_ID,
+        allowanceId: String? = ALLOWANCE_ID,
     ) = PaymentOccurrenceRecord(
         key = PaymentOccurrenceKey(request = accountingScope(requestId), billingPeriod = null),
         disposition = PaymentDisposition.Automatic,
@@ -673,14 +647,12 @@ internal object PaykitAllowanceFixtures {
     fun paymentRequest(
         id: String = "550e8400-e29b-41d4-a716-446655440001",
         counterparty: String = counterpartyKey,
-        receiverPath: String = PaykitReceiverPaths.WALLET,
         amountValue: String = "0.00001",
         amountSats: ULong = 1_000uL,
         createdAt: String = "2026-09-24T11:00:00Z",
     ) = PaykitPaymentRequest(
         paymentRequestId = id,
         counterparty = counterparty,
-        counterpartyReceiverPath = receiverPath,
         amountValue = amountValue,
         amountSats = amountSats,
         createdAt = Instant.parse(createdAt),

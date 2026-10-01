@@ -26,13 +26,11 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.repositories.PaykitAllowanceFixtures.SERVER_ALLOWANCE_ID
-import to.bitkit.repositories.PaykitAllowanceFixtures.WALLET_ALLOWANCE_ID
+import to.bitkit.repositories.PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID
+import to.bitkit.repositories.PaykitAllowanceFixtures.ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -82,7 +80,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(activityRepo.setContact(any(), any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(sdk.listAllowances(any())).thenAnswer { records }
         whenever(sdk.linkedPeers()).thenReturn(emptyList())
-        whenever(sdk.processOutboundPrivateMessages(any(), any()))
+        whenever(sdk.processOutboundPrivateMessages(any()))
             .thenReturn(OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()))
 
         sut = PaykitAllowanceRepo(
@@ -102,30 +100,29 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     // region Entries
 
     @Test
-    fun `entries group one grant across links with the wallet link as primary`() = test {
+    fun `entries list one grant per contact with the grant's limits`() = test {
         records = listOf(
-            fixtures.record(allowanceId = SERVER_ALLOWANCE_ID, receiverPath = PaykitReceiverPaths.SERVER),
-            fixtures.record(allowanceId = WALLET_ALLOWANCE_ID),
+            fixtures.record(allowanceId = ALLOWANCE_ID),
             fixtures.record(allowanceId = "allowance-other", counterparty = fixtures.otherCounterpartyKey),
             fixtures.record(allowanceId = "allowance-invalid", historyStatus = AllowanceHistoryStatus.INVALID),
         )
-        localState = PaykitAllowanceLocalState(groups = listOf(group(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID)))
+        localState = PaykitAllowanceLocalState(groups = listOf(group(ALLOWANCE_ID)))
 
         sut.activate(identity)
 
         val entries = sut.entries.value
         assertEquals(listOf("group-1", "allowance-other"), entries.map { it.id })
-        val grouped = entries.first()
-        assertEquals(listOf(SERVER_ALLOWANCE_ID, WALLET_ALLOWANCE_ID), grouped.allowances.map { it.allowanceId })
-        assertEquals(WALLET_ALLOWANCE_ID, grouped.primary.allowanceId)
-        assertEquals(fixtures.limits, grouped.limits)
-        assertEquals(fixtures.counterpartyKey, grouped.counterparty)
-        assertEquals(PaykitAllowance.Role.ALLOWER, grouped.role)
-        assertEquals(5_000uL, grouped.perPaymentMaxSats)
-        assertEquals(50_000uL, grouped.monthlyLimitSats)
-        assertEquals(PaykitAllowance.Status.ACTIVE, grouped.status(fixtures.now))
+        val grant = entries.first()
+        assertEquals(listOf(ALLOWANCE_ID), grant.allowances.map { it.allowanceId })
+        assertEquals(ALLOWANCE_ID, grant.primary.allowanceId)
+        assertEquals(fixtures.limits, grant.limits)
+        assertEquals(fixtures.counterpartyKey, grant.counterparty)
+        assertEquals(PaykitAllowance.Role.ALLOWER, grant.role)
+        assertEquals(5_000uL, grant.perPaymentMaxSats)
+        assertEquals(50_000uL, grant.monthlyLimitSats)
+        assertEquals(PaykitAllowance.Status.ACTIVE, grant.status(fixtures.now))
         assertNull(entries.last().limits)
-        assertEquals(WALLET_ALLOWANCE_ID, sut.entry("group-1")?.primary?.allowanceId)
+        assertEquals(ALLOWANCE_ID, sut.entry("group-1")?.primary?.allowanceId)
     }
 
     @Test
@@ -149,19 +146,16 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
     @Test
     fun `auto-paid sats and requests come from succeeded automatic payments`() = test {
-        records = listOf(
-            fixtures.record(allowanceId = SERVER_ALLOWANCE_ID, receiverPath = PaykitReceiverPaths.SERVER),
-            fixtures.record(allowanceId = WALLET_ALLOWANCE_ID),
-        )
+        records = listOf(fixtures.record(allowanceId = ALLOWANCE_ID))
         val paid = fixtures.paymentRequest(id = "paid")
         val failed = fixtures.paymentRequest(id = "failed")
-        val serverPaid = fixtures.paymentRequest(id = "server")
+        val secondPaid = fixtures.paymentRequest(id = "second")
         localState = PaykitAllowanceLocalState(
-            groups = listOf(group(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID)),
+            groups = listOf(group(ALLOWANCE_ID)),
             journal = listOf(
-                journalEntry("a", paid, WALLET_ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED),
-                journalEntry("b", serverPaid, SERVER_ALLOWANCE_ID, 2_000uL, Stage.SUCCEEDED),
-                journalEntry("c", failed, WALLET_ALLOWANCE_ID, 5_000uL, Stage.FAILED),
+                journalEntry("a", paid, ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED),
+                journalEntry("b", secondPaid, ALLOWANCE_ID, 2_000uL, Stage.SUCCEEDED),
+                journalEntry("c", failed, ALLOWANCE_ID, 5_000uL, Stage.FAILED),
                 journalEntry("d", fixtures.paymentRequest(id = "manual"), null, 7_000uL, Stage.SUCCEEDED, false),
             ),
         )
@@ -179,14 +173,13 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     // region Coverage
 
     @Test
-    fun `coverage needs an active allower allowance on the request's exact link`() = test {
+    fun `coverage needs an active allower allowance for the request's contact identity`() = test {
         records = listOf(fixtures.record(terms = fixtures.terms(expiresAt = (fixtures.now + 30.days).toString())))
 
         sut.activate(identity)
 
         assertTrue(sut.coversRequest(fixtures.paymentRequest()))
         assertFalse(sut.coversRequest(fixtures.paymentRequest(counterparty = fixtures.otherCounterpartyKey)))
-        assertFalse(sut.coversRequest(fixtures.paymentRequest(receiverPath = PaykitReceiverPaths.SERVER)))
 
         records = listOf(
             fixtures.record(terms = fixtures.terms(expiresAt = "2026-09-20T00:00:00Z")),
@@ -214,23 +207,16 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     // region Lifecycle
 
     @Test
-    fun `propose sends the same terms on every supported linked path and records one entry`() = test {
+    fun `propose sends the terms to the linked contact and records one entry`() = test {
         whenever(sdk.linkedPeers()).thenReturn(
             listOf(
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER),
-                linkedPeer(fixtures.counterpartyKey, "a/other"),
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET),
-                linkedPeer(fixtures.otherCounterpartyKey, PaykitReceiverPaths.WALLET),
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET, LinkedPeerState.LINKING),
+                linkedPeer(fixtures.otherCounterpartyKey),
+                linkedPeer(fixtures.counterpartyKey),
             ),
         )
-        whenever(sdk.proposeAllowance(any(), any(), any(), any())).doSuspendableAnswer {
-            val receiverPath = it.getArgument<String>(1)
-            val isWallet = receiverPath == PaykitReceiverPaths.WALLET
-            val allowanceId = if (isWallet) WALLET_ALLOWANCE_ID else SERVER_ALLOWANCE_ID
+        whenever(sdk.proposeAllowance(any(), any(), any())).doSuspendableAnswer {
             fixtures.record(
-                allowanceId = allowanceId,
-                receiverPath = receiverPath,
+                allowanceId = ALLOWANCE_ID,
                 state = AllowanceLifecycleState.PROPOSED,
                 terms = terms,
             ).also { record -> records = records + record }
@@ -240,18 +226,14 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         val result = sut.propose(fixtures.counterpartyKey, fixtures.limits)
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
-        val allower = AllowanceLocalRole.ALLOWER
-        verify(sdk).proposeAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET, allower, terms)
-        verify(sdk).proposeAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER, allower, terms)
-        verify(sdk, never()).proposeAllowance(any(), eq("a/other"), any(), any())
-        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET)
-        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER)
+        verify(sdk).proposeAllowance(fixtures.counterpartyKey, AllowanceLocalRole.ALLOWER, terms)
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
         assertEquals(
             listOf(fixtures.septemberAnchor to PaykitAllowanceRepo.allowedPaymentEndpointIdentifiers()),
             proposedTerms,
         )
         val group = localState.groups.single()
-        assertEquals(listOf(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID), group.allowanceIds)
+        assertEquals(listOf(ALLOWANCE_ID), group.allowanceIds)
         assertEquals(fixtures.limits, group.limits)
         assertEquals(fixtures.counterpartyKey, group.counterparty)
         val entry = sut.entries.value.single()
@@ -261,115 +243,50 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `propose keeps the wallet proposal when the server link fails`() = test {
-        whenever(sdk.linkedPeers()).thenReturn(
-            listOf(
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET),
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER),
-            ),
-        )
-        whenever(sdk.proposeAllowance(any(), any(), any(), any())).doSuspendableAnswer {
-            if (it.getArgument<String>(1) == PaykitReceiverPaths.SERVER) throw TestRepoError("server link")
-            fixtures.record(state = AllowanceLifecycleState.PROPOSED, terms = terms)
-        }
-        sut.activate(identity)
-
-        assertTrue(sut.propose(fixtures.counterpartyKey, fixtures.limits).isSuccess)
-
-        assertEquals(listOf(WALLET_ALLOWANCE_ID), localState.groups.single().allowanceIds)
-    }
-
-    @Test
-    fun `propose fails when the contact has no linked receiver`() = test {
+    fun `propose fails when the contact link is not up`() = test {
         whenever(sdk.linkedPeers())
-            .thenReturn(
-                listOf(linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET, LinkedPeerState.LINKING)),
-            )
+            .thenReturn(listOf(linkedPeer(fixtures.counterpartyKey, LinkedPeerState.LINKING)))
         sut.activate(identity)
 
         val result = sut.propose(fixtures.counterpartyKey, fixtures.limits)
 
         assertIs<PaykitAllowanceError.ContactNotLinked>(result.exceptionOrNull())
-        verify(sdk, never()).proposeAllowance(any(), any(), any(), any())
+        verify(sdk, never()).proposeAllowance(any(), any(), any())
         assertTrue(localState.groups.isEmpty())
     }
 
     @Test
-    fun `refresh extends a grant to a contact link that linked after it`() = test {
-        records = listOf(fixtures.record(allowanceId = WALLET_ALLOWANCE_ID))
-        localState = PaykitAllowanceLocalState(groups = listOf(group(WALLET_ALLOWANCE_ID)))
-        whenever(sdk.linkedPeers()).thenReturn(
-            listOf(
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET),
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER),
-            ),
-        )
-        whenever(sdk.proposeAllowance(any(), any(), any(), any())).doSuspendableAnswer {
-            fixtures.record(
-                allowanceId = SERVER_ALLOWANCE_ID,
-                receiverPath = PaykitReceiverPaths.SERVER,
-                state = AllowanceLifecycleState.PROPOSED,
-                terms = terms,
-            ).also { record -> records = records + record }
-        }
-
-        sut.activate(identity)
-        sut.refresh()
-
-        val allower = AllowanceLocalRole.ALLOWER
-        verify(sdk).proposeAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER, allower, terms)
-        verify(sdk, never()).proposeAllowance(any(), eq(PaykitReceiverPaths.WALLET), any(), any())
-        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER)
-        assertEquals(
-            listOf(fixtures.septemberAnchor to PaykitAllowanceRepo.allowedPaymentEndpointIdentifiers()),
-            proposedTerms,
-        )
-        assertEquals(listOf(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID), localState.groups.single().allowanceIds)
-        val entry = sut.entries.value.single()
-        assertEquals("group-1", entry.id)
-        assertEquals(setOf(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID), entry.allowances.map { it.allowanceId }.toSet())
-        assertEquals(PaykitAllowance.Status.ACTIVE, entry.status(fixtures.now))
-    }
-
-    @Test
-    fun `refresh does not extend an ended grant or one that covers every linked path`() = test {
-        whenever(sdk.linkedPeers()).thenReturn(
-            listOf(
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET),
-                linkedPeer(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER),
-            ),
-        )
-        records = listOf(fixtures.record(allowanceId = WALLET_ALLOWANCE_ID, state = AllowanceLifecycleState.ENDED))
-        localState = PaykitAllowanceLocalState(groups = listOf(group(WALLET_ALLOWANCE_ID)))
+    fun `an allowance stays one grant for the identity when the contact adds another app later`() = test {
+        // The grant is bound to the contact's identity, so one that links an app later is covered without a proposal.
+        records = listOf(fixtures.record(allowanceId = ALLOWANCE_ID))
+        localState = PaykitAllowanceLocalState(groups = listOf(group(ALLOWANCE_ID)))
+        whenever(sdk.linkedPeers()).thenReturn(listOf(linkedPeer(fixtures.counterpartyKey)))
         sut.activate(identity)
 
-        records = listOf(
-            fixtures.record(allowanceId = WALLET_ALLOWANCE_ID),
-            fixtures.record(allowanceId = SERVER_ALLOWANCE_ID, receiverPath = PaykitReceiverPaths.SERVER),
-        )
-        localState = PaykitAllowanceLocalState(groups = listOf(group(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID)))
         sut.refresh()
 
-        verify(sdk, never()).proposeAllowance(any(), any(), any(), any())
+        verify(sdk, never()).proposeAllowance(any(), any(), any())
+        assertTrue(sut.coversRequest(fixtures.paymentRequest()))
+        assertEquals(listOf(ALLOWANCE_ID), sut.entries.value.single().allowances.map { it.allowanceId })
     }
 
     @Test
     fun `received proposal is presented once and accepting answers it`() = test {
         val proposalRecord = receivedProposal()
         records = listOf(proposalRecord)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(proposalRecord)
+        whenever(sdk.acceptAllowance(any(), any())).thenReturn(proposalRecord)
         sut.activate(identity)
 
         val proposal = checkNotNull(sut.proposalForPresentation())
-        assertEquals(WALLET_ALLOWANCE_ID, proposal.id)
+        assertEquals(ALLOWANCE_ID, proposal.id)
         sut.markProposalPresented(proposal.id)
         assertNull(sut.proposalForPresentation())
-        assertEquals(setOf(WALLET_ALLOWANCE_ID), localState.presentedProposalIds)
+        assertEquals(setOf(ALLOWANCE_ID), localState.presentedProposalIds)
 
         assertTrue(sut.accept(proposal.id).isSuccess)
 
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET, WALLET_ALLOWANCE_ID)
-        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET)
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID)
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
     }
 
     @Test
@@ -377,25 +294,22 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         records = listOf(fixtures.record())
         sut.activate(identity)
 
-        assertIs<PaykitAllowanceError.Unavailable>(sut.reject(WALLET_ALLOWANCE_ID).exceptionOrNull())
+        assertIs<PaykitAllowanceError.Unavailable>(sut.reject(ALLOWANCE_ID).exceptionOrNull())
         assertIs<PaykitAllowanceError.Unavailable>(sut.accept("missing").exceptionOrNull())
-        verify(sdk, never()).rejectAllowance(any(), any(), any())
+        verify(sdk, never()).rejectAllowance(any(), any())
     }
 
     @Test
-    fun `ending an entry ends every endable allowance`() = test {
-        records = listOf(
-            fixtures.record(allowanceId = SERVER_ALLOWANCE_ID, receiverPath = PaykitReceiverPaths.SERVER),
-            fixtures.record(allowanceId = WALLET_ALLOWANCE_ID),
-        )
-        localState = PaykitAllowanceLocalState(groups = listOf(group(WALLET_ALLOWANCE_ID, SERVER_ALLOWANCE_ID)))
-        whenever(sdk.endAllowance(any(), any(), any())).thenReturn(records.last())
+    fun `ending an entry ends its allowance and sends the end right away`() = test {
+        records = listOf(fixtures.record(allowanceId = ALLOWANCE_ID))
+        localState = PaykitAllowanceLocalState(groups = listOf(group(ALLOWANCE_ID)))
+        whenever(sdk.endAllowance(any(), any())).thenReturn(records.last())
         sut.activate(identity)
 
         assertTrue(sut.end("group-1").isSuccess)
 
-        verify(sdk).endAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.WALLET, WALLET_ALLOWANCE_ID)
-        verify(sdk).endAllowance(fixtures.counterpartyKey, PaykitReceiverPaths.SERVER, SERVER_ALLOWANCE_ID)
+        verify(sdk).endAllowance(fixtures.counterpartyKey, ALLOWANCE_ID)
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
     }
 
     // endregion
@@ -418,7 +332,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertFalse(sut.processIncomingRequests(listOf(request)))
         verify(executor, times(1)).autoPay(any(), any(), any())
 
-        records = listOf(fixtures.record(), fixtures.record(allowanceId = SERVER_ALLOWANCE_ID))
+        records = listOf(fixtures.record(), fixtures.record(allowanceId = SECOND_ALLOWANCE_ID))
         sut.refresh()
         sut.processIncomingRequests(listOf(request))
         verify(executor, times(2)).autoPay(any(), any(), any())
@@ -501,14 +415,14 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
         localState = PaykitAllowanceLocalState(
             journal = listOf(
-                journalEntry("a", fixtures.paymentRequest(), WALLET_ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED),
+                journalEntry("a", fixtures.paymentRequest(), ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED),
             ),
         )
 
         executorEvents.emit(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, TXID))
 
         verify(activityRepo).setContact(eq(fixtures.counterpartyKey), eq(TXID), any(), any())
-        assertEquals(mapOf(WALLET_ALLOWANCE_ID to 1_000uL), sut.autoPaidSats.value)
+        assertEquals(mapOf(ALLOWANCE_ID to 1_000uL), sut.autoPaidSats.value)
     }
 
     @Test
@@ -559,11 +473,9 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
     private fun linkedPeer(
         publicKey: String,
-        receiverPath: String,
         state: LinkedPeerState = LinkedPeerState.LINKED,
     ) = LinkedPeerRecord(
         counterparty = publicKey,
-        counterpartyReceiverPath = receiverPath,
         state = state,
         lastSyncAt = null,
         lastPrivateReceiveAt = null,
@@ -577,5 +489,3 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
     // endregion
 }
-
-private class TestRepoError(message: String) : AppError(message)

@@ -13,7 +13,6 @@ import com.synonym.paykit.PaymentExecutionMode
 import com.synonym.paykit.PaymentExecutionStatus
 import kotlinx.serialization.Serializable
 import to.bitkit.models.safe
-import to.bitkit.services.PaykitReceiverPaths
 import java.math.BigDecimal
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -24,7 +23,7 @@ import kotlin.time.toJavaInstant
 import kotlin.time.toKotlinInstant
 
 /**
- * An Allowance between this wallet and one contact link, built from the SDK record.
+ * An Allowance between this wallet's identity and one contact identity, built from the SDK record.
  * Eligibility always runs on real time.
  */
 @Immutable
@@ -44,7 +43,6 @@ data class PaykitAllowance(
     @Serializable
     data class Id(
         val counterparty: String,
-        val counterpartyReceiverPath: String,
         val allowanceId: String,
     )
 
@@ -66,7 +64,6 @@ data class PaykitAllowance(
     }
 
     val counterparty: String get() = id.counterparty
-    val counterpartyReceiverPath: String get() = id.counterpartyReceiverPath
     val allowanceId: String get() = id.allowanceId
 
     /** The payer side: this wallet pays the counterparty's requests automatically. */
@@ -104,7 +101,7 @@ data class PaykitAllowance(
             if (terms.asset() != PaykitIssuerInterop.BITCOIN_ASSET) return null
             val monthly = terms.periodLimits().firstOrNull { isMonthly(it.period()) }
             return PaykitAllowance(
-                id = Id(record.counterparty, record.counterpartyReceiverPath, record.allowanceId),
+                id = Id(record.counterparty, record.allowanceId),
                 role = role,
                 lifecycleState = record.state,
                 isProposedByMe = record.proposalOutboundMessageId != null,
@@ -129,20 +126,16 @@ data class PaykitAllowance(
     }
 }
 
-/** One grant as the user sees it: the same limits proposed on each of a contact's supported links. */
+/** One grant as the user sees it: the Allowance with a contact identity and the limits picked for it. */
 @Immutable
 data class PaykitAllowanceEntry(
     val id: String,
     val allowances: List<PaykitAllowance>,
     val limits: PaykitAllowanceLimits?,
 ) {
-    /** An accepted link before any other, and the contact's wallet link before their server link. */
+    /** An accepted Allowance before any other. */
     val primary: PaykitAllowance
-        get() = allowances.minBy {
-            val acceptedRank = if (it.lifecycleState == AllowanceLifecycleState.ACCEPTED) 0 else 2
-            val walletRank = if (it.counterpartyReceiverPath == PaykitReceiverPaths.WALLET) 0 else 1
-            acceptedRank + walletRank
-        }
+        get() = allowances.firstOrNull { it.lifecycleState == AllowanceLifecycleState.ACCEPTED } ?: allowances.first()
     val counterparty: String get() = primary.counterparty
     val role: PaykitAllowance.Role get() = primary.role
     val perPaymentMaxSats: ULong? get() = primary.perPaymentMaxSats

@@ -28,7 +28,6 @@ import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.safe
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -54,7 +53,7 @@ sealed interface PaykitAllowanceEvent {
 }
 
 enum class PaykitAllowanceAutoPayResult {
-    /** No accepted Allowance covers the request's link, or the request is already being paid. */
+    /** No accepted Allowance covers the request's contact, or the request is already being paid. */
     NOT_COVERED,
 
     /** An Allowance exists but this request stays on the manual flow (over a limit, ended, no payable endpoint). */
@@ -71,15 +70,15 @@ enum class PaykitAllowanceAutoPayResult {
 }
 
 sealed class PaykitAllowanceError(message: String) : AppError(message) {
-    data object ContactNotLinked : PaykitAllowanceError("The contact has no linked Paykit receiver")
+    data object ContactNotLinked : PaykitAllowanceError("The contact has no linked Paykit identity")
     data object Unavailable : PaykitAllowanceError("The allowance is unavailable")
     data object PaymentAlreadyRecorded : PaykitAllowanceError("A payment for this request is already in progress")
     data object PaymentListPending : PaykitAllowanceError("The payee has not published a new payment list yet")
 }
 
 /**
- * Allowances for the active identity. One user-facing entry groups the same grant across a contact's links (their
- * wallet, and their Paykit Server folder), and covered incoming requests are paid headlessly through
+ * Allowances for the active identity. One user-facing entry is one grant to a contact's identity, which covers every
+ * Paykit app of that contact, and covered incoming requests are paid headlessly through
  * [PaykitAllowanceExecutor]. The repository also settles its own Lightning attempts from the node's payment events
  * and attributes automatic payments to the contact's activity.
  */
@@ -103,16 +102,6 @@ class PaykitAllowanceRepo @Inject constructor(
         fun allowedPaymentEndpointIdentifiers(network: Network = Env.network): List<String> =
             (listOf(MethodId.Bolt11) + MethodId.entries.filter { it.isOnchain }).map { it.rawValueForNetwork(network) }
 
-        /** A grant in one of these states still covers the contact, so links that appear later join it. */
-        private val EXTENDABLE_STATUSES = setOf(
-            PaykitAllowance.Status.ACTIVE,
-            PaykitAllowance.Status.NOT_YET_ACTIVE,
-            PaykitAllowance.Status.AWAITING_ANSWER,
-        )
-
-        /** The supported receiver paths among [paths], the wallet link first. */
-        fun orderedReceiverPaths(paths: Collection<String>): List<String> =
-            PaykitReceiverPaths.ordered.filter { it in paths }
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -131,7 +120,7 @@ class PaykitAllowanceRepo @Inject constructor(
 
     private val _entries = MutableStateFlow<List<PaykitAllowanceEntry>>(emptyList())
 
-    /** Grants grouped across a contact's links, newest first. */
+    /** Grants by contact identity. */
     val entries: StateFlow<List<PaykitAllowanceEntry>> = _entries.asStateFlow()
 
     private val _autoPaidSats = MutableStateFlow<Map<String, ULong>>(emptyMap())
@@ -197,8 +186,7 @@ class PaykitAllowanceRepo @Inject constructor(
     suspend fun refresh(): Result<Unit> = withContext(ioDispatcher) {
         val identity = activeIdentity ?: return@withContext Result.success(Unit)
         refreshMutex.withLock {
-            var listing = listAllowances()
-            if (listing.getOrNull()?.let { extendToNewLinks(identity, it) } == true) listing = listAllowances()
+            val listing = listAllowances()
             if (activeIdentity == identity) {
                 publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
             }
@@ -210,7 +198,6 @@ class PaykitAllowanceRepo @Inject constructor(
         paykitSdkService.listAllowances(
             AllowanceFilter(
                 counterparty = null,
-                counterpartyReceiverPath = null,
                 localRole = null,
                 states = emptyList(),
             ),
@@ -222,98 +209,45 @@ class PaykitAllowanceRepo @Inject constructor(
             .mapNotNull { PaykitAllowance.from(it) }
     }.onFailure { Logger.warn("Failed to list Paykit allowances", it, context = TAG) }
 
-    /**
-     * A grant covers the contact's links that were linked when it was made. When another supported link of the
-     * contact links later (typically their Paykit Server folder), proposes the grant's terms there and adds it to the
-     * grant, as a grant made now would. Returns true when any proposal was made.
-     */
-    private suspend fun extendToNewLinks(identity: String, allowances: List<PaykitAllowance>): Boolean {
-        val now = clock.now()
-        val liveGroups = executor.localState(identity).groups.mapNotNull { group ->
-            val members = allowances.filter { it.allowanceId in group.allowanceIds }
-            val isLive = members.size == group.allowanceIds.size &&
-                members.any { it.isAllower && it.status(now) in EXTENDABLE_STATUSES }
-            if (isLive) group to members else null
-        }
-        if (liveGroups.isEmpty()) return false
-        val linkedPeers = runSuspendCatching { paykitSdkService.linkedPeers() }
-            .onFailure { Logger.warn("Failed to list linked peers for allowances", it, context = TAG) }
-            .getOrNull()
-            ?.filter { it.state == LinkedPeerState.LINKED }
-            ?: return false
-
-        var proposed = false
-        for ((group, members) in liveGroups) {
-            val coveredPaths = members.map { it.counterpartyReceiverPath }.toSet()
-            val linkedPaths = linkedPeers
-                .filter { PubkyPublicKeyFormat.matches(it.counterparty, group.counterparty) }
-                .map { it.counterpartyReceiverPath }
-            val newPaths = orderedReceiverPaths(linkedPaths).filterNot { it in coveredPaths }
-            if (newPaths.isEmpty()) continue
-
-            val terms = allowanceTerms(
-                group.limits,
-                members.firstNotNullOfOrNull { it.monthlyAnchor } ?: PaykitAllowanceTime.monthStart(now),
-                allowedPaymentEndpointIdentifiers(),
-            )
-            runSuspendCatching { proposeOnLinks(group.counterparty, newPaths, terms) }
-                .onSuccess { allowanceIds ->
-                    executor.updateLocalState(identity) { state ->
-                        state.copy(
-                            groups = state.groups.map {
-                                if (it.id == group.id) it.copy(allowanceIds = it.allowanceIds + allowanceIds) else it
-                            },
-                        )
-                    }
-                    Logger.info("Extended an allowance to '${allowanceIds.size}' newly linked links", context = TAG)
-                    proposed = true
-                }
-                .onFailure { Logger.warn("Failed to extend an allowance to a newly linked link", it, context = TAG) }
-        }
-        return proposed
-    }
-
-    /** Proposes the same terms on every supported linked receiver path of the contact and records one entry. */
+    /** Proposes the terms to the contact's identity, which needs a linked contact, and records one entry. */
     suspend fun propose(contactPublicKey: String, limits: PaykitAllowanceLimits): Result<Unit> =
         withContext(ioDispatcher) {
             runSuspendCatching {
                 val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
                 val contactKey = PubkyPublicKeyFormat.normalized(contactPublicKey)
                     ?: throw PaykitAllowanceError.ContactNotLinked
-                val linkedPaths = paykitSdkService.linkedPeers()
-                    .filter {
-                        PubkyPublicKeyFormat.matches(it.counterparty, contactKey) && it.state == LinkedPeerState.LINKED
-                    }
-                    .map { it.counterpartyReceiverPath }
-                val receiverPaths = orderedReceiverPaths(linkedPaths)
-                if (receiverPaths.isEmpty()) throw PaykitAllowanceError.ContactNotLinked
+                val isLinked = paykitSdkService.linkedPeers().any {
+                    PubkyPublicKeyFormat.matches(it.counterparty, contactKey) && it.state == LinkedPeerState.LINKED
+                }
+                if (!isLinked) throw PaykitAllowanceError.ContactNotLinked
 
                 val terms = allowanceTerms(
                     limits,
                     PaykitAllowanceTime.monthStart(clock.now()),
                     allowedPaymentEndpointIdentifiers(),
                 )
-                val allowanceIds = proposeOnLinks(contactKey, receiverPaths, terms)
+                val allowance = paykitSdkService.proposeAllowance(contactKey, AllowanceLocalRole.ALLOWER, terms)
+                sendQueuedMessages(contactKey)
                 val group = PaykitAllowanceLocalState.Group(
                     id = UUID.randomUUID().toString(),
                     counterparty = contactKey,
                     limits = limits,
-                    allowanceIds = allowanceIds,
+                    allowanceIds = listOf(allowance.allowanceId),
                     createdAtMillis = clock.now().toEpochMilliseconds(),
                 )
                 executor.updateLocalState(identity) { it.copy(groups = it.groups + group) }
-                Logger.info("Proposed an allowance on '${allowanceIds.size}' links", context = TAG)
+                Logger.info("Proposed an allowance", context = TAG)
                 refresh()
                 Unit
             }
         }
 
     suspend fun accept(entryId: String): Result<Unit> = respond(entryId) {
-        paykitSdkService.acceptAllowance(it.counterparty, it.counterpartyReceiverPath, it.allowanceId)
+        paykitSdkService.acceptAllowance(it.counterparty, it.allowanceId)
     }
 
     suspend fun reject(entryId: String): Result<Unit> = respond(entryId) {
-        paykitSdkService.rejectAllowance(it.counterparty, it.counterpartyReceiverPath, it.allowanceId)
+        paykitSdkService.rejectAllowance(it.counterparty, it.allowanceId)
     }
 
     suspend fun end(entryId: String): Result<Unit> = withContext(ioDispatcher) {
@@ -322,12 +256,8 @@ class PaykitAllowanceRepo @Inject constructor(
             val endable = entry.allowances.filter { it.canEnd }
             if (endable.isEmpty()) throw PaykitAllowanceError.Unavailable
             for (allowance in endable) {
-                paykitSdkService.endAllowance(
-                    allowance.counterparty,
-                    allowance.counterpartyReceiverPath,
-                    allowance.allowanceId,
-                )
-                sendQueuedMessages(allowance.counterparty, allowance.counterpartyReceiverPath)
+                paykitSdkService.endAllowance(allowance.counterparty, allowance.allowanceId)
+                sendQueuedMessages(allowance.counterparty)
             }
             refresh()
             Unit
@@ -345,7 +275,7 @@ class PaykitAllowanceRepo @Inject constructor(
             if (answerable.isEmpty()) throw PaykitAllowanceError.Unavailable
             for (allowance in answerable) {
                 response(allowance)
-                sendQueuedMessages(allowance.counterparty, allowance.counterpartyReceiverPath)
+                sendQueuedMessages(allowance.counterparty)
             }
             val ids = entry.allowances.map { it.allowanceId }
             executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + ids) }
@@ -354,34 +284,9 @@ class PaykitAllowanceRepo @Inject constructor(
         }
     }
 
-    private suspend fun proposeOnLinks(
-        contactKey: String,
-        receiverPaths: List<String>,
-        terms: AllowanceTerms,
-    ): List<String> {
-        val allowanceIds = mutableListOf<String>()
-        var firstError: Throwable? = null
-        for (receiverPath in receiverPaths) {
-            runSuspendCatching {
-                paykitSdkService.proposeAllowance(contactKey, receiverPath, AllowanceLocalRole.ALLOWER, terms)
-            }.onSuccess {
-                allowanceIds += it.allowanceId
-                sendQueuedMessages(contactKey, receiverPath)
-            }.onFailure {
-                if (receiverPath == PaykitReceiverPaths.WALLET) throw it
-                if (firstError == null) firstError = it
-                Logger.warn("Failed to propose an allowance on the secondary link '$receiverPath'", it, context = TAG)
-            }
-        }
-        if (allowanceIds.isEmpty()) throw firstError ?: PaykitAllowanceError.Unavailable
-        return allowanceIds
-    }
-
-    private suspend fun sendQueuedMessages(counterparty: String, receiverPath: String) {
-        runSuspendCatching { paykitSdkService.processOutboundPrivateMessages(counterparty, receiverPath) }
-            .onFailure {
-                Logger.warn("Failed to send allowance messages on '$receiverPath' right away", it, context = TAG)
-            }
+    private suspend fun sendQueuedMessages(counterparty: String) {
+        runSuspendCatching { paykitSdkService.processOutboundPrivateMessages(counterparty) }
+            .onFailure { Logger.warn("Failed to send allowance messages right away", it, context = TAG) }
     }
 
     // endregion
@@ -410,8 +315,8 @@ class PaykitAllowanceRepo @Inject constructor(
     // region Automatic payments
 
     /**
-     * Whether an active Allowance this wallet granted covers the request's exact link. A request created before the
-     * Allowance was accepted stays manual: it may already have been shown to the user for a decision.
+     * Whether an active Allowance this wallet granted covers the request's contact identity. A request created before
+     * the Allowance was accepted stays manual: it may already have been shown to the user for a decision.
      */
     fun coversRequest(request: PaykitPaymentRequest): Boolean {
         val now = clock.now()
@@ -419,7 +324,6 @@ class PaykitAllowanceRepo @Inject constructor(
             allowance.isAllower &&
                 allowance.status(now) == PaykitAllowance.Status.ACTIVE &&
                 PubkyPublicKeyFormat.matches(allowance.counterparty, request.counterparty) &&
-                allowance.counterpartyReceiverPath == request.counterpartyReceiverPath &&
                 isCreatedAfterAcceptance(request, allowance)
         }
     }
