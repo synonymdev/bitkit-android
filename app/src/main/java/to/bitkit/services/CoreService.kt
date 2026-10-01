@@ -618,6 +618,7 @@ class ActivityService(
         var complete = true
         for (activity in activities) {
             if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
+            if (cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) continue
             val contact = when (activity) {
                 is Activity.Lightning -> receivedPaykitContact(activity.v1, contacts)
                 is Activity.Onchain -> {
@@ -627,7 +628,7 @@ class ActivityService(
                 }
             }
             if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
-            if (contact != null) {
+            if (contact != null && !cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) {
                 val updated = when (activity) {
                     is Activity.Lightning -> Activity.Lightning(activity.v1.copy(contact = contact))
                     is Activity.Onchain -> Activity.Onchain(activity.v1.copy(contact = contact))
@@ -884,7 +885,9 @@ class ActivityService(
         val contact = existingActivity
             ?.takeIf { it is Activity.Lightning }
             ?.let { (it as Activity.Lightning).v1.contact }
-            ?: payment.takeUnless { it.status == PaymentStatus.FAILED }?.let {
+            ?: payment.takeUnless {
+                it.status == PaymentStatus.FAILED || cacheStore.data.first().isContactDetached(it.id, defaultWalletId)
+            }?.let {
                 privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(it.id, it.direction)
             }
 
@@ -1332,6 +1335,7 @@ class ActivityService(
         val existingContact = existingOnchainActivity?.v1?.contact
         val contact = existingContact ?: if (
             payment.direction == PaymentDirection.INBOUND && payment.status != PaymentStatus.FAILED &&
+            !cacheStore.data.first().isContactDetached(payment.id, defaultWalletId) &&
             !details?.outputs.isNullOrEmpty()
         ) {
             privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(

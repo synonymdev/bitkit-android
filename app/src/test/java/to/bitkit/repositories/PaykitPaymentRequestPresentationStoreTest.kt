@@ -94,11 +94,11 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `accepted one time ownership survives reopening but never enters wallet backup`() = test {
+    fun `accepted one time ownership survives reopening and wallet restore`() = test {
         val keychain = mock<Keychain>()
         val values = mutableMapOf<String, String>()
         whenever(keychain.loadString(any())).thenAnswer { values[it.getArgument<String>(0)] }
-        whenever { keychain.upsertString(any(), any()) }.thenAnswer {
+        whenever(keychain.upsertString(any(), any())).thenAnswer {
             values[it.getArgument(0)] = it.getArgument(1)
             Unit
         }
@@ -114,13 +114,16 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
         assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
         assertEquals(setOf(secondId), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
         assertEquals(emptyMap(), reopened.backupSnapshot())
-        assertEquals(0L, sut.backupStateVersion.value)
+        assertEquals(3L, sut.backupStateVersion.value)
+        val backup = reopened.acceptedOneTimeBackupSnapshot()
         reopened.restoreBackup(emptyMap())
         assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
 
         values.clear()
         reopened.restoreBackup(emptyMap())
-        assertEquals(emptySet(), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        reopened.restoreAcceptedOneTimeRequests(backup)
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(secondId), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
     }
 
     @Test
@@ -129,7 +132,7 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
         val key = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
         var stored: String? = null
         whenever(keychain.loadString(key)).thenAnswer { stored }
-        whenever { keychain.upsertString(eq(key), any()) }.thenAnswer {
+        whenever(keychain.upsertString(eq(key), any())).thenAnswer {
             stored = it.getArgument(1)
             Unit
         }

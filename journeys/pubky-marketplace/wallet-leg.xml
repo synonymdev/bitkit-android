@@ -50,5 +50,8 @@
     <action>Tap the seller's latest received activity (testTag "ActivityShort-0"), then tap transaction details (testTag "ActivityTxDetails")</action>
     <action>Verify the transaction id (testTag "TXID") matches the fixture transaction</action>
     <action>Capture the final activity, transaction id, confirmation height, and completed purchase evidence</action>
+    <action>Return to the received activity details and tap Detach</action>
+    <action>Wait for Paykit synchronization, then restart the seller app and reopen the received activity</action>
+    <action>Verify the activity no longer identifies the buyer and offers Assign instead of Detach</action>
   </actions>
 </journey>

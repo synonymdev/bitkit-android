@@ -74,7 +74,6 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
         }
     }
 
-    /** Local execution ownership is never exported or imported by wallet backups. */
     fun loadAcceptedOneTimeIds(identity: String): Set<PaykitPaymentRequestId> {
         val normalizedIdentity = PubkyPublicKeyFormat.normalized(identity) ?: return emptySet()
         return loadAcceptedOneTimeIdsByIdentity()[normalizedIdentity].orEmpty()
@@ -87,6 +86,7 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
             val ids = current[normalizedIdentity].orEmpty() + id
             val state = current + (normalizedIdentity to ids)
             keychain.upsertString(ACCEPTED_KEY, Json.encodeToString(state))
+            _backupStateVersion.update { it + 1 }
             ids
         }
 
@@ -106,8 +106,16 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
                 current + (normalizedIdentity to remaining)
             }
             keychain.upsertString(ACCEPTED_KEY, Json.encodeToString(state))
+            _backupStateVersion.update { it + 1 }
             remaining
         }
+
+    fun acceptedOneTimeBackupSnapshot(): Map<String, Set<PaykitPaymentRequestId>> = loadAcceptedOneTimeIdsByIdentity()
+
+    suspend fun restoreAcceptedOneTimeRequests(requests: Map<String, Set<PaykitPaymentRequestId>>) = mutex.withLock {
+        keychain.upsertString(ACCEPTED_KEY, Json.encodeToString(requests))
+        _backupStateVersion.update { it + 1 }
+    }
 
     private fun loadAcceptedOneTimeIdsByIdentity(): Map<String, Set<PaykitPaymentRequestId>> {
         val value = keychain.loadString(ACCEPTED_KEY) ?: return emptyMap()

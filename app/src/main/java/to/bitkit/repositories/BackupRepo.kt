@@ -641,6 +641,7 @@ class BackupRepo @Inject constructor(
             paykitPaymentState = PaykitPaymentStateBackup(
                 subscriptions = paykitPresentationStore.backupSnapshot(),
                 pendingProofs = paykitPaymentProofRepo.get().backupSnapshot(),
+                acceptedOneTimeRequests = paykitPresentationStore.acceptedOneTimeBackupSnapshot(),
             ),
         )
 
@@ -781,6 +782,7 @@ class BackupRepo @Inject constructor(
             paykitPaymentRequestRepo.get().clear()
             paykitPresentationStore.restoreBackup(it.subscriptions)
             paykitPaymentProofRepo.get().restoreBackup(it.pendingProofs)
+            paykitPresentationStore.restoreAcceptedOneTimeRequests(it.acceptedOneTimeRequests.orEmpty())
         }
         db.transferDao().upsert(parsed.transfers)
         watchOnlyAccountRepo.restore(

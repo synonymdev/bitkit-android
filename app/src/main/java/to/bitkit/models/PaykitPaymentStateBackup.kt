@@ -16,6 +16,7 @@ import kotlin.time.Instant
 data class PaykitPaymentStateBackup(
     val subscriptions: Map<String, Subscription>,
     val pendingProofs: List<Proof>,
+    val acceptedOneTimeRequests: Map<String, Set<PaykitPaymentRequestId>>? = null,
 ) {
     @Serializable
     data class Subscription(
