@@ -70,3 +70,5 @@ request id, check its full row identifier, and include the required back and tab
 transitions. The accepted
 subscription must have no end date so cancellation is available. The proposal review
 must explain that its payment details are unsupported and offer no Subscribe control.
+
+`automatic-presentation.xml` uses the same two-wallet setup and leaves the payer in the foreground. `confirmation-controls.xml` checks Android's fixed amount and confirmation footer on a compact screen with large text; it is not ported to iOS because the confirmation layout is different there.

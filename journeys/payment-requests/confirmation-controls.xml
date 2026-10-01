@@ -1,0 +1,17 @@
+<journey name="Payment Request Confirmation Controls">
+  <description>
+    Verifies that the amount and Swipe To Pay remain visible while confirmation details scroll on a compact portrait screen with large text. Requires a linked requester and a payer funded for 1,753 sats plus fees. Configure the payer at 360 dp width and 1.3 font scale before opening Bitkit. This journey covers Android's confirmation layout; iOS has a separate layout.
+  </description>
+  <actions>
+    <action>On the requester, send the payer contact a Payment Request for 1,753 sats with a multi-paragraph invoice note</action>
+    <action>On the payer, verify Payment Request confirmation (testTag "PaymentRequestConfirm") opens automatically</action>
+    <action>Verify the full 1,753-sat amount (testTag "ReviewAmount"), Show details and Swipe To Pay (testTag "GRAB") are visible without scrolling</action>
+    <action>Tap Show details (testTag "SendConfirmToggleDetails")</action>
+    <action>Scroll the middle confirmation content (testTag "SendConfirmContent") to the invoice note (testTag "PaymentRequestInvoiceNote")</action>
+    <action>Verify the full amount and Swipe To Pay remain visible in their original positions above the system navigation area</action>
+    <action>Scroll the details back to the top</action>
+    <action>Verify the full amount, Hide details and Swipe To Pay remain visible</action>
+    <action>Tap Hide details and verify the amount and Swipe To Pay remain visible</action>
+    <action>Close the confirmation without paying</action>
+  </actions>
+</journey>
