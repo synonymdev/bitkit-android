@@ -175,6 +175,15 @@ internal object PaykitReceiverPaths {
     val supported = ordered.toSet()
 }
 
+/** Which public read slots a public Pubky read may use. */
+enum class PaykitReadLane {
+    /** A read for what the user is looking at; it takes only a shared read slot. */
+    Interactive,
+
+    /** A background read over many keys; it also takes a bulk slot, so bulk reads never fill every read slot. */
+    Bulk,
+}
+
 @Singleton
 @Suppress("TooManyFunctions", "LargeClass")
 class PaykitSdkService @Inject constructor(
@@ -205,6 +214,7 @@ class PaykitSdkService @Inject constructor(
     private val handleMutex = Mutex()
     private val operationMutex = Mutex()
     private val publicReadPermits = Semaphore(PUBLIC_READ_PERMITS)
+    private val bulkReadPermits = Semaphore(BULK_READ_PERMITS)
     private val setupMutex = Mutex()
     private var isSetup = CompletableDeferred<Unit>()
     private var setupFailed = false
@@ -594,11 +604,15 @@ class PaykitSdkService @Inject constructor(
     suspend fun resolveContactProfile(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
-    ): ContactProfileResolution? = publicRead {
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+    ): ContactProfileResolution? = publicRead(lane) {
         it.resolveContactProfile(publicKey, PaykitReceiverPaths.WALLET, allowPubkyProfileFallback)
     }
 
-    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> = publicRead { handle ->
+    suspend fun discoverRelevantReceiverPaths(
+        publicKey: String,
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+    ): List<String> = publicRead(lane) { handle ->
         val discovered = handle.paykitReceiverPaths(publicKey)
             .filter { it in PaykitReceiverPaths.supported }
             .filter {
@@ -611,7 +625,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun privateReceiverPathSelection(
         publicKey: String,
         savedReceiverPaths: List<String>,
-    ): PaykitPrivateReceiverPathSelection = publicRead { handle ->
+    ): PaykitPrivateReceiverPathSelection = publicRead(PaykitReadLane.Bulk) { handle ->
         val linkable = mutableListOf<String>()
         val publishable = mutableListOf<String>()
         val cleanupProtected = mutableListOf<String>()
@@ -759,7 +773,7 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun paymentRequestReceiverPaths(publicKey: String): List<String> =
-        publicRead { handle ->
+        publicRead(PaykitReadLane.Bulk) { handle ->
             handle.paykitReceiverPaths(publicKey)
                 .filter { it in PaykitReceiverPaths.supported }
                 .filter { handle.paykitReceiverMarker(publicKey, it)?.capabilities?.paymentRequests == true }
@@ -1118,11 +1132,17 @@ class PaykitSdkService @Inject constructor(
      * Runs [block] on the SDK instance without [operationMutex]. [block] may only call unauthenticated public
      * Pubky reads, never session, secret, state-blob or publishing APIs. Without an instance it builds one under
      * [operationMutex], because building one outside it would race [resetRuntime], but reads under the permit.
+     * A [PaykitReadLane.Bulk] read takes a bulk permit before its read permit, always in that order, so bulk reads
+     * hold at most [BULK_READ_PERMITS] read permits and the rest stay free for interactive reads.
      */
-    private suspend fun <T> publicRead(block: suspend (PaykitSdk) -> T): T {
+    private suspend fun <T> publicRead(
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+        block: suspend (PaykitSdk) -> T,
+    ): T {
         isSetup.await()
         val existing = sdk ?: operationMutex.withLock { handle() }
-        return publicReadPermits.withPermit { block(existing) }
+        if (lane == PaykitReadLane.Interactive) return publicReadPermits.withPermit { block(existing) }
+        return bulkReadPermits.withPermit { publicReadPermits.withPermit { block(existing) } }
     }
 
     private fun bootstrap() = cachedBootstrap
@@ -1168,6 +1188,9 @@ class PaykitSdkService @Inject constructor(
 
         /** Maximum concurrent public Pubky reads that run outside the operation lock. */
         private const val PUBLIC_READ_PERMITS = 6
+
+        /** Maximum concurrent bulk public reads, which leaves the other read permits to interactive reads. */
+        private const val BULK_READ_PERMITS = 4
 
         fun localSecretKey(secretKeyHex: String): PubkyLocalSecretKey =
             PubkyLocalSecretKey(secretKeyHex.fromHex())

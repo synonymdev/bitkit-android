@@ -32,6 +32,8 @@ Delegates Pubky operations to `PaykitSdkService`, which uses:
 
 Session, state, key and publishing calls are serialized by `PaykitSdkService`'s operation lock. The public reads — `fetchFile()` (`fetchPubkyFileBounded()`), `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, and the receiver reads `discoverRelevantReceiverPaths()`, `privateReceiverPathSelection()` and `paymentRequestReceiverPaths()` (`paykitReceiverPaths()` and `paykitReceiverMarker()`) — run outside that lock, at most 6 at once, and are cancelled with their caller. Only unauthenticated public reads may use that path. Reading or saving a contact record stays under the lock, so a caller that discovers receiver paths and then saves them takes the lock only for the save.
 
+Each public read names a lane. An interactive read, for something the user is looking at — the user's own profile, avatars and other files, Pubky Ring choice rows, and a single contact opened from Add Contact or the contact screen — takes one of the 6 read slots. A bulk read — the follow lookups of `prepareImport()`, receiver discovery during a contact import, the contacts list's background profile refresh, private sync's receiver discovery and marker reads, and payment request target reads — first takes one of 4 bulk slots and then a read slot, so bulk work never holds more than 4 read slots and at least 2 stay free for interactive reads. Both are first come, first served, and a cancelled read gives its slots back.
+
 ## Repository Layer (`PubkyRepo`)
 
 Manages session lifecycle, identity adoption, and profile data. Singleton scoped.

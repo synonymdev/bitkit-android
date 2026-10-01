@@ -54,6 +54,7 @@ import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
@@ -998,7 +999,7 @@ class PubkyRepo @Inject constructor(
                             pubkyService.saveContact(
                                 prefixedKey,
                                 profile.name,
-                                relevantReceiverPaths(prefixedKey),
+                                relevantReceiverPaths(prefixedKey, PaykitReadLane.Bulk),
                                 restorePrivateConnection = true,
                             )
                             profile
@@ -1029,7 +1030,7 @@ class PubkyRepo @Inject constructor(
                 contactKeys.map { contactPk ->
                     val prefixedKey = contactPk.ensurePubkyPrefix()
                     async {
-                        resolveContactProfile(prefixedKey, retry = false)
+                        resolveContactProfile(prefixedKey, retry = false, lane = PaykitReadLane.Bulk)
                             .onFailure {
                                 Logger.warn("Failed to resolve follow '${redacted(prefixedKey)}'", it, context = TAG)
                             }
@@ -1331,7 +1332,7 @@ class PubkyRepo @Inject constructor(
         paykitProfile?.let {
             return PubkyProfile.fromPaykitProfile(prefixedKey, it).withNameFallback(label)
         }
-        resolveContactProfile(prefixedKey, retry = false)
+        resolveContactProfile(prefixedKey, retry = false, lane = PaykitReadLane.Bulk)
             .onFailure { Logger.warn("Failed to resolve contact '${redacted(prefixedKey)}'", it, context = TAG) }
             .getOrNull()
             ?.let { return it.withNameFallback(label) }
@@ -1345,14 +1346,15 @@ class PubkyRepo @Inject constructor(
     private suspend fun resolveContactProfile(
         publicKey: String,
         retry: Boolean,
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
     ): Result<PubkyProfile?> = runSuspendCatching {
         withContext(ioDispatcher) {
             val prefixedKey = publicKey.ensurePubkyPrefix()
-            if (!retry) return@withContext resolveProfileOnce(prefixedKey)
+            if (!retry) return@withContext resolveProfileOnce(prefixedKey, lane)
             var lastError: Throwable? = null
 
             repeat(2) { attempt ->
-                val result = runSuspendCatching { resolveProfileOnce(prefixedKey) }
+                val result = runSuspendCatching { resolveProfileOnce(prefixedKey, lane) }
                 if (result.isSuccess && (result.getOrNull() != null || attempt == 1)) {
                     return@withContext result.getOrNull()
                 }
@@ -1375,10 +1377,11 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun resolveProfileOnce(prefixedKey: String): PubkyProfile? =
+    private suspend fun resolveProfileOnce(prefixedKey: String, lane: PaykitReadLane): PubkyProfile? =
         pubkyService.resolveContactProfile(
             publicKey = prefixedKey,
             allowPubkyProfileFallback = true,
+            lane = lane,
         )?.let(::profileFromResolution)
 
     private fun profileFromResolution(resolution: ContactProfileResolution): PubkyProfile {
@@ -1396,9 +1399,12 @@ class PubkyRepo @Inject constructor(
         )
     }
 
-    private suspend fun relevantReceiverPaths(publicKey: String): List<String> =
+    private suspend fun relevantReceiverPaths(
+        publicKey: String,
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+    ): List<String> =
         runSuspendCatching {
-            pubkyService.discoverRelevantReceiverPaths(publicKey)
+            pubkyService.discoverRelevantReceiverPaths(publicKey, lane)
         }.onFailure {
             Logger.warn("Failed to discover Paykit receivers for '${redacted(publicKey)}'", it, context = TAG)
         }.getOrNull()

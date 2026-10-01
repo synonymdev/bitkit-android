@@ -62,6 +62,7 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PubkyRingAuthTimeoutError
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
@@ -724,7 +725,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `loadProfile should return early when no public key`() = test {
         sut.loadProfile()
 
-        verify(pubkyService, never()).resolveContactProfile(any(), any())
+        verify(pubkyService, never()).resolveContactProfile(any(), any(), any())
     }
 
     @Test
@@ -1198,7 +1199,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         sut.addContact(existingContact.publicKey, existingProfile = existingContact)
         whenever(pubkyService.getContacts(publicKey)).thenReturn(listOf(pendingContactKey))
-        whenever(pubkyService.resolveContactProfile(pendingContactKey, true))
+        whenever(pubkyService.resolveContactProfile(pendingContactKey, true, PaykitReadLane.Bulk))
             .thenReturn(createResolution(pendingContactKey, paykitProfile = createPaykitProfile("Pending Contact")))
 
         val prepareResult = sut.prepareImport()
@@ -1225,15 +1226,15 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals("Alice", sut.pendingImportProfile.value?.name)
         assertEquals(sut.profile.value, sut.pendingImportProfile.value)
-        verify(pubkyService, never()).resolveContactProfile(any(), any())
+        verify(pubkyService, never()).resolveContactProfile(any(), any(), any())
     }
 
     @Test
     fun `prepareImport resolves each follow once without retrying a missing profile or an error`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true)).thenReturn(null)
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)).thenReturn(null)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
             .thenAnswer { throw TestAppError("Unreachable") }
 
         val result = sut.prepareImport()
@@ -1243,8 +1244,8 @@ class PubkyRepoTest : BaseUnitTest() {
             setOf(PubkyProfile.placeholder(VALID_CONTACT_KEY_A), PubkyProfile.placeholder(VALID_CONTACT_KEY_B)),
             sut.pendingImportContacts.value.toSet(),
         )
-        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true)
-        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk)
     }
 
     @Test
@@ -1257,7 +1258,7 @@ class PubkyRepoTest : BaseUnitTest() {
             finishFollows.await()
             listOf(VALID_CONTACT_KEY_A)
         }
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
             .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Bob")))
         val preparation = async { sut.prepareImport() }
         followsStarted.await()
@@ -1487,7 +1488,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(profileSetupPending.value)
         assertEquals(VALID_SELF_KEY, cached.ownerPublicKey)
         assertEquals("Ring Profile", cached.cachedName)
-        verify(pubkyService, never()).resolveContactProfile(any(), any())
+        verify(pubkyService, never()).resolveContactProfile(any(), any(), any())
     }
 
     @Test
@@ -1501,7 +1502,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.getOrNull())
         assertEquals("Ring Profile", sut.profile.value?.name)
-        verify(pubkyService, never()).resolveContactProfile(any(), any())
+        verify(pubkyService, never()).resolveContactProfile(any(), any(), any())
     }
 
     @Test
@@ -2651,7 +2652,7 @@ class PubkyRepoTest : BaseUnitTest() {
         authenticateForTesting()
         val contactKey = "pubkycontact2"
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(contactKey)))
-        whenever(pubkyService.resolveContactProfile(contactKey, true))
+        whenever(pubkyService.resolveContactProfile(contactKey, true, PaykitReadLane.Bulk))
             .thenAnswer { throw TestAppError("Network error") }
 
         sut.loadContacts()
@@ -2667,8 +2668,8 @@ class PubkyRepoTest : BaseUnitTest() {
         authenticateForTesting()
         whenever(pubkyService.contactRecords())
             .thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A), createContactRecord(VALID_CONTACT_KEY_B)))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true)).thenReturn(null)
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)).thenReturn(null)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
             .thenAnswer { throw TestAppError("Unreachable") }
 
         sut.loadContacts()
@@ -2677,8 +2678,8 @@ class PubkyRepoTest : BaseUnitTest() {
             setOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B),
             sut.contacts.value.map { it.publicKey }.toSet(),
         )
-        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true)
-        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk)
     }
 
     @Test
@@ -2818,7 +2819,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val publicKey = checkNotNull(sut.publicKey.value)
         val pendingContactKey = "pubkypending-contact"
         whenever(pubkyService.getContacts(publicKey)).thenReturn(listOf(pendingContactKey))
-        whenever(pubkyService.resolveContactProfile(pendingContactKey, true))
+        whenever(pubkyService.resolveContactProfile(pendingContactKey, true, PaykitReadLane.Bulk))
             .thenReturn(createResolution(pendingContactKey, paykitProfile = createPaykitProfile("Pending Contact")))
 
         sut.prepareImport()
@@ -2864,7 +2865,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val contactKey = "pubkyabc123"
         whenever(pubkyService.contactRecords())
             .thenReturn(listOf(createContactRecord(contactKey, label = "Extracted")))
-        whenever(pubkyService.resolveContactProfile(contactKey, true)).thenReturn(null)
+        whenever(pubkyService.resolveContactProfile(contactKey, true, PaykitReadLane.Bulk)).thenReturn(null)
 
         sut.loadContacts()
 

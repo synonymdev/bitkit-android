@@ -43,6 +43,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
+import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
@@ -1494,7 +1495,7 @@ class PrivatePaykitRepo @Inject constructor(
         val savedPaths = supportedReceiverPaths(record?.receiverPaths.orEmpty())
 
         return runSuspendCatching {
-            val discoveredPaths = pubkyService.discoverRelevantReceiverPaths(publicKey)
+            val discoveredPaths = pubkyService.discoverRelevantReceiverPaths(publicKey, PaykitReadLane.Bulk)
             val currentRecord = paykitSdkService.contactRecord(publicKey)
                 ?: return@runSuspendCatching savedPaths
             val currentSavedPaths = supportedReceiverPaths(currentRecord.receiverPaths)

@@ -216,12 +216,16 @@ class PubkyService @Inject constructor(
     suspend fun resolveContactProfile(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
     ): ContactProfileResolution? = cancellablePublicRead {
-        paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback)
+        paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback, lane)
     }
 
-    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> = cancellablePublicRead {
-        paykitSdkService.discoverRelevantReceiverPaths(publicKey)
+    suspend fun discoverRelevantReceiverPaths(
+        publicKey: String,
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+    ): List<String> = cancellablePublicRead {
+        paykitSdkService.discoverRelevantReceiverPaths(publicKey, lane)
     }
 
     // endregion

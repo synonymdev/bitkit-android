@@ -431,7 +431,7 @@ class PaykitSdkServiceTest {
 
         assertEquals(
             listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER),
-            service.discoverRelevantReceiverPaths(RING_PUBKY),
+            service.discoverRelevantReceiverPaths(RING_PUBKY, PaykitReadLane.Bulk),
         )
         assertEquals(listOf(PaykitReceiverPaths.WALLET), service.paymentRequestReceiverPaths(RING_PUBKY))
         val selection = service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER))
@@ -460,6 +460,90 @@ class PaykitSdkServiceTest {
         assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.publishableReceiverPaths)
         assertEquals(listOf(PaykitReceiverPaths.SERVER), selection.cleanupProtectedReceiverPaths)
         assertSame(failure, selection.error)
+    }
+
+    @Test
+    fun `bulk reads leave two read permits to interactive reads`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        service.contactRecords()
+        val gate = CompletableDeferred<Unit>()
+        var bulkActive = 0
+        var interactiveActive = 0
+        whenever(sdk.resolveContactProfile(any(), any(), any())).doSuspendableAnswer {
+            bulkActive++
+            gate.await()
+            bulkActive--
+            null
+        }
+        whenever(sdk.fetchPubkyFileBounded(FILE_URI, 1uL)).doSuspendableAnswer {
+            interactiveActive++
+            gate.await()
+            interactiveActive--
+            byteArrayOf(1)
+        }
+
+        val bulkReads = List(10) {
+            async { service.resolveContactProfile("$RING_PUBKY$it", true, PaykitReadLane.Bulk) }
+        }
+        runCurrent()
+        assertEquals(4, bulkActive)
+
+        val interactiveReads = List(3) { async { service.fetchFile(FILE_URI, 1uL) } }
+        runCurrent()
+        assertEquals(4, bulkActive)
+        assertEquals(2, interactiveActive)
+
+        gate.complete(Unit)
+        bulkReads.awaitAll()
+        interactiveReads.awaitAll()
+        verify(sdk, times(10)).resolveContactProfile(any(), any(), any())
+        verify(sdk, times(3)).fetchPubkyFileBounded(FILE_URI, 1uL)
+    }
+
+    @Test
+    fun `bulk reads start in request order and a cancelled one frees both permits`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        service.contactRecords()
+        val started = mutableListOf<String>()
+        val gates = List(6) { CompletableDeferred<Unit>() }
+        whenever(sdk.paykitReceiverPaths(any())).doSuspendableAnswer {
+            val key = it.getArgument<String>(0)
+            started += key
+            gates[key.removePrefix(RING_PUBKY).toInt()].await()
+            emptyList<String>()
+        }
+        val reads = List(6) {
+            async { service.discoverRelevantReceiverPaths("$RING_PUBKY$it", PaykitReadLane.Bulk) }
+        }
+        runCurrent()
+        assertEquals(List(4) { "$RING_PUBKY$it" }, started)
+
+        reads[1].cancel()
+        runCurrent()
+        assertEquals(List(5) { "$RING_PUBKY$it" }, started)
+
+        val interactiveGate = CompletableDeferred<ByteArray?>()
+        var interactiveActive = 0
+        whenever(sdk.fetchPubkyFileBounded(FILE_URI, 1uL)).doSuspendableAnswer {
+            interactiveActive++
+            interactiveGate.await()
+        }
+        val interactiveReads = List(2) { async { service.fetchFile(FILE_URI, 1uL) } }
+        runCurrent()
+        assertEquals(2, interactiveActive)
+
+        gates[0].complete(Unit)
+        runCurrent()
+        assertEquals(List(6) { "$RING_PUBKY$it" }, started)
+
+        gates.forEach { it.complete(Unit) }
+        interactiveGate.complete(byteArrayOf(1))
+        reads.filterIndexed { index, _ -> index != 1 }.awaitAll()
+        interactiveReads.awaitAll()
     }
 
     @Test
