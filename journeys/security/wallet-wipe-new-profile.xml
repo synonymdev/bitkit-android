@@ -4,6 +4,7 @@
     Pubky profile and no available Pubky Ring identities. Use a reachable Pubky test network
     and an English device. This deletes the
     wallet and its profile credentials. Keep the app process alive throughout the journey.
+    On Android, the Profile Error toast is titled "Failed to create profile". Check it using a screenshot.
   </description>
   <actions>
     <action>Open Profile from the Home header and record the current public Pubky key</action>
@@ -16,6 +17,7 @@
     <action>Continue through the profile introduction and select Create Profile (identifier "PubkyChoiceCreate")</action>
     <action>Enter "After Wipe" in the username field (identifier "CreateProfileUsername") and dismiss the keyboard</action>
     <action>Tap Continue (identifier "CreateProfileSave") and wait for profile creation to finish</action>
+    <action>Verify no Profile Error toast appears when profile creation completes</action>
     <action>Open Profile and verify it shows "After Wipe" and a public Pubky key different from the deleted identity</action>
     <action>Return Home and reopen Profile; verify the new profile is still available without restarting the app</action>
   </actions>
