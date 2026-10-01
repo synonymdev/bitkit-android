@@ -24,14 +24,20 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
@@ -3092,20 +3098,26 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resolvePendingContactProfile looks up a label-only contact on the interactive lane`() = test {
+    fun `resolvePendingContactProfile looks up a label-only contact once on the interactive lane`() = test {
         authenticateForTesting()
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
             .doSuspendableAnswer { awaitCancellation() }
-        val alice = createPaykitProfile("Alice", image = "pubky://a")
+        val lookup = CompletableDeferred<ContactProfileResolution?>()
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
-            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = alice))
+            .doSuspendableAnswer { lookup.await() }
         sut.loadContacts()
 
-        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
+        val callers = List(2) { async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) } }
+        val alice = createPaykitProfile("Alice", bio = "Hello", image = "pubky://a")
+        lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = alice))
+        callers.awaitAll()
         sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
 
-        assertEquals(listOf("Alice" to "pubky://a"), sut.contacts.value.map { it.name to it.imageUrl })
+        assertEquals(
+            listOf(Triple("Alice", "Hello", "pubky://a")),
+            sut.contacts.value.map { Triple(it.name, it.bio, it.imageUrl) },
+        )
         verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive)
     }
 
@@ -3137,61 +3149,93 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resolvePendingContactProfile waits for the background lookup when its own lookup fails`() = test {
+    fun `a failed screen lookup does not wait for the background lookup still queued`() = test {
         authenticateForTesting()
-        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
-        val bulkLookup = CompletableDeferred<ContactProfileResolution?>()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved"), createContactRecord(VALID_CONTACT_KEY_B)),
+        )
+        var queuedLookup: Job? = null
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
-            .doSuspendableAnswer { bulkLookup.await() }
+            .doSuspendableAnswer {
+                queuedLookup = currentCoroutineContext().job
+                awaitCancellation()
+            }
+        val otherLookup = CompletableDeferred<ContactProfileResolution?>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { otherLookup.await() }
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
             .doSuspendableAnswer { throw TestAppError("offline") }
         sut.loadContacts()
 
         val resolve = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
-        assertFalse(resolve.isCompleted)
-        assertTrue(sut.isContactProfilePending(VALID_CONTACT_KEY_A))
-        val alice = createPaykitProfile("Alice", bio = "Hello", image = "pubky://a")
-        bulkLookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = alice))
-        resolve.await()
 
-        assertFalse(sut.isContactProfilePending(VALID_CONTACT_KEY_A))
-        assertEquals(listOf("Hello" to "pubky://a"), sut.contacts.value.map { it.bio to it.imageUrl })
+        assertTrue(resolve.isCompleted)
+        assertEquals(true, queuedLookup?.isCancelled)
+        assertTrue(sut.updateContact(VALID_CONTACT_KEY_A, "Saved", "", null, emptyList(), listOf("Friend")).isSuccess)
+        otherLookup.complete(createResolution(VALID_CONTACT_KEY_B, paykitProfile = createPaykitProfile("Bob")))
+        assertEquals(
+            listOf("Bob" to emptyList(), "Saved" to listOf("Friend")),
+            sut.contacts.value.map { it.name to it.tags },
+        )
     }
 
     @Test
-    fun `a label-only contact stays pending until a lookup of its profile succeeds`() = test {
+    fun `a background lookup taken over by a screen lookup applies no result`() = test {
         authenticateForTesting()
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        val backgroundLookup = CompletableDeferred<ContactProfileResolution?>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { withContext(NonCancellable) { backgroundLookup.await() } }
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
+            .doSuspendableAnswer { throw TestAppError("offline") }
+        sut.loadContacts()
+        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
+
+        val alice = createPaykitProfile("Alice", bio = "Hello", image = "pubky://a")
+        backgroundLookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = alice))
+
+        assertEquals(listOf(PubkyProfile.forDisplay(VALID_CONTACT_KEY_A, "Saved", imageUrl = null)), sut.contacts.value)
+    }
+
+    @Test
+    fun `resolvePendingContactProfile leaves a contact whose background lookup finished alone`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(createContactRecord(VALID_CONTACT_KEY_A, "Alice"), createContactRecord(VALID_CONTACT_KEY_B, "Bob")),
+        )
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
             .doSuspendableAnswer { throw TestAppError("offline") }
-        var interactiveLookup: ContactProfileResolution? = null
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
-            .doSuspendableAnswer { interactiveLookup ?: throw TestAppError("offline") }
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk)).thenReturn(null)
         sut.loadContacts()
 
         sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
+        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_B)
 
-        assertTrue(sut.isContactProfilePending(VALID_CONTACT_KEY_A))
-        val alice = createPaykitProfile("Alice", bio = "Hello")
-        interactiveLookup = createResolution(VALID_CONTACT_KEY_A, paykitProfile = alice)
-        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
-        assertFalse(sut.isContactProfilePending(VALID_CONTACT_KEY_A))
-        assertEquals(listOf("Alice" to "Hello"), sut.contacts.value.map { it.name to it.bio })
+        assertEquals(listOf("Alice", "Bob"), sut.contacts.value.map { it.name })
+        listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B).forEach {
+            verify(pubkyService, never()).resolveContactProfile(it, true, PaykitReadLane.Interactive)
+        }
     }
 
     @Test
-    fun `a lookup that finds no profile loads a label-only contact`() = test {
+    fun `a screen lookup overtaken by a sign-out applies nothing`() = test {
         authenticateForTesting()
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
             .doSuspendableAnswer { awaitCancellation() }
+        val lookup = CompletableDeferred<ContactProfileResolution?>()
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
-            .thenReturn(null)
+            .doSuspendableAnswer { withContext(NonCancellable) { lookup.await() } }
         sut.loadContacts()
+        val resolve = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
 
-        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
+        sut.wipeLocalState()
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        sut.loadContacts()
+        lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        resolve.await()
 
-        assertFalse(sut.isContactProfilePending(VALID_CONTACT_KEY_A))
         assertEquals(listOf("Saved"), sut.contacts.value.map { it.name })
     }
 
