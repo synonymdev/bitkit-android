@@ -35,14 +35,28 @@ class PrivatePaykitContactResolver @Inject constructor(
                 .mapNotNull(PubkyPublicKeyFormat::normalized).distinct().singleOrNull()
         }
 
-    suspend fun contactPublicKeyForPrivateOnchainAddresses(addresses: Collection<String>): String? =
+    suspend fun contactPublicKeyForReservedAddress(address: String): String? = withContext(ioDispatcher) {
+        addressReservationRepo.get().contactPublicKeyForReservedAddress(address)
+    }
+
+    suspend fun contactPublicKeyForPrivateOnchainAddresses(
+        receivingAddress: String?,
+        addresses: Collection<String>,
+    ): String? =
         withContext(ioDispatcher) {
+            if (receivingAddress.isNullOrBlank() || receivingAddress !in addresses) return@withContext null
             val shared = receivedPaymentContacts
-            val contacts = addresses.mapNotNull {
-                addressReservationRepo.get().contactPublicKeyForReservedAddress(it)
+            val reservedContacts = addresses.distinct().associateWith {
+                contactPublicKeyForReservedAddress(it)
             }
+            val receivingContacts = listOfNotNull(reservedContacts[receivingAddress]) +
+                shared.contactsForAddresses(listOf(receivingAddress))
+            val contact = receivingContacts.mapNotNull(PubkyPublicKeyFormat::normalized).distinct().singleOrNull()
+                ?: return@withContext null
             if (receivedPaymentContacts !== shared) return@withContext null
-            (contacts + shared.contactsForAddresses(addresses))
-                .mapNotNull(PubkyPublicKeyFormat::normalized).distinct().singleOrNull()
+            contact.takeIf {
+                (reservedContacts.values.filterNotNull() + shared.contactsForAddresses(addresses))
+                    .mapNotNull(PubkyPublicKeyFormat::normalized).distinct().singleOrNull() == contact
+            }
         }
 }

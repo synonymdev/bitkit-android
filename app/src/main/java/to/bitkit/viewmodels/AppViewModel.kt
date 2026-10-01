@@ -1698,15 +1698,7 @@ class AppViewModel @Inject constructor(
     ) {
         closeSettledReceiveSheet(receiveSheetToClose)
         val addresses = event.details.outputs.mapNotNull { it.scriptpubkeyAddress }
-        val contactPublicKey = privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(addresses)
         notifyPaymentReceived(event)
-        if (contactPublicKey != null) {
-            activityRepo.setContact(
-                contactPublicKey = contactPublicKey,
-                forPaymentId = event.txid,
-                syncLdkPayments = false,
-            )
-        }
         privatePaykitRepo.handleOnchainActivity(addresses)
             .onFailure {
                 Logger.warn("Failed to rotate private Paykit address for '${event.txid}'", it, context = TAG)
