@@ -7,6 +7,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -110,28 +112,22 @@ class EditContactViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a contact whose profile cannot be loaded shows the retry state instead of the form`() = test {
+    fun `a contact whose profile lookup failed shows its label in the form and saves`() = test {
+        whenever(context.getString(any())).thenReturn("")
         val labelOnly = PubkyProfile.forDisplay(TEST_PUBLIC_KEY, "Alice", imageUrl = null)
-        val contacts = MutableStateFlow(listOf(labelOnly))
-        whenever(pubkyRepo.contacts).thenReturn(contacts)
-        var isPending = true
-        whenever(pubkyRepo.isContactProfilePending(TEST_PUBLIC_KEY)).thenAnswer { isPending }
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(labelOnly)))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+            .thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
 
-        assertTrue(sut.uiState.value.isMissing)
-        contacts.value = listOf(labelOnly.copy(name = "Alice Renamed"))
-        advanceUntilIdle()
-        assertTrue(sut.uiState.value.isMissing)
-        isPending = false
-        contacts.value = listOf(createContact())
+        assertFalse(sut.uiState.value.isMissing)
+        assertEquals("Alice", sut.uiState.value.name)
+        sut.onBioChange("Met at a meetup")
+        sut.save()
         advanceUntilIdle()
 
-        val state = sut.uiState.value
-        assertFalse(state.isMissing)
-        assertEquals("Hello", state.bio)
-        assertEquals("https://example.com/avatar.jpg", state.imageUrl)
-        assertEquals(listOf("Website"), state.links.map { it.label })
+        verify(pubkyRepo).updateContact(TEST_PUBLIC_KEY, "Alice", "Met at a meetup", null, emptyList(), emptyList())
     }
 
     @Test
