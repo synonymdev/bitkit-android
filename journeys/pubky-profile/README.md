@@ -38,8 +38,10 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
   records are read, under its saved name or truncated key, and fills in a name and avatar when that
   contact's profile lookup finishes; a lookup that fails leaves the row as it is. The screen-wide
   spinner shows only until the saved records first load. Reopening Contacts in the same session
-  shows the profiles already found at once. Opening a contact whose profile has not loaded yet looks
-  it up at once, and its edit form shows the published bio.
+  shows the profiles already found at once; on Android it also does not look up again a profile
+  found less than ten minutes ago, so only contacts still without a profile get a new lookup.
+  Opening a contact whose profile has not loaded yet looks it up at once, and its edit form shows
+  the published bio.
 
 ## Setup
 

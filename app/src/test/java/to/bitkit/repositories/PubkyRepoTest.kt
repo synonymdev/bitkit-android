@@ -87,10 +87,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @Suppress("LargeClass")
 class PubkyRepoTest : BaseUnitTest() {
     companion object {
@@ -122,6 +125,9 @@ class PubkyRepoTest : BaseUnitTest() {
     private val settingsFlow = MutableStateFlow(SettingsData())
     private val profileSetupPending = MutableStateFlow(false)
     private var adoptedSource: String? = null
+    private val clock = object : Clock {
+        override fun now(): Instant = Instant.fromEpochMilliseconds(testDispatcher.scheduler.currentTime)
+    }
 
     @Before
     fun setUp() = runBlocking {
@@ -162,6 +168,7 @@ class PubkyRepoTest : BaseUnitTest() {
         pubkyStore = pubkyStore,
         settingsStore = settingsStore,
         httpClient = httpClient,
+        clock = clock,
     )
 
     private fun stubAdoptedRingSource() {
@@ -3105,7 +3112,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `loadContacts shows a profile resolved earlier in the session while it refreshes`() = test {
+    fun `loadContacts shows a session profile without a lookup until it is stale, then while it refreshes`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
         stubFollowLookup(VALID_CONTACT_KEY_A, "Alice")
@@ -3114,12 +3121,63 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
             .doSuspendableAnswer { lookup.await() }
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))
+        advanceTimeBy(PubkyRepo.CONTACT_PROFILE_FRESHNESS - 1.milliseconds)
+
+        sut.loadContacts()
+
+        assertEquals(listOf("Alice"), sut.contacts.value.map { it.name })
+        verify(pubkyService, never()).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
+        advanceTimeBy(1.milliseconds)
 
         sut.loadContacts()
 
         assertEquals(listOf("Alice"), sut.contacts.value.map { it.name })
         lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice Renamed")))
         assertEquals(listOf("Alice Renamed"), sut.contacts.value.map { it.name })
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
+    }
+
+    @Test
+    fun `loadContacts looks up only contacts without a profile resolved within the freshness window`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(
+                createContactRecord(VALID_CONTACT_KEY_A, "Saved A"),
+                createContactRecord(VALID_CONTACT_KEY_B, "Saved B"),
+            ),
+        )
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
+            .thenAnswer { throw TestAppError("offline") }
+        sut.loadContacts()
+        advanceTimeBy(PubkyRepo.CONTACT_PROFILE_FRESHNESS - 1.milliseconds)
+
+        sut.loadContacts()
+
+        assertEquals(listOf("Alice", "Saved B"), sut.contacts.value.map { it.name })
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
+        verify(pubkyService, times(2)).resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk)
+    }
+
+    @Test
+    fun `sign out forgets which contact profiles are fresh`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+        sut.loadContacts()
+        assertEquals(listOf("Alice"), sut.contacts.value.map { it.name })
+
+        assertTrue(sut.signOut().isSuccess)
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        sut.loadContacts()
+
+        assertEquals(listOf("Saved"), sut.contacts.value.map { it.name })
+        verify(pubkyService, times(2)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
     }
 
     @Test
@@ -3132,7 +3190,9 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
             .doSuspendableAnswer { lookup.await() }
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))
+        advanceTimeBy(PubkyRepo.CONTACT_PROFILE_FRESHNESS)
         sut.loadContacts()
+        verify(pubkyService).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
 
         sut.wipeLocalState()
         lookup.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))

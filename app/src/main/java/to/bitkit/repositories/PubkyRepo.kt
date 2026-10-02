@@ -50,6 +50,7 @@ import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isPaykitIdentityError
+import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HomegateResponse
 import to.bitkit.models.PubkyAuthClaim
@@ -71,7 +72,10 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
 sealed class PubkyContactError(message: String) : AppError(message) {
     data object AlreadyExists : PubkyContactError("Contact already exists")
@@ -100,6 +104,7 @@ enum class PubkyIdentityReadiness {
     Unavailable,
 }
 
+@OptIn(ExperimentalTime::class)
 @Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @Singleton
 class PubkyRepo @Inject constructor(
@@ -112,6 +117,7 @@ class PubkyRepo @Inject constructor(
     private val pubkyStore: PubkyStore,
     private val settingsStore: SettingsStore,
     private val httpClient: HttpClient,
+    private val clock: Clock,
 ) {
     companion object {
         private const val TAG = "PubkyRepo"
@@ -122,6 +128,9 @@ class PubkyRepo @Inject constructor(
 
         /** Longest one follow's profile read in the import preview may run once it has a read slot. */
         internal val IMPORT_FOLLOW_LOOKUP_TIMEOUT = 10.seconds
+
+        /** How long a contact profile resolved in this session is shown without being looked up again. */
+        internal val CONTACT_PROFILE_FRESHNESS = 10.minutes
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -131,7 +140,7 @@ class PubkyRepo @Inject constructor(
     private val loadContactsMutex = Mutex()
     private val contactsLock = Any()
     private var contactsRevision = 0L
-    private val sessionContactProfiles = mutableMapOf<String, PubkyProfile>()
+    private val sessionContactProfiles = mutableMapOf<String, SessionContactProfile>()
     private var sessionContactProfilesOwner: String? = null
     private var contactProfileRefresh: ContactProfileRefresh? = null
     private val contactScreenLookups = mutableMapOf<String, Job>()
@@ -215,6 +224,11 @@ class PubkyRepo @Inject constructor(
         val needsRefresh: Boolean,
         val showsLabelOnly: Boolean = false,
     )
+
+    private class SessionContactProfile(val profile: PubkyProfile, private val resolvedAtMillis: Long) {
+        fun isFresh(now: Long): Boolean =
+            now - resolvedAtMillis in 0 until CONTACT_PROFILE_FRESHNESS.inWholeMilliseconds
+    }
 
     private class ContactProfileRefresh(
         private val owner: String,
@@ -938,7 +952,8 @@ class PubkyRepo @Inject constructor(
     /**
      * Publishes the saved contact records without waiting for any profile lookup. A record without a profile override
      * or a stored Paykit profile shows the profile resolved earlier in this session, else its label, and is then
-     * refreshed in the background on the bulk read lane, its row updating once its lookup finishes.
+     * refreshed in the background on the bulk read lane, its row updating once its lookup finishes, unless its profile
+     * was resolved less than [CONTACT_PROFILE_FRESHNESS] ago.
      */
     suspend fun loadContacts() {
         val pk = _publicKey.value ?: return
@@ -972,7 +987,8 @@ class PubkyRepo @Inject constructor(
                             reload = true
                             return@onSuccess
                         }
-                        val loadedContacts = savedContacts.map { it.withSessionProfile(pk) }
+                        val now = clock.nowMs()
+                        val loadedContacts = savedContacts.map { it.withSessionProfile(pk, now) }
                         _contacts.update { loadedContacts.map { it.profile }.sortedBy { it.name.lowercase() } }
                         contactsToRefresh = loadedContacts.filter { it.needsRefresh }
                     }
@@ -1530,10 +1546,14 @@ class PubkyRepo @Inject constructor(
         return SavedContact(profile, record.label, needsRefresh = true, showsLabelOnly = true)
     }
 
-    private fun SavedContact.withSessionProfile(owner: String): SavedContact {
+    private fun SavedContact.withSessionProfile(owner: String, now: Long): SavedContact {
         if (!needsRefresh) return this
         val cached = sessionContactProfile(owner, profile.publicKey) ?: return this
-        return copy(profile = cached.withNameFallback(label), showsLabelOnly = false)
+        return copy(
+            profile = cached.profile.withNameFallback(label),
+            needsRefresh = !cached.isFresh(now),
+            showsLabelOnly = false,
+        )
     }
 
     private fun refreshContactProfiles(owner: String, contacts: List<SavedContact>) {
@@ -1571,9 +1591,10 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private fun sessionContactProfile(owner: String, publicKey: String): PubkyProfile? = synchronized(contactsLock) {
-        sessionContactProfiles[publicKey].takeIf { sessionContactProfilesOwner == owner }
-    }
+    private fun sessionContactProfile(owner: String, publicKey: String): SessionContactProfile? =
+        synchronized(contactsLock) {
+            sessionContactProfiles[publicKey].takeIf { sessionContactProfilesOwner == owner }
+        }
 
     private fun cacheSessionContactProfiles(owner: String, profiles: Collection<PubkyProfile>) {
         synchronized(contactsLock) {
@@ -1582,8 +1603,9 @@ class PubkyRepo @Inject constructor(
                 sessionContactProfiles.clear()
                 sessionContactProfilesOwner = owner
             }
+            val now = clock.nowMs()
             profiles.filter { it != PubkyProfile.placeholder(it.publicKey) }
-                .forEach { sessionContactProfiles[it.publicKey] = it }
+                .forEach { sessionContactProfiles[it.publicKey] = SessionContactProfile(it, now) }
         }
     }
 
