@@ -947,20 +947,7 @@ class PrivatePaykitRepo @Inject constructor(
         report: PrivatePaymentListDeliveryReport,
         reason: String,
     ): Throwable? {
-        report.failedToQueue.forEach {
-            Logger.warn(
-                "Failed to queue private Paykit endpoints for '${redacted(it.counterparty)}' during '$reason': " +
-                    (it.error?.redactedContext() ?: "unknown error"),
-                context = TAG,
-            )
-        }
-        report.failedToDeliver.forEach {
-            Logger.warn(
-                "Failed to deliver private Paykit endpoints for '${redacted(it.counterparty)}' during '$reason': " +
-                    it.error.redactedContext(),
-                context = TAG,
-            )
-        }
+        logPrivatePaymentListDeliveryFailures(report, reason)
 
         var didUpdateCache = false
         for (change in report.queued) {
@@ -981,6 +968,23 @@ class PrivatePaykitRepo @Inject constructor(
 
         return PrivatePaykitError.PrivateUnavailable.takeIf {
             report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()
+        }
+    }
+
+    private fun logPrivatePaymentListDeliveryFailures(report: PrivatePaymentListDeliveryReport, reason: String) {
+        report.failedToQueue.forEach {
+            Logger.warn(
+                "Failed to queue private Paykit endpoints for '${redacted(it.counterparty)}' during '$reason': " +
+                    (it.error?.redactedContext() ?: "unknown error"),
+                context = TAG,
+            )
+        }
+        report.failedToDeliver.forEach {
+            Logger.warn(
+                "Failed to deliver private Paykit endpoints for '${redacted(it.counterparty)}' during '$reason': " +
+                    it.error.redactedContext(),
+                context = TAG,
+            )
         }
     }
 
@@ -1332,6 +1336,10 @@ class PrivatePaykitRepo @Inject constructor(
                 )
                 val pendingRetryKeys = pendingPrivateMessageDrainKeys(preparation.clearedRetryKeys)
                 if (pendingRetryKeys.isNotEmpty()) {
+                    Logger.warn(
+                        "Private Paykit endpoint withdrawal remains pending for ${pendingRetryKeys.map(::redacted)}",
+                        context = TAG,
+                    )
                     failedPublicKeys += pendingRetryKeys
                     firstError = firstError ?: PrivatePaykitError.PrivateUnavailable
                 }
@@ -1372,6 +1380,7 @@ class PrivatePaykitRepo @Inject constructor(
             runSuspendCatching {
                 val report = paykitSdkService.clearPrivatePaymentList(publicKey)
                     ?: return@runSuspendCatching false
+                logPrivatePaymentListDeliveryFailures(report, "cleanup")
                 if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
                     throw PrivatePaykitError.PrivateUnavailable
                 }
@@ -1379,6 +1388,10 @@ class PrivatePaykitRepo @Inject constructor(
             }.onSuccess {
                 if (it) clearedRetryKeys += publicKey
             }.onFailure {
+                Logger.warn(
+                    "Failed to clear private Paykit endpoints for '${redacted(publicKey)}': ${it::class.simpleName}",
+                    context = TAG,
+                )
                 failedPublicKeys += publicKey
                 firstError = firstError ?: it
             }
