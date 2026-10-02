@@ -1310,13 +1310,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
         runCurrent()
-        clearInvocations(privatePaykitRepo)
+        clearInvocations(privatePaykitRepo, paykitPaymentRequestRepo, paykitPaymentProofRepo)
         val pendingProposal = mock<PaykitSubscription>()
         whenever(paykitPaymentRequestRepo.automaticSubscriptionProposals()).thenReturn(listOf(pendingProposal))
 
         sut.onPaykitSubscriptionNotificationTapped(testPublicKey, targetRequest.id)
         runCurrent()
 
+        verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = false)
+        verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
+        verify(paykitPaymentProofRepo, never()).reconcile()
+        verify(privatePaykitRepo, never()).awaitContactPreparation()
         verify(privatePaykitRepo).beginPaymentRequest(targetRequest)
         verify(privatePaykitRepo, never()).beginPaymentRequest(otherRequest)
     }
