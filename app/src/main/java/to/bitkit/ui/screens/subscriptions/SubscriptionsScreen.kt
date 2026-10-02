@@ -1067,7 +1067,7 @@ internal fun PaykitSubscription.rowSubtitleSpec(now: Instant): Pair<Int, Instant
         recurrence.endsAt != null || !isActive(now) -> R.string.subscriptions__expires_date to expiryDate()
         else -> recurrence.nextPeriodAfter(now)?.startsAt?.let { R.string.subscriptions__renews_date to it }
     }
-    else -> recurrence.endsAt?.let { R.string.subscriptions__expires_date to it }
+    else -> recurrence.endsAt?.let { R.string.subscriptions__expires_date to (canceledPaidThrough() ?: it) }
         ?: (R.string.subscriptions__expired to null)
 }
 

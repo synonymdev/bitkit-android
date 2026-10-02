@@ -194,6 +194,8 @@ class SubscriptionsScreenTest {
         assertTrue(canceled.runsUntilPaidThrough(now))
         assertFalse(canceled.runsUntilPaidThrough(paidThrough))
         assertEquals(R.string.subscriptions__expired, canceled.statusRes(paidThrough))
+        assertEquals(R.string.subscriptions__expires_date to paidThrough, canceled.rowSubtitleSpec(now))
+        assertEquals(R.string.subscriptions__expires_date to paidThrough, canceled.rowSubtitleSpec(paidThrough))
         assertEquals(paidThrough, nextSubscriptionTransition(listOf(canceled), now))
     }
 
