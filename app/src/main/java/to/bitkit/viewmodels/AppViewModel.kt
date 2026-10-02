@@ -389,7 +389,6 @@ class AppViewModel @Inject constructor(
     private var isPaymentRequestIdentityActivating = false
     private var isSubmittingPaymentRequest = false
     private var paykitPaymentRequestPollingJob: Job? = null
-    private var initialPaykitPaymentRequestPollingJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
@@ -566,7 +565,6 @@ class AppViewModel @Inject constructor(
         observePublicPaykitInvoiceExpiry()
         observePrivatePaykitContacts()
         observePaykitPaymentRequestConnectivity()
-        observeInitialPaykitLinkBursts()
         observeIncomingPaykitPaymentRequests()
         observePaykitOnchainPaymentResolution()
         observeSendEvents()
@@ -760,7 +758,6 @@ class AppViewModel @Inject constructor(
                 .onFailure { Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG) }
             privatePaykitRepo.pruneUnsavedContactState(state.contactKeys)
                 .onFailure { Logger.warn("Failed to prune private Paykit contact state", it, context = TAG) }
-            privatePaykitRepo.startInitialLinkBurst(state.contactKeys, "contact sync")
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
             refreshIncomingPaykitPaymentRequests()
             refreshPaymentRequestTargets(force = true)
@@ -788,7 +785,6 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
             }
         privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
-        privatePaykitRepo.startInitialLinkBurst(contactKeys, reason)
         refreshIncomingPaykitPaymentRequests()
         refreshPaymentRequestTargets(force = true)
     }
@@ -807,12 +803,6 @@ class AppViewModel @Inject constructor(
                     }
                     refreshPrivatePaykitEndpointsIfEnabled("network restored")
                 }
-        }
-    }
-
-    private fun observeInitialPaykitLinkBursts() {
-        viewModelScope.launch {
-            privatePaykitRepo.initialLinkBurstStarted.collect { startInitialPaykitPaymentRequestPolling() }
         }
     }
 
@@ -894,6 +884,8 @@ class AppViewModel @Inject constructor(
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
+            refreshIncomingPaykitPaymentRequests()
+            refreshPaymentRequestTargets()
             var maintenanceIntervalIndex = 0
             var maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
@@ -913,7 +905,6 @@ class AppViewModel @Inject constructor(
                 if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
             }
         }
-        startInitialPaykitPaymentRequestPolling()
     }
 
     fun synchronizeSubscriptionNotifications(enabled: Boolean) {
@@ -942,22 +933,7 @@ class AppViewModel @Inject constructor(
     fun stopPaykitPaymentRequestPolling() {
         paykitPaymentRequestPollingJob?.cancel()
         paykitPaymentRequestPollingJob = null
-        initialPaykitPaymentRequestPollingJob?.cancel()
-        initialPaykitPaymentRequestPollingJob = null
         clearPaymentRequestPresentationRetries()
-    }
-
-    private fun startInitialPaykitPaymentRequestPolling() {
-        if (paykitPaymentRequestPollingJob?.isActive != true) return
-        initialPaykitPaymentRequestPollingJob?.cancel()
-        initialPaykitPaymentRequestPollingJob = viewModelScope.launch {
-            refreshIncomingPaykitPaymentRequests()
-            refreshPaymentRequestTargets()
-            INITIAL_PAYKIT_SYNC_RETRY_DELAYS.forEach {
-                delay(it)
-                refreshIncomingPaykitPaymentRequests(refreshMaintenance = false)
-            }
-        }
     }
 
     private fun observeIncomingPaykitPaymentRequests() {
@@ -5963,7 +5939,6 @@ class AppViewModel @Inject constructor(
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
         private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 10.seconds
         private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
-        private val INITIAL_PAYKIT_SYNC_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds

@@ -14,11 +14,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -90,7 +87,7 @@ class PrivatePaykitRepo @Inject constructor(
             45.seconds,
             90.seconds,
         )
-        private val initialLinkBurstRetryDelays = List(14) { 2.seconds }
+        private val paymentListRetryDelays = List(14) { 2.seconds }
         private val privatePaymentResolutionRetryDelays = listOf(1.seconds, 3.seconds, 8.seconds)
 
         fun isDuplicatePaymentError(error: Throwable): Boolean =
@@ -107,12 +104,6 @@ class PrivatePaykitRepo @Inject constructor(
     private val pendingMessageDrainRetryKeys = mutableSetOf<String>()
     private var pendingMessageDrainRetryJob: Job? = null
     private var pendingMessageDrainRetryGeneration = 0
-    private val _initialLinkBurstStarted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val initialLinkBurstStarted: SharedFlow<Unit> = _initialLinkBurstStarted.asSharedFlow()
-    private val initialLinkBurstLock = Any()
-    private val initialLinkBurstPublicKeys = mutableSetOf<String>()
-    private var initialLinkBurstJob: Job? = null
-    private var initialLinkBurstGeneration = 0
 
     private data class PrivatePublicationPreparation(
         val updates: List<PrivatePaymentListReservationUpdateInput>,
@@ -216,39 +207,6 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    fun startInitialLinkBurst(publicKeys: Collection<String>, reason: String) {
-        val publicKeys = normalizedPublicKeyBatch(publicKeys).normalizedKeys
-
-        synchronized(initialLinkBurstLock) {
-            initialLinkBurstGeneration += 1
-            initialLinkBurstJob?.cancel()
-            initialLinkBurstJob = null
-            initialLinkBurstPublicKeys.clear()
-            initialLinkBurstPublicKeys += publicKeys
-            if (publicKeys.isEmpty()) return
-
-            val generation = initialLinkBurstGeneration
-            _initialLinkBurstStarted.tryEmit(Unit)
-
-            initialLinkBurstJob = retryScope.launch {
-                for (retryDelay in listOf(kotlin.time.Duration.ZERO) + initialLinkBurstRetryDelays) {
-                    delay(retryDelay)
-                    val keys = synchronized(initialLinkBurstLock) {
-                        if (generation != initialLinkBurstGeneration) return@launch
-                        initialLinkBurstPublicKeys.toList()
-                    }
-                    refreshSavedContactEndpointsDuringInitialLinkBurst(keys, reason)
-                    if (pendingPrivateMessageDrainKeys(keys, retryMissingPeers = true).isEmpty()) break
-                }
-                synchronized(initialLinkBurstLock) {
-                    if (generation != initialLinkBurstGeneration) return@launch
-                    initialLinkBurstJob = null
-                    initialLinkBurstPublicKeys.clear()
-                }
-            }
-        }
-    }
-
     suspend fun retryPendingEndpointRemoval(
         savedPublicKeys: Collection<String>,
     ): Result<Unit> = withContext(serializedDispatcher) {
@@ -321,7 +279,6 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
     suspend fun removePublishedEndpointsForCleanup(context: String): Result<Unit> = withContext(serializedDispatcher) {
-        clearInitialLinkBurst()
         runSuspendCatching {
             updateContactSharingCleanupPending(true)
             removePublishedEndpoints().getOrThrow()
@@ -336,7 +293,6 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun closeAndClear(): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             publicationMutex.withLock {
-                clearInitialLinkBurst()
                 clearPendingMessageDrainRetries()
                 knownSavedContactKeys.clear()
                 state = PrivatePaykitState()
@@ -370,7 +326,7 @@ class PrivatePaykitRepo @Inject constructor(
         request: PaykitPaymentRequest,
     ): Result<PublicPaykitPaymentResult> = runSuspendCatching {
         var result = beginPaymentRequest(request).getOrThrow()
-        for (retryDelay in initialLinkBurstRetryDelays) {
+        for (retryDelay in paymentListRetryDelays) {
             if (result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList) return@runSuspendCatching result
             delay(retryDelay)
             result = beginPaymentRequest(request).getOrThrow()
@@ -855,7 +811,10 @@ class PrivatePaykitRepo @Inject constructor(
         reason: String,
         retryKeys: Collection<String>,
     ) {
-        val pendingKeys = pendingPrivateMessageDrainKeys(retryKeys, retryMissingPeers = true)
+        val newKeys = synchronized(pendingMessageDrainRetryLock) {
+            retryKeys.toSet() - pendingMessageDrainRetryKeys
+        }
+        val pendingKeys = pendingPrivateMessageDrainKeys(newKeys, retryMissingPeers = true)
         if (pendingKeys.isEmpty()) return
 
         drainPendingPrivateMessages(reason, advancingLinksFor = pendingKeys.toList())
@@ -969,8 +928,6 @@ class PrivatePaykitRepo @Inject constructor(
             }
             paykitSdkService.processPendingPrivateMessages()
             paykitSdkService.receivePrivateMessagesFromLinkedPeers()
-            paykitSdkService.processPendingPrivateMessages()
-            paykitSdkService.receivePrivateMessagesFromLinkedPeers()
         }.onFailure {
             Logger.warn("Failed to process pending private Paykit messages during '$reason'", it, context = TAG)
         }
@@ -984,7 +941,10 @@ class PrivatePaykitRepo @Inject constructor(
         if (retryKeys.isEmpty()) return
 
         synchronized(pendingMessageDrainRetryLock) {
+            val hasActiveRetry =
+                pendingMessageDrainRetryJob?.isActive == true && pendingMessageDrainRetryKeys.isNotEmpty()
             pendingMessageDrainRetryKeys.addAll(retryKeys)
+            if (hasActiveRetry) return
             pendingMessageDrainRetryGeneration += 1
             val retryGeneration = pendingMessageDrainRetryGeneration
             pendingMessageDrainRetryJob?.cancel()
@@ -1378,27 +1338,6 @@ class PrivatePaykitRepo @Inject constructor(
             localInvoice = contactState?.localInvoice,
             hasPublishedPrivatePaymentList = contactState?.hasPublishedPrivatePaymentList == true,
         )
-    }
-
-    private suspend fun refreshSavedContactEndpointsDuringInitialLinkBurst(
-        publicKeys: Collection<String>,
-        reason: String,
-    ) = withContext(serializedDispatcher) {
-        if (!canPublishPrivateEndpoints()) {
-            prepareRelevantPrivateLinksIfAvailable(publicKeys, "$reason initial link burst")
-            return@withContext
-        }
-        publishLocalEndpoints(publicKeys.toList(), reason = "$reason initial link burst")
-            .onFailure { Logger.warn("Failed initial private Paykit sync for '$reason'", it, context = TAG) }
-    }
-
-    private fun clearInitialLinkBurst() {
-        synchronized(initialLinkBurstLock) {
-            initialLinkBurstJob?.cancel()
-            initialLinkBurstJob = null
-            initialLinkBurstPublicKeys.clear()
-            initialLinkBurstGeneration += 1
-        }
     }
 
     private fun normalizedPublicKeyBatch(publicKeys: Collection<String>): NormalizedPublicKeyBatch {
