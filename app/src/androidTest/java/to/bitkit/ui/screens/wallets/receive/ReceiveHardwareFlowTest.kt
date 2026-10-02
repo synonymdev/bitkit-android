@@ -66,7 +66,7 @@ class ReceiveHardwareFlowTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("Tab-trezor").performClick()
+        composeTestRule.onNodeWithTag("Tab-hardware").performClick()
         composeTestRule.waitForIdle()
         assertEquals(1, addressLoadCount)
 

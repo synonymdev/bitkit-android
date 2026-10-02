@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 class ReceiveInvoiceUtilsTest {
 
     @Test
-    fun `getInvoiceForTab TREZOR returns only the hardware address`() {
+    fun `getInvoiceForTab HARDWARE returns only the hardware address`() {
         val result = getInvoiceForTab(
             tab = ReceiveTab.HARDWARE,
             bip21 = "bitcoin:software?lightning=lnbc1software",
@@ -21,7 +21,7 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab TREZOR applies hardware invoice details`() {
+    fun `getInvoiceForTab HARDWARE applies hardware invoice details`() {
         val result = getInvoiceForTab(
             tab = ReceiveTab.HARDWARE,
             bip21 = "bitcoin:software",
@@ -38,7 +38,7 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab TREZOR omits a zero amount`() {
+    fun `getInvoiceForTab HARDWARE omits a zero amount`() {
         val result = getInvoiceForTab(
             tab = ReceiveTab.HARDWARE,
             bip21 = "bitcoin:bc1qsoftware",
