@@ -13,6 +13,7 @@ import com.synonym.bitkitcore.getTransactionDetails
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.upsertActivity
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Test
 import org.lightningdevkit.ldknode.ConfirmationStatus
@@ -135,6 +136,27 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
 
         assertFalse(sut.backfillPaykitContacts())
         assertTrue(updates.isEmpty())
+    }
+
+    @Test
+    fun `backfill preserves a manual edit during the final cache read`() = coreTest {
+        val original = lightning()
+        val edited = Activity.Lightning(original.copy(contact = OTHER_BUYER, message = "manual note"))
+        rows = listOf(Activity.Lightning(original))
+        whenever(contacts.contactsForPaymentHash(original.id)).thenReturn(setOf(BUYER))
+        var cacheReads = 0
+        whenever(cacheStore.data).thenReturn(flow {
+            if (++cacheReads == 2) {
+                sut.update(original.id, edited)
+                rows = listOf(edited)
+            }
+            emit(cacheData.value)
+        })
+
+        assertFalse(sut.backfillPaykitContacts())
+        assertEquals(listOf<Activity>(edited), updates)
+        assertFalse(sut.backfillPaykitContacts())
+        assertEquals(listOf<Activity>(edited), updates)
     }
 
     @Test

@@ -188,6 +188,37 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `a canceled subscription cannot finish payment authorization`() = test {
+        val record = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        sut.accept(request).getOrThrow()
+        val checking = CompletableDeferred<Unit>()
+        val checked = CompletableDeferred<Unit>()
+        var pauseNextLookup = true
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            if (pauseNextLookup) {
+                pauseNextLookup = false
+                checking.complete(Unit)
+                checked.await()
+            }
+            emptyList()
+        }
+
+        val authorization = async { sut.ensurePaymentAllowed(request) }
+        checking.await()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(record.copy(state = PaymentRequestLifecycleState.CANCELED)))
+        sut.refresh(syncPrivateMessages = false).getOrThrow()
+        checked.complete(Unit)
+
+        assertTrue(authorization.await().isFailure)
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+        assertTrue(sut.accept(request).isFailure)
+    }
+
+    @Test
     fun `a paid subscription period stays blocked while its next unpaid period is authorized`() = test {
         val record = paymentRequestRecord(
             state = PaymentRequestLifecycleState.ACTIVE_RECURRING,
