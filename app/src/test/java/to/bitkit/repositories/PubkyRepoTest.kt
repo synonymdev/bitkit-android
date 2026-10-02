@@ -978,6 +978,54 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forgetUnrestoredIdentity clears an expired imported grant without remote calls`() = test {
+        sut.awaitInitialization()
+        var session: String? = "expired_session"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        whenever(keychain.delete(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session = null }
+        whenever(pubkyService.importSession("expired_session")).thenAnswer { throw TestAppError("Expired") }
+        sut.initialize()
+        assertTrue(sut.hasIdentity())
+        assertNull(sut.publicKey.value)
+        clearInvocations(pubkyService, pubkyStore)
+
+        assertEquals(true, sut.forgetUnrestoredIdentity().getOrThrow())
+
+        assertFalse(sut.hasIdentity())
+        assertNull(sut.profile.value)
+        assertTrue(sut.contacts.value.isEmpty())
+        verify(pubkyService).forgetSessionAccess()
+        verify(pubkyService, never()).signOut()
+        verify(pubkyService, never()).removeBitkitPaymentEndpoints()
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyStore).reset()
+    }
+
+    @Test
+    fun `forgetUnrestoredIdentity preserves identity restored while waiting for auth lock`() = test {
+        sut.awaitInitialization()
+        val importStarted = CompletableDeferred<Unit>()
+        val finishImport = CompletableDeferred<String>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer {
+            importStarted.complete(Unit)
+            finishImport.await()
+        }
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenReturn(null)
+        val initialize = async { sut.initialize() }
+        importStarted.await()
+        val disconnect = async(start = CoroutineStart.UNDISPATCHED) { sut.forgetUnrestoredIdentity() }
+        assertFalse(disconnect.isCompleted)
+        finishImport.complete(VALID_SELF_KEY)
+        initialize.await()
+
+        assertEquals(false, disconnect.await().getOrThrow())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verify(pubkyService, never()).forgetSessionAccess()
+        verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
+    }
+
+    @Test
     fun `signOut should preserve local state when grant revocation fails`() = test {
         authenticateForTesting()
         settingsFlow.value = SettingsData(
@@ -1853,6 +1901,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoration exposes progress and keeps saved identity available on failure`() = test {
+        sut.awaitInitialization()
+        val finishRestore = CompletableDeferred<Unit>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer {
+            finishRestore.await()
+            throw TestAppError("Offline")
+        }
+
+        val retry = async { sut.restoreSessionIfNeeded() }
+        assertTrue(sut.isRestoringSession.value)
+        assertEquals(true, sut.identityExists.value)
+        assertNull(sut.publicKey.value)
+        finishRestore.complete(Unit)
+        retry.await()
+        assertFalse(sut.isRestoringSession.value)
+        assertEquals(true, sut.identityExists.value)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
     fun `failed restoration preserves profile data and credentials for retry`() = test {
         val session = "saved_session"
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
@@ -1871,11 +1940,11 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(pubkyStore, never()).reset()
         verifyBlocking(keychain, never()) { delete(any()) }
 
-        sut.restoreSessionIfNeeded()
+        assertFalse(sut.restoreSessionIfNeeded())
         assertTrue(sut.sessionRestorationFailed.value)
 
         canRestore = true
-        sut.restoreSessionIfNeeded()
+        assertTrue(sut.restoreSessionIfNeeded())
 
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertTrue(sut.isAuthenticated.value)
@@ -1941,6 +2010,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals(previousVersion + 1, sut.identityRefreshVersion.value)
         assertFalse(sut.hasIdentity())
+        assertEquals(false, sut.identityExists.value)
     }
 
     @Test
