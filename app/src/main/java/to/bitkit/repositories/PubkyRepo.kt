@@ -950,35 +950,31 @@ class PubkyRepo @Inject constructor(
         throw it
     }
 
-    suspend fun importContacts(publicKeys: List<String>): Result<Unit> = runSuspendCatching {
+    suspend fun importContacts(profiles: List<PubkyProfile>): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
-            val imported = coroutineScope {
-                publicKeys.map { contactPk ->
-                    val prefixedKey = contactPk.ensurePubkyPrefix()
-                    async {
-                        runSuspendCatching {
-                            val profile = resolveContactProfile(prefixedKey).getOrThrow()
-                                ?: PubkyProfile.placeholder(prefixedKey)
-                            pubkyService.saveContact(
-                                prefixedKey,
-                                profile.name,
-                                relevantReceiverPaths(prefixedKey),
-                                restorePrivateConnection = true,
-                            )
-                            profile
-                        }.onFailure {
-                            Logger.warn("Failed to import contact '${redacted(prefixedKey)}'", it, context = TAG)
-                        }.getOrNull()
-                    }
-                }.awaitAll().filterNotNull()
+            val imported = mutableListOf<PubkyProfile>()
+            val existing = _contacts.value.map { it.publicKey }.toMutableSet()
+            var firstError: Throwable? = null
+            for (profile in profiles.distinctBy { it.publicKey }) {
+                if (profile.publicKey in existing) continue
+                runSuspendCatching {
+                    // The preview already resolved this profile. Receiver discovery runs during contact refresh.
+                    pubkyService.saveContact(profile.publicKey, profile.name, restorePrivateConnection = true)
+                    imported.add(profile)
+                    existing.add(profile.publicKey)
+                }.onFailure {
+                    firstError = firstError ?: it
+                    Logger.warn("Failed to import contact '${redacted(profile.publicKey)}'", it, context = TAG)
+                }
             }
             updateContacts { current ->
-                val existing = current.map { it.publicKey }.toSet()
-                (current + imported.filter { it.publicKey !in existing })
+                val currentKeys = current.map { it.publicKey }.toSet()
+                (current + imported.filter { it.publicKey !in currentKeys })
                     .sortedBy { it.name.lowercase() }
             }
             markContactsLoaded()
             Logger.info("Imported '${imported.size}' contacts", context = TAG)
+            firstError?.let { throw it }
         }
     }
 
@@ -986,7 +982,10 @@ class PubkyRepo @Inject constructor(
         clearPendingImport()
         val pk = requireNotNull(_publicKey.value) { "Not authenticated" }
         withContext(ioDispatcher) {
-            val contactKeys = pubkyService.getContacts(pk)
+            val canonicalOwnKey = PubkyPublicKeyFormat.canonicalized(pk)
+            val contactKeys = pubkyService.getContacts(pk).filterNot {
+                canonicalOwnKey != null && PubkyPublicKeyFormat.canonicalized(it) == canonicalOwnKey
+            }
             Logger.debug("Discovered '${contactKeys.size}' contacts for import", context = TAG)
 
             val contacts = coroutineScope {

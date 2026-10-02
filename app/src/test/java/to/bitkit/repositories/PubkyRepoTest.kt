@@ -138,6 +138,79 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `import saves prepared profiles without network lookups and ignores duplicates`() = test {
+        val profiles = listOf(
+            PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice"),
+            PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob"),
+        )
+        for (profile in profiles) {
+            whenever(pubkyService.saveContact(profile.publicKey, profile.name, restorePrivateConnection = true))
+                .thenReturn(mock())
+        }
+        whenever(pubkyService.resolveContactProfile(any(), any())).thenAnswer { throw TestAppError("Offline") }
+        whenever(pubkyService.discoverRelevantReceiverPaths(any())).thenAnswer { throw TestAppError("Offline") }
+
+        val result = sut.importContacts(profiles + profiles)
+
+        assertTrue(result.isSuccess)
+        assertEquals(profiles, sut.contacts.value)
+        for (profile in profiles) {
+            verify(pubkyService).saveContact(profile.publicKey, profile.name, restorePrivateConnection = true)
+        }
+        verify(pubkyService, never()).resolveContactProfile(any(), any())
+        verify(pubkyService, never()).discoverRelevantReceiverPaths(any())
+    }
+
+    @Test
+    fun `failed import keeps successful contacts and retry saves only missing contacts`() = test {
+        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
+        val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
+        whenever(pubkyService.saveContact(alice.publicKey, alice.name, restorePrivateConnection = true))
+            .thenReturn(mock())
+        whenever(pubkyService.saveContact(bob.publicKey, bob.name, restorePrivateConnection = true))
+            .thenAnswer { throw TestAppError("Storage unavailable") }.thenReturn(mock())
+
+        assertTrue(sut.importContacts(listOf(alice, bob)).isFailure)
+        assertEquals(listOf(alice), sut.contacts.value)
+        assertTrue(sut.importContacts(listOf(alice, bob)).isSuccess)
+        assertEquals(listOf(alice, bob), sut.contacts.value)
+        verify(pubkyService).saveContact(alice.publicKey, alice.name, restorePrivateConnection = true)
+        verify(pubkyService, times(2)).saveContact(bob.publicKey, bob.name, restorePrivateConnection = true)
+    }
+
+    @Test
+    fun `prepareImport excludes own key and imports remaining follows`() = test {
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A)
+        val ownProfile = checkNotNull(sut.profile.value)
+        val ownKeys = listOf(
+            VALID_CONTACT_KEY_A,
+            VALID_CONTACT_KEY_A.removePrefix("pubky"),
+            NON_CANONICAL_CONTACT_KEY_A,
+            NON_CANONICAL_CONTACT_KEY_A.removePrefix("pubky"),
+        )
+        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Alice")
+        whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(ownKeys + VALID_CONTACT_KEY_B)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_B, paykitProfile = createPaykitProfile("Alice")))
+        whenever(pubkyService.saveContact(alice.publicKey, alice.name, restorePrivateConnection = true))
+            .thenReturn(mock())
+        whenever(pubkyService.saveContact(VALID_CONTACT_KEY_A, ownProfile.name, restorePrivateConnection = true))
+            .thenAnswer { throw TestAppError("Cannot save own identity") }
+
+        assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(ownProfile, sut.pendingImportProfile.value)
+        assertEquals(listOf(alice), sut.pendingImportContacts.value)
+        assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
+        assertEquals(listOf(alice), sut.contacts.value)
+
+        whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(ownKeys)
+
+        assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(ownProfile, sut.pendingImportProfile.value)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
+    }
+
+    @Test
     fun `initial state should have no public key`() = test {
         assertNull(sut.publicKey.value)
         assertFalse(sut.isAuthenticated.value)
