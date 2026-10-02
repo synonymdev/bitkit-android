@@ -84,7 +84,15 @@ sealed class PubkyContactError(message: String) : AppError(message) {
     data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
     data object ActiveSubscription : PubkyContactError("Contact has an active subscription")
+    data object SignInChanged : PubkyContactError("Pubky sign-in changed while saving the contact")
 }
+
+/**
+ * One sign-in of a Pubky identity. Work the user starts in it, such as a contact edit that first waits for a profile
+ * lookup, checks [PubkyRepo.isCurrent] before it writes, so it stops once that identity signs out or another signs in,
+ * even when the same identity signs straight back in. It holds no secret.
+ */
+class PubkySignIn internal constructor(val publicKey: String, internal val generation: Long)
 
 private fun Throwable.containsActiveSubscriptionError(): Boolean =
     generateSequence(this) { it.cause }.any { it is PubkyContactError.ActiveSubscription }
@@ -152,6 +160,7 @@ class PubkyRepo @Inject constructor(
     private val adoptedSourceCheckMutex = Mutex()
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
+    private val signInGeneration = AtomicLong(0L)
     private var isServiceInitialized = false
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
@@ -648,6 +657,18 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    /** The current sign-in, for work that must stop once it ends, or null when no identity is signed in. */
+    fun currentSignIn(): PubkySignIn? {
+        // The generation is read first, so a sign-out between the two reads leaves a sign-in that is already over.
+        val generation = signInGeneration.get()
+        val publicKey = _publicKey.value ?: return null
+        return PubkySignIn(publicKey, generation)
+    }
+
+    /** Whether [signIn] has not ended: its identity has neither signed out nor been replaced since. */
+    fun isCurrent(signIn: PubkySignIn): Boolean =
+        signInGeneration.get() == signIn.generation && _publicKey.value == signIn.publicKey
+
     // endregion
 
     // region Profile loading
@@ -1117,8 +1138,16 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    /**
+     * Saves a contact's label and keeps the rest of its profile as the contact's local override. The edit belongs to
+     * [signIn]: once that identity signs out or another signs in, it fails with [PubkyContactError.SignInChanged]
+     * before the save, or once the save has run, before the override and the contact row are written. Sign-out
+     * clears the overrides, so a save that lands after it must not write one back, least of all for the next identity,
+     * which may have saved a contact with the same key.
+     */
     @Suppress("LongParameterList")
     suspend fun updateContact(
+        signIn: PubkySignIn,
         publicKey: String,
         name: String,
         bio: String,
@@ -1137,11 +1166,16 @@ class PubkyRepo @Inject constructor(
                 tags = tags,
                 status = null,
             )
-            pubkyService.saveContact(prefixedKey, name)
-            upsertContactProfileOverride(updatedProfile)
-            updateContacts { current ->
-                current.map { if (it.publicKey == prefixedKey) updatedProfile else it }
-                    .sortedBy { it.name.lowercase() }
+            requireCurrent(signIn)
+            // The SDK checks the identity under the same lock as the save, so no other identity can slip in between.
+            pubkyService.saveContact(prefixedKey, name, expectedIdentity = signIn.publicKey)
+            upsertContactProfileOverride(updatedProfile, signIn)
+            synchronized(contactsLock) {
+                requireCurrent(signIn)
+                updateContacts { current ->
+                    current.map { if (it.publicKey == prefixedKey) updatedProfile else it }
+                        .sortedBy { it.name.lowercase() }
+                }
             }
             markContactsLoaded()
             Logger.info("Updated contact '${redacted(prefixedKey)}'", context = TAG)
@@ -1765,16 +1799,21 @@ class PubkyRepo @Inject constructor(
         }.getOrNull()
             ?: listOf(PaykitReceiverPaths.WALLET)
 
-    private suspend fun upsertContactProfileOverride(profile: PubkyProfile) {
+    private suspend fun upsertContactProfileOverride(profile: PubkyProfile, signIn: PubkySignIn) {
         val prefixedKey = profile.publicKey.ensurePubkyPrefix()
-        val ownerPublicKey = requireNotNull(_publicKey.value) { "Pubky identity unavailable" }
         pubkyStore.update { data ->
+            // Checked as the store applies the write: sign-out ends the sign-in before it resets the store.
+            if (!isCurrent(signIn)) return@update data
             data.copy(
-                ownerPublicKey = ownerPublicKey,
+                ownerPublicKey = signIn.publicKey,
                 contactProfileOverrides = data.contactProfileOverrides + (prefixedKey to profile.toProfileData()),
             )
         }
         notifyBackupStateChanged()
+    }
+
+    private fun requireCurrent(signIn: PubkySignIn) {
+        if (!isCurrent(signIn)) throw PubkyContactError.SignInChanged
     }
 
     private suspend fun removeContactProfileOverride(publicKey: String) {
@@ -1864,6 +1903,8 @@ class PubkyRepo @Inject constructor(
         clearCachedProfile: Boolean = true,
         clearRestorationFailure: Boolean = true,
     ) = withContext(ioDispatcher) {
+        // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
+        signInGeneration.incrementAndGet()
         if (clearCachedProfile) {
             evictPubkyImages()
             profileWriteGeneration.incrementAndGet()

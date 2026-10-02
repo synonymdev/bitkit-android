@@ -17,6 +17,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.forEachCase
 import kotlin.test.assertEquals
@@ -27,6 +28,7 @@ import kotlin.test.assertTrue
 class EditContactViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
+    private val signIn = PubkySignIn(publicKey = "pubkyowner", generation = 0)
 
     @Test
     fun `missing local contact triggers refresh path`() = test {
@@ -126,7 +128,7 @@ class EditContactViewModelTest : BaseUnitTest() {
         whenever(context.getString(any())).thenReturn("")
         val labelOnly = PubkyProfile.forDisplay(TEST_PUBLIC_KEY, "Alice", imageUrl = null)
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(labelOnly)))
-        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
@@ -137,7 +139,15 @@ class EditContactViewModelTest : BaseUnitTest() {
         sut.save()
         advanceUntilIdle()
 
-        verify(pubkyRepo).updateContact(TEST_PUBLIC_KEY, "Alice", "Met at a meetup", null, emptyList(), emptyList())
+        verify(pubkyRepo).updateContact(
+            signIn,
+            TEST_PUBLIC_KEY,
+            "Alice",
+            "Met at a meetup",
+            null,
+            emptyList(),
+            emptyList(),
+        )
     }
 
     @Test
@@ -156,6 +166,8 @@ class EditContactViewModelTest : BaseUnitTest() {
     }
 
     private fun createSut(publicKey: String = TEST_PUBLIC_KEY): EditContactViewModel {
+        whenever(pubkyRepo.currentSignIn()).thenReturn(signIn)
+        whenever(pubkyRepo.isCurrent(signIn)).thenReturn(true)
         return EditContactViewModel(
             context = context,
             pubkyRepo = pubkyRepo,

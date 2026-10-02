@@ -3300,11 +3300,52 @@ class PubkyRepoTest : BaseUnitTest() {
         }
         sut.loadContacts()
 
-        assertTrue(sut.updateContact(VALID_CONTACT_KEY_A, "Edited", "", null, emptyList(), emptyList()).isSuccess)
+        val signIn = checkNotNull(sut.currentSignIn())
+        assertTrue(
+            sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Edited", "", null, emptyList(), emptyList()).isSuccess,
+        )
         assertTrue(sut.removeContact(VALID_CONTACT_KEY_B).isSuccess)
         lookups.values.forEach { it.complete(Unit) }
 
         assertEquals(listOf("Edited"), sut.contacts.value.map { it.name })
+    }
+
+    @Test
+    fun `a contact edit from an ended sign-in saves nothing, also once the same identity signs back in`() = test {
+        val store = stubGatedPubkyStore()
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val signIn = checkNotNull(sut.currentSignIn())
+        assertTrue(sut.isCurrent(signIn))
+
+        assertTrue(sut.signOut().isSuccess)
+        assertFalse(sut.isCurrent(signIn))
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
+
+        assertFalse(sut.isCurrent(signIn))
+        assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull())
+        assertEquals(emptyMap(), store.data.contactProfileOverrides)
+        assertTrue(sut.isCurrent(checkNotNull(sut.currentSignIn())))
+    }
+
+    @Test
+    fun `a contact edit saves through the SDK for its own identity only`() = test {
+        val store = stubGatedPubkyStore()
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        sut.loadContacts()
+
+        val signIn = checkNotNull(sut.currentSignIn())
+        val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
+
+        assertTrue(result.isSuccess)
+        verify(pubkyService).saveContact(VALID_CONTACT_KEY_A, "Alice", expectedIdentity = VALID_SELF_KEY)
+        assertEquals(listOf("Friend"), store.data.contactProfileOverrides[VALID_CONTACT_KEY_A]?.tags)
+        assertEquals(VALID_SELF_KEY, store.data.ownerPublicKey)
+        assertEquals(listOf("Alice" to listOf("Friend")), sut.contacts.value.map { it.name to it.tags })
     }
 
     @Test
@@ -3380,7 +3421,10 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(resolve.isCompleted)
         assertEquals(true, queuedLookup?.isCancelled)
-        assertTrue(sut.updateContact(VALID_CONTACT_KEY_A, "Saved", "", null, emptyList(), listOf("Friend")).isSuccess)
+        val signIn = checkNotNull(sut.currentSignIn())
+        assertTrue(
+            sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Saved", "", null, emptyList(), listOf("Friend")).isSuccess,
+        )
         otherLookup.complete(createResolution(VALID_CONTACT_KEY_B, paykitProfile = createPaykitProfile("Bob")))
         assertEquals(
             listOf("Bob" to emptyList(), "Saved" to listOf("Friend")),

@@ -38,6 +38,7 @@ import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -347,10 +348,13 @@ class ContactDetailViewModel @Inject constructor(
         transform: (ImmutableList<String>) -> ImmutableList<String>,
         onSuccess: () -> Unit = {},
     ) {
+        val signIn = pubkyRepo.currentSignIn() ?: return
         viewModelScope.launch {
             tagPersistenceMutex.withLock {
                 contactLoad?.join()
+                if (!isTagChangeCurrent(signIn)) return@withLock
                 pubkyRepo.resolvePendingContactProfile(publicKey)
+                if (!isTagChangeCurrent(signIn)) return@withLock
                 val state = _uiState.value
                 val profile = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
                     ?: state.profile
@@ -361,6 +365,7 @@ class ContactDetailViewModel @Inject constructor(
                     return@withLock
                 }
                 pubkyRepo.updateContact(
+                    signIn = signIn,
                     publicKey = publicKey,
                     name = profile.name,
                     bio = profile.bio,
@@ -376,6 +381,7 @@ class ContactDetailViewModel @Inject constructor(
                     }
                     onSuccess()
                 }.onFailure {
+                    if (!isTagChangeCurrent(signIn)) return@onFailure
                     Logger.error("Failed to update tags for contact '$redactedPublicKey'", it, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
@@ -385,6 +391,14 @@ class ContactDetailViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun isTagChangeCurrent(signIn: PubkySignIn): Boolean {
+        val isCurrent = pubkyRepo.isCurrent(signIn)
+        if (!isCurrent) {
+            Logger.info("Dropped a tag change for '$redactedPublicKey' after the Pubky sign-in ended", context = TAG)
+        }
+        return isCurrent
     }
 }
 
