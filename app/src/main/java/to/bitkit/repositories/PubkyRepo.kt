@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -73,6 +74,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -131,6 +133,9 @@ class PubkyRepo @Inject constructor(
 
         /** How long a contact profile resolved in this session is shown without being looked up again. */
         internal val CONTACT_PROFILE_FRESHNESS = 10.minutes
+
+        /** Shortest time between two contact list updates of a background profile refresh. */
+        internal val CONTACT_REFRESH_BATCH_WINDOW = 300.milliseconds
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -230,22 +235,32 @@ class PubkyRepo @Inject constructor(
             now - resolvedAtMillis in 0 until CONTACT_PROFILE_FRESHNESS.inWholeMilliseconds
     }
 
+    private class RefreshedContact(val contact: SavedContact, val profile: PubkyProfile)
+
     private class ContactProfileRefresh(
-        private val owner: String,
+        val owner: String,
         contacts: List<SavedContact>,
         scope: CoroutineScope,
-        lookUp: suspend (SavedContact) -> Unit,
+        lookUp: suspend (ContactProfileRefresh, SavedContact) -> Unit,
+        onFinished: (ContactProfileRefresh) -> Unit,
     ) {
         private val keys = contacts.mapTo(mutableSetOf()) { it.profile.publicKey }
         private val labelOnly = contacts.filter { it.showsLabelOnly }.associateBy { it.profile.publicKey }
 
         val job = SupervisorJob(scope.coroutineContext.job)
+        val pendingResults = mutableMapOf<String, RefreshedContact>()
+        var scheduledApply: Job? = null
         private val bulkLookups = contacts.associate {
-            it.profile.publicKey to scope.launch(job, CoroutineStart.LAZY) { lookUp(it) }
+            it.profile.publicKey to scope.launch(job, CoroutineStart.LAZY) { lookUp(this@ContactProfileRefresh, it) }
+        }
+        private val finish = scope.launch(job, CoroutineStart.LAZY) {
+            bulkLookups.values.joinAll()
+            onFinished(this@ContactProfileRefresh)
         }
 
         fun start() {
             bulkLookups.values.forEach { it.start() }
+            finish.start()
             job.complete()
         }
 
@@ -1013,12 +1028,14 @@ class PubkyRepo @Inject constructor(
      * contact does not wait behind bulk reads and an edit made there keeps the contact's avatar, bio and links. The
      * lookup takes the contact over from the refresh, which stops its own lookup and never applies a result for it,
      * and a caller arriving meanwhile waits for the same lookup. Only a sign-out or an identity change stops it, not a
-     * later refresh. It returns at once for any other row; when the lookup fails, the row keeps its label.
+     * later refresh. It returns at once for any other row; when the lookup fails, the row keeps its label. A profile
+     * the refresh already found for the contact but has not applied to the list yet is applied at once instead.
      */
     suspend fun resolvePendingContactProfile(publicKey: String) {
         val owner = _publicKey.value ?: return
         val key = publicKey.ensurePubkyPrefix()
         val lookup = synchronized(contactsLock) {
+            contactProfileRefresh?.let { if (key in it.pendingResults) applyRefreshResults(it) }
             contactScreenLookups[key]?.takeUnless { it.isCompleted }
                 ?: contactProfileRefresh?.takeOver(owner, key) { it.profile in _contacts.value }?.let { contact ->
                     scope.launch(start = CoroutineStart.LAZY) {
@@ -1558,9 +1575,13 @@ class PubkyRepo @Inject constructor(
 
     private fun refreshContactProfiles(owner: String, contacts: List<SavedContact>) {
         if (contacts.isEmpty()) return
-        val refresh = ContactProfileRefresh(owner, contacts, scope) {
-            refreshContactProfile(owner, it, PaykitReadLane.Bulk)
-        }
+        val refresh = ContactProfileRefresh(
+            owner = owner,
+            contacts = contacts,
+            scope = scope,
+            lookUp = { refresh, contact -> refreshContactProfile(owner, contact, PaykitReadLane.Bulk, refresh) },
+            onFinished = { synchronized(contactsLock) { applyRefreshResults(it) } },
+        )
         val replaced = synchronized(contactsLock) {
             val active = contactProfileRefresh
             if (_publicKey.value != owner || active?.covers(refresh) == true) {
@@ -1574,21 +1595,50 @@ class PubkyRepo @Inject constructor(
         refresh.start()
     }
 
-    private suspend fun refreshContactProfile(owner: String, contact: SavedContact, lane: PaykitReadLane) {
+    private suspend fun refreshContactProfile(
+        owner: String,
+        contact: SavedContact,
+        lane: PaykitReadLane,
+        refresh: ContactProfileRefresh? = null,
+    ) {
         val lookup = currentCoroutineContext().job
         val publicKey = contact.profile.publicKey
         val resolved = resolveContactProfile(publicKey, retry = false, lane = lane)
             .onFailure { Logger.warn("Failed to resolve contact '${redacted(publicKey)}'", it, context = TAG) }
             .getOrNull() ?: return
-        val refreshed = resolved.withNameFallback(contact.label)
+        val refreshed = RefreshedContact(contact, resolved.withNameFallback(contact.label))
         synchronized(contactsLock) {
             if (_publicKey.value != owner || !lookup.isActive) return
             cacheSessionContactProfiles(owner, listOf(resolved))
-            if (contact.profile !in _contacts.value) return
-            _contacts.update { current ->
-                current.map { if (it == contact.profile) refreshed else it }.sortedBy { it.name.lowercase() }
+            when (refresh) {
+                null -> applyRefreshedContacts(listOf(refreshed))
+                else -> queueRefreshedContact(refresh, refreshed)
             }
         }
+    }
+
+    private fun queueRefreshedContact(refresh: ContactProfileRefresh, refreshed: RefreshedContact) {
+        refresh.pendingResults[refreshed.contact.profile.publicKey] = refreshed
+        if (refresh.scheduledApply != null) return
+        refresh.scheduledApply = scope.launch(refresh.job) {
+            delay(CONTACT_REFRESH_BATCH_WINDOW)
+            synchronized(contactsLock) { applyRefreshResults(refresh) }
+        }
+    }
+
+    private fun applyRefreshResults(refresh: ContactProfileRefresh) {
+        refresh.scheduledApply?.cancel()
+        refresh.scheduledApply = null
+        val results = refresh.pendingResults.values.toList()
+        refresh.pendingResults.clear()
+        if (results.isEmpty() || refresh.job.isCancelled || _publicKey.value != refresh.owner) return
+        applyRefreshedContacts(results)
+    }
+
+    private fun applyRefreshedContacts(results: List<RefreshedContact>) {
+        val replacements = results.associate { it.contact.profile to it.profile }
+        if (_contacts.value.none { it in replacements }) return
+        _contacts.update { current -> current.map { replacements[it] ?: it }.sortedBy { it.name.lowercase() } }
     }
 
     private fun sessionContactProfile(owner: String, publicKey: String): SessionContactProfile? =
@@ -1612,6 +1662,7 @@ class PubkyRepo @Inject constructor(
     private fun clearSessionContactProfiles() {
         synchronized(contactsLock) {
             contactProfileRefresh?.job?.cancel()
+            contactProfileRefresh?.pendingResults?.clear()
             contactProfileRefresh = null
             contactScreenLookups.values.forEach { it.cancel() }
             contactScreenLookups.clear()

@@ -33,6 +33,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -40,6 +41,8 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import org.junit.Before
@@ -111,6 +114,12 @@ class PubkyRepoTest : BaseUnitTest() {
 
         /** More follows than `PaykitSdkService` runs public reads at once, so some wait for a read slot. */
         private const val MORE_FOLLOWS_THAN_READ_SLOTS = 8
+
+        /** Saved contacts whose background lookups finish one after another in the batching test. */
+        private const val BATCHED_CONTACTS = 20
+
+        /** Virtual time between two background lookup results in the batching test. */
+        private val BATCHED_LOOKUP_INTERVAL = 50.milliseconds
     }
 
     private lateinit var sut: PubkyRepo
@@ -3393,6 +3402,96 @@ class PubkyRepoTest : BaseUnitTest() {
         listOf(resolve, joined).awaitAll()
         assertEquals(listOf("Alice" to "Hi", "Bob" to ""), sut.contacts.value.map { it.name to it.bio })
         verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive)
+    }
+
+    @Test
+    fun `a background refresh updates the contact list in sorted batches and applies the last one when it ends`() =
+        test {
+            authenticateForTesting()
+            val keys = List(BATCHED_CONTACTS) { "pubkybatched-contact-$it" }
+            val names = keys.indices.map { "Friend ${'A' + BATCHED_CONTACTS - it}" }
+            whenever(pubkyService.contactRecords()).thenReturn(keys.map { createContactRecord(it, "Saved $it") })
+            keys.forEachIndexed { index, key ->
+                whenever(pubkyService.resolveContactProfile(key, true, PaykitReadLane.Bulk)).doSuspendableAnswer {
+                    delay(BATCHED_LOOKUP_INTERVAL * index)
+                    createResolution(key, paykitProfile = createPaykitProfile(names[index]))
+                }
+            }
+            sut.loadContacts()
+            val updates = mutableListOf<List<String>>()
+            backgroundScope.launch { sut.contacts.collect { list -> updates += list.map { it.name } } }
+            val start = currentTime
+
+            advanceUntilIdle()
+
+            assertEquals(BATCHED_LOOKUP_INTERVAL.inWholeMilliseconds * (BATCHED_CONTACTS - 1), currentTime - start)
+            val refreshUpdates = updates.drop(1)
+            assertTrue(refreshUpdates.size in 1..BATCHED_CONTACTS / 4, "updates: ${refreshUpdates.size}")
+            assertTrue(refreshUpdates.all { it == it.sortedBy { name -> name.lowercase() } })
+            assertEquals(names.sortedBy { it.lowercase() }, sut.contacts.value.map { it.name })
+        }
+
+    @Test
+    fun `a refresh batch overtaken by a sign-out or an identity change is dropped`() = test {
+        listOf("sign-out", "identity change").forEachCase({ it }) { case ->
+            resetForCase()
+            authenticateForTesting()
+            val records = listOf(
+                createContactRecord(VALID_CONTACT_KEY_A, "Saved A"),
+                createContactRecord(VALID_CONTACT_KEY_B, "Saved B"),
+            )
+            whenever(pubkyService.contactRecords()).thenReturn(records)
+            whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+                .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
+                .doSuspendableAnswer { awaitCancellation() }
+            val slowLookup = CompletableDeferred<Unit>()
+            whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
+                .doSuspendableAnswer {
+                    withContext(NonCancellable) { slowLookup.await() }
+                    null
+                }
+            sut.loadContacts()
+            assertEquals(listOf("Saved A", "Saved B"), sut.contacts.value.map { it.name }, case)
+
+            if (case == "sign-out") {
+                sut.wipeLocalState()
+                authenticateForTesting()
+                whenever(pubkyService.contactRecords()).thenReturn(records)
+                sut.loadContacts()
+            } else {
+                val ringPubky = stubRingCredential()
+                whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+                assertTrue(sut.adoptRingIdentity(ringPubky).isSuccess, case)
+            }
+            advanceTimeBy(PubkyRepo.CONTACT_REFRESH_BATCH_WINDOW)
+            runCurrent()
+
+            assertEquals(listOf("Saved A", "Saved B"), sut.contacts.value.map { it.name }, case)
+            slowLookup.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `resolvePendingContactProfile applies a profile the refresh found but has not applied yet`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(
+            listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved"), createContactRecord(VALID_CONTACT_KEY_B, "Bob")),
+        )
+        val alice = createPaykitProfile("Alice", bio = "Hello", image = "pubky://a")
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = alice))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        sut.loadContacts()
+        assertEquals(listOf("Bob", "Saved"), sut.contacts.value.map { it.name })
+
+        sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A)
+
+        assertEquals(
+            listOf(Triple("Alice", "Hello", "pubky://a"), Triple("Bob", "", null)),
+            sut.contacts.value.map { Triple(it.name, it.bio, it.imageUrl) },
+        )
+        verify(pubkyService, never()).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive)
     }
 
     @Test
