@@ -600,6 +600,66 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `a freed read slot goes to a waiting interactive read before bulk reads queued for a slot`() = runTest {
+        val interactive = List(7) { "$FILE_URI$it" }
+        val bulk = List(4) { "$RING_PUBKY$it" }
+        val gates = (interactive + bulk).associateWith { CompletableDeferred<Unit>() }
+        val started = mutableListOf<String>()
+        val service = gatedReadService(gates, started)
+
+        val reads = interactive.take(6).map { async { service.fetchFile(it, 1uL) } } +
+            bulk.map { async { service.resolveContactProfile(it, true, PaykitReadLane.Bulk) } }
+        runCurrent()
+        val lateRead = async { service.fetchFile(interactive[6], 1uL) }
+        runCurrent()
+        assertEquals(interactive.take(6), started)
+
+        gates.getValue(interactive[0]).complete(Unit)
+        runCurrent()
+        assertEquals(interactive, started)
+
+        gates.getValue(interactive[1]).complete(Unit)
+        runCurrent()
+        assertEquals(interactive + bulk.first(), started)
+
+        gates.values.forEach { it.complete(Unit) }
+        (reads + lateRead).awaitAll()
+        assertEquals(interactive + bulk, started)
+    }
+
+    @Test
+    fun `a cancelled read slot waiter takes no slot and passes on one it was handed`() = runTest {
+        listOf("cancelled while queued" to false, "cancelled once handed a slot" to true)
+            .forEachCase({ it.first }) { (case, handed) ->
+                val interactive = List(7) { "$FILE_URI$it" }
+                val bulk = RING_PUBKY
+                val gates = (interactive + bulk).associateWith { CompletableDeferred<Unit>() }
+                val started = mutableListOf<String>()
+                val service = gatedReadService(gates, started)
+                val reads = interactive.take(6).map { async { service.fetchFile(it, 1uL) } } +
+                    async { service.resolveContactProfile(bulk, true, PaykitReadLane.Bulk) }
+                runCurrent()
+                val lateRead = async { service.fetchFile(interactive[6], 1uL) }
+                runCurrent()
+
+                if (handed) {
+                    reads.first().invokeOnCompletion { lateRead.cancel() }
+                } else {
+                    lateRead.cancel()
+                    runCurrent()
+                    assertEquals(interactive.take(6), started, case)
+                }
+                gates.getValue(interactive[0]).complete(Unit)
+                runCurrent()
+
+                assertTrue(lateRead.isCancelled, case)
+                assertEquals(interactive.take(6) + bulk, started, case)
+                gates.values.forEach { it.complete(Unit) }
+                reads.awaitAll()
+            }
+    }
+
+    @Test
     fun `activation returns while identity publication runs and approval republish joins it until the cap`() = runTest {
         listOf("publication finishes" to true, "cap" to false).forEachCase({ it.first }) { (case, gateOpens) ->
             val keychain = mock<Keychain>()
@@ -809,6 +869,29 @@ class PaykitSdkServiceTest {
         val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
         assertNull(service.clearPrivatePaymentList(RING_PUBKY, PaykitReceiverPaths.SERVER))
         verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any(), any())
+    }
+
+    private suspend fun gatedReadService(
+        gates: Map<String, CompletableDeferred<Unit>>,
+        started: MutableList<String>,
+    ): PaykitSdkService {
+        val sdk = mock<PaykitSdk>()
+        val read: suspend (String) -> Unit = { key ->
+            started += key
+            gates.getValue(key).await()
+        }
+        whenever { sdk.contactRecords() }.thenReturn(emptyList())
+        gates.keys.forEach { key ->
+            whenever { sdk.fetchPubkyFileBounded(key, 1uL) }.doSuspendableAnswer {
+                read(key)
+                byteArrayOf(1)
+            }
+        }
+        whenever { sdk.resolveContactProfile(any(), any(), any()) }.doSuspendableAnswer {
+            read(it.getArgument(0))
+            null
+        }
+        return PaykitSdkService(mock(), mock(), mock()) { sdk }.also { it.contactRecords() }
     }
 
     private fun receiverMarker(path: String, paymentRequests: Boolean, outgoingPayments: Boolean) =

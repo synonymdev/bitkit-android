@@ -177,11 +177,57 @@ internal object PaykitReceiverPaths {
 
 /** Which public read slots a public Pubky read may use. */
 enum class PaykitReadLane {
-    /** A read for what the user is looking at or waiting on; it takes only a shared read slot. */
+    /**
+     * A read for what the user is looking at or waiting on; it takes only a shared read slot, and a freed read slot
+     * goes to it before any waiting bulk read.
+     */
     Interactive,
 
     /** A background read over many keys; it also takes a bulk slot, so bulk reads never fill every read slot. */
     Bulk,
+}
+
+private class PaykitPublicReadSlots(slots: Int) {
+    private val lock = Any()
+    private var free = slots
+    private val interactiveWaiters = ArrayDeque<CompletableDeferred<Unit>>()
+    private val bulkWaiters = ArrayDeque<CompletableDeferred<Unit>>()
+
+    suspend fun <T> withSlot(lane: PaykitReadLane, block: suspend () -> T): T {
+        acquire(lane)
+        return try {
+            block()
+        } finally {
+            release()
+        }
+    }
+
+    private suspend fun acquire(lane: PaykitReadLane) {
+        val waiters = when (lane) {
+            PaykitReadLane.Interactive -> interactiveWaiters
+            PaykitReadLane.Bulk -> bulkWaiters
+        }
+        val slot = synchronized(lock) {
+            if (free > 0) {
+                free--
+                return
+            }
+            CompletableDeferred<Unit>().also(waiters::addLast)
+        }
+        try {
+            slot.await()
+        } catch (error: CancellationException) {
+            if (synchronized(lock) { !waiters.remove(slot) }) release()
+            throw error
+        }
+    }
+
+    private fun release() {
+        val next = synchronized(lock) {
+            (interactiveWaiters.removeFirstOrNull() ?: bulkWaiters.removeFirstOrNull()).also { if (it == null) free++ }
+        }
+        next?.complete(Unit)
+    }
 }
 
 @Singleton
@@ -213,7 +259,7 @@ class PaykitSdkService @Inject constructor(
     private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationLock = PaykitSdkOperationLock()
-    private val publicReadPermits = Semaphore(PUBLIC_READ_PERMITS)
+    private val publicReadSlots = PaykitPublicReadSlots(PUBLIC_READ_PERMITS)
     private val bulkReadPermits = Semaphore(BULK_READ_PERMITS)
     private val setupMutex = Mutex()
     private var isSetup = CompletableDeferred<Unit>()
@@ -1174,10 +1220,12 @@ class PaykitSdkService @Inject constructor(
      * Runs [block] on the SDK instance without [operationLock]. [block] may only call unauthenticated public
      * Pubky reads, never session, secret, state-blob or publishing APIs. Without an instance it builds one under
      * [operationLock], because building one outside it would race [resetRuntime] and a wallet wipe, but reads
-     * under the permit. Like a locked call, a read that starts during a wallet wipe is rejected, and one that the
+     * under its read slot. Like a locked call, a read that starts during a wallet wipe is rejected, and one that the
      * wipe overtakes fails instead of returning its result across the wipe. A [PaykitReadLane.Bulk] read takes a
-     * bulk permit before its read permit, always in that order, so bulk reads hold at most [BULK_READ_PERMITS]
-     * read permits and the rest stay free for interactive reads.
+     * bulk permit before its read slot, always in that order, so bulk reads hold at most [BULK_READ_PERMITS] read
+     * slots and the rest stay free for interactive reads. A freed read slot goes to the oldest waiting interactive
+     * read before any waiting bulk read, also one already queued for a slot, and reads of one lane start in the order
+     * they asked for a slot.
      */
     private suspend fun <T> publicRead(
         lane: PaykitReadLane = PaykitReadLane.Interactive,
@@ -1187,8 +1235,8 @@ class PaykitSdkService @Inject constructor(
         return operationLock.withoutLock {
             val existing = sdk ?: operationLock.withLock { handle() }
             when (lane) {
-                PaykitReadLane.Interactive -> publicReadPermits.withPermit { block(existing) }
-                PaykitReadLane.Bulk -> bulkReadPermits.withPermit { publicReadPermits.withPermit { block(existing) } }
+                PaykitReadLane.Interactive -> publicReadSlots.withSlot(lane) { block(existing) }
+                PaykitReadLane.Bulk -> bulkReadPermits.withPermit { publicReadSlots.withSlot(lane) { block(existing) } }
             }
         }
     }
