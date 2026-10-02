@@ -222,13 +222,13 @@ import java.math.BigDecimal
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.TimeSource
 
 @OptIn(ExperimentalTime::class)
 @Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
@@ -276,7 +276,7 @@ class AppViewModel @Inject constructor(
     private val highBalanceSheet: HighBalanceTimedSheet,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
-    private val clock: Clock,
+    private val timeSource: TimeSource,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -770,6 +770,7 @@ class AppViewModel @Inject constructor(
                 .onFailure { Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG) }
             privatePaykitRepo.pruneUnsavedContactState(state.contactKeys)
                 .onFailure { Logger.warn("Failed to prune private Paykit contact state", it, context = TAG) }
+            privatePaykitRepo.awaitContactPreparation()
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
             refreshIncomingPaykitPaymentRequests()
             refreshPaymentRequestTargets(force = true)
@@ -797,6 +798,7 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
             }
         privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
+        privatePaykitRepo.awaitContactPreparation()
         refreshIncomingPaykitPaymentRequests()
         refreshPaymentRequestTargets(force = true)
     }
@@ -949,22 +951,23 @@ class AppViewModel @Inject constructor(
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
+            privatePaykitRepo.awaitContactPreparation()
             refreshIncomingPaykitPaymentRequests()
             refreshPaymentRequestTargets()
             var maintenanceIntervalIndex = 0
-            var nextMaintenance = clock.now() + PAYKIT_MAINTENANCE_INTERVALS.first()
+            var nextMaintenance = timeSource.markNow() + PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
                 delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
                 if (isOnline.value != ConnectivityState.CONNECTED) continue
-                val now = clock.now()
-                val refreshMaintenance = now >= nextMaintenance
+                val refreshMaintenance = nextMaintenance.hasPassedNow()
                 if (refreshMaintenance) {
                     maintenanceIntervalIndex =
                         (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
-                    nextMaintenance = now + PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
+                    nextMaintenance = timeSource.markNow() + PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
                     if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
                     pubkyRepo.republishIdentityIfNeeded()
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
+                    privatePaykitRepo.awaitContactPreparation()
                 }
                 refreshIncomingPaykitPaymentRequests(refreshMaintenance)
                 if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
