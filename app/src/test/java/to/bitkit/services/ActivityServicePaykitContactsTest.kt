@@ -384,9 +384,29 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         assertEquals("server-address", row.address)
         assertEquals(BUYER, row.contact)
         assertEquals(
-            mapOf("nativeSegwit" to 600, "nativeSegwit:account:5" to 200),
+            mapOf("nativeSegwit" to 600, "nativeSegwit:account:5" to 203),
             cacheData.value.addressSearchLastUsedReceiveIndexes,
         )
+    }
+
+    @Test
+    fun `companion account search advances from the matched index through the next window`() = coreTest {
+        whenever(lightningService.listOnchainWalletAccounts()).thenReturn(
+            listOf(OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 5u)),
+        )
+        for (index in listOf(999, 1999)) {
+            val address = "server-address-$index"
+            sharedAddresses(address to BUYER)
+            whenever(lightningService.addressInfosForType(AddressType.P2WPKH, false, index - 199, 200, 5u))
+                .thenReturn(listOf(AddressDerivationInfo(address, index)))
+
+            receive("change-address", address)
+
+            val row = (updates.last() as Activity.Onchain).v1
+            assertEquals(address, row.address)
+            assertEquals(BUYER, row.contact)
+            assertEquals(index, cacheData.value.addressSearchLastUsedReceiveIndexes["nativeSegwit:account:5"])
+        }
     }
 
     @Test
@@ -404,7 +424,8 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         verify(lightningService).addressInfosForType(AddressType.P2WPKH, false, 800, 200, 5u)
         verify(lightningService, never()).addressInfosForType(AddressType.P2WPKH, false, 1000, 200, 5u)
         verify(lightningService).addressInfosForType(AddressType.P2WPKH, true, 1000, 200, 5u)
-        verify(lightningService, never()).addressInfosForType(AddressType.P2WPKH, true, 1200, 200, 5u)
+        verify(lightningService).addressInfosForType(AddressType.P2WPKH, true, 1200, 1, 5u)
+        verify(lightningService, never()).addressInfosForType(AddressType.P2WPKH, true, 1400, 200, 5u)
     }
 
     @Test

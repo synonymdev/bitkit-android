@@ -342,6 +342,27 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `full cleanup discovers remote peers and retries failed discovery without local state`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        var failLookup = true
+        whenever(paykitSdkService.linkedPeers()).thenAnswer {
+            if (failLookup) throw AppError("Peer lookup unavailable")
+            listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED))
+        }
+
+        assertTrue(sut.disableSharingAndPruneUnsavedContactState(emptyList()).isFailure)
+        assertTrue(cacheData.value.contacts.isEmpty())
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).clearPrivatePaymentList(any())
+
+        failLookup = false
+        sut.retryPendingEndpointRemoval(emptyList()).getOrThrow()
+
+        verify(paykitSdkService).clearPrivatePaymentList(CONTACT_KEY)
+        assertFalse(cacheData.value.cleanupPending)
+    }
+
+    @Test
     fun `disabled cleanup uses existing capability and retries withdrawal and registry failures`() = test {
         val publicRepo = PublicPaykitRepo(
             ioDispatcher = testDispatcher,

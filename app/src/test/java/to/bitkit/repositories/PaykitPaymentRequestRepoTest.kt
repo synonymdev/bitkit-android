@@ -785,22 +785,32 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `lost acceptance response is reconciled from shared state`() = test {
-        val proposed = paymentRequestRecord()
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
-        whenever(paykitSdkService.acceptPaymentRequest(any(), any()))
-            .thenAnswer { throw PaykitException.Transport("transport_error", "response lost") }
-        sut.refresh().getOrThrow()
-        val request = sut.pendingRequests.value.single()
-        assertTrue(sut.accept(request).isFailure)
-        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
-        verify(presentationStore, never()).removeAcceptedOneTimeIds(any(), any())
+        for (error in listOf(
+            PaykitException.Transport("transport_error", "response lost"),
+            PaykitException.ConcurrentUpdate("concurrent_update", "response read locked"),
+        )) {
+            sut.clear()
+            whenever(presentationStore.loadAcceptedOneTimeIds(any())).thenReturn(emptySet())
+            sut.activate(LOCAL_IDENTITY)
+            val proposed = paymentRequestRecord()
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
+            doSuspendableAnswer { throw error }.whenever(paykitSdkService).acceptPaymentRequest(any(), any())
+            sut.refresh().getOrThrow()
+            val request = sut.pendingRequests.value.single()
+            assertTrue(sut.accept(request).isFailure)
+            assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+            verify(presentationStore, never()).removeAcceptedOneTimeIds(any(), any())
 
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
-            .thenReturn(listOf(proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)))
-        sut.refresh().getOrThrow()
-        val retry = sut.pendingRequests.value.single()
-        sut.accept(retry).getOrThrow()
-        sut.ensurePaymentAllowed(retry).getOrThrow()
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+                .thenReturn(listOf(proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)))
+            whenever(presentationStore.loadAcceptedOneTimeIds(LOCAL_IDENTITY)).thenReturn(setOf(request.id))
+            sut.clear()
+            sut.activate(LOCAL_IDENTITY)
+            sut.refresh().getOrThrow()
+            val retry = sut.pendingRequests.value.single()
+            sut.accept(retry).getOrThrow()
+            sut.ensurePaymentAllowed(retry).getOrThrow()
+        }
     }
 
     @Test
