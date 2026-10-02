@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaykitApp
@@ -69,6 +70,39 @@ import kotlin.test.assertTrue
 class PaykitSdkServiceTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
+    @Test
+    fun `private link calls advance once and allow pending handshakes to resume`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.backupStateRevision()).thenReturn("backup")
+        whenever(sdk.ensureLinkWithPeer(any(), any())).thenReturn(
+            LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKING, 1uL, null),
+            LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKED, 1uL, null),
+        )
+        val pending = PaykitException.RecoveryRequired("recovery_required", "Handshake pending")
+        whenever(sdk.prepareAndResolvePrivateContactPayment(RING_PUBKY, null, null, 1u)).thenThrow(pending)
+        whenever(sdk.prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null, 1u)).thenThrow(pending)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        assertEquals(LinkedPeerState.LINKING, service.ensureLinkWithPeer(RING_PUBKY).state)
+        assertEquals(LinkedPeerState.LINKED, service.ensureLinkWithPeer(RING_PUBKY).state)
+        assertSame(
+            pending,
+            assertFailsWith<PaykitException.RecoveryRequired> {
+                service.prepareAndResolvePrivateContactPayment(RING_PUBKY, null)
+            },
+        )
+        assertSame(
+            pending,
+            assertFailsWith<PaykitException.RecoveryRequired> {
+                service.prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null)
+            },
+        )
+        verify(sdk, times(2)).ensureLinkWithPeer(RING_PUBKY, 1u)
+        verify(sdk).prepareAndResolvePrivateContactPayment(RING_PUBKY, null, null, 1u)
+        verify(sdk).prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null, 1u)
     }
 
     @Test

@@ -664,7 +664,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun ensureLinkWithPeer(
         counterparty: String,
-        maxAdvanceSteps: UInt = 8u,
+        maxAdvanceSteps: UInt = 1u,
     ) = run {
         isSetup.await()
         operationLock.withLock {
@@ -1072,7 +1072,7 @@ class PaykitSdkService @Inject constructor(
                     counterparty = counterparty,
                     amount = amount,
                     afterPrivatePaymentListVersion = afterPrivatePaymentListVersion,
-                    maxAdvanceSteps = 8u,
+                    maxAdvanceSteps = 1u,
                 )
             }
         }
@@ -1094,7 +1094,7 @@ class PaykitSdkService @Inject constructor(
                     counterparty,
                     paymentRequestId,
                     afterPrivatePaymentListVersion,
-                    8u,
+                    1u,
                 )
             }
         }
