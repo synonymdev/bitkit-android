@@ -994,7 +994,7 @@ class AppViewModel @Inject constructor(
             requestedPaymentRequestTags = persistentListOf()
         }
         viewModelScope.launch {
-            refreshIncomingPaykitPaymentRequests()
+            refreshIncomingPaykitPaymentRequests(refreshMaintenance = false)
         }
     }
 

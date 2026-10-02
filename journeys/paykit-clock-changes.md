@@ -22,6 +22,7 @@ Create a fresh wallet and a matching Pubky identity, save a contact, and link a 
 3. Schedule a reminder, then move the clock backward before it is due. It must not announce that payment is due while the device's current time is before that billing boundary.
 4. Restore the correct clock and verify reminders still work. On Android, WorkManager delivery is best effort and may be delayed by retry backoff or OS scheduling; this check does not require exact delivery to the second.
 5. While a payment request is temporarily unavailable and presentation is retrying, move the clock forward and backward. Retry intervals should remain short, while actual payment expiry and approval continue to use absolute timestamps.
+6. Tap a due subscription reminder during background contact preparation, then repeat with Bitkit closed before the tap. Verify the exact unpaid billing period is presented after authentication and unlock. The notification refresh must read shared state without starting proof reconciliation or private-message maintenance. Record tap-to-sheet timing separately from identity activation, authentication, background preparation, and any SDK lock wait. Startup and foreground maintenance run independently and can still delay the cold-launch case.
 
 These steps describe the remaining manual verification. Unit tests cover injected restoration failures, state preservation, retry timing, UTC recurrence, and notification scheduling; they do not replace a live Ring-session clock-change test.
 
