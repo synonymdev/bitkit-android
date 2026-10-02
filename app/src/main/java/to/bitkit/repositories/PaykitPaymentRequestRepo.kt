@@ -857,7 +857,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         val uncertain = when (error) {
                             is PaykitException.Transport,
                             is PaykitException.Storage,
-                            is PaykitException.Identity -> true
+                            is PaykitException.Identity,
+                            is PaykitException.ConcurrentUpdate -> true
                             else -> false
                         }
                         if (!alreadySaved && !uncertain) {

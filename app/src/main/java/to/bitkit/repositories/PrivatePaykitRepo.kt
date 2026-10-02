@@ -1230,10 +1230,7 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun removePublishedEndpoints(): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             publicationMutex.withLock {
-                val keys = (
-                    knownSavedContactKeys + ensureState().contacts.keys + pendingDeletedContactCleanupPublicKeys()
-                    ).distinct()
-                removePublishedEndpointsLocked(keys).getOrThrow()
+                removePublishedEndpointsLocked().getOrThrow()
             }
         }
     }
@@ -1248,16 +1245,24 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
 
-    private suspend fun removePublishedEndpointsLocked(publicKeys: Collection<String>): Result<Unit> =
+    private suspend fun removePublishedEndpointsLocked(publicKeys: Collection<String>? = null): Result<Unit> =
         runSuspendCatching {
-            val normalizedBatch = normalizedPublicKeyBatch(publicKeys)
+            val linkedPublicKeys = paykitSdkService.linkedPeers()
+                .filter { it.state != LinkedPeerState.NOT_LINKED }
+                .mapNotNull { normalizedPublicKey(it.counterparty) }
+                .toSet()
+            val keys = publicKeys ?: (
+                knownSavedContactKeys + ensureState().contacts.keys + pendingDeletedContactCleanupPublicKeys() +
+                    linkedPublicKeys
+                )
+            val normalizedBatch = normalizedPublicKeyBatch(keys)
             discardInvalidCleanupKeys(normalizedBatch.invalidKeys)
             val normalizedKeys = normalizedBatch.normalizedKeys
             if (normalizedKeys.isEmpty()) return@runSuspendCatching
 
             ensureState()
             val cleanupStateByPublicKey = normalizedKeys.associateWith(::publishedEndpointCleanupState)
-            val preparation = clearPrivatePaymentLists(normalizedKeys)
+            val preparation = clearPrivatePaymentLists(normalizedKeys, linkedPublicKeys)
             val failedPublicKeys = preparation.failedPublicKeys.toMutableSet()
             var firstError = preparation.firstError
 
@@ -1294,11 +1299,8 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun clearPrivatePaymentLists(
         publicKeys: Collection<String>,
+        linkedPublicKeys: Set<String>,
     ): PrivateEndpointCleanupPreparation {
-        val linkedPublicKeys = paykitSdkService.linkedPeers()
-            .filter { it.state != LinkedPeerState.NOT_LINKED }
-            .mapNotNull { normalizedPublicKey(it.counterparty) }
-            .toSet()
         val failedPublicKeys = mutableSetOf<String>()
         val clearedRetryKeys = mutableListOf<String>()
         var firstError: Throwable? = null

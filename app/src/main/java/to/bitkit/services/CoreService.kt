@@ -1073,8 +1073,11 @@ class ActivityService(
         var index = 0
         var currentAddressBatch: Int? = null
         while (index < endIndex) {
-            val addresses = fetchAddressSearchBatch(addressType, isChange, index, addressTypeKey, accountIndex)
-                ?: return null
+            val count = minOf(ADDRESS_SEARCH_BATCH_SIZE, endIndex - index)
+            val addressInfos = fetchAddressSearchBatch(
+                addressType, isChange, index, count, addressTypeKey, accountIndex,
+            ) ?: return null
+            val addresses = addressInfos.map { it.address }
 
             if (
                 currentWalletAddress.isNotBlank() &&
@@ -1085,34 +1088,37 @@ class ActivityService(
             }
 
             findAddressSearchMatch(details, value, addresses)?.let {
-                saveLastUsedAddressSearchIndex(addressTypeKey, isChange, index)
+                val matchedIndex = addressInfos.first { info -> info.address == it }.index
+                saveLastUsedAddressSearchIndex(addressTypeKey, isChange, matchedIndex)
                 return it
             }
 
             if (shouldStopAfterCurrentAddressBatch(currentAddressBatch, index)) return null
 
-            index += ADDRESS_SEARCH_BATCH_SIZE
+            index += count
         }
 
         return null
     }
 
+    @Suppress("LongParameterList")
     private suspend fun fetchAddressSearchBatch(
         addressType: AddressType,
         isChange: Boolean,
         index: Int,
+        count: Int,
         addressTypeKey: String,
         accountIndex: UInt,
-    ): List<String>? {
+    ): List<AddressDerivationInfo>? {
         val scope = if (isChange) "change" else "receive"
         return runSuspendCatching {
             lightningService.addressInfosForType(
                 addressType = addressType,
                 isChange = isChange,
                 startIndex = index,
-                count = ADDRESS_SEARCH_BATCH_SIZE,
+                count = count,
                 accountIndex = accountIndex,
-            ).map { it.address }
+            )
         }.onFailure {
             Logger.warn(
                 "Skipping '$addressTypeKey' '$scope' address search batch '$index'",
@@ -1143,7 +1149,7 @@ class ActivityService(
 
     private fun addressSearchEndIndex(lastUsed: Int?): Int {
         return lastUsed?.let {
-            if (it > Int.MAX_VALUE - ADDRESS_SEARCH_WINDOW) Int.MAX_VALUE else it + ADDRESS_SEARCH_WINDOW
+            if (it > Int.MAX_VALUE - ADDRESS_SEARCH_WINDOW - 1) Int.MAX_VALUE else it + ADDRESS_SEARCH_WINDOW + 1
         } ?: ADDRESS_SEARCH_WINDOW
     }
 
