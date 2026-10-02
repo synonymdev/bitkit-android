@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaykitAppRegistry
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PubkyIdentityCapability
@@ -66,20 +67,24 @@ class PaykitKeyGenerationTest {
     }
 
     @Test
-    fun `stored root refresh rotates the session key and rejects registry rollback`() = runTest {
+    fun `cached keys refresh after remote rotation and reject registry rollback`() = runTest {
         val initialRegistry = mock<PaykitAppRegistry> { on { keyGeneration }.thenReturn(2uL) }
         val rotatedRegistry = mock<PaykitAppRegistry> { on { keyGeneration }.thenReturn(3uL) }
         val sdk = mock<PaykitSdk>()
         whenever(sdk.paykitAppRegistry(RING_PUBKY))
             .thenReturn(initialRegistry, rotatedRegistry, initialRegistry, null)
-        whenever(sdk.identityStatus())
-            .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        val status = IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        val staleKey = PaykitException.Identity("identity_error", "Shared state requires a newer key")
+        whenever(sdk.identityStatus()).thenReturn(status, status).thenThrow(staleKey).thenReturn(status)
+            .thenThrow(staleKey)
         val keychain = mock<Keychain>()
         val storageKey = "${Keychain.Key.PAYKIT_KEY_GENERATION.name}:$RING_PUBKY"
-        whenever(keychain.loadString(storageKey)).thenReturn("2", "2", "3", "3")
+        var savedGeneration = "2"
+        whenever(keychain.loadString(storageKey)).thenAnswer { savedGeneration }
+        whenever(keychain.upsertString(storageKey, "3")).thenAnswer { savedGeneration = "3" }
         val root = mock<PubkyLocalSecretKey>()
-        val initialKey = mock<PaykitIdentitySecretKey>()
-        val rotatedKey = mock<PaykitIdentitySecretKey>()
+        val initialKey = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(2uL) }
+        val rotatedKey = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(3uL) }
         whenever(root.derivePaykitIdentitySecretKey(2uL)).thenReturn(initialKey)
         whenever(root.derivePaykitIdentitySecretKey(3uL)).thenReturn(rotatedKey)
 
@@ -91,6 +96,10 @@ class PaykitKeyGenerationTest {
                 val service = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { sdk }
                 val provider = providers.constructed().single()
                 repeat(2) { assertEquals(RING_PUBKY, service.currentPublicKey()) }
+                verify(sdk).paykitAppRegistry(RING_PUBKY)
+                assertSame(staleKey, assertFailsWith<PaykitException.Identity> { service.currentPublicKey() })
+                assertEquals(RING_PUBKY, service.currentPublicKey())
+                assertSame(staleKey, assertFailsWith<PaykitException.Identity> { service.currentPublicKey() })
                 repeat(2) {
                     val error = assertFailsWith<IllegalStateException> { service.currentPublicKey() }
                     assertEquals("The Paykit App Registry has an older key generation", error.message)
@@ -105,7 +114,7 @@ class PaykitKeyGenerationTest {
                 }
                 verify(root, times(2)).derivePaykitIdentitySecretKey(any())
                 verify(keychain).upsertString(any(), any())
-                verify(sdk, times(2)).identityStatus()
+                verify(sdk, times(5)).identityStatus()
                 verify(provider, times(2)).setPaykitIdentitySecretKey(any())
             }
         }
@@ -136,6 +145,44 @@ class PaykitKeyGenerationTest {
             assertSame(sessions.constructed().single(), refreshedAccess)
             assertSame(refreshedAccess, provider.loadSessionAccess())
             assertEquals(1, sessions.constructed().size)
+        }
+    }
+
+    @Test
+    fun `best effort backup identity failures invalidate the cached session key`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val initialRegistry = mock<PaykitAppRegistry> { on { keyGeneration }.thenReturn(1uL) }
+        val rotatedRegistry = mock<PaykitAppRegistry> { on { keyGeneration }.thenReturn(2uL) }
+        whenever(sdk.paykitAppRegistry(RING_PUBKY)).thenReturn(initialRegistry, rotatedRegistry)
+        whenever(sdk.identityStatus())
+            .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.backupStateRevision()).thenThrow(PaykitException.Identity("identity_error", "Stale key"))
+        whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
+        val keychain = mock<Keychain>()
+        val storageKey = "${Keychain.Key.PAYKIT_KEY_GENERATION.name}:$RING_PUBKY"
+        whenever(keychain.loadString(storageKey)).thenReturn("1")
+        val root = mock<PubkyLocalSecretKey>()
+        val initialKey = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(1uL) }
+        val rotatedKey = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(2uL) }
+        whenever(root.derivePaykitIdentitySecretKey(1uL)).thenReturn(initialKey)
+        whenever(root.derivePaykitIdentitySecretKey(2uL)).thenReturn(rotatedKey)
+
+        mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
+            native.`when`<String> { pubkyPublicKeyFromSecret(root) }.thenReturn(RING_PUBKY)
+            mockConstruction(PaykitSdkSessionProvider::class.java) { provider, _ ->
+                whenever(provider.loadLocalSecretKey()).thenReturn(root)
+            }.use { providers ->
+                val service = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { sdk }
+                assertEquals(RING_PUBKY, service.currentPublicKey())
+                service.processPendingPrivateMessages()
+                verify(sdk).paykitAppRegistry(RING_PUBKY)
+
+                assertEquals(RING_PUBKY, service.currentPublicKey())
+                verify(sdk, times(2)).paykitAppRegistry(RING_PUBKY)
+                verify(providers.constructed().single()).setPaykitIdentitySecretKey(rotatedKey)
+                verify(keychain).upsertString(storageKey, "2")
+            }
         }
     }
 }
