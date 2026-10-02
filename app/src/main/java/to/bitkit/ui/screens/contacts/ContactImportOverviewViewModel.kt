@@ -70,24 +70,28 @@ class ContactImportOverviewViewModel @Inject constructor(
     }
 
     fun importAll() {
+        if (_uiState.value.isImporting) return
         val contacts = _uiState.value.contacts
-        if (contacts.isEmpty() || _uiState.value.isImporting) return
+        if (contacts.isEmpty()) return
 
         _uiState.update { it.copy(isImporting = true) }
         viewModelScope.launch {
-            pubkyRepo.importContacts(contacts)
-                .onSuccess {
-                    _uiState.update { it.copy(isImporting = false, shouldRedirectToPayContacts = true) }
-                }
-                .onFailure {
-                    Logger.error("Failed to import all contacts", it, context = TAG)
-                    _uiState.update { it.copy(isImporting = false) }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = it.message,
-                    )
-                }
+            try {
+                pubkyRepo.importContacts(contacts)
+                    .onSuccess {
+                        _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
+                    }
+                    .onFailure {
+                        Logger.error("Failed to import all contacts", it, context = TAG)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = it.message,
+                        )
+                    }
+            } finally {
+                _uiState.update { it.copy(isImporting = false) }
+            }
         }
     }
 

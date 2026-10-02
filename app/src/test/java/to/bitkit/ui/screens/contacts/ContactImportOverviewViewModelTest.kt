@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.contacts
 
 import android.content.Context
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
@@ -29,6 +31,26 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     private val isImportingContacts = MutableStateFlow(false)
     private val pendingImportProfile = MutableStateFlow<PubkyProfile?>(null)
     private val pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
+
+    @Test
+    fun `pending import blocks duplicate requests and clears progress after cancellation`() = test {
+        val contacts = listOf(createProfile(publicKey = "pubkyalice"))
+        stubPendingImport(createProfile(publicKey = "pubkyself"), contacts)
+        val pending = CompletableDeferred<Result<Unit>>()
+        whenever(pubkyRepo.importContacts(contacts)).doSuspendableAnswer { pending.await() }
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.importAll()
+        sut.importAll()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isImporting)
+        verify(pubkyRepo).importContacts(contacts)
+
+        pending.cancel()
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isImporting)
+    }
 
     @Test
     fun `missing pending import redirects to pay contacts`() = test {

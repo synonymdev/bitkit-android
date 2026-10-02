@@ -970,13 +970,21 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             paykitPaymentRequestRepo.pendingRequests.drop(1).collect { requests ->
                 retainPaymentRequestPresentationState(requests)
-                val activeRequest = activeIncomingPaymentRequest() ?: return@collect
-                if (isSubmittingPaymentRequest || uncertainOnchainPaymentRequestId == activeRequest.id) return@collect
+                val activeRequest = activeIncomingPaymentRequest()
                 if (
-                    currentSheet.value is Sheet.Send &&
-                    requests.none { it.id == activeRequest.id }
+                    activeRequest != null &&
+                    !isSubmittingPaymentRequest &&
+                    uncertainOnchainPaymentRequestId != activeRequest.id
                 ) {
-                    hideSheet()
+                    if (currentSheet.value is Sheet.Send && requests.none { it.id == activeRequest.id }) {
+                        hideSheet()
+                    }
+                }
+                if (
+                    isPaykitEnabled.value && paymentRequestIdentity != null &&
+                    PubkyPublicKeyFormat.matches(paymentRequestIdentity, pubkyRepo.publicKey.value)
+                ) {
+                    presentNextIncomingPaykitPaymentRequest()
                 }
             }
         }
@@ -1028,10 +1036,10 @@ class AppViewModel @Inject constructor(
             activePaymentRequestPresentationGeneration = null
         }
 
+        if (isPaymentRequestPresentationBlocked()) return
         if (
-            stopped &&
-            generation != paymentRequestPresentationGeneration &&
-            !isPaymentRequestPresentationBlocked()
+            stopped && generation != paymentRequestPresentationGeneration ||
+            paymentRequestsForPresentation()?.any { next -> requests.none { it.id == next.id } } == true
         ) {
             presentNextIncomingPaykitPaymentRequest()
         }

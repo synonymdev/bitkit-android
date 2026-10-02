@@ -42,6 +42,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
@@ -150,6 +151,93 @@ class PubkyRepoTest : BaseUnitTest() {
 
     private fun stubAdoptedRingSource() {
         adoptedSource = SharedPubkyContract.RING_SOURCE_PREFIX + VALID_SELF_KEY.removePrefix("pubky")
+    }
+
+    @Test
+    fun `import saves prepared profiles without network lookups and ignores duplicates`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        clearInvocations(pubkyService)
+        val profiles = listOf(
+            PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice"),
+            PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob"),
+        )
+        for (profile in profiles) {
+            whenever(
+                pubkyService.saveContact(
+                    profile.publicKey,
+                    profile.name,
+                    restorePrivateConnection = true,
+                    expectedIdentity = VALID_SELF_KEY,
+                ),
+            ).thenReturn(mock())
+        }
+        whenever(pubkyService.resolveContactProfile(any(), any(), any())).thenAnswer { throw TestAppError("Offline") }
+        whenever(pubkyService.discoverRelevantReceiverPaths(any(), any())).thenAnswer { throw TestAppError("Offline") }
+
+        val result = sut.importContacts(profiles + profiles)
+
+        assertTrue(result.isSuccess)
+        assertEquals(profiles, sut.contacts.value)
+        for (profile in profiles) {
+            verify(pubkyService).saveContact(
+                profile.publicKey,
+                profile.name,
+                restorePrivateConnection = true,
+                expectedIdentity = VALID_SELF_KEY,
+            )
+        }
+        verify(pubkyService, never()).resolveContactProfile(any(), any(), any())
+        verify(pubkyService, never()).discoverRelevantReceiverPaths(any(), any())
+    }
+
+    @Test
+    fun `failed import keeps successful contacts and retry saves only missing contacts`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
+        val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
+        whenever(pubkyService.saveContact(alice.publicKey, alice.name, null, true, VALID_SELF_KEY))
+            .thenReturn(mock())
+        whenever(pubkyService.saveContact(bob.publicKey, bob.name, null, true, VALID_SELF_KEY))
+            .thenAnswer { throw TestAppError("Storage unavailable") }.thenReturn(mock())
+
+        assertTrue(sut.importContacts(listOf(alice, bob)).isFailure)
+        assertEquals(listOf(alice), sut.contacts.value)
+        assertTrue(sut.importContacts(listOf(alice, bob)).isSuccess)
+        assertEquals(listOf(alice, bob), sut.contacts.value)
+        verify(pubkyService).saveContact(alice.publicKey, alice.name, null, true, VALID_SELF_KEY)
+        verify(pubkyService, times(2)).saveContact(bob.publicKey, bob.name, null, true, VALID_SELF_KEY)
+    }
+
+    @Test
+    fun `prepareImport excludes own key and imports remaining follows`() = test {
+        authenticateForTesting(publicKey = VALID_CONTACT_KEY_A)
+        val ownProfile = checkNotNull(sut.profile.value)
+        val ownKeys = listOf(
+            VALID_CONTACT_KEY_A,
+            VALID_CONTACT_KEY_A.removePrefix("pubky"),
+            NON_CANONICAL_CONTACT_KEY_A,
+            NON_CANONICAL_CONTACT_KEY_A.removePrefix("pubky"),
+        )
+        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Alice")
+        whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(ownKeys + VALID_CONTACT_KEY_B)
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true))
+            .thenReturn(createResolution(VALID_CONTACT_KEY_B, paykitProfile = createPaykitProfile("Alice")))
+        whenever(pubkyService.saveContact(alice.publicKey, alice.name, null, true, VALID_CONTACT_KEY_A))
+            .thenReturn(mock())
+        whenever(pubkyService.saveContact(VALID_CONTACT_KEY_A, ownProfile.name, null, true, VALID_CONTACT_KEY_A))
+            .thenAnswer { throw TestAppError("Cannot save own identity") }
+
+        assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(ownProfile, sut.pendingImportProfile.value)
+        assertEquals(listOf(alice), sut.pendingImportContacts.value)
+        assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
+        assertEquals(listOf(alice), sut.contacts.value)
+
+        whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(ownKeys)
+
+        assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(ownProfile, sut.pendingImportProfile.value)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
     }
 
     @Test
@@ -2770,84 +2858,17 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `importContacts saves the prepared profiles and keeps unresolved follows as placeholders`() = test {
-        authenticateForTesting(publicKey = VALID_SELF_KEY)
-        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
-            .thenReturn(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice")))
-        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Interactive))
-            .thenAnswer { throw TestAppError("Unreachable") }
-        whenever(pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_A, PaykitReadLane.Bulk))
-            .thenReturn(listOf("bitkit/wallet", "bitkit/server"))
-        assertTrue(sut.prepareImport().isSuccess)
-        clearInvocations(pubkyService)
-        val placeholder = PubkyProfile.placeholder(VALID_CONTACT_KEY_B)
-
-        val result = sut.importContacts(sut.pendingImportContacts.value)
-
-        assertTrue(result.isSuccess)
-        assertEquals(setOf("Alice", placeholder.name), sut.contacts.value.map { it.name }.toSet())
-        verify(pubkyService, never()).resolveContactProfile(any(), any(), any())
-        verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_A, "Alice", listOf("bitkit/wallet", "bitkit/server"), true, VALID_SELF_KEY)
-        }
-        verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true, VALID_SELF_KEY)
-        }
-        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(eq(VALID_CONTACT_KEY_B), any()) }
-    }
-
-    @Test
-    fun `importContacts keeps the saved label of a contact whose follow it could not resolve`() = test {
-        authenticateForTesting(publicKey = VALID_SELF_KEY)
-        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B))
-        whenever(pubkyService.resolveContactProfile(any(), any(), any()))
-            .thenAnswer { throw TestAppError("Unreachable") }
-        assertTrue(sut.prepareImport().isSuccess)
-        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Alice")))
-        val placeholder = PubkyProfile.placeholder(VALID_CONTACT_KEY_B)
-
-        assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
-
-        verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_A, "Alice", listOf("bitkit/wallet"), true, VALID_SELF_KEY)
-        }
-        verifyBlocking(pubkyService) {
-            saveContact(VALID_CONTACT_KEY_B, placeholder.name, listOf("bitkit/wallet"), true, VALID_SELF_KEY)
-        }
-    }
-
-    @Test
-    fun `importContacts discovers receivers of a contact it has no record of resolving`() = test {
-        authenticateForTesting(publicKey = VALID_SELF_KEY)
-        val placeholder = PubkyProfile.placeholder(VALID_CONTACT_KEY_A)
-        whenever(pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_A, PaykitReadLane.Bulk))
-            .thenReturn(listOf("bitkit/wallet", "bitkit/server"))
-
-        assertTrue(sut.importContacts(listOf(placeholder)).isSuccess)
-
-        verifyBlocking(pubkyService) {
-            saveContact(
-                VALID_CONTACT_KEY_A,
-                placeholder.name,
-                listOf("bitkit/wallet", "bitkit/server"),
-                true,
-                VALID_SELF_KEY,
-            )
-        }
-    }
-
-    @Test
     fun `importContacts keeps saving after its caller is cancelled`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
         val saveStarted = CompletableDeferred<Unit>()
         val finishSave = CompletableDeferred<Unit>()
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), any(), any(), any())).doSuspendableAnswer {
-            saveStarted.complete(Unit)
-            finishSave.await()
-            createContactRecord(VALID_CONTACT_KEY_A)
-        }
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer {
+                saveStarted.complete(Unit)
+                finishSave.await()
+                createContactRecord(VALID_CONTACT_KEY_A)
+            }
         assertFalse(sut.isImportingContacts.value)
         val caller = launch { sut.importContacts(listOf(alice)) }
         saveStarted.await()
@@ -2864,22 +2885,23 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `importContacts stops saving once the identity changes`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
-        val discoveryStarted = CompletableDeferred<Unit>()
-        val finishDiscovery = CompletableDeferred<Unit>()
-        whenever(pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_A, PaykitReadLane.Bulk))
+        val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
+        val saveStarted = CompletableDeferred<Unit>()
+        val finishSave = CompletableDeferred<Unit>()
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any()))
             .doSuspendableAnswer {
-                discoveryStarted.complete(Unit)
-                finishDiscovery.await()
-                listOf("bitkit/wallet")
+                saveStarted.complete(Unit)
+                finishSave.await()
+                createContactRecord(VALID_CONTACT_KEY_A)
             }
-        val import = async { sut.importContacts(listOf(alice)) }
-        discoveryStarted.await()
+        val import = async { sut.importContacts(listOf(alice, bob)) }
+        saveStarted.await()
 
         sut.wipeLocalState()
-        finishDiscovery.complete(Unit)
+        finishSave.complete(Unit)
 
         assertTrue(import.await().isFailure)
-        verifyBlocking(pubkyService, never()) { saveContact(any(), any(), any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { saveContact(eq(VALID_CONTACT_KEY_B), any(), anyOrNull(), any(), any()) }
         assertTrue(sut.contacts.value.isEmpty())
         assertFalse(sut.isImportingContacts.value)
     }
@@ -2896,20 +2918,6 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(sut.pendingImportProfile.value)
         assertTrue(sut.pendingImportContacts.value.isEmpty())
         assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
-    }
-
-    @Test
-    fun `importContacts leaves out only a contact whose save fails`() = test {
-        authenticateForTesting(publicKey = VALID_SELF_KEY)
-        val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
-        val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_B), any(), any(), any(), any()))
-            .thenAnswer { throw TestAppError("Save failed") }
-
-        val result = sut.importContacts(listOf(alice, bob))
-
-        assertTrue(result.isSuccess)
-        assertEquals(listOf(alice), sut.contacts.value)
     }
 
     @Test

@@ -1,0 +1,20 @@
+<journey name="Automatic Payment Request Presentation">
+  <description>
+    Verifies that a newly received request opens automatically in the foreground, waits for another sheet to close, and does not reopen a request the payer already reviewed. Requires two Bitkit instances saved as each other's contacts and linked on receiver path "bitkit/wallet", with the payer funded for 21,000 sats; see README.md.
+  </description>
+  <actions>
+    <action>On the payer, leave Bitkit unlocked and in the foreground on Home</action>
+    <action>On the requester, send the payer contact a Payment Request for 21,000 sats with the note "First request"</action>
+    <action>On the payer, verify Payment Request confirmation (testTag "PaymentRequestConfirm") appears automatically with 21,000 sats and For shows "First request"</action>
+    <action>Close the confirmation without paying</action>
+    <action>On the payer, open Receive and leave its sheet open</action>
+    <action>On the requester, send the payer contact another Payment Request for 5,000 sats with the note "Second request"</action>
+    <action>Wait for the requester's send operation to finish and for the payer to synchronize its pending requests</action>
+    <action>On the payer, verify Receive stays open without being replaced by confirmation</action>
+    <action>Close Receive</action>
+    <action>Verify Payment Request confirmation (testTag "PaymentRequestConfirm") appears automatically with 5,000 sats and For shows "Second request"</action>
+    <action>Close the confirmation without paying</action>
+    <action>Open Receive and close it again</action>
+    <action>Verify Home remains visible and neither reviewed request reopens automatically</action>
+  </actions>
+</journey>
