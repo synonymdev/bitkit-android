@@ -8,6 +8,7 @@ import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentListSyncChange
@@ -1325,6 +1326,42 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val request = paymentRequest(listOf(MethodId.P2wpkh.rawValue))
         assertEquals(PublicPaykitPaymentResult.NotOpened, sut.beginPaymentRequest(request).getOrThrow())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `recurring request can reuse its fixed onchain destination but not a consumed private list`() = test {
+        val endpoint = resolvedEndpoint(MethodId.P2wpkh, PRIVATE_ADDRESS)
+        whenever(
+            paykitSdkService.prepareAndResolvePrivatePaymentRequest(CONTACT_KEY, "request-id", null),
+        ).thenReturn(resolution(endpoint, version = null))
+        whenever(coreService.isAddressUsed(PRIVATE_ADDRESS)).thenReturn(false)
+        val request = paymentRequest(listOf(MethodId.P2wpkh.rawValue)).copy(
+            lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+            billingPeriod = PaykitBillingPeriod(
+                Instant.parse("2027-01-01T08:00:00Z"),
+                Instant.parse("2027-02-01T08:00:00Z"),
+            ),
+        )
+        val expected = PublicPaykitPaymentResult.Opened(
+            PRIVATE_ADDRESS,
+            PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to "bitkit"), null),
+        )
+        assertEquals(expected, sut.beginPaymentRequest(request).getOrThrow())
+
+        whenever(coreService.isAddressUsed(PRIVATE_ADDRESS)).thenReturn(true)
+        val nextPeriod = request.copy(
+            billingPeriod = PaykitBillingPeriod(
+                Instant.parse("2027-02-01T08:00:00Z"),
+                Instant.parse("2027-03-01T08:00:00Z"),
+            ),
+        )
+        assertEquals(expected, sut.beginPaymentRequest(nextPeriod).getOrThrow())
+
+        whenever(
+            paykitSdkService.prepareAndResolvePrivatePaymentRequest(CONTACT_KEY, "request-id", null),
+        ).thenReturn(resolution(endpoint, version = 7uL))
+        assertEquals(PublicPaykitPaymentResult.NotOpened, sut.beginPaymentRequest(nextPeriod).getOrThrow())
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 

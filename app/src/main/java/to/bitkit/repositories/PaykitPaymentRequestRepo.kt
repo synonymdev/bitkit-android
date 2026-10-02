@@ -328,12 +328,15 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     suspend fun activate(identity: String) = withContext(ioDispatcher) {
         val normalizedIdentity = PubkyPublicKeyFormat.normalized(identity) ?: return@withContext
-        if (!PubkyPublicKeyFormat.matches(activeIdentity, normalizedIdentity)) {
-            stateGeneration.incrementAndGet()
+        val committedGeneration = activatedGeneration
+        if (PubkyPublicKeyFormat.matches(activeIdentity, normalizedIdentity) &&
+            committedGeneration == stateGeneration.get()
+        ) {
+            return@withContext
         }
-        val generation = stateGeneration.get()
+        val generation = stateGeneration.incrementAndGet()
         operationMutex.withLock {
-            if (PubkyPublicKeyFormat.matches(activeIdentity, normalizedIdentity)) return@withLock
+            if (stateGeneration.get() != generation) return@withLock
             clearStateLocked()
             activeIdentity = null
             acceptedOneTimeRequestIds = emptySet()
@@ -351,6 +354,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             subscriptionAcceptedAt = subscriptionState.acceptedAt
             presentedSubscriptionProposalIds = subscriptionState.presentedProposalIds
             dismissedSubscriptionPaymentIds = subscriptionState.dismissedPaymentIds
+            if (stateGeneration.get() != generation) return@withLock
             activeIdentity = normalizedIdentity
             activatedGeneration = generation
         }
@@ -1218,7 +1222,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
             }
         }
         return activatedGeneration == stateGeneration.get() && _subscriptions.value.any {
-            it.isPayer && it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING && request.belongsTo(it)
+            it.isPayer && it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING &&
+                request.belongsTo(it) && request.billingPeriod !in it.paidPeriods
         }
     }
 

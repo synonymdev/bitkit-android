@@ -668,7 +668,12 @@ class PrivatePaykitRepo @Inject constructor(
             acceptedEndpointIdentifiers?.contains(it.methodId.rawValue) ?: true
         }
 
-        val privatePayable = privatePayableEndpoints(acceptedEndpoints, publicKey)
+        val privatePayable = privatePayableEndpoints(
+            acceptedEndpoints,
+            publicKey,
+            allowUsedOnchainAddress = paymentRequest?.billingPeriod != null &&
+                resolution.privatePaymentListVersion == null,
+        )
         val paymentListVersion = resolution.privatePaymentListVersion
         if (privatePayable.isNotEmpty() && (paymentListVersion != null || paymentRequest != null)) {
             Logger.info(
@@ -1418,7 +1423,11 @@ class PrivatePaykitRepo @Inject constructor(
         persistState(markWalletBackup = true)
     }
 
-    private suspend fun privatePayableEndpoints(endpoints: List<Endpoint>, publicKey: String): List<Endpoint> {
+    private suspend fun privatePayableEndpoints(
+        endpoints: List<Endpoint>,
+        publicKey: String,
+        allowUsedOnchainAddress: Boolean,
+    ): List<Endpoint> {
         val payable = publicPaykitRepo.payableEndpoints(endpoints)
         val attemptedHashes = attemptedOutboundBolt11PaymentHashes()
         val staleLightningHashes = mutableSetOf<String>()
@@ -1444,7 +1453,7 @@ class PrivatePaykitRepo @Inject constructor(
                         true
                     }
                 }
-                endpoint.methodId.isOnchain -> {
+                endpoint.methodId.isOnchain && !allowUsedOnchainAddress -> {
                     val isUsed = runSuspendCatching { coreService.isAddressUsed(endpoint.value) }
                         .onFailure {
                             Logger.warn(

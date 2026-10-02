@@ -695,6 +695,43 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `overlapping identity activations preserve restored acceptance`() = test {
+        val record = paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED)
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        for (lastIdentity in listOf(SECOND_IDENTITY, LOCAL_IDENTITY)) {
+            sut.clear()
+            for (identity in listOf(LOCAL_IDENTITY, SECOND_IDENTITY)) {
+                whenever(presentationStore.loadAcceptedOneTimeIds(identity))
+                    .thenReturn(if (identity == lastIdentity) setOf(requestId) else emptySet())
+            }
+            sut.activate(LOCAL_IDENTITY)
+            val refreshing = CompletableDeferred<Unit>()
+            val refreshed = CompletableDeferred<Unit>()
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+                refreshing.complete(Unit)
+                refreshed.await()
+                listOf(record)
+            }
+            val refresh = async { sut.refresh() }
+            refreshing.await()
+            val firstActivation = async { sut.activate(SECOND_IDENTITY) }
+            val secondActivation = async { sut.activate(lastIdentity) }
+            runCurrent()
+            refreshed.complete(Unit)
+            refresh.await().getOrThrow()
+            firstActivation.await()
+            secondActivation.await()
+
+            sut.refresh().getOrThrow()
+            val request = sut.pendingRequests.value.single()
+            assertEquals(requestId, request.id)
+            sut.ensurePaymentAllowed(request).getOrThrow()
+            sut.activate(lastIdentity)
+            sut.ensurePaymentAllowed(request).getOrThrow()
+        }
+    }
+
+    @Test
     fun `failed intent persistence prevents remote acceptance`() = test {
         val proposed = paymentRequestRecord()
         val accepted = proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
@@ -773,6 +810,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paymentProofStore,
             paymentProofRepo,
             subscriptionNotificationScheduler,
+            clock,
             clock,
         )
         other.activate(LOCAL_IDENTITY)

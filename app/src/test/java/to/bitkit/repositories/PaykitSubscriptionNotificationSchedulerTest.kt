@@ -171,7 +171,6 @@ class PaykitSubscriptionNotificationSchedulerTest {
                 PaykitPaymentRequestId(
                     paymentRequestId = PAYMENT_REQUEST_ID,
                     counterparty = COUNTERPARTY,
-                    counterpartyReceiverPath = RECEIVER_PATH,
                     billingPeriodStartsAt = NEXT_PERIOD_START.toString(),
                 )
             ),
@@ -206,7 +205,6 @@ class PaykitSubscriptionNotificationSchedulerTest {
                 PaykitPaymentRequestId(
                     paymentRequestId = PAYMENT_REQUEST_ID,
                     counterparty = COUNTERPARTY,
-                    counterpartyReceiverPath = RECEIVER_PATH,
                     billingPeriodStartsAt = it.startsAt.toString(),
                 )
             },
@@ -250,7 +248,6 @@ class PaykitSubscriptionNotificationSchedulerTest {
                 PaykitPaymentRequestId(
                     paymentRequestId = PAYMENT_REQUEST_ID,
                     counterparty = COUNTERPARTY,
-                    counterpartyReceiverPath = RECEIVER_PATH,
                     billingPeriodStartsAt = NEXT_PERIOD_START.toString(),
                 )
             ),

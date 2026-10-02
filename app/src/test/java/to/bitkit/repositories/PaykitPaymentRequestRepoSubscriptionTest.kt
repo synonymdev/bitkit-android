@@ -188,6 +188,31 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `a paid subscription period stays blocked while its next unpaid period is authorized`() = test {
+        val record = paymentRequestRecord(
+            state = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+            endpoints = listOf(MethodId.P2wpkh.rawValue),
+        )
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val firstPeriod = sut.pendingRequests.value.single()
+        sut.ensurePaymentAllowed(firstPeriod).getOrThrow()
+        val proof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn requireNotNull(firstPeriod.billingPeriod).sdkValue
+            on { paymentEndpointIdentifier } doReturn MethodId.P2wpkh.rawValue
+        }
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(record.copy(paymentProofs = listOf(proof))))
+        subscriptionOffset = 31.days
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.ensurePaymentAllowed(firstPeriod).isFailure)
+        val nextPeriod = sut.pendingRequests.value.single()
+        assertEquals(Instant.parse("2027-02-01T08:00:00Z"), nextPeriod.billingPeriod?.startsAt)
+        sut.ensurePaymentAllowed(nextPeriod).getOrThrow()
+    }
+
+    @Test
     fun `refresh keeps creator subscription without generating a payer payment`() = test {
         val metadataText = """
             {
@@ -314,7 +339,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
         val captured = argumentCaptor<PaykitPaymentRequestProposalTerms>()
         verifyBlocking(paykitSdkService) {
-            proposePaymentRequest(any(), any(), captured.capture(), any())
+            proposePaymentRequest(any(), captured.capture(), any())
         }
         assertEquals(clock.now().toString(), captured.firstValue.recurrence?.startsAt)
         assertEquals(clock.now().toString(), captured.firstValue.recurrence?.anchor)
@@ -495,11 +520,10 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     fun `subscription clock offset makes the next billing period due`() = test {
         val proposal = paymentRequestRecord()
         val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
-        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(proposal), listOf(active))
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposal), listOf(active))
         whenever(
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
-                PaykitReceiverPaths.SERVER,
                 PAYMENT_REQUEST_ID,
             )
         ).thenReturn(active)
@@ -523,11 +547,10 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     fun `accepting with the subscription clock offset on keeps the first period due`() = test {
         val proposal = paymentRequestRecord()
         val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
-        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(proposal), listOf(active))
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposal), listOf(active))
         whenever(
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
-                PaykitReceiverPaths.SERVER,
                 PAYMENT_REQUEST_ID,
             )
         ).thenReturn(active)
@@ -556,11 +579,10 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     fun `subscription clock offset lists the paid next period in the payment history`() = test {
         val proposal = paymentRequestRecord()
         val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
-        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(proposal), listOf(active))
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposal), listOf(active))
         whenever(
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
-                PaykitReceiverPaths.SERVER,
                 PAYMENT_REQUEST_ID,
             )
         ).thenReturn(active)
@@ -570,7 +592,6 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             PaykitPaymentRequestId(
                 paymentRequestId = PAYMENT_REQUEST_ID,
                 counterparty = COUNTERPARTY,
-                counterpartyReceiverPath = PaykitReceiverPaths.SERVER,
                 billingPeriodStartsAt = it,
             ) to PaykitPaymentProofKind.Onchain
         }
