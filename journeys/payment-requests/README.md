@@ -24,6 +24,12 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 
 `definite-pre-broadcast-retry.xml` uses the linked fixture issuer and the local regtest LNURL server. Configure its LNURL-pay metadata endpoint normally, but make its invoice callback fail the first request and succeed after it is switched back to the healthy response. Do not republish the Paykit payment list between attempts. This makes the first send fail before Lightning dispatch and proves that the same private payment details can be opened and paid on retry.
 
+## Foreground synchronization
+
+Bitkit refreshes shared request state every 10 seconds. Private messages are synchronized on
+startup and explicit refreshes, and on maintenance rounds that back off from 30 to 60 to 120 seconds.
+A new peer message can therefore take up to two minutes plus synchronization time to appear during steady polling.
+
 ## Accepting install
 
 Acceptance intent is saved before the remote operation and included in wallet backups.
