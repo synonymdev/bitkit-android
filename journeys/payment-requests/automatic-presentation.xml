@@ -5,7 +5,7 @@
   <actions>
     <action>On the payer, leave Bitkit unlocked and in the foreground on Home</action>
     <action>On the requester, send the payer contact a Payment Request for 21,000 sats with the note "First request"</action>
-    <action>On the payer, verify Payment Request confirmation (testTag "PaymentRequestConfirm") appears automatically with 21,000 sats and For shows "First request"</action>
+    <action>On the payer, wait for the next private-message sync and verify Payment Request confirmation (testTag "PaymentRequestConfirm") appears automatically with 21,000 sats and For shows "First request"</action>
     <action>Close the confirmation without paying</action>
     <action>On the payer, open Receive and leave its sheet open</action>
     <action>On the requester, send the payer contact another Payment Request for 5,000 sats with the note "Second request"</action>

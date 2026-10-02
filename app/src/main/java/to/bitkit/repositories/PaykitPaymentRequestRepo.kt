@@ -440,7 +440,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    suspend fun refresh(): Result<Unit> {
+    suspend fun refresh(syncPrivateMessages: Boolean = true): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
         return withContext(ioDispatcher) {
@@ -450,7 +450,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         clearStateLocked()
                         return@withLock
                     }
-                    runSuspendCatching { synchronizeLocked(generation, expectedIdentity) }
+                    runSuspendCatching { synchronizeLocked(generation, expectedIdentity, syncPrivateMessages) }
                         .onFailure { discardExpiredRequestsLocked() }
                         .getOrThrow()
                 }
@@ -971,9 +971,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun synchronizeLocked(
         generation: Long,
         expectedIdentity: String?,
+        syncPrivateMessages: Boolean = true,
     ) {
-        processPendingMessages()
-        paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
+        if (syncPrivateMessages) {
+            processPendingMessages()
+            paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
+        }
         val now = clock.now()
         val subscriptionNow = subscriptionClock.now()
         receivedContacts = null

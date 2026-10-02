@@ -137,6 +137,23 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `shared state refresh skips private messages until a full refresh`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+
+        sut.refresh(syncPrivateMessages = false).getOrThrow()
+
+        assertEquals(record.paymentRequestId, sut.pendingRequests.value.single().paymentRequestId)
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
+
+        sut.refresh().getOrThrow()
+
+        verify(paykitSdkService).processPendingPrivateMessages()
+        verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers()
+    }
+
+    @Test
     fun `shared app destinations stay out of request UI and clear on identity switch`() = test {
         val address = PaykitReceivedPaymentContactsTest.ADDRESS
         val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).let {
