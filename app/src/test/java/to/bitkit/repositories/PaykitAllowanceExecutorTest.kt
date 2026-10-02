@@ -25,6 +25,8 @@ import com.synonym.paykit.PrivateStreamIntakeReport
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.PaymentStatus
@@ -46,6 +48,7 @@ import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import to.bitkit.utils.SubscriptionClockOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -751,9 +754,38 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(listOf(PaykitAllowanceTime.format(now)), evaluatedTrustedTimes)
     }
 
+    @Test
+    fun `admission ignores the subscription clock offset`() = test {
+        offsetSubscriptionClock(days = 400)
+        accountingState = stateNearTheMonthlyCap()
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(
+            PaykitAllowanceAutoPayResult.MANUAL,
+            result,
+            "September's attempts must count; the offset would move the window a year ahead",
+        )
+        assertEquals(listOf(PaykitAllowanceTime.format(fixtures.now)), evaluatedTrustedTimes)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+    }
+
     // endregion
 
     // region Helpers
+
+    private fun offsetSubscriptionClock(days: Int) {
+        SubscriptionClockOffset.setOffsetDays(days)
+        assumeTrue(
+            "The subscription clock offset is unavailable in this build",
+            SubscriptionClockOffset.offsetDays == days,
+        )
+    }
+
+    @After
+    fun resetSubscriptionClockOffset() {
+        SubscriptionClockOffset.setOffsetDays(0)
+    }
 
     private fun TestScope.collectEvents() {
         backgroundScope.launch { sut.events.collect { events += it } }
