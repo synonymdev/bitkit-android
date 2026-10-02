@@ -185,7 +185,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             true,
             cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList,
         )
-        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        verify(paykitSdkService, never()).ensureLinkWithPeer(CONTACT_KEY)
         verify(paykitSdkService, never()).processPendingPrivateMessages()
         verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
     }
@@ -824,7 +824,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `prepareSavedContacts preserves cleanup markers while saving publication state`() = test {
+    fun `prepareSavedContacts does not publish while cleanup is pending`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,
             publicPaykitLightningEnabled = false,
@@ -837,9 +837,92 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
 
-        assertTrue(result.isSuccess)
+        assertTrue(result.isFailure)
         assertEquals(true, cacheData.value.cleanupPending)
         assertEquals(setOf(OTHER_CONTACT_KEY), cacheData.value.deletedContactCleanupPendingPublicKeys)
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+    }
+
+    @Test
+    fun `enabling returns before contact linking and repeated preparation is coalesced`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        val linkStarted = CompletableDeferred<Unit>()
+        val resumeLink = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)) doSuspendableAnswer {
+            linkStarted.complete(Unit)
+            resumeLink.await()
+            LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKED, 1uL, null)
+        }
+
+        assertTrue(sut.enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY)).isSuccess)
+        runCurrent()
+        assertTrue(linkStarted.isCompleted)
+        repeat(3) { sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow() }
+        resumeLink.complete(Unit)
+        runCurrent()
+
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false))
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `cleanup stops a stalled preparation before later contacts are visited`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        val linkStarted = CompletableDeferred<Unit>()
+        val resumeLink = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)) doSuspendableAnswer {
+            linkStarted.complete(Unit)
+            resumeLink.await()
+            LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKED, 1uL, null)
+        }
+        val publication = async {
+            sut.prepareSavedContacts(listOf(CONTACT_KEY, OTHER_CONTACT_KEY), requireImmediatePublication = true)
+        }
+        runCurrent()
+        assertTrue(linkStarted.isCompleted)
+
+        sut.removePublishedEndpointsForCleanup("test").getOrThrow()
+        resumeLink.complete(Unit)
+        runCurrent()
+
+        assertTrue(publication.await().isFailure)
+        verify(paykitSdkService, never()).ensureLinkWithPeer(OTHER_CONTACT_KEY)
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `preparation drops contacts removed while linking`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        val resumeLink = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)) doSuspendableAnswer {
+            resumeLink.await()
+            LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKED, 1uL, null)
+        }
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        sut.removeSavedContact(CONTACT_KEY).getOrThrow()
+        resumeLink.complete(Unit)
+        runCurrent()
+
+        verify(addressReservationRepo, never()).currentOrRotatedAddress(CONTACT_KEY)
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `unavailable contacts are retried after a cooldown`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.NotFound("not_found", "No App Registry") }
+        repeat(3) { sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow() }
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+
+        whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(NOW_SECONDS + 301))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        verify(paykitSdkService, times(2)).ensureLinkWithPeer(CONTACT_KEY)
+        sut.closeAndClear()
     }
 
     @Test

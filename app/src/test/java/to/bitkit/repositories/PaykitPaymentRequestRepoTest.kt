@@ -137,20 +137,20 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `inbox refresh receives messages without draining outbound work`() = test {
+    fun `inbox refresh reads shared state without private message sync`() = test {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
 
-        sut.refresh(processOutgoingMessages = false).getOrThrow()
+        sut.refresh(syncPrivateMessages = false).getOrThrow()
 
         assertEquals(record.paymentRequestId, sut.pendingRequests.value.single().paymentRequestId)
         verify(paykitSdkService, never()).processPendingPrivateMessages()
-        verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers()
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
 
         sut.refresh().getOrThrow()
 
         verify(paykitSdkService).processPendingPrivateMessages()
-        verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers()
+        verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers()
     }
 
     @Test
