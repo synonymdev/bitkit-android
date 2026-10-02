@@ -1456,29 +1456,21 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `recipient discovery bounds a stalled capability lookup`() = test {
-        val discoveryStarted = CompletableDeferred<Unit>()
-        val stalledDiscovery = CompletableDeferred<Unit>()
+    fun `recipient discovery preserves a known target after a lookup timeout`() = test {
         whenever(
             paykitSdkService.identityStatus()
         ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
         )
-        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY)).doSuspendableAnswer {
-            discoveryStarted.complete(Unit)
-            stalledDiscovery.await()
-            true
-        }
+        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY))
+            .thenReturn(true)
+            .thenReturn(null)
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
 
-        val targetRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
-        discoveryStarted.await()
-        advanceTimeBy(5.seconds.inWholeMilliseconds)
-        runCurrent()
-
-        assertTrue(targetRefresh.isCompleted)
-        targetRefresh.await().getOrThrow()
-        assertTrue(sut.eligibleTargets.value.isEmpty())
+        val result = sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        assertFalse(result.isComplete)
+        assertEquals(PaykitPaymentRequestTarget(COUNTERPARTY), result.target)
     }
 
     @Test

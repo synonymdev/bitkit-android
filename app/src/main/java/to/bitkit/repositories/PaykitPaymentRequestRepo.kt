@@ -25,7 +25,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -60,7 +59,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -264,7 +262,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "PaykitPaymentRequestRepo"
-        private val TARGET_DISCOVERY_TIMEOUT = 5.seconds
     }
 
     private val operationMutex = Mutex()
@@ -1165,31 +1162,27 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val failedPublicKeys = mutableSetOf<String>()
         val targets = context.savedPublicKeys.mapNotNull { publicKey ->
             if (publicKey !in context.linkedPublicKeys) return@mapNotNull null
-            val lookup = withTimeoutOrNull(TARGET_DISCOVERY_TIMEOUT) {
-                runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey) }
-            }
-            if (lookup == null) {
-                isComplete = false
-                failedPublicKeys += publicKey
-                Logger.warn(
-                    "Timed out inspecting payment request support for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
-                    context = TAG,
-                )
-                return@mapNotNull previousTargets[publicKey]
-            }
+            val lookup = runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey) }
             val capable = lookup
                 .onFailure {
-                    isComplete = false
-                    failedPublicKeys += publicKey
                     Logger.warn(
                         "Failed to inspect payment request support for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
                         it,
                         context = TAG,
                     )
                 }
-                .getOrElse {
-                    return@mapNotNull previousTargets[publicKey]
+                .getOrNull()
+            if (capable == null) {
+                isComplete = false
+                failedPublicKeys += publicKey
+                if (lookup.isSuccess) {
+                    Logger.warn(
+                        "Timed out inspecting request support for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
+                        context = TAG,
+                    )
                 }
+                return@mapNotNull previousTargets[publicKey]
+            }
             if (!capable) {
                 isComplete = false
                 return@mapNotNull null

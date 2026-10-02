@@ -729,12 +729,15 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun canReceivePaymentRequests(publicKey: String): Boolean {
+    /** Returns null when the registry lookup times out, excluding queued SDK work. */
+    suspend fun canReceivePaymentRequests(publicKey: String): Boolean? {
         isSetup.await()
         return operationLock.withLock {
-            handle().paykitAppRegistry(publicKey)?.apps?.any {
-                it.capabilities.paymentRequests && it.capabilities.outgoingPayments
-            } == true
+            withTimeoutOrNull(PAYMENT_REQUEST_DISCOVERY_TIMEOUT) {
+                handle().paykitAppRegistry(publicKey)?.apps?.any {
+                    it.capabilities.paymentRequests && it.capabilities.outgoingPayments
+                } == true
+            }
         }
     }
 
@@ -1190,6 +1193,9 @@ class PaykitSdkService @Inject constructor(
 
         /** Maximum time identity maintenance may delay its caller. */
         private val IDENTITY_REPUBLISH_WAIT_TIMEOUT = 5.seconds
+
+        /** Maximum duration of a payment-request capability lookup after acquiring the SDK lock. */
+        private val PAYMENT_REQUEST_DISCOVERY_TIMEOUT = 5.seconds
 
         fun localSecretKey(secretKeyHex: String): PubkyLocalSecretKey =
             PubkyLocalSecretKey(secretKeyHex.fromHex())
