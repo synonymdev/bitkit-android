@@ -216,6 +216,7 @@ import java.math.BigDecimal
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
@@ -268,6 +269,7 @@ class AppViewModel @Inject constructor(
     private val highBalanceSheet: HighBalanceTimedSheet,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
+    private val clock: Clock,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -754,7 +756,7 @@ class AppViewModel @Inject constructor(
                     }
             }
 
-            privatePaykitRepo.prepareSavedContacts(state.contactKeys)
+            privatePaykitRepo.scheduleSavedContactPreparation(state.contactKeys)
                 .onFailure { Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG) }
             privatePaykitRepo.pruneUnsavedContactState(state.contactKeys)
                 .onFailure { Logger.warn("Failed to prune private Paykit contact state", it, context = TAG) }
@@ -865,7 +867,7 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true) {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
-        paykitPaymentRequestRepo.refresh(processOutgoingMessages = refreshMaintenance).onSuccess {
+        paykitPaymentRequestRepo.refresh(syncPrivateMessages = refreshMaintenance).onSuccess {
             activityRepo.backfillPaykitContacts()
             presentNextIncomingPaykitPaymentRequest()
         }
@@ -887,19 +889,19 @@ class AppViewModel @Inject constructor(
             refreshIncomingPaykitPaymentRequests()
             refreshPaymentRequestTargets()
             var maintenanceIntervalIndex = 0
-            var maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS.first()
+            var nextMaintenance = clock.now() + PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
                 delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
-                maintenanceDelay -= PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL
                 if (isOnline.value != ConnectivityState.CONNECTED) continue
-                val refreshMaintenance = maintenanceDelay <= Duration.ZERO
+                val now = clock.now()
+                val refreshMaintenance = now >= nextMaintenance
                 if (refreshMaintenance) {
+                    maintenanceIntervalIndex =
+                        (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
+                    nextMaintenance = now + PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
                     if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
                     pubkyRepo.republishIdentityIfNeeded()
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
-                    maintenanceIntervalIndex =
-                        (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
-                    maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
                 }
                 refreshIncomingPaykitPaymentRequests(refreshMaintenance)
                 if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
@@ -5938,7 +5940,7 @@ class AppViewModel @Inject constructor(
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
         private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 10.seconds
-        private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
+        private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds)
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds

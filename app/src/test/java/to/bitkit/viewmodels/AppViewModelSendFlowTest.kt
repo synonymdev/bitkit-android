@@ -429,7 +429,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any())
         }.thenReturn(Result.success(Unit))
         whenever { activityRepo.setContact(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
+        whenever { privatePaykitRepo.scheduleSavedContactPreparation(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
@@ -528,6 +528,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
+        clock = object : Clock {
+            override fun now() = kotlin.time.Instant.fromEpochMilliseconds(testDispatcher.scheduler.currentTime)
+        },
     )
 
     private suspend fun emitNodeEvent(
@@ -721,20 +724,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         try {
             advanceTimeBy(30.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(paykitPaymentRequestRepo, atLeast(2)).refresh(processOutgoingMessages = true)
-            for (interval in listOf(60.seconds, 120.seconds, 120.seconds)) {
+            verify(paykitPaymentRequestRepo, atLeast(2)).refresh(syncPrivateMessages = true)
+            for (interval in listOf(60.seconds, 60.seconds, 60.seconds)) {
                 clearInvocations(pubkyRepo, paykitPaymentRequestRepo)
                 advanceTimeBy(interval.inWholeMilliseconds - 1)
                 runCurrent()
                 verify(pubkyRepo, never()).republishIdentityIfNeeded()
-                verify(paykitPaymentRequestRepo, never()).refresh(processOutgoingMessages = true)
-                verify(paykitPaymentRequestRepo, atLeast(1)).refresh(processOutgoingMessages = false)
+                verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
+                verify(paykitPaymentRequestRepo, atLeast(1)).refresh(syncPrivateMessages = false)
 
                 advanceTimeBy(1)
                 runCurrent()
                 verify(pubkyRepo).republishIdentityIfNeeded()
-                verify(paykitPaymentRequestRepo).refresh(processOutgoingMessages = true)
+                verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
             }
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `slow inbox refresh counts toward maintenance deadline`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh(true)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh(false)).doSuspendableAnswer {
+            kotlinx.coroutines.delay(25.seconds)
+            Result.success(Unit)
+        }
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            clearInvocations(pubkyRepo)
+            advanceTimeBy(44.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(pubkyRepo, never()).republishIdentityIfNeeded()
+
+            advanceTimeBy(1.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(pubkyRepo).republishIdentityIfNeeded()
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }
@@ -827,13 +855,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         try {
             runCurrent()
 
-            verify(paykitPaymentRequestRepo).refresh(processOutgoingMessages = true)
+            verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
             clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
 
             advanceTimeBy(29.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(paykitPaymentRequestRepo, atLeast(1)).refresh(processOutgoingMessages = false)
-            verify(paykitPaymentRequestRepo, never()).refresh(processOutgoingMessages = true)
+            verify(paykitPaymentRequestRepo, atLeast(1)).refresh(syncPrivateMessages = false)
+            verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
             verify(paykitPaymentProofRepo, never()).reconcile()
 
@@ -874,8 +902,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             advanceTimeBy(120.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(privatePaykitRepo, times(2)).refreshKnownSavedContactEndpoints(any(), any())
-            verify(paykitPaymentProofRepo, times(2)).reconcile()
+            verify(privatePaykitRepo, times(3)).refreshKnownSavedContactEndpoints(any(), any())
+            verify(paykitPaymentProofRepo, times(3)).reconcile()
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }
@@ -6847,7 +6875,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.retryIncomingPaymentRequest(request.id)
         advanceUntilIdle()
 
-        verify(paykitPaymentRequestRepo).refresh(processOutgoingMessages = true)
+        verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
         verify(privatePaykitRepo, atLeast(1)).beginPaymentRequest(request)
         assertEquals(request.id, sut.sendUiState.value.incomingPaymentRequestId)
         assertTrue(sut.currentSheet.value is Sheet.Send)
@@ -7275,7 +7303,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, "bitkit")
-        verify(paykitPaymentRequestRepo).refresh(processOutgoingMessages = true)
+        verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
     }
 
     @Test
@@ -8414,13 +8442,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(publicPaykitRepo).syncPaykitApp()
-        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
+        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any<Collection<String>>())
         verify(privatePaykitRepo, never()).pruneUnsavedContactState(any<Collection<String>>())
 
         pubkyContactsLoadVersion.value = 1L
         advanceUntilIdle()
 
-        verify(privatePaykitRepo).prepareSavedContacts(any<Collection<String>>(), any())
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(any<Collection<String>>())
         verify(privatePaykitRepo).pruneUnsavedContactState(any<Collection<String>>())
     }
 
@@ -8448,7 +8476,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
-        verify(privatePaykitRepo).prepareSavedContacts(emptySet<String>(), false)
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(emptySet<String>())
         verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
     }
 
