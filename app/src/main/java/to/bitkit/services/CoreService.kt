@@ -623,6 +623,7 @@ class ActivityService(
             complete = complete && hydrated
             if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
             if (updated != null && !cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) {
+                if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
                 updateActivity(activityId = activity.rawId(), activity = updated)
                 changed = true
             }

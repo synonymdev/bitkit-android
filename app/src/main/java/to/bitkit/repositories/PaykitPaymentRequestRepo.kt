@@ -818,6 +818,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
             if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
+            if (forExecution && !hasCurrentExecutionContext(request)) {
+                throw PaykitPaymentRequestError.RequestUnavailable
+            }
         }
     }
 
@@ -885,7 +888,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 is PaykitException.Transport,
                 is PaykitException.Storage,
                 is PaykitException.Identity,
-                is PaykitException.ConcurrentUpdate -> true
+                is PaykitException.ConcurrentUpdate,
+                is PaykitException.SharedStateBusy -> true
                 else -> false
             }
             if (!alreadySaved && !uncertain) {
