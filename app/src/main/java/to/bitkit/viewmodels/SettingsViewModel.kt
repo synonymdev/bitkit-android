@@ -150,6 +150,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val isPubkyAuthenticated = pubkyRepo.isAuthenticated
+    val pubkyIdentityExists = pubkyRepo.identityExists
     val hasPubkyContacts = pubkyRepo.contacts.map { it.isNotEmpty() }
         .asStateFlow(initialValue = false)
 

@@ -77,6 +77,7 @@ class SettingsViewModelTest : BaseUnitTest() {
             Unit
         }
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.identityExists).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }.thenReturn(Result.success(Unit))
