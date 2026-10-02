@@ -416,7 +416,7 @@ class PrivatePaykitRepo @Inject constructor(
                 .filter {
                     it.methodId.rawValue in eligible && (it.methodId == MethodId.Bolt11 || it.methodId.isOnchain)
                 }
-            val payable = privatePayableEndpoints(candidates, publicKey)
+            val payable = privatePayableEndpoints(candidates, publicKey, allowUsedOnchainAddress = false)
             allowancePayment(
                 request = request,
                 payable = payable,
