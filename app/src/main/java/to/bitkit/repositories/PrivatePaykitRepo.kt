@@ -320,6 +320,7 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
     suspend fun removePublishedEndpointsForCleanup(context: String): Result<Unit> = withContext(serializedDispatcher) {
+        clearInitialLinkBurst()
         runSuspendCatching {
             updateContactSharingCleanupPending(true)
             removePublishedEndpoints().getOrThrow()

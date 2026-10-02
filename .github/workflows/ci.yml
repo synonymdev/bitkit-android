@@ -91,7 +91,7 @@ jobs:
 
     steps:
       - name: Comment APK link on PR
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           ARTIFACT_URL: ${{ needs.build.outputs.artifact-url }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
