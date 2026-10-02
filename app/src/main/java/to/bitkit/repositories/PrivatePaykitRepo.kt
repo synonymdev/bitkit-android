@@ -191,6 +191,10 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
 
+    suspend fun awaitContactPreparation(): Unit = withContext(serializedDispatcher) {
+        preparationJob?.join()
+    }
+
     private fun scheduleContactPreparation(publicKeys: Collection<String>, forceRefreshLightning: Boolean = false) {
         pendingPreparationKeys.addAll(publicKeys.filter { forceRefreshLightning || it !in activePreparationKeys })
         pendingForceRefreshLightning = pendingForceRefreshLightning || forceRefreshLightning
@@ -988,8 +992,14 @@ class PrivatePaykitRepo @Inject constructor(
                     preparedKeys += publicKey
                 }.onFailure {
                     Logger.warn("Failed to prepare private Paykit link during '$reason'", it, context = TAG)
-                    if (it is PaykitException.NotFound || it is PaykitException.Transport) {
+                    val hasNoHandshake = it is PaykitException.Transport && runSuspendCatching {
+                        val state = paykitSdkService.linkedPeers().firstOrNull { it.counterparty == publicKey }?.state
+                        state == null || state == LinkedPeerState.NOT_LINKED
+                    }.getOrDefault(false)
+                    if (it is PaykitException.NotFound || hasNoHandshake) {
                         unavailableLinkRetryAt[publicKey] = clock.now() + unavailableLinkRetryDelay
+                    } else if (it is PaykitException.Transport) {
+                        unavailableLinkRetryAt.remove(publicKey)
                     }
                     if (it !is PaykitException.NotFound) linkRetryKeys += publicKey
                 }
@@ -1137,8 +1147,12 @@ class PrivatePaykitRepo @Inject constructor(
                     )
                 }
             }
-            paykitSdkService.processPendingPrivateMessages()
-            paykitSdkService.receivePrivateMessagesFromLinkedPeers()
+            if (paykitSdkService.pendingOutboundPrivateCounterparties().isNotEmpty()) {
+                paykitSdkService.processPendingPrivateMessages()
+            }
+            if (paykitSdkService.linkedPeers().any { it.state == LinkedPeerState.LINKED }) {
+                paykitSdkService.receivePrivateMessagesFromLinkedPeers()
+            }
         }.onFailure {
             Logger.warn("Failed to process pending private Paykit messages during '$reason'", it, context = TAG)
         }
