@@ -214,7 +214,7 @@ class PrivatePaykitRepo @Inject constructor(
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             if (!canPublishPrivateEndpoints()) {
-                prepareRelevantPrivateLinksIfAvailable(knownSavedContactKeys, reason)
+                prepareRelevantPrivateLinksIfAvailable(knownSavedContactKeys.toList(), reason)
                 return@runSuspendCatching
             }
             publishLocalEndpoints(
