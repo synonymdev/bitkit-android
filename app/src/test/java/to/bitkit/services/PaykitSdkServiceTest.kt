@@ -28,16 +28,21 @@ import com.synonym.paykit.PublicContactSharingPolicy
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -63,13 +68,66 @@ import to.bitkit.utils.AppError
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 class PaykitSdkServiceTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `request discovery timeout excludes time queued for the SDK`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val releaseContacts = CompletableDeferred<Unit>()
+        whenever { sdk.contactRecords() }.doSuspendableAnswer {
+            releaseContacts.await()
+            emptyList()
+        }
+        whenever { sdk.paykitAppRegistry(RING_PUBKY) }.thenReturn(
+            PaykitAppRegistry(
+                1u,
+                null,
+                listOf(PaykitApp("bitkit", "Bitkit", PaykitAppCapabilities(true, true, false, true))),
+                null,
+                emptyMap(),
+            ),
+        )
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val contacts = async { service.contactRecords() }
+        runCurrent()
+        val discovery = async { service.canReceivePaymentRequests(RING_PUBKY) }
+        advanceTimeBy(6.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertFalse(discovery.isCompleted)
+        verify(sdk, never()).paykitAppRegistry(any())
+        releaseContacts.complete(Unit)
+        contacts.await()
+        assertEquals(true, discovery.await())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `request discovery bounds registry lookup and propagates cancellation`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever { sdk.paykitAppRegistry(RING_PUBKY) }.doSuspendableAnswer { awaitCancellation() }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val discovery = async { service.canReceivePaymentRequests(RING_PUBKY) }
+        advanceTimeBy(5.seconds.inWholeMilliseconds)
+        runCurrent()
+        assertNull(discovery.await())
+
+        val cancelled = async { service.canReceivePaymentRequests(RING_PUBKY) }
+        runCurrent()
+        cancelled.cancel()
+        assertFailsWith<CancellationException> { cancelled.await() }
+        doReturn(null).whenever(sdk).paykitAppRegistry(RING_PUBKY)
+        assertEquals(false, service.canReceivePaymentRequests(RING_PUBKY))
     }
 
     @Test
