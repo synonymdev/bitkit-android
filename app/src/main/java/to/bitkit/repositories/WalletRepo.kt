@@ -33,6 +33,7 @@ import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
+import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
@@ -285,6 +286,12 @@ class WalletRepo @Inject constructor(
         Logger.debug("Sync $sourceLabel completed at block height=$endHeight", context = TAG)
 
         result
+    }
+
+    /** Re-derives the channel-based Spending limit alone, without the balances call of [syncBalances]. */
+    suspend fun refreshMaxSendLightning() = withContext(bgDispatcher) {
+        val channels = lightningRepo.getChannels() ?: return@withContext
+        _balanceState.update { it.copy(maxSendLightningSats = channels.totalNextOutboundHtlcLimitSats()) }
     }
 
     suspend fun syncBalances() {

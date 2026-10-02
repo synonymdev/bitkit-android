@@ -309,6 +309,11 @@ class AppViewModel @Inject constructor(
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
     private fun mainScreenEffect(effect: MainScreenEffect) = viewModelScope.launch { _mainScreenEffect.emit(effect) }
 
+    private suspend fun waitForUsableChannels() {
+        lightningRepo.waitForUsableChannels()
+        walletRepo.refreshMaxSendLightning()
+    }
+
     private val sendEvents = MutableSharedFlow<SendEvent>()
     private var amountContinuePending = false
     private var fundingSourceSwitchPending = false
@@ -2296,7 +2301,7 @@ class AppViewModel @Inject constructor(
                     )
                     return@takeIf false
                 }
-                lightningRepo.waitForUsableChannels()
+                waitForUsableChannels()
                 val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                 if (!canSend) {
                     val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
@@ -3395,7 +3400,7 @@ class AppViewModel @Inject constructor(
 
         if (incomingPaymentRequest != null) {
             if (lnInvoice != null) {
-                lightningRepo.waitForUsableChannels()
+                waitForUsableChannels()
                 if (!lightningRepo.canSend(amount) && amount <= maxSendOnchain) {
                     _sendUiState.update { it.copy(payMethod = SendMethod.ONCHAIN) }
                 }
@@ -3613,7 +3618,7 @@ class AppViewModel @Inject constructor(
         )
         if (quickPayHandled) return
 
-        lightningRepo.waitForUsableChannels()
+        waitForUsableChannels()
         if (!lightningRepo.canSend(amount)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = amount.safe() - maxSendLightning.safe()
@@ -3682,7 +3687,7 @@ class AppViewModel @Inject constructor(
         }
         val paymentAmount = incomingAmount ?: displaySats
 
-        lightningRepo.waitForUsableChannels()
+        waitForUsableChannels()
         if (!lightningRepo.canSend(paymentAmount.coerceAtLeast(1u))) {
             toast(
                 type = Toast.ToastType.WARNING,

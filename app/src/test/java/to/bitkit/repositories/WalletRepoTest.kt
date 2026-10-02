@@ -295,6 +295,37 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refreshMaxSendLightning should update only the spending limit from the node channels`() = test {
+        val syncedState = BalanceState(totalOnchainSats = 100_000u, maxSendLightningSats = 0u)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(syncedState))
+        sut.syncBalances()
+        val recovered = mock<ChannelDetails> {
+            on { isChannelReady } doReturn true
+            on { isUsable } doReturn true
+            on { nextOutboundHtlcLimitMsat } doReturn 2_000_000u
+        }
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(recovered))
+
+        sut.refreshMaxSendLightning()
+
+        assertEquals(2_000u, sut.balanceState.value.maxSendLightningSats)
+        assertEquals(100_000u, sut.balanceState.value.totalOnchainSats)
+        verify(lightningRepo, never()).getBalances()
+    }
+
+    @Test
+    fun `refreshMaxSendLightning should keep the spending limit when the node is not running`() = test {
+        val syncedState = BalanceState(maxSendLightningSats = 1_000u)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(syncedState))
+        sut.syncBalances()
+        whenever(lightningRepo.getChannels()).thenReturn(null)
+
+        sut.refreshMaxSendLightning()
+
+        assertEquals(1_000u, sut.balanceState.value.maxSendLightningSats)
+    }
+
+    @Test
     fun `refreshBip21ForEvent should not refresh for other events`() = test {
         sut.refreshBip21ForEvent(
             Event.PaymentSuccessful(
