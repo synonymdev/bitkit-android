@@ -1018,8 +1018,7 @@ class AppViewModel @Inject constructor(
             refreshPaymentRequestTargets()
             INITIAL_PAYKIT_SYNC_RETRY_DELAYS.forEach {
                 delay(it)
-                refreshIncomingPaykitPaymentRequests()
-                refreshPaymentRequestTargets()
+                refreshIncomingPaykitPaymentRequests(refreshMaintenance = false)
             }
         }
     }

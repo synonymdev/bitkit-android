@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaykitException
@@ -130,6 +131,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }
             .thenReturn(privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY)))
         whenever { paykitSdkService.linkedPeers() }.thenReturn(emptyList())
+        whenever { paykitSdkService.ensureLinkWithPeer(any(), any()) }.thenAnswer {
+            LinkedPeerHandshakeReport(it.getArgument(0), LinkedPeerState.LINKED, 1uL, null)
+        }
         whenever { paykitSdkService.pendingOutboundPrivateCounterparties() }.thenReturn(emptyList())
         whenever { paykitSdkService.clearPrivatePaymentList(any()) }.thenReturn(privateListDeliveryReport())
         whenever { publicPaykitRepo.beginPayment(any()) }
@@ -156,6 +160,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
 
         val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
 
@@ -180,6 +185,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             true,
             cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList,
         )
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
     }
 
     @Test
@@ -218,6 +226,31 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verifyBlocking(paykitSdkService) { ensureLinkWithPeer(OTHER_CONTACT_KEY) }
         verifyBlocking(paykitSdkService, never()) { ensureLinkWithPeer(CONTACT_KEY) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `initial link burst stops after linking and delivering pending messages`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(listOf(CONTACT_KEY))
+        clearInvocations(paykitSdkService)
+        advanceTimeBy(2_000)
+        runCurrent()
+        verify(paykitSdkService, atLeast(1)).processPendingPrivateMessages()
+
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(emptyList())
+        advanceTimeBy(2_000)
+        runCurrent()
+        clearInvocations(paykitSdkService)
+        advanceTimeBy(120_000)
+        runCurrent()
+        verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any())
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
         sut.closeAndClear()
     }
 
