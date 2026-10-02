@@ -490,7 +490,7 @@ class WalletViewModel @Inject constructor(
     }
 
     suspend fun refreshChannelsAndPeers() {
-        lightningRepo.refreshChannelsAndPeers().onSuccess { walletRepo.refreshMaxSendLightning() }
+        lightningRepo.refreshChannelsAndPeers(onRefreshed = walletRepo::refreshMaxSendLightning)
     }
 
     /**

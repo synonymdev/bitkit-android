@@ -1344,6 +1344,26 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refreshChannelsAndPeers runs the callback right after publishing the channels and fails with it`() = test {
+        val old = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(old))
+        startNodeForTesting()
+        val recovered = old.copy(isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(recovered))
+        var seen: List<ChannelDetails>? = null
+
+        val result = sut.refreshChannelsAndPeers { seen = sut.lightningState.value.channels }
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(recovered), seen)
+
+        val failed = sut.refreshChannelsAndPeers { error("callback failed") }
+
+        assertTrue(failed.isFailure)
+        assertEquals(listOf(recovered), sut.lightningState.value.channels)
+    }
+
+    @Test
     fun `wipeStorage should stop node and call service wipe`() = test {
         startNodeForTesting()
         whenever(lightningService.stop()).thenReturn(Unit)

@@ -171,6 +171,7 @@ class LightningRepo @Inject constructor(
      */
     private val configChangeMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
+    private val refreshFailureLogged = AtomicBoolean(false)
 
     init {
         observeConnectivityForSyncRetry()
@@ -1675,8 +1676,10 @@ class LightningRepo @Inject constructor(
     /**
      * Re-reads channels and peers from the running node, leaving balances as they are (see [syncState]).
      * A peer reconnecting makes a channel usable again without any node event, so callers poll this.
+     * [onRefreshed] runs right after the new channels are published, in the same uninterruptible block,
+     * so state derived from them cannot fall behind them.
      */
-    suspend fun refreshChannelsAndPeers(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun refreshChannelsAndPeers(onRefreshed: () -> Unit = {}): Result<Unit> = withContext(bgDispatcher) {
         if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
         runCatching {
             _lightningState.update {
@@ -1685,8 +1688,13 @@ class LightningRepo @Inject constructor(
                     channels = getChannels().orEmpty().toImmutableList(),
                 )
             }
+            onRefreshed()
+        }.onSuccess {
+            refreshFailureLogged.set(false)
         }.onFailure {
-            Logger.warn("Failed to re-read channels and peers", it, context = TAG)
+            if (refreshFailureLogged.compareAndSet(false, true)) {
+                Logger.warn("Failed to re-read channels and peers", it, context = TAG)
+            }
         }
     }
 

@@ -29,6 +29,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.BalanceState
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
@@ -295,30 +296,42 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `refreshMaxSendLightning should update only the spending limit from the node channels`() = test {
-        val syncedState = BalanceState(totalOnchainSats = 100_000u, maxSendLightningSats = 0u)
-        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(syncedState))
-        sut.syncBalances()
-        val recovered = mock<ChannelDetails> {
-            on { isChannelReady } doReturn true
-            on { isUsable } doReturn true
-            on { nextOutboundHtlcLimitMsat } doReturn 2_000_000u
+    fun `refreshMaxSendLightning should derive the spending limit from the published channels without reading the node`() =
+        test {
+            val syncedState = BalanceState(totalOnchainSats = 100_000u, maxSendLightningSats = 0u)
+            whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(syncedState))
+            sut.syncBalances()
+            val recovered = mock<ChannelDetails> {
+                on { isChannelReady } doReturn true
+                on { isUsable } doReturn true
+                on { nextOutboundHtlcLimitMsat } doReturn 2_000_000u
+            }
+            whenever(lightningRepo.lightningState).thenReturn(
+                MutableStateFlow(
+                    LightningState(
+                        nodeLifecycleState = NodeLifecycleState.Running,
+                        channels = listOf(recovered).toImmutableList(),
+                    )
+                )
+            )
+            whenever(lightningRepo.getChannels()).thenThrow(IllegalStateException("read failed"))
+
+            sut.refreshMaxSendLightning()
+
+            assertEquals(2_000u, sut.balanceState.value.maxSendLightningSats)
+            assertEquals(100_000u, sut.balanceState.value.totalOnchainSats)
+            verify(lightningRepo, never()).getChannels()
+            verify(lightningRepo, never()).getBalances()
         }
-        whenever(lightningRepo.getChannels()).thenReturn(listOf(recovered))
-
-        sut.refreshMaxSendLightning()
-
-        assertEquals(2_000u, sut.balanceState.value.maxSendLightningSats)
-        assertEquals(100_000u, sut.balanceState.value.totalOnchainSats)
-        verify(lightningRepo, never()).getBalances()
-    }
 
     @Test
     fun `refreshMaxSendLightning should keep the spending limit when the node is not running`() = test {
         val syncedState = BalanceState(maxSendLightningSats = 1_000u)
         whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(syncedState))
         sut.syncBalances()
-        whenever(lightningRepo.getChannels()).thenReturn(null)
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Stopped))
+        )
 
         sut.refreshMaxSendLightning()
 

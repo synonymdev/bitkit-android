@@ -288,10 +288,11 @@ class WalletRepo @Inject constructor(
         result
     }
 
-    /** Re-derives the channel-based Spending limit alone, without the balances call of [syncBalances]. */
-    suspend fun refreshMaxSendLightning() = withContext(bgDispatcher) {
-        val channels = lightningRepo.getChannels() ?: return@withContext
-        _balanceState.update { it.copy(maxSendLightningSats = channels.totalNextOutboundHtlcLimitSats()) }
+    /** Re-derives the Spending limit from the published channels, without the balances call of [syncBalances]. */
+    fun refreshMaxSendLightning() {
+        val state = lightningRepo.lightningState.value
+        if (!state.nodeLifecycleState.isRunning()) return
+        _balanceState.update { it.copy(maxSendLightningSats = state.channels.totalNextOutboundHtlcLimitSats()) }
     }
 
     suspend fun syncBalances() {
