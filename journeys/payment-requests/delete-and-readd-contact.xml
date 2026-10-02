@@ -17,6 +17,7 @@
     <action>Move the requester app to the background</action>
     <action>On the payer, explicitly add the requester's Pubky key as a contact again</action>
     <action>While the requester remains in the background, return Home, reopen Contacts, and verify the saved contact remains visible</action>
+    <action>Keep the payer in the foreground for two minutes, then background and foreground it twice while the requester remains in the background</action>
     <action>Bring the requester app back to the foreground</action>
     <action>Keep both apps in the foreground until the private connection is established again</action>
     <action>On the requester, send a new Payment Request with the note "After readd"</action>
