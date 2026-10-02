@@ -21,6 +21,7 @@ import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.encodeToUrl
 import java.util.Locale
@@ -286,6 +287,12 @@ class PublicPaykitRepo @Inject constructor(
         publishMutex.withLock {
             requireCurrentPublicKey()
             val report = paykitSdkService.syncPublicEndpoints(desiredEndpoints)
+            report.failed.forEach { failure ->
+                Logger.warn(
+                    "Failed to sync public Paykit endpoint '${failure.identifier}': ${failure.error}",
+                    context = "PublicPaykitRepo",
+                )
+            }
             if (report.failed.isNotEmpty()) throw PublicPaykitError.PublicationFailed
         }
     }

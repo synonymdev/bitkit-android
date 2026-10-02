@@ -58,26 +58,29 @@ class ContactImportOverviewViewModel @Inject constructor(
     }
 
     fun importAll() {
+        if (_uiState.value.isImporting) return
         val contacts = _uiState.value.contacts
         if (contacts.isEmpty()) return
 
+        _uiState.update { it.copy(isImporting = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isImporting = true) }
-            pubkyRepo.importContacts(contacts.map { it.publicKey })
-                .onSuccess {
-                    pubkyRepo.clearPendingImport()
-                    _uiState.update { it.copy(isImporting = false) }
-                    _effects.emit(ContactImportOverviewEffect.ImportComplete)
-                }
-                .onFailure {
-                    Logger.error("Failed to import all contacts", it, context = TAG)
-                    _uiState.update { it.copy(isImporting = false) }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = it.message,
-                    )
-                }
+            try {
+                pubkyRepo.importContacts(contacts)
+                    .onSuccess {
+                        pubkyRepo.clearPendingImport()
+                        _effects.emit(ContactImportOverviewEffect.ImportComplete)
+                    }
+                    .onFailure {
+                        Logger.error("Failed to import all contacts", it, context = TAG)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = it.message,
+                        )
+                    }
+            } finally {
+                _uiState.update { it.copy(isImporting = false) }
+            }
         }
     }
 
