@@ -3,9 +3,7 @@ package to.bitkit.usecases
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
-import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
@@ -44,21 +42,18 @@ class RefreshContactPaykitLinkUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `refreshes contact endpoints before starting the link burst`() = test {
+    fun `refreshes contact endpoints with saved contacts`() = test {
         whenever(privatePaykitRepo.refreshSavedContactEndpoints(contactKeys.last(), contactKeys))
             .thenReturn(Result.success(Unit))
 
         val result = sut(contactKeys.last())
 
         assertTrue(result.isSuccess)
-        inOrder(privatePaykitRepo).apply {
-            verify(privatePaykitRepo).refreshSavedContactEndpoints(contactKeys.last(), contactKeys)
-            verify(privatePaykitRepo).startInitialLinkBurst(contactKeys, "contact link refresh")
-        }
+        verify(privatePaykitRepo).refreshSavedContactEndpoints(contactKeys.last(), contactKeys)
     }
 
     @Test
-    fun `stops when endpoint refresh fails`() = test {
+    fun `returns endpoint refresh failure`() = test {
         val error = IllegalStateException("Endpoint refresh failed")
         whenever(privatePaykitRepo.refreshSavedContactEndpoints(contactKeys.last(), contactKeys))
             .thenReturn(Result.failure(error))
@@ -66,6 +61,5 @@ class RefreshContactPaykitLinkUseCaseTest : BaseUnitTest() {
         val result = sut(contactKeys.last())
 
         assertEquals(error, result.exceptionOrNull())
-        verify(privatePaykitRepo, never()).startInitialLinkBurst(contactKeys, "contact link refresh")
     }
 }

@@ -23,7 +23,6 @@ class RefreshContactPaykitLinkUseCase @Inject constructor(
         runSuspendCatching {
             val savedPublicKeys = (pubkyRepo.contacts.value.map { it.publicKey } + publicKey).distinct()
             privatePaykitRepo.refreshSavedContactEndpoints(publicKey, savedPublicKeys).getOrThrow()
-            privatePaykitRepo.startInitialLinkBurst(savedPublicKeys, "contact link refresh")
         }.onFailure {
             Logger.warn(
                 "Failed to refresh the Paykit link for '${PubkyPublicKeyFormat.redacted(publicKey)}'",

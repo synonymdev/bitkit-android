@@ -436,7 +436,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any())
         }.thenReturn(Result.success(Unit))
         whenever { activityRepo.setContact(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
-        whenever(privatePaykitRepo.initialLinkBurstStarted).thenReturn(MutableSharedFlow())
         whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>()) }

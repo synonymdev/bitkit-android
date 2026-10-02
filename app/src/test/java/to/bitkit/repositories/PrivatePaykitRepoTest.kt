@@ -211,29 +211,29 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `restarting initial link burst replaces saved contact keys`() = test {
+    fun `repeated refreshes preserve pending link retry backoff`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
-
-        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        advanceTimeBy(1_000)
         runCurrent()
         clearInvocations(paykitSdkService)
 
-        sut.startInitialLinkBurst(listOf(OTHER_CONTACT_KEY), "test")
-        runCurrent()
-        clearInvocations(paykitSdkService)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
         advanceTimeBy(2_000)
         runCurrent()
-
-        verifyBlocking(paykitSdkService) { ensureLinkWithPeer(OTHER_CONTACT_KEY) }
-        verifyBlocking(paykitSdkService, never()) { ensureLinkWithPeer(CONTACT_KEY) }
+        verify(paykitSdkService, never()).ensureLinkWithPeer(CONTACT_KEY)
+        advanceTimeBy(1_000)
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
         sut.closeAndClear()
     }
 
     @Test
-    fun `initial link burst stops after linking and delivering pending messages`() = test {
+    fun `private retries stop after linking and delivering pending messages`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
-        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
 
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
@@ -255,11 +255,13 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `endpoint cleanup cancels scheduled link publication before local state is cleared`() = test {
+    fun `endpoint cleanup cancels pending link retries before local state is cleared`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
-        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
 
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
         assertTrue(sut.removePublishedEndpointsForCleanup("test").isSuccess)
         clearInvocations(pubkyService, paykitSdkService)
         advanceTimeBy(30_000)
@@ -267,22 +269,6 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(paykitSdkService, never()).ensureLinkWithPeer(CONTACT_KEY)
         verifyBlocking(paykitSdkService, never()) { syncPrivatePaymentListsWithReservations(any(), any()) }
-        sut.closeAndClear()
-    }
-
-    @Test
-    fun `restarting initial link burst with no contacts cancels retries`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
-
-        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
-        runCurrent()
-        clearInvocations(paykitSdkService)
-
-        sut.startInitialLinkBurst(emptyList(), "test")
-        advanceTimeBy(30_000)
-        runCurrent()
-
-        verifyBlocking(paykitSdkService, never()) { ensureLinkWithPeer(any(), any()) }
         sut.closeAndClear()
     }
 
@@ -680,8 +666,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY) }
         verifyBlocking(paykitSdkService, atLeast(1)) { linkedPeers() }
         verifyBlocking(paykitSdkService, times(1)) { pendingOutboundPrivateCounterparties() }
-        verifyBlocking(paykitSdkService, times(2)) { processPendingPrivateMessages() }
-        verifyBlocking(paykitSdkService, times(2)) { receivePrivateMessagesFromLinkedPeers() }
+        verifyBlocking(paykitSdkService) { processPendingPrivateMessages() }
+        verifyBlocking(paykitSdkService) { receivePrivateMessagesFromLinkedPeers() }
         assertTrue(cacheData.value.contacts.isEmpty())
     }
 
