@@ -828,15 +828,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         try {
             runCurrent()
 
-            verify(paykitPaymentRequestRepo).refresh(any())
-            clearInvocations(paykitPaymentRequestRepo)
+            verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+            clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
 
-            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            advanceTimeBy(29.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(paykitPaymentRequestRepo, atLeast(1)).refresh(syncPrivateMessages = false)
+            verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+            verify(paykitPaymentProofRepo, never()).reconcile()
+
+            advanceTimeBy(1.seconds.inWholeMilliseconds)
             runCurrent()
 
             verify(paykitPaymentRequestRepo, atLeast(2)).refresh(any())
-            clearInvocations(paykitPaymentRequestRepo)
-            clearInvocations(privatePaykitRepo, paykitPaymentProofRepo)
+            clearInvocations(paykitPaymentRequestRepo, privatePaykitRepo, paykitPaymentProofRepo)
 
             advanceTimeBy(9.seconds.inWholeMilliseconds)
             runCurrent()

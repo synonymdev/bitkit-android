@@ -231,13 +231,14 @@ class PrivatePaykitRepo @Inject constructor(
             _initialLinkBurstStarted.tryEmit(Unit)
 
             initialLinkBurstJob = retryScope.launch {
-                (listOf(kotlin.time.Duration.ZERO) + initialLinkBurstRetryDelays).forEach { retryDelay ->
+                for (retryDelay in listOf(kotlin.time.Duration.ZERO) + initialLinkBurstRetryDelays) {
                     delay(retryDelay)
                     val keys = synchronized(initialLinkBurstLock) {
                         if (generation != initialLinkBurstGeneration) return@launch
                         initialLinkBurstPublicKeys.toList()
                     }
                     refreshSavedContactEndpointsDuringInitialLinkBurst(keys, reason)
+                    if (pendingPrivateMessageDrainKeys(keys, retryMissingPeers = true).isEmpty()) break
                 }
                 synchronized(initialLinkBurstLock) {
                     if (generation != initialLinkBurstGeneration) return@launch
@@ -834,7 +835,7 @@ class PrivatePaykitRepo @Inject constructor(
                 if (link.exceptionOrNull() !is PaykitException.NotFound) linkRetryKeys += publicKey
                 continue
             }
-            linkRetryKeys += publicKey
+            if (link.getOrThrow().state != LinkedPeerState.LINKED) linkRetryKeys += publicKey
             runSuspendCatching { privatePaymentListUpdate(publicKey, forceRefreshLightning) }
                 .onSuccess { updates += it }
                 .onFailure {
@@ -854,10 +855,11 @@ class PrivatePaykitRepo @Inject constructor(
         reason: String,
         retryKeys: Collection<String>,
     ) {
-        if (retryKeys.isEmpty()) return
+        val pendingKeys = pendingPrivateMessageDrainKeys(retryKeys, retryMissingPeers = true)
+        if (pendingKeys.isEmpty()) return
 
-        drainPendingPrivateMessages(reason, advancingLinksFor = retryKeys.toList())
-        val pendingRetryKeys = pendingPrivateMessageDrainKeys(retryKeys)
+        drainPendingPrivateMessages(reason, advancingLinksFor = pendingKeys.toList())
+        val pendingRetryKeys = pendingPrivateMessageDrainKeys(pendingKeys)
         if (pendingRetryKeys.isNotEmpty()) {
             schedulePendingPrivateMessageDrainRetries(reason, retryKeys = pendingRetryKeys)
         }
@@ -1008,7 +1010,10 @@ class PrivatePaykitRepo @Inject constructor(
             pendingMessageDrainRetryKeys.toList()
         }
         if (retryKeys.isEmpty()) return@withContext
-        drainPendingPrivateMessages(reason, advancingLinksFor = retryKeys)
+        val pendingKeys = pendingPrivateMessageDrainKeys(retryKeys)
+        if (pendingKeys.isNotEmpty()) {
+            drainPendingPrivateMessages(reason, advancingLinksFor = pendingKeys.toList())
+        }
         updatePendingMessageDrainRetryKeys(retryKeys)
     }
 
@@ -1035,6 +1040,7 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun pendingPrivateMessageDrainKeys(
         retryKeys: Collection<String>,
+        retryMissingPeers: Boolean = false,
     ): Set<String> {
         val retryKeys = retryKeys.toSet()
         if (retryKeys.isEmpty()) return emptySet()
@@ -1060,7 +1066,8 @@ class PrivatePaykitRepo @Inject constructor(
 
         return retryKeys.filterTo(mutableSetOf()) { retryKey ->
             when (linkedPeers[retryKey]) {
-                LinkedPeerState.LINKED, null -> retryKey in pendingOutbound
+                LinkedPeerState.LINKED -> retryKey in pendingOutbound
+                null -> retryMissingPeers || retryKey in pendingOutbound
                 LinkedPeerState.BLOCKED, LinkedPeerState.UNKNOWN -> false
                 else -> true
             }
