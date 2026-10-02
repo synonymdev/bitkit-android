@@ -11,6 +11,7 @@
     <action>Verify the friend count excludes your own profile</action>
     <action>Tap Import All</action>
     <action>Verify the import finishes and the Let Your Contacts Pay You screen appears</action>
+    <action>Tap Continue and verify the screen finishes without waiting for every contact to connect</action>
     <action>Return Home and open Contacts from the menu</action>
     <action>Verify the prepared contacts, including Pubky-only profiles, are present with their preview names</action>
     <action>Verify your own profile is absent from Contacts</action>

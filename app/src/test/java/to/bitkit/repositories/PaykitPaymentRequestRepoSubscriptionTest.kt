@@ -210,7 +210,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         checking.await()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
             .thenReturn(listOf(record.copy(state = PaymentRequestLifecycleState.CANCELED)))
-        sut.refresh(processOutgoingMessages = false).getOrThrow()
+        sut.refresh(syncPrivateMessages = false).getOrThrow()
         checked.complete(Unit)
 
         assertTrue(authorization.await().isFailure)

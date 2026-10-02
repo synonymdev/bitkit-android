@@ -26,10 +26,11 @@ Rejected fixture shapes stay in unit tests because Bitkit intentionally does not
 
 ## Foreground synchronization
 
-Bitkit receives private messages and refreshes shared request state every 10 seconds.
-Outbound retries, endpoint publication, and target discovery run on startup, explicit refreshes,
-and maintenance rounds that back off from 30 to 60 to 120 seconds.
-While foregrounded and online, new peer messages are checked on the next inbox poll, plus synchronization time.
+Bitkit checks shared request state every 10 seconds while foregrounded and online.
+Private-message intake, outbound retries, endpoint publication, and target discovery run on startup,
+explicit refreshes, and maintenance rounds after 30 seconds, then every 60 seconds.
+Maintenance uses elapsed time, including slow requests; polling remains serialized and does not
+start catch-up rounds. New peer messages may wait for maintenance plus synchronization time.
 
 ## Accepting install
 

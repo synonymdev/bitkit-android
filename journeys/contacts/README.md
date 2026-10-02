@@ -12,6 +12,11 @@ public endpoint or app-registry update failing.
 
 Import journeys require a disposable identity with a known following list. They save local Bitkit contacts; payment sharing remains a separate step.
 
+Continue waits for public payment setup, not private linking with every imported contact.
+Private preparation runs in the background. Repeat Import All with a large following list containing
+unavailable profiles, then delete a contact while preparation is running. It must not be republished
+after deletion. Unavailable private-link lookups are retried after five minutes rather than on each refresh.
+
 For Import All, include the identity's own key in the following list. Repeat with a spelling that changes only the final z-base32 padding bits, which still represents the same 32-byte key. The preview friend count and saved contacts exclude that identity, while the other follows import normally. Carry the same self-follow checks and padding-alias repeat in the matching iOS journey.
 
 Network and storage fault injection are outside journey-runner capabilities. Manually disable connectivity after the preview has loaded: importing the prepared contacts must still finish. Simulate a failed local save: stay on import, preserve successful saves, and retry only missing contacts without claiming complete success. On Android, a failed Continue on the payment-sharing screen should offer recovery guidance and leave saved contacts intact.
