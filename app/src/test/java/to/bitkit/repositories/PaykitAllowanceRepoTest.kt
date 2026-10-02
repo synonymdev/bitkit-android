@@ -11,6 +11,8 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -31,6 +33,7 @@ import to.bitkit.repositories.PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.SubscriptionClockOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -189,6 +192,26 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.refresh()
 
         assertFalse(sut.coversRequest(fixtures.paymentRequest()))
+    }
+
+    @Test
+    fun `coverage ignores the subscription clock offset`() = test {
+        SubscriptionClockOffset.setOffsetDays(400)
+        assumeTrue(
+            "The subscription clock offset is unavailable in this build",
+            SubscriptionClockOffset.offsetDays == 400,
+        )
+        records = listOf(fixtures.record(terms = fixtures.terms(expiresAt = (fixtures.now + 30.days).toString())))
+
+        sut.activate(identity)
+
+        assertTrue(sut.coversRequest(fixtures.paymentRequest()), "The allowance still has 30 days in real time")
+        assertFalse(sut.coversRequest(fixtures.paymentRequest(counterparty = fixtures.otherCounterpartyKey)))
+    }
+
+    @After
+    fun resetSubscriptionClockOffset() {
+        SubscriptionClockOffset.setOffsetDays(0)
     }
 
     @Test

@@ -18,6 +18,8 @@ import com.synonym.paykit.PaymentExecutionMode
 import com.synonym.paykit.PaymentExecutionStatus
 import com.synonym.paykit.PaymentOccurrenceKey
 import com.synonym.paykit.PaymentOccurrenceRecord
+import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
@@ -27,10 +29,12 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.SubscriptionClockOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -357,6 +361,28 @@ class PaykitAllowanceTest : BaseUnitTest() {
         assertEquals(PaykitAllowance.Status.EXPIRED, allowance.status(fixtures.now + 30.days))
         assertFalse(PaykitAllowanceCapacity.fits(1uL, allowance, attempts, fixtures.now))
         assertTrue(PaykitAllowanceCapacity.fits(1uL, allowance, attempts, Instant.parse("2026-10-01T00:00:00Z")))
+    }
+
+    @Test
+    fun `status and capacity ignore the subscription clock offset`() {
+        SubscriptionClockOffset.setOffsetDays(365)
+        assumeTrue(
+            "The subscription clock offset is unavailable in this build",
+            SubscriptionClockOffset.offsetDays == 365,
+        )
+        assertTrue(SubscriptionClockOffset.subscriptionNow() > Clock.System.now() + 364.days)
+
+        val allowance = fixtures.allowance(expiresAt = fixtures.now + 30.days)
+        val attempts = listOf(fixtures.capacityAttempt(sats = 50_000uL, at = "2026-09-10T10:00:00Z"))
+
+        assertEquals(PaykitAllowance.Status.ACTIVE, allowance.status(fixtures.now))
+        assertEquals(50_000uL, fixtures.usedSats(attempts))
+        assertFalse(PaykitAllowanceCapacity.fits(1uL, allowance, attempts, fixtures.now))
+    }
+
+    @After
+    fun resetSubscriptionClockOffset() {
+        SubscriptionClockOffset.setOffsetDays(0)
     }
 
     // endregion
