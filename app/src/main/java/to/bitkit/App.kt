@@ -15,6 +15,7 @@ import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.services.BluetoothInit
 import to.bitkit.services.PubkyAuthHandlerRegistrar
+import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
 import to.bitkit.utils.SubscriptionClockOffsetSync
 import javax.inject.Inject
@@ -42,6 +43,8 @@ internal open class App : Application(), Configuration.Provider {
             .build()
 
     override fun onCreate() {
+        // Runs before super.onCreate(), where Hilt starts building services that open TLS connections
+        Crypto.installSecurityProvider()
         super.onCreate()
         Env.initAppStoragePath(filesDir.absolutePath)
         installUncaughtExceptionLogger()
