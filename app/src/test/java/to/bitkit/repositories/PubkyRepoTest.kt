@@ -2882,7 +2882,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `importContacts stops saving once the identity changes`() = test {
+    fun `importContacts stops saving quietly once the identity changes`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
         val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
@@ -2904,6 +2904,7 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService, never()) { saveContact(eq(VALID_CONTACT_KEY_B), any(), anyOrNull(), any(), any()) }
         assertTrue(sut.contacts.value.isEmpty())
         assertFalse(sut.isImportingContacts.value)
+        assertNull(sut.contactImportFailure.value)
     }
 
     @Test

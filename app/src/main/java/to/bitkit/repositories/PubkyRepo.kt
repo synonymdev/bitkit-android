@@ -1108,15 +1108,20 @@ class PubkyRepo @Inject constructor(
      * import, so a retry saves only the missing contacts. The import runs in the repository scope, so it finishes even
      * when the caller is cancelled, stops saving once the identity changes, and clears the pending import once it
      * succeeds. A success bumps [contactImportVersion] and a failure sets [contactImportFailure], so both reach the app
-     * after the import screens are gone.
+     * after the import screens are gone. An import stopped by an identity change, such as a sign-out, reports nothing.
      */
     suspend fun importContacts(profiles: List<PubkyProfile>): Result<Unit> =
         scope.async(start = CoroutineStart.UNDISPATCHED) {
+            val owner = _publicKey.value
             activeContactImports.update { it + 1 }
             try {
                 saveImportedContacts(profiles)
                     .onSuccess { _contactImportVersion.update { it + 1 } }
                     .onFailure { error ->
+                        if (_publicKey.value != owner) {
+                            Logger.info("Stopped a contact import after the identity changed", context = TAG)
+                            return@onFailure
+                        }
                         Logger.error("Failed to import contacts", error, context = TAG)
                         _contactImportFailure.update { error }
                     }
