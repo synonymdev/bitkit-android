@@ -1,0 +1,16 @@
+<journey name="subscription cancellation during confirmation">
+  <description>
+    Requires a linked regtest issuer and a payer funded for a 5,000-sat on-chain payment.
+    The issuer can cancel an accepted recurring request with a fixed P2WPKH endpoint and no
+    payment deadline. Verifies cancellation while confirmation is open. Cancellation after payment
+    preparation or during an authorization lookup is covered by unit tests.
+  </description>
+  <actions>
+    <action>Have the issuer propose a monthly subscription for 5,000 sats with no payment deadline and an explicit regtest P2WPKH endpoint</action>
+    <action>Accept the proposal in Bitkit and open its unpaid period to the send confirmation screen without confirming payment</action>
+    <action>Have the issuer cancel the subscription and keep Bitkit foregrounded until the payer's request state or logs confirm receipt of the cancellation</action>
+    <action>If the send confirmation is still open, try to confirm payment and verify it is refused</action>
+    <action>Verify no transaction to the request's receiving address was broadcast and no payment proof was created for the period</action>
+    <action>Return to Subscriptions and verify the canceled subscription offers no action to pay its unpaid period</action>
+  </actions>
+</journey>

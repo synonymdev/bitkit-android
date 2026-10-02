@@ -1342,13 +1342,17 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun removePublishedEndpointsLocked(publicKeys: Collection<String>? = null): Result<Unit> =
         runSuspendCatching {
-            val linkedPublicKeys = paykitSdkService.linkedPeers()
+            val peers = paykitSdkService.linkedPeers()
+            val linkedPublicKeys = peers
                 .filter { it.state != LinkedPeerState.NOT_LINKED }
                 .mapNotNull { normalizedPublicKey(it.counterparty) }
                 .toSet()
+            val discoveredPublicKeys = peers
+                .filter { it.state == LinkedPeerState.LINKED }
+                .mapNotNull { normalizedPublicKey(it.counterparty) }
             val keys = publicKeys ?: (
                 knownSavedContactKeys + ensureState().contacts.keys + pendingDeletedContactCleanupPublicKeys() +
-                    linkedPublicKeys
+                    discoveredPublicKeys
                 )
             val normalizedBatch = normalizedPublicKeyBatch(keys)
             discardInvalidCleanupKeys(normalizedBatch.invalidKeys)

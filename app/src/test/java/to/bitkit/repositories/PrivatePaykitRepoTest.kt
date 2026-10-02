@@ -377,10 +377,15 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `full cleanup discovers remote peers and retries failed discovery without local state`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        val recoveringPublicKey = "pubky6rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         var failLookup = true
         whenever(paykitSdkService.linkedPeers()).thenAnswer {
             if (failLookup) throw AppError("Peer lookup unavailable")
-            listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED))
+            listOf(
+                linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED),
+                linkedPeer(OTHER_CONTACT_KEY, LinkedPeerState.LINKING),
+                linkedPeer(recoveringPublicKey, LinkedPeerState.RECOVERY_REQUIRED),
+            )
         }
 
         assertTrue(sut.disableSharingAndPruneUnsavedContactState(emptyList()).isFailure)
@@ -392,6 +397,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.retryPendingEndpointRemoval(emptyList()).getOrThrow()
 
         verify(paykitSdkService).clearPrivatePaymentList(CONTACT_KEY)
+        verify(paykitSdkService, never()).clearPrivatePaymentList(OTHER_CONTACT_KEY)
+        verify(paykitSdkService, never()).clearPrivatePaymentList(recoveringPublicKey)
         assertFalse(cacheData.value.cleanupPending)
     }
 

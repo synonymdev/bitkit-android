@@ -788,6 +788,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         for (error in listOf(
             PaykitException.Transport("transport_error", "response lost"),
             PaykitException.ConcurrentUpdate("concurrent_update", "response read locked"),
+            PaykitException.SharedStateBusy("shared_state_busy", "response read busy"),
         )) {
             sut.clear()
             whenever(presentationStore.loadAcceptedOneTimeIds(any())).thenReturn(emptySet())
