@@ -150,6 +150,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val isPubkyAuthenticated = pubkyRepo.isAuthenticated
+    val pubkyIdentityExists = pubkyRepo.identityExists
     val hasPubkyContacts = pubkyRepo.contacts.map { it.isNotEmpty() }
         .asStateFlow(initialValue = false)
 
@@ -192,9 +193,16 @@ class SettingsViewModel @Inject constructor(
     val isDevModeEnabled = settingsStore.data.map { it.isDevModeEnabled }
         .asStateFlow(initialValue = false)
 
-    fun setIsDevModeEnabled(value: Boolean) {
+    suspend fun setIsDevModeEnabled(value: Boolean) {
+        settingsStore.update { it.copy(isDevModeEnabled = value) }
+    }
+
+    val disableAllToasts = settingsStore.data.map { it.disableAllToasts }
+        .asStateFlow(initialValue = false)
+
+    fun setDisableAllToasts(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.update { it.copy(isDevModeEnabled = value) }
+            settingsStore.update { it.copy(disableAllToasts = value) }
         }
     }
 

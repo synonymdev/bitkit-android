@@ -1,11 +1,13 @@
 package to.bitkit.ui.screens.contacts
 
 import android.content.Context
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -13,12 +15,33 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactImportOverviewViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
+
+    @Test
+    fun `pending import blocks duplicate requests and clears progress after cancellation`() = test {
+        val contacts = listOf(createProfile(publicKey = "pubkyalice"))
+        stubPendingImport(createProfile(publicKey = "pubkyself"), contacts)
+        val pending = CompletableDeferred<Result<Unit>>()
+        whenever(pubkyRepo.importContacts(contacts)).doSuspendableAnswer { pending.await() }
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.importAll()
+        sut.importAll()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isImporting)
+        verify(pubkyRepo).importContacts(contacts)
+
+        pending.cancel()
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isImporting)
+    }
 
     @Test
     fun `missing pending import redirects to pay contacts`() = test {
@@ -34,7 +57,7 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     fun `importAll clears pending import and completes`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
         stubPendingImport(profile = createProfile(publicKey = "pubkyself"), contacts = contacts)
-        whenever(pubkyRepo.importContacts(contacts.map { it.publicKey })).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.importContacts(contacts)).thenReturn(Result.success(Unit))
         val sut = createSut()
 
         val effects = mutableListOf<ContactImportOverviewEffect>()

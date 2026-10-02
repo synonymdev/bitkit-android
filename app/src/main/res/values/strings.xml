@@ -710,6 +710,7 @@
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
     <string name="profile__pay_contacts_error_invalid_payload">Payment endpoint data could not be prepared.</string>
     <string name="profile__pay_contacts_error_no_endpoint">No supported payment endpoint is available.</string>
+    <string name="profile__pay_contacts_error_retry">Could not enable contact payments. Your saved contacts are unchanged. Please try again.</string>
     <string name="profile__pay_contacts_error_session">Reconnect your Pubky profile to share payment data.</string>
     <string name="profile__pay_contacts_error_wallet">Wallet is still starting. Try again in a moment.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>

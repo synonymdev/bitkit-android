@@ -463,6 +463,12 @@ class AppViewModel @Inject constructor(
 
     private val toastManager = toastManagerProvider(viewModelScope)
 
+    // Toasts are hidden only while dev mode and the "Disable All Toasts" dev setting are both on
+    private val areToastsDisabled = settingsStore.data
+        .map { it.isDevModeEnabled && it.disableAllToasts }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     init {
         viewModelScope.launch {
             ToastEventBus.events.collect {
@@ -965,13 +971,21 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             paykitPaymentRequestRepo.pendingRequests.drop(1).collect { requests ->
                 retainPaymentRequestPresentationState(requests)
-                val activeRequest = activeIncomingPaymentRequest() ?: return@collect
-                if (isSubmittingPaymentRequest || uncertainOnchainPaymentRequestId == activeRequest.id) return@collect
+                val activeRequest = activeIncomingPaymentRequest()
                 if (
-                    currentSheet.value is Sheet.Send &&
-                    requests.none { it.id == activeRequest.id }
+                    activeRequest != null &&
+                    !isSubmittingPaymentRequest &&
+                    uncertainOnchainPaymentRequestId != activeRequest.id
                 ) {
-                    hideSheet()
+                    if (currentSheet.value is Sheet.Send && requests.none { it.id == activeRequest.id }) {
+                        hideSheet()
+                    }
+                }
+                if (
+                    isPaykitEnabled.value && paymentRequestIdentity != null &&
+                    PubkyPublicKeyFormat.matches(paymentRequestIdentity, pubkyRepo.publicKey.value)
+                ) {
+                    presentNextIncomingPaykitPaymentRequest()
                 }
             }
         }
@@ -1023,10 +1037,10 @@ class AppViewModel @Inject constructor(
             activePaymentRequestPresentationGeneration = null
         }
 
+        if (isPaymentRequestPresentationBlocked()) return
         if (
-            stopped &&
-            generation != paymentRequestPresentationGeneration &&
-            !isPaymentRequestPresentationBlocked()
+            stopped && generation != paymentRequestPresentationGeneration ||
+            paymentRequestsForPresentation()?.any { next -> requests.none { it.id == next.id } } == true
         ) {
             presentNextIncomingPaykitPaymentRequest()
         }
@@ -5048,7 +5062,10 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    val currentToast: StateFlow<Toast?> = toastManager.currentToast
+    // Hidden at display time, not enqueue time, so a toast raised together with a dev mode change follows the new state
+    val currentToast: StateFlow<Toast?> = combine(toastManager.currentToast, areToastsDisabled) { toast, disabled ->
+        toast.takeUnless { disabled }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun toast(
         type: Toast.ToastType,

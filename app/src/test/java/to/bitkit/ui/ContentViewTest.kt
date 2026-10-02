@@ -8,12 +8,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.createGraph
 import androidx.navigation.navigation
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.navigateIfNotCurrent
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
@@ -25,7 +31,94 @@ import kotlin.test.assertTrue
 
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 class ContentViewTest {
+    @Test
+    fun `profile navigation waits for identity lookup and preserves disconnected identities`() = runTest {
+        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = Routes.Home) {
+                composable<Routes.Home> {}
+                composable<Routes.Profile> {}
+                composable<Routes.ProfileIntro> {}
+                composable<Routes.PubkyChoice> {}
+            }
+        }
+        for (hasSeenIntro in listOf(false, true)) {
+            assertNull(profileDestination(identityExists = null, hasSeenIntro))
+        }
+        val cases = listOf(
+            Triple(false, false, Routes.ProfileIntro),
+            Triple(false, true, Routes.PubkyChoice),
+            Triple(true, false, Routes.Profile),
+            Triple(true, true, Routes.Profile),
+        )
+        for ((identityExists, hasSeenIntro, expected) in cases) {
+            navController.popBackStack(Routes.Home, inclusive = false)
+            val destination = requireNotNull(profileDestination(identityExists, hasSeenIntro))
+            assertEquals(expected, destination)
+            val identity = MutableStateFlow<Boolean?>(null)
+            repeat(2) { launch { navController.navigateToProfile(identity, hasSeenIntro) } }
+            runCurrent()
+            assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
+            identity.value = identityExists
+            runCurrent()
+            assertTrue(navController.currentDestination?.hasRoute(expected::class) == true)
+            val entry = navController.currentBackStackEntry
+            navController.navigateIfNotCurrent(destination)
+            assertEquals(entry, navController.currentBackStackEntry)
+        }
+        navController.popBackStack(Routes.Home, inclusive = false)
+        val identity = MutableStateFlow<Boolean?>(null)
+        launch { navController.navigateToProfile(identity, hasSeenIntro = true) }
+        runCurrent()
+        navController.navigateTo(Routes.ProfileIntro)
+        identity.value = true
+        runCurrent()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.ProfileIntro>() == true)
+    }
+
+    @Test
+    fun `contacts intro fallback awaits identity and removes intro only when still current`() = runTest {
+        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = Routes.Home) {
+                composable<Routes.Home> {}
+                composable<Routes.ContactsIntro> {}
+                composable<Routes.Profile> {}
+                composable<Routes.ProfileIntro> {}
+                composable<Routes.PubkyChoice> {}
+            }
+        }
+        for ((savedIdentity, hasSeenIntro, expected) in listOf(
+            Triple(true, false, Routes.Profile),
+            Triple(true, true, Routes.Profile),
+            Triple(false, false, Routes.ProfileIntro),
+            Triple(false, true, Routes.PubkyChoice),
+        )) {
+            navController.navigateTo(Routes.ContactsIntro)
+            val identity = MutableStateFlow<Boolean?>(null)
+            repeat(2) {
+                launch { navController.navigateToProfile(identity, hasSeenIntro) { popUpTo(Routes.Home) } }
+            }
+            runCurrent()
+            assertTrue(navController.currentDestination?.hasRoute<Routes.ContactsIntro>() == true)
+            identity.value = savedIdentity
+            runCurrent()
+            assertTrue(navController.currentDestination?.hasRoute(expected::class) == true)
+            navController.popBackStack()
+            assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
+        }
+        navController.navigateTo(Routes.ContactsIntro)
+        val identity = MutableStateFlow<Boolean?>(null)
+        launch { navController.navigateToProfile(identity, true) { popUpTo(Routes.Home) } }
+        runCurrent()
+        navController.popBackStack()
+        identity.value = true
+        runCurrent()
+        assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
+    }
+
     @Test
     fun `wallet initialization waits for successful startup after each failure`() {
         val states = listOf(
