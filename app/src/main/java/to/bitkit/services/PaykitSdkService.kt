@@ -117,6 +117,7 @@ import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -186,6 +187,11 @@ enum class PaykitReadLane {
     /** A background read over many keys; it also takes a bulk slot, so bulk reads never fill every read slot. */
     Bulk,
 }
+
+/** A public Pubky read that ran out of the timeout its caller gave it once it held a read slot. */
+class PaykitReadTimeoutError(timeout: Duration) : AppError("Public Pubky read timed out after $timeout")
+
+private class TimedRead<T>(val value: T)
 
 private class PaykitPublicReadSlots(slots: Int) {
     private val lock = Any()
@@ -677,7 +683,8 @@ class PaykitSdkService @Inject constructor(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
         lane: PaykitReadLane = PaykitReadLane.Interactive,
-    ): ContactProfileResolution? = publicRead(lane) {
+        timeout: Duration? = null,
+    ): ContactProfileResolution? = publicRead(lane, timeout) {
         it.resolveContactProfile(publicKey, PaykitReceiverPaths.WALLET, allowPubkyProfileFallback)
     }
 
@@ -1225,20 +1232,30 @@ class PaykitSdkService @Inject constructor(
      * bulk permit before its read slot, always in that order, so bulk reads hold at most [BULK_READ_PERMITS] read
      * slots and the rest stay free for interactive reads. A freed read slot goes to the oldest waiting interactive
      * read before any waiting bulk read, also one already queued for a slot, and reads of one lane start in the order
-     * they asked for a slot.
+     * they asked for a slot. A [timeout] limits only the time [block] runs once the read holds its read slot, so
+     * waiting for a slot never counts; a read that runs out is cancelled, gives back its slots and fails with
+     * [PaykitReadTimeoutError].
      */
     private suspend fun <T> publicRead(
         lane: PaykitReadLane = PaykitReadLane.Interactive,
+        timeout: Duration? = null,
         block: suspend (PaykitSdk) -> T,
     ): T {
         isSetup.await()
         return operationLock.withoutLock {
             val existing = sdk ?: operationLock.withLock { handle() }
+            val read: suspend () -> T = { withReadTimeout(timeout) { block(existing) } }
             when (lane) {
-                PaykitReadLane.Interactive -> publicReadSlots.withSlot(lane) { block(existing) }
-                PaykitReadLane.Bulk -> bulkReadPermits.withPermit { publicReadSlots.withSlot(lane) { block(existing) } }
+                PaykitReadLane.Interactive -> publicReadSlots.withSlot(lane, read)
+                PaykitReadLane.Bulk -> bulkReadPermits.withPermit { publicReadSlots.withSlot(lane, read) }
             }
         }
+    }
+
+    private suspend fun <T> withReadTimeout(timeout: Duration?, block: suspend () -> T): T {
+        if (timeout == null) return block()
+        val read = withTimeoutOrNull(timeout) { TimedRead(block()) } ?: throw PaykitReadTimeoutError(timeout)
+        return read.value
     }
 
     private fun bootstrap() = cachedBootstrap

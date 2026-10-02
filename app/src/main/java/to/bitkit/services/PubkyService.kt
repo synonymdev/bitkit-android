@@ -218,8 +218,9 @@ class PubkyService @Inject constructor(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
         lane: PaykitReadLane = PaykitReadLane.Interactive,
+        timeout: Duration? = null,
     ): ContactProfileResolution? = cancellablePublicRead {
-        paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback, lane)
+        paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback, lane, timeout)
     }
 
     suspend fun discoverRelevantReceiverPaths(

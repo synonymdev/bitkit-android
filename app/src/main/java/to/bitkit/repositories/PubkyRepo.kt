@@ -61,6 +61,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PaykitReadLane
+import to.bitkit.services.PaykitReadTimeoutError
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
@@ -70,6 +71,7 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
+import kotlin.time.Duration.Companion.seconds
 
 sealed class PubkyContactError(message: String) : AppError(message) {
     data object AlreadyExists : PubkyContactError("Contact already exists")
@@ -80,6 +82,9 @@ sealed class PubkyContactError(message: String) : AppError(message) {
 
 private fun Throwable.containsActiveSubscriptionError(): Boolean =
     generateSequence(this) { it.cause }.any { it is PubkyContactError.ActiveSubscription }
+
+private fun Throwable.isPaykitReadTimeout(): Boolean =
+    generateSequence(this) { it.cause }.any { it is PaykitReadTimeoutError }
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
 
@@ -114,6 +119,9 @@ class PubkyRepo @Inject constructor(
         private const val PUBKY_SCHEME = "pubky://"
         private const val AVATAR_MAX_SIZE = 400
         private const val AVATAR_QUALITY = 80
+
+        /** Longest one follow's profile read in the import preview may run once it has a read slot. */
+        internal val IMPORT_FOLLOW_LOOKUP_TIMEOUT = 10.seconds
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -1173,7 +1181,9 @@ class PubkyRepo @Inject constructor(
     /**
      * Looks up the signed-in identity's follows for the import overview, leaving out its own key, resolving each
      * follow's profile once and keeping a follow it cannot resolve as a placeholder. Its lookups use the interactive
-     * read lane, since the user waits on the Pubky Ring choice row until it returns.
+     * read lane, since the user waits on the Pubky Ring choice row until it returns, and each one still running
+     * [IMPORT_FOLLOW_LOOKUP_TIMEOUT] after it got its read slot is cancelled and treated as failed; waiting for a read
+     * slot does not count.
      */
     suspend fun prepareImport(): Result<Unit> = runSuspendCatching {
         clearPendingImport()
@@ -1189,12 +1199,23 @@ class PubkyRepo @Inject constructor(
                 contactKeys.map { contactPk ->
                     val prefixedKey = contactPk.ensurePubkyPrefix()
                     async {
-                        prefixedKey to resolveContactProfile(
-                            prefixedKey,
-                            retry = false,
-                            lane = PaykitReadLane.Interactive,
-                        ).onFailure {
-                            Logger.warn("Failed to resolve follow '${redacted(prefixedKey)}'", it, context = TAG)
+                        prefixedKey to runSuspendCatching {
+                            pubkyService.resolveContactProfile(
+                                publicKey = prefixedKey,
+                                allowPubkyProfileFallback = true,
+                                lane = PaykitReadLane.Interactive,
+                                timeout = IMPORT_FOLLOW_LOOKUP_TIMEOUT,
+                            )?.let(::profileFromResolution)
+                        }.onFailure {
+                            if (it.isPaykitReadTimeout()) {
+                                Logger.warn(
+                                    "Timed out resolving follow '${redacted(prefixedKey)}' after " +
+                                        "'$IMPORT_FOLLOW_LOOKUP_TIMEOUT'",
+                                    context = TAG,
+                                )
+                            } else {
+                                Logger.warn("Failed to resolve follow '${redacted(prefixedKey)}'", it, context = TAG)
+                            }
                         }.getOrNull()
                     }
                 }.awaitAll()

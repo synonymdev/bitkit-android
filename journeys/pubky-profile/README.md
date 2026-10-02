@@ -31,7 +31,9 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
   shows a spinner and both buttons are disabled. The import belongs to the app rather than the
   screen, so leaving the overview does not stop it, and an import that finishes after you left does
   not take you to Pay Contacts. `contact-import-after-leaving.xml` checks the leaving; the saving is
-  covered by `journeys/contacts`.
+  covered by `journeys/contacts`. The overview does not wait long on any one follow: on Android a
+  follow whose profile lookup runs ten seconds without an answer shows under its truncated key.
+  Waiting behind other lookups does not count towards those ten seconds.
 - **Contacts lists saved contacts at once.** Contacts shows every saved contact as soon as the saved
   records are read, under its saved name or truncated key, and fills in a name and avatar when that
   contact's profile lookup finishes; a lookup that fails leaves the row as it is. The screen-wide

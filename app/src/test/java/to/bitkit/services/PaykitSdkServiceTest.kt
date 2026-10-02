@@ -30,6 +30,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -66,9 +67,12 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("LargeClass")
@@ -76,6 +80,7 @@ class PaykitSdkServiceTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val FILE_URI = "pubky://$RING_PUBKY/pub/pubky.app/files/avatar"
+        private val READ_TIMEOUT = 10.seconds
     }
 
     @Test
@@ -657,6 +662,40 @@ class PaykitSdkServiceTest {
                 gates.values.forEach { it.complete(Unit) }
                 reads.awaitAll()
             }
+    }
+
+    @Test
+    fun `a read timeout counts only the time the read holds its slot and fails with its own error`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        val busy = List(6) { "$RING_PUBKY-busy-$it" }
+        val freeSlots = CompletableDeferred<Unit>()
+        whenever(sdk.resolveContactProfile(any(), any(), any())).doSuspendableAnswer {
+            when (it.getArgument<String>(0)) {
+                in busy -> freeSlots.await()
+                "$RING_PUBKY-stuck" -> awaitCancellation()
+            }
+            null
+        }
+        val busyReads = busy.map { async { service.resolveContactProfile(it, true) } }
+        runCurrent()
+        val start = currentTime
+
+        val timedOut = async {
+            runCatching { service.resolveContactProfile("$RING_PUBKY-stuck", true, timeout = READ_TIMEOUT) }
+        }
+        advanceTimeBy(READ_TIMEOUT * 2)
+        freeSlots.complete(Unit)
+        busyReads.awaitAll()
+        advanceTimeBy(READ_TIMEOUT - 1.milliseconds)
+        runCurrent()
+        assertFalse(timedOut.isCompleted)
+        advanceTimeBy(1.milliseconds)
+        runCurrent()
+
+        assertIs<PaykitReadTimeoutError>(timedOut.await().exceptionOrNull())
+        assertEquals((READ_TIMEOUT * 3).inWholeMilliseconds, currentTime - start)
+        assertNull(service.resolveContactProfile("$RING_PUBKY-null", true, timeout = READ_TIMEOUT))
     }
 
     @Test
