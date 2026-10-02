@@ -2907,10 +2907,17 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `importContacts clears the pending import once it succeeds`() = test {
+    fun `importContacts clears the pending import only once it succeeds`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any()))
+            .thenAnswer { throw TestAppError("Storage unavailable") }
+            .thenReturn(createContactRecord(VALID_CONTACT_KEY_A))
         assertTrue(sut.prepareImport().isSuccess)
+        assertEquals(1, sut.pendingImportContacts.value.size)
+
+        assertTrue(sut.importContacts(sut.pendingImportContacts.value).isFailure)
+        assertNotNull(sut.pendingImportProfile.value)
         assertEquals(1, sut.pendingImportContacts.value.size)
 
         assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
