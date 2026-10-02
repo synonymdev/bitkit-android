@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.contacts
 
-import android.content.Context
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -19,7 +18,6 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactImportSelectViewModelTest : BaseUnitTest() {
-    private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val isImportingContacts = MutableStateFlow(false)
 
@@ -97,7 +95,6 @@ class ContactImportSelectViewModelTest : BaseUnitTest() {
     }
 
     private fun createSut() = ContactImportSelectViewModel(
-        context = context,
         pubkyRepo = pubkyRepo,
     )
 

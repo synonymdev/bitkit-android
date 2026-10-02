@@ -2930,7 +2930,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `leaving during a failing import keeps the pending import`() = test {
+    fun `leaving during a failing import keeps the pending import and reports the failure`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
         val saveStarted = CompletableDeferred<Unit>()
@@ -2952,12 +2952,15 @@ class PubkyRepoTest : BaseUnitTest() {
         failSave.complete(Unit)
 
         assertFalse(sut.isImportingContacts.value)
+        assertEquals("Storage unavailable", sut.contactImportFailure.value?.message)
         assertEquals(0L, sut.contactImportVersion.value)
         assertNotNull(sut.pendingImportProfile.value)
         assertEquals(pending, sut.pendingImportContacts.value)
         assertTrue(sut.contacts.value.isEmpty())
 
+        sut.clearContactImportFailure()
         sut.discardPendingImport()
+        assertNull(sut.contactImportFailure.value)
         assertNull(sut.pendingImportProfile.value)
         assertTrue(sut.pendingImportContacts.value.isEmpty())
     }

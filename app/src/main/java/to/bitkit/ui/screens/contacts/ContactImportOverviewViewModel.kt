@@ -1,11 +1,9 @@
 package to.bitkit.ui.screens.contacts
 
-import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -17,23 +15,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.R
 import to.bitkit.models.PubkyProfile
-import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
-import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
 class ContactImportOverviewViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
-
-    companion object {
-        private const val TAG = "ContactImportOverviewVM"
-    }
 
     private val _uiState = MutableStateFlow(ContactImportOverviewUiState())
     val uiState: StateFlow<ContactImportOverviewUiState> = _uiState.asStateFlow()
@@ -76,16 +65,7 @@ class ContactImportOverviewViewModel @Inject constructor(
         _uiState.update { it.copy(isImporting = true) }
         viewModelScope.launch {
             try {
-                pubkyRepo.importContacts(contacts)
-                    .onSuccess { completeImport() }
-                    .onFailure {
-                        Logger.error("Failed to import all contacts", it, context = TAG)
-                        ToastEventBus.send(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.common__error),
-                            description = it.message,
-                        )
-                    }
+                pubkyRepo.importContacts(contacts).onSuccess { completeImport() }
             } finally {
                 _uiState.update { it.copy(isImporting = false) }
             }

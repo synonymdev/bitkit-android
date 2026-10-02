@@ -262,6 +262,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pubkyContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     private val pubkyContactsLoadVersion = MutableStateFlow(0L)
     private val pubkyContactsLoadCompletionVersion = MutableStateFlow(0L)
+    private val pubkyContactImportFailure = MutableStateFlow<Throwable?>(null)
     private val pendingPaykitPaymentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
@@ -340,6 +341,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             }
         }
 
+    @Test
+    fun `contact import failure shows an error toast after the import screens are gone`() = test {
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(pubkyRepo.clearContactImportFailure()).thenAnswer { pubkyContactImportFailure.value = null }
+        clearInvocations(toastManager)
+
+        pubkyContactImportFailure.value = AppError("Storage unavailable")
+        runCurrent()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Error", it.title)
+                assertEquals("Storage unavailable", it.description)
+            }
+        )
+        assertNull(pubkyContactImportFailure.value)
+    }
+
     @Suppress("LongMethod")
     private fun stubRepositories() {
         whenever(context.getString(any())).thenReturn("")
@@ -382,6 +402,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever { pubkyRepo.republishIdentityIfNeeded() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.hasIdentity() }.thenAnswer { pubkyPublicKey.value != null }

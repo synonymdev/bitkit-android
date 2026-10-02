@@ -559,6 +559,18 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            pubkyRepo.contactImportFailure.collect { error ->
+                if (error != null) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = error.message,
+                    )
+                    pubkyRepo.clearContactImportFailure()
+                }
+            }
+        }
         observeReceiveSheetInvoice()
         observeLdkNodeEvents()
         observeLightningUsableChannels()

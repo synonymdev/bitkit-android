@@ -172,6 +172,9 @@ class PubkyRepo @Inject constructor(
     private val _contactImportVersion = MutableStateFlow(0L)
     val contactImportVersion: StateFlow<Long> = _contactImportVersion.asStateFlow()
 
+    private val _contactImportFailure = MutableStateFlow<Throwable?>(null)
+    val contactImportFailure: StateFlow<Throwable?> = _contactImportFailure.asStateFlow()
+
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
 
@@ -1104,7 +1107,8 @@ class PubkyRepo @Inject constructor(
      * during contact refresh. A contact already saved is skipped, and a failed save keeps the others and fails the
      * import, so a retry saves only the missing contacts. The import runs in the repository scope, so it finishes even
      * when the caller is cancelled, stops saving once the identity changes, and clears the pending import once it
-     * succeeds, bumping [contactImportVersion].
+     * succeeds. A success bumps [contactImportVersion] and a failure sets [contactImportFailure], so both reach the app
+     * after the import screens are gone.
      */
     suspend fun importContacts(profiles: List<PubkyProfile>): Result<Unit> =
         scope.async(start = CoroutineStart.UNDISPATCHED) {
@@ -1112,6 +1116,10 @@ class PubkyRepo @Inject constructor(
             try {
                 saveImportedContacts(profiles)
                     .onSuccess { _contactImportVersion.update { it + 1 } }
+                    .onFailure { error ->
+                        Logger.error("Failed to import contacts", error, context = TAG)
+                        _contactImportFailure.update { error }
+                    }
             } finally {
                 activeContactImports.update { it - 1 }
             }
@@ -1211,6 +1219,10 @@ class PubkyRepo @Inject constructor(
     suspend fun discardPendingImport() = withContext(ioDispatcher) {
         if (activeContactImports.value > 0) return@withContext
         clearPendingImport()
+    }
+
+    fun clearContactImportFailure() {
+        _contactImportFailure.update { null }
     }
 
     // endregion

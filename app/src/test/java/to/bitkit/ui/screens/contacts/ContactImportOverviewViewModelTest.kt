@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.contacts
 
-import android.content.Context
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -27,7 +26,6 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactImportOverviewViewModelTest : BaseUnitTest() {
-    private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val isImportingContacts = MutableStateFlow(false)
     private val contactImportVersion = MutableStateFlow(0L)
@@ -113,7 +111,6 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     @Test
     fun `back during import all keeps the pending import and never opens pay contacts`() = test {
         val contacts = listOf(createProfile(publicKey = "pubkyalice"), createProfile(publicKey = "pubkybob"))
-        whenever(context.getString(any())).thenReturn("Error")
         listOf(
             "fails" to Result.failure(AppError("Storage unavailable")),
             "succeeds" to Result.success(Unit),
@@ -206,7 +203,6 @@ class ContactImportOverviewViewModelTest : BaseUnitTest() {
     }
 
     private fun createSut() = ContactImportOverviewViewModel(
-        context = context,
         pubkyRepo = pubkyRepo,
     )
 
