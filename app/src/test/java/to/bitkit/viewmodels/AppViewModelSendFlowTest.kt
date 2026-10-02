@@ -528,9 +528,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
-        clock = object : Clock {
-            override fun now() = kotlin.time.Instant.fromEpochMilliseconds(testDispatcher.scheduler.currentTime)
-        },
+        timeSource = testDispatcher.scheduler.timeSource,
     )
 
     private suspend fun emitNodeEvent(
@@ -764,6 +762,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCurrent()
             verify(pubkyRepo).republishIdentityIfNeeded()
         } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `maintenance waits for contact preparation before inbox and target refresh`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        sut.startPaykitPaymentRequestPolling()
+        val prepared = CompletableDeferred<Unit>()
+        try {
+            runCurrent()
+            whenever(privatePaykitRepo.awaitContactPreparation()).doSuspendableAnswer { prepared.await() }
+            advanceTimeBy(30.seconds.inWholeMilliseconds - 1)
+            runCurrent()
+            clearInvocations(paykitPaymentRequestRepo)
+
+            advanceTimeBy(1)
+            runCurrent()
+            verify(paykitPaymentRequestRepo, never()).refresh(any())
+            verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+
+            prepared.complete(Unit)
+            runCurrent()
+            verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
+        } finally {
+            prepared.complete(Unit)
             sut.stopPaykitPaymentRequestPolling()
         }
     }
@@ -8445,11 +8472,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any<Collection<String>>())
         verify(privatePaykitRepo, never()).pruneUnsavedContactState(any<Collection<String>>())
 
+        val prepared = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.awaitContactPreparation()).doSuspendableAnswer { prepared.await() }
+        clearInvocations(paykitPaymentRequestRepo)
         pubkyContactsLoadVersion.value = 1L
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).refresh(any())
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+
+        prepared.complete(Unit)
         advanceUntilIdle()
 
         verify(privatePaykitRepo).scheduleSavedContactPreparation(any<Collection<String>>())
         verify(privatePaykitRepo).pruneUnsavedContactState(any<Collection<String>>())
+        verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
     }
 
     @Test

@@ -13,6 +13,7 @@ import java.util.Locale
 import javax.inject.Qualifier
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.TimeSource
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -24,6 +25,9 @@ object EnvModule {
     @OptIn(ExperimentalTime::class)
     @Provides
     fun provideClock(): Clock = Clock.System
+
+    @Provides
+    fun provideTimeSource(): TimeSource = TimeSource.Monotonic
 
     @Provides
     @SubscriptionClock

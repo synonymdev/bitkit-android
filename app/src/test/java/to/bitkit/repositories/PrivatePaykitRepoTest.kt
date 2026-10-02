@@ -305,9 +305,46 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         advanceTimeBy(257_000)
         runCurrent()
+        sut.closeAndClear()
 
         verifyBlocking(paykitSdkService, atLeast(8)) { ensureLinkWithPeer(CONTACT_KEY) }
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
+    }
+
+    @Test
+    fun `private message drain receives immediately when advancement links the peer`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        var state = LinkedPeerState.LINKING
+        whenever(paykitSdkService.linkedPeers()).thenAnswer { listOf(linkedPeer(CONTACT_KEY, state)) }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).thenAnswer {
+            state = LinkedPeerState.LINKED
+            LinkedPeerHandshakeReport(CONTACT_KEY, state, 1uL, null)
+        }
+
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
         sut.closeAndClear()
+
+        verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers()
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
+    }
+
+    @Test
+    fun `private message drain processes outbound queued during advancement without a linked peer`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        var pendingOutbound = emptyList<String>()
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenAnswer { pendingOutbound }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).thenAnswer {
+            pendingOutbound = listOf(CONTACT_KEY)
+            LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKING, 1uL, null)
+        }
+
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        sut.closeAndClear()
+
+        verify(paykitSdkService).processPendingPrivateMessages()
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
     }
 
     @Test
@@ -658,6 +695,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 linkedPeer(OTHER_CONTACT_KEY, LinkedPeerState.LINKED),
             ),
         )
+        whenever { paykitSdkService.pendingOutboundPrivateCounterparties() }
+            .thenReturn(listOf(CONTACT_KEY, OTHER_CONTACT_KEY), emptyList())
 
         val result = sut.removePublishedEndpointsForCleanup("test")
 
@@ -665,7 +704,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY) }
         verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY) }
         verifyBlocking(paykitSdkService, atLeast(1)) { linkedPeers() }
-        verifyBlocking(paykitSdkService, times(1)) { pendingOutboundPrivateCounterparties() }
+        verifyBlocking(paykitSdkService, times(2)) { pendingOutboundPrivateCounterparties() }
         verifyBlocking(paykitSdkService) { processPendingPrivateMessages() }
         verifyBlocking(paykitSdkService) { receivePrivateMessagesFromLinkedPeers() }
         assertTrue(cacheData.value.contacts.isEmpty())
@@ -858,8 +897,12 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         runCurrent()
         assertTrue(linkStarted.isCompleted)
         repeat(3) { sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow() }
+        val preparation = async { sut.awaitContactPreparation() }
+        runCurrent()
+        assertFalse(preparation.isCompleted)
         resumeLink.complete(Unit)
         runCurrent()
+        preparation.await()
 
         verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
         verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false))
@@ -923,6 +966,59 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
         verify(paykitSdkService, times(2)).ensureLinkWithPeer(CONTACT_KEY)
         sut.closeAndClear()
+    }
+
+    @Test
+    fun `transport failures only defer contacts without a handshake after advancement`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        var state: LinkedPeerState? = null
+        var nextState: LinkedPeerState? = null
+        whenever(paykitSdkService.linkedPeers()).thenAnswer {
+            state?.let { listOf(linkedPeer(CONTACT_KEY, it)) } ?: emptyList<LinkedPeerRecord>()
+        }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).thenAnswer {
+            state = nextState
+            throw PaykitException.Transport("offline", "Unavailable homeserver")
+        }
+        val states = listOf(
+            null,
+            LinkedPeerState.NOT_LINKED,
+            LinkedPeerState.LINKING,
+            LinkedPeerState.RECOVERY_REQUIRED,
+        )
+        for (stateAfterFailure in states) {
+            sut = createSut()
+            state = null
+            nextState = null
+
+            sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+            nextState = stateAfterFailure
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+            advanceTimeBy(1_000)
+            runCurrent()
+            sut.closeAndClear()
+
+            val hasNoHandshake = stateAfterFailure == null || stateAfterFailure == LinkedPeerState.NOT_LINKED
+            val expectedAttempts = if (hasNoHandshake) 2 else 3
+            verify(paykitSdkService, times(expectedAttempts)).ensureLinkWithPeer(CONTACT_KEY)
+            clearInvocations(paykitSdkService)
+        }
+    }
+
+    @Test
+    fun `removed contacts do not retain unavailable link cooldown`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.NotFound("not_found", "No App Registry") }
+
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        sut.removeSavedContact(CONTACT_KEY).getOrThrow()
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        sut.prepareSavedContacts(emptyList()).getOrThrow()
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        sut.closeAndClear()
+
+        verify(paykitSdkService, times(3)).ensureLinkWithPeer(CONTACT_KEY)
     }
 
     @Test
