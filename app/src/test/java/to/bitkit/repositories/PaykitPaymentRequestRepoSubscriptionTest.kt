@@ -127,7 +127,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
-    fun `refresh maps active subscription and exposes current unpaid period`() = test {
+    fun `inbox refresh maps active subscription and exposes current unpaid period`() = test {
         val metadataText = """
             {"note":"Mobile plan","subscription":{"version":1,"description":"10 GB every month","benefits":["Roaming"]}}
         """.trimIndent()
@@ -144,8 +144,10 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             ),
         )
 
-        sut.refresh().getOrThrow()
+        sut.refresh(syncPrivateMessages = false).getOrThrow()
 
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
         val subscription = sut.subscriptions.value.single()
         assertEquals("Mobile plan", subscription.note)
         assertEquals("10 GB every month", subscription.metadata.description)
