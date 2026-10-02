@@ -875,7 +875,7 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true) {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
-        paykitPaymentRequestRepo.refresh().onSuccess {
+        paykitPaymentRequestRepo.refresh(syncPrivateMessages = refreshMaintenance).onSuccess {
             activityRepo.backfillPaykitContacts()
             presentNextIncomingPaykitPaymentRequest()
         }
