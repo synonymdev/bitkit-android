@@ -2919,12 +2919,47 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.importContacts(sut.pendingImportContacts.value).isFailure)
         assertNotNull(sut.pendingImportProfile.value)
         assertEquals(1, sut.pendingImportContacts.value.size)
+        assertEquals(0L, sut.contactImportVersion.value)
 
         assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
 
         assertNull(sut.pendingImportProfile.value)
         assertTrue(sut.pendingImportContacts.value.isEmpty())
         assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        assertEquals(1L, sut.contactImportVersion.value)
+    }
+
+    @Test
+    fun `leaving during a failing import keeps the pending import`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
+        val saveStarted = CompletableDeferred<Unit>()
+        val failSave = CompletableDeferred<Unit>()
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer {
+                saveStarted.complete(Unit)
+                failSave.await()
+                throw TestAppError("Storage unavailable")
+            }
+        assertTrue(sut.prepareImport().isSuccess)
+        val pending = sut.pendingImportContacts.value
+        val screen = launch { sut.importContacts(pending) }
+        saveStarted.await()
+
+        sut.discardPendingImport()
+        screen.cancelAndJoin()
+        assertEquals(pending, sut.pendingImportContacts.value)
+        failSave.complete(Unit)
+
+        assertFalse(sut.isImportingContacts.value)
+        assertEquals(0L, sut.contactImportVersion.value)
+        assertNotNull(sut.pendingImportProfile.value)
+        assertEquals(pending, sut.pendingImportContacts.value)
+        assertTrue(sut.contacts.value.isEmpty())
+
+        sut.discardPendingImport()
+        assertNull(sut.pendingImportProfile.value)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
     }
 
     @Test

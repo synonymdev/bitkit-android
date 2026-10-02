@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -40,6 +41,8 @@ class ContactImportOverviewViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<ContactImportOverviewEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    private var hasLeft = false
+
     init {
         viewModelScope.launch {
             val profile = pubkyRepo.pendingImportProfile.value
@@ -57,15 +60,11 @@ class ContactImportOverviewViewModel @Inject constructor(
         }
         viewModelScope.launch {
             pubkyRepo.isImportingContacts.collect { isImporting ->
-                val isImported = _uiState.value.isImporting && !isImporting &&
-                    pubkyRepo.pendingImportContacts.value.isEmpty()
-                _uiState.update {
-                    it.copy(
-                        isImporting = isImporting,
-                        shouldRedirectToPayContacts = it.shouldRedirectToPayContacts || isImported,
-                    )
-                }
+                _uiState.update { it.copy(isImporting = isImporting) }
             }
+        }
+        viewModelScope.launch {
+            pubkyRepo.contactImportVersion.drop(1).collect { completeImport() }
         }
     }
 
@@ -78,9 +77,7 @@ class ContactImportOverviewViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 pubkyRepo.importContacts(contacts)
-                    .onSuccess {
-                        _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
-                    }
+                    .onSuccess { completeImport() }
                     .onFailure {
                         Logger.error("Failed to import all contacts", it, context = TAG)
                         ToastEventBus.send(
@@ -103,10 +100,16 @@ class ContactImportOverviewViewModel @Inject constructor(
     }
 
     fun onBackClick() {
+        hasLeft = true
         viewModelScope.launch {
-            pubkyRepo.clearPendingImport()
+            pubkyRepo.discardPendingImport()
             _effects.emit(ContactImportOverviewEffect.NavigateBack)
         }
+    }
+
+    private fun completeImport() {
+        if (hasLeft) return
+        _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
     }
 }
 

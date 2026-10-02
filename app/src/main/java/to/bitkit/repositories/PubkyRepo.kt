@@ -169,6 +169,9 @@ class PubkyRepo @Inject constructor(
     val isImportingContacts: StateFlow<Boolean> = activeContactImports.map { it > 0 }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
+    private val _contactImportVersion = MutableStateFlow(0L)
+    val contactImportVersion: StateFlow<Long> = _contactImportVersion.asStateFlow()
+
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
 
@@ -1101,13 +1104,14 @@ class PubkyRepo @Inject constructor(
      * during contact refresh. A contact already saved is skipped, and a failed save keeps the others and fails the
      * import, so a retry saves only the missing contacts. The import runs in the repository scope, so it finishes even
      * when the caller is cancelled, stops saving once the identity changes, and clears the pending import once it
-     * succeeds.
+     * succeeds, bumping [contactImportVersion].
      */
     suspend fun importContacts(profiles: List<PubkyProfile>): Result<Unit> =
         scope.async(start = CoroutineStart.UNDISPATCHED) {
             activeContactImports.update { it + 1 }
             try {
                 saveImportedContacts(profiles)
+                    .onSuccess { _contactImportVersion.update { it + 1 } }
             } finally {
                 activeContactImports.update { it - 1 }
             }
@@ -1198,6 +1202,15 @@ class PubkyRepo @Inject constructor(
     suspend fun clearPendingImport() = withContext(ioDispatcher) {
         _pendingImportProfile.update { null }
         _pendingImportContacts.update { emptyList() }
+    }
+
+    /**
+     * Drops the pending import when the user leaves the import screens, unless an import is running: that import
+     * clears it once it succeeds and keeps it when it fails, so the follows it could not save stay pending.
+     */
+    suspend fun discardPendingImport() = withContext(ioDispatcher) {
+        if (activeContactImports.value > 0) return@withContext
+        clearPendingImport()
     }
 
     // endregion

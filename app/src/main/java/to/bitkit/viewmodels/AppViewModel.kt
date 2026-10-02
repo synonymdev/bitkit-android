@@ -5762,9 +5762,9 @@ class AppViewModel @Inject constructor(
         sheet is Sheet.Pin ||
         sheet is Sheet.PubkyAuth
 
-    fun clearPendingPubkyImport() {
+    fun discardPendingPubkyImport() {
         viewModelScope.launch {
-            pubkyRepo.clearPendingImport()
+            pubkyRepo.discardPendingImport()
         }
     }
 
