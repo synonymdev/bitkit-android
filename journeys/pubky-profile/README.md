@@ -4,10 +4,9 @@ These journeys cover the states a Pubky profile passes through while it loads: t
 opened before the profile has loaded after a relaunch, the Pubky Ring choice screen while its
 rows look up their profiles and while one of them is adopted, and Contacts opened after a relaunch
 while its profiles load. They also cover a contact import that finishes after you leave it.
-Importing contacts itself is covered by `journeys/contacts`, which arrives with
-synonymdev/bitkit-android#1395. `bitkit-ios` carries the same suite with the same file names and
-journey names, and the steps differ only where the platform forces it; see
-[Android vs iOS](#android-vs-ios).
+Importing contacts itself is covered by [`journeys/contacts`](../contacts/README.md).
+`bitkit-ios` carries the same suite with the same file names and journey names, and the steps differ
+only where the platform forces it; see [Android vs iOS](#android-vs-ios).
 
 ## What the behaviour is
 
@@ -27,14 +26,12 @@ journey names, and the steps differ only where the platform forces it; see
   keeps its avatar, and disables every row until the adoption succeeds or fails. On Android the
   other rows' lookups keep running during an adoption, so a name can still fill in on a disabled
   row; the journey does not assert on that either way.
-- **The import keeps every follow.** The import overview counts the follows the adopted identity
-  publishes. Import All saves each one with the profile the overview already looked up, and a follow
-  whose profile could not be looked up, such as a key that never published one, is saved under its
-  truncated public key rather than dropped. While the import runs, Import All shows a spinner and
-  both buttons are disabled. The import belongs to the app rather than the screen, so leaving the
-  overview does not stop it, and an import that finishes after you left does not take you to Pay
-  Contacts. `contact-import-after-leaving.xml` checks the leaving; the saving is covered by
-  `journeys/contacts` once synonymdev/bitkit-android#1395 merges.
+- **The import keeps going after you leave it.** Import All saves the follows the overview already
+  looked up, only to the device, as `journeys/contacts` describes. While the import runs, Import All
+  shows a spinner and both buttons are disabled. The import belongs to the app rather than the
+  screen, so leaving the overview does not stop it, and an import that finishes after you left does
+  not take you to Pay Contacts. `contact-import-after-leaving.xml` checks the leaving; the saving is
+  covered by `journeys/contacts`.
 - **Contacts lists saved contacts at once.** Contacts shows every saved contact as soon as the saved
   records are read, under its saved name or truncated key, and fills in a name and avatar when that
   contact's profile lookup finishes; a lookup that fails leaves the row as it is. The screen-wide
@@ -50,11 +47,9 @@ journey names, and the steps differ only where the platform forces it; see
    adopted" or "already imported" instead of failing, so slow the network with
    `adb emu network delay gprs` and `adb emu network speed edge` before a journey's first step and
    restore it with `adb emu network delay none` and `adb emu network speed full` after its last to
-   catch the loading states. A contact import here still reads each resolved follow's Paykit
-   receiver paths from the network, so the throttle also keeps it running long enough to leave.
-   synonymdev/bitkit-android#1395 makes it save only to the device, as on iOS; it can then finish
-   before you leave it, and the journey reports "already imported". `adb emu` works only on an
-   emulator. If a state still passes too quickly, use `adb emu network speed gsm`; if loads start
+   catch the loading states. A contact import saves only to the device, so the throttle does not
+   slow it; it can finish before you leave it, and the journey then reports "already imported".
+   `adb emu` works only on an emulator. If a state still passes too quickly, use `adb emu network speed gsm`; if loads start
    failing, relax the throttle.
 2. **Cached header:** an active Pubky profile with a name and an avatar, PIN off, and Profile
    opened once on this install so the cache is filled. The journey does that as its first steps.
@@ -66,8 +61,7 @@ journey names, and the steps differ only where the platform forces it; see
    The journey adopts one identity; sign out of it in Bitkit before running the journey again.
 4. **Contact import after leaving (not a listed capability):** the same Ring setup, with an
    identity that has a published profile and follows many pubkys on pubky.app (62, as in
-   `journeys/contacts/import-all-contacts.xml`, which arrives with synonymdev/bitkit-android#1395),
-   so the import takes long enough to leave. The journey saves the follows as contacts; sign out in
+   `journeys/contacts/import-all-contacts.xml`), so the import takes long enough to leave. The journey saves the follows as contacts; sign out in
    Bitkit before running it again.
 5. **Contacts list loading:** a Pubky identity with at least five saved contacts, at least one with
    a published profile name and bio and one with no published profile. Importing such follows with
@@ -116,10 +110,8 @@ identifiers as testTags rather than iOS ids, drops the iOS `predicate exists` wa
   `ContactImportOverviewSummary`), so the journey names the "Import" title and the "N friends" text
   instead. synonymdev/bitkit-android#1399 adds `ContactImportOverviewImportAll`, the only contact
   import testTag the journeys use; Back is the shared `NavigationBack`. See the Identifiers table
-  in [`journeys/README.md`](../README.md#identifiers). Until synonymdev/bitkit-android#1395 merges,
-  the import also takes longer here: iOS saves only to the device, while Android still reads each
-  resolved follow's Paykit receiver paths from the network, so the import can still be running
-  when the journey opens Contacts. The app log shows "Imported 'N' contacts" when it finishes.
+  in [`journeys/README.md`](../README.md#identifiers). Both platforms save the import only to the
+  device.
 - **Contacts list loading.** `contacts-list-loading.xml` has the same file, journey name and steps
   on both platforms; only the relaunch commands differ.
 

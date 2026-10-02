@@ -10,8 +10,8 @@
 
     Precondition: an onboarded dev wallet with Paykit enabled (the default) and a Pubky identity with
     at least five saved contacts, at least one of them with a published profile name and bio and one
-    with no published profile. Importing such follows with journeys/contacts/import-all-contacts.xml,
-    which arrives with synonymdev/bitkit-android#1395, leaves exactly that.
+    with no published profile. Importing such follows with journeys/contacts/import-all-contacts.xml
+    leaves exactly that.
 
     A warm network can resolve every profile before the first inspection; report "already resolved"
     rather than failing. To slow the lookups on an emulator, run adb emu network delay gprs and adb

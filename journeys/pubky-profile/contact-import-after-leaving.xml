@@ -3,7 +3,7 @@
     A contact import keeps saving after you leave the import overview, and when it finishes it leaves
     you where you went instead of opening Pay Contacts. Saving the prepared follows without looking
     them up again is covered by journeys/contacts/import-all-contacts.xml and
-    import-selected-contacts.xml, which arrive with synonymdev/bitkit-android#1395.
+    import-selected-contacts.xml.
 
     Precondition (not a listed capability): Pubky Ring (package app.pubkyring) installed on the same
     device and signed with this repository's app/debug.keystore, as for the pubky ring choice
@@ -13,20 +13,13 @@
     that identity and saves its follows as contacts, so sign out of it in Bitkit before running the
     journey again. See README.md.
 
-    The import can finish before Back is tapped; if Pay Contacts opens first, report "already
-    imported" rather than failing.
+    The import saves only to the device and can finish before Back is tapped; if Pay Contacts opens
+    first, report "already imported" rather than failing.
 
-    Android differs from iOS in identifiers and, until synonymdev/bitkit-android#1395 merges, in
-    how long the import takes. Every Ring row carries the same testTag, so tell the rows apart by
-    their key caption, and the overview's profile and friend count carry no testTag, so read the
-    "Import" title and the count from its "N friends" text; see the Identifiers table in
-    journeys/README.md. The iOS import saves only to the device, but here it still reads each
-    resolved follow's Paykit receiver paths from the network before saving it, so it can still be
-    running after the ten-second wait and Contacts may list only the follows saved so far. The app
-    log shows "Imported 'N' contacts" when it finishes; wait for that line and reopen Contacts
-    before reporting a short list as a failure. To keep the import running long enough to leave on
-    an emulator, run adb emu network delay gprs and adb emu network speed edge before the first
-    step, and adb emu network delay none and adb emu network speed full after the last.
+    Android differs from iOS only in identifiers. Every Ring row carries the same testTag, so tell
+    the rows apart by their key caption, and the overview's profile and friend count carry no
+    testTag, so read the "Import" title and the count from its "N friends" text; see the Identifiers
+    table in journeys/README.md.
   </description>
   <actions>
     <action>Tap the header profile button (testTag "ProfileButton"); if the profile intro (testTag "ProfileIntro") shows, tap Continue (testTag "ProfileIntro-button")</action>
