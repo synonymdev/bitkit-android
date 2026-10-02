@@ -10,8 +10,11 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.repositories.ContactPaymentSettingsRepo
+import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -56,6 +59,27 @@ class PayContactsViewModelTest : BaseUnitTest() {
         }
 
         assertFalse(sut.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `continue explains wrapped session errors and gives retry guidance for other failures`() = test {
+        val cases = listOf(
+            AppError(PublicPaykitError.SessionNotActive) to R.string.profile__pay_contacts_error_session,
+            PayContactsTestAppError("sync failed") to R.string.profile__pay_contacts_error_retry,
+        )
+        for ((error, messageId) in cases) {
+            val message = "message-$messageId"
+            whenever(context.getString(messageId)).thenReturn(message)
+            whenever(contactPaymentSettingsRepo.setEnabled(true)).thenReturn(Result.failure(error))
+            val sut = createSut()
+
+            ToastEventBus.events.test {
+                sut.continueToProfile()
+                advanceUntilIdle()
+                assertEquals(message, awaitItem().description)
+            }
+            assertFalse(sut.uiState.value.isLoading)
+        }
     }
 
     private fun createSut() = PayContactsViewModel(
