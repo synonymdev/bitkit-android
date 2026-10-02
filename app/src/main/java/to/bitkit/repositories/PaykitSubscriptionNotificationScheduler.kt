@@ -17,6 +17,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import to.bitkit.App
 import to.bitkit.R
+import to.bitkit.di.SubscriptionClock
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY
@@ -24,29 +25,33 @@ import to.bitkit.ui.EXTRA_PAYKIT_PAYER_IDENTITY
 import to.bitkit.ui.EXTRA_PAYKIT_PAYMENT_REQUEST_ID
 import to.bitkit.ui.EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE
 import to.bitkit.ui.pushNotification
+import to.bitkit.utils.SubscriptionClockOffset
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @Singleton
 class PaykitSubscriptionNotificationScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val clock: Clock,
+    @SubscriptionClock private val clock: Clock,
     private val workClient: PaykitSubscriptionWorkClient,
 ) {
     private companion object {
         const val MAX_NOTIFICATIONS = 32
         const val PREFERENCES_NAME = "paykit-subscription-notifications"
         const val SCHEDULED_WORK_NAMES_KEY = "scheduled-work-names"
+        const val SCHEDULED_OFFSET_DAYS_KEY = "scheduled-clock-offset-days"
         const val WORK_PREFIX = "paykit-subscription-"
         const val WORK_TAG = "paykit-subscriptions"
     }
 
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private var scheduledWorkNames = preferences.getStringSet(SCHEDULED_WORK_NAMES_KEY, emptySet()).orEmpty()
+    private var scheduledOffsetDays = preferences.getInt(SCHEDULED_OFFSET_DAYS_KEY, 0)
     private var notificationsWereEnabled: Boolean? = null
 
     @Synchronized
@@ -65,44 +70,48 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
         }
 
         val now = clock.now()
-        val scheduledWork = subscriptions
-            .filter {
-                it.isPayer &&
-                    it.isActive(now) &&
-                    !it.hasPaymentDeadline &&
-                    it.recurrence.unit.isSupported &&
-                    acceptedAt(it) != null
-            }
-            .flatMap { subscription ->
-                subscription.recurrence.upcomingPeriodsAfter(now, MAX_NOTIFICATIONS)
-                    .map { subscription to it }
-            }
-            .sortedBy { it.second.startsAt }
-            .take(MAX_NOTIFICATIONS)
-            .associate { (subscription, period) ->
-                val workName = "$WORK_PREFIX$payerIdentity|${subscription.counterparty}|" +
-                    "${subscription.paymentRequestId}|${period.startsAt}"
-                val delay = (period.startsAt - now).inWholeMilliseconds.coerceAtLeast(0)
-                val work = OneTimeWorkRequestBuilder<PaykitSubscriptionNotificationWorker>()
-                    .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-                    .setInputData(
-                        workDataOf(
-                            EXTRA_PAYKIT_PAYMENT_REQUEST_ID to subscription.paymentRequestId,
-                            EXTRA_PAYKIT_PAYER_IDENTITY to payerIdentity,
-                            EXTRA_PAYKIT_COUNTERPARTY to subscription.counterparty,
-                            EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT to period.startsAt.toString(),
-                        )
-                    )
-                    .addTag(WORK_TAG)
-                    .build()
-                workName to work
-            }
+        // A changed subscription clock offset moves every due time, so work queued for the old one is replaced and
+        // periods the jump made due are notified too.
+        val offsetChanged = SubscriptionClockOffset.offsetDays != scheduledOffsetDays
+        if (offsetChanged) {
+            workClient.cancelAllWorkByTag(WORK_TAG)
+            updateScheduledWorkNames(emptySet())
+            updateScheduledOffsetDays(SubscriptionClockOffset.offsetDays)
+        }
         val pendingWorkNames = pendingRequestIds.mapNotNullTo(mutableSetOf()) { requestId ->
             requestId.billingPeriodStartsAt?.let {
                 "$WORK_PREFIX$payerIdentity|${requestId.counterparty}|" +
                     "${requestId.paymentRequestId}|$it"
             }
         }
+
+        val scheduledWork = subscriptions
+            .filter {
+                it.isPayer &&
+                    !it.hasPaymentDeadline &&
+                    it.recurrence.unit.isSupported &&
+                    acceptedAt(it) != null
+            }
+            .flatMap { subscription ->
+                // A jump can pass the end of a finite subscription, whose last unpaid period still needs its alert.
+                // Only the latest unpaid period alerts, so a long jump cannot fill every slot with catch-up alerts.
+                val duePeriod = acceptedAt(subscription)
+                    ?.takeIf { offsetChanged }
+                    ?.let { subscription.recurrence.periodsThrough(now, it) }
+                    ?.lastOrNull { workName(payerIdentity, subscription, it) in pendingWorkNames }
+                val upcomingPeriods = if (subscription.isActive(now)) {
+                    subscription.recurrence.upcomingPeriodsAfter(now, MAX_NOTIFICATIONS)
+                } else {
+                    emptyList()
+                }
+                (listOfNotNull(duePeriod) + upcomingPeriods).map { subscription to it }
+            }
+            .sortedBy { it.second.startsAt }
+            .take(MAX_NOTIFICATIONS)
+            .associate { (subscription, period) ->
+                workName(payerIdentity, subscription, period) to
+                    notificationWork(payerIdentity, subscription, period, delay = period.startsAt - now)
+            }
         val desiredWorkNames = scheduledWork.keys + scheduledWorkNames.intersect(pendingWorkNames)
         (scheduledWorkNames - desiredWorkNames).forEach(workClient::cancelUniqueWork)
         scheduledWork
@@ -119,6 +128,33 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
         workClient.cancelAllWorkByTag(WORK_TAG)
         updateScheduledWorkNames(emptySet())
         notificationsWereEnabled = false
+    }
+
+    private fun workName(payerIdentity: String, subscription: PaykitSubscription, period: PaykitBillingPeriod) =
+        "$WORK_PREFIX$payerIdentity|${subscription.counterparty}|" +
+            "${subscription.paymentRequestId}|${period.startsAt}"
+
+    private fun notificationWork(
+        payerIdentity: String,
+        subscription: PaykitSubscription,
+        period: PaykitBillingPeriod,
+        delay: Duration,
+    ): OneTimeWorkRequest = OneTimeWorkRequestBuilder<PaykitSubscriptionNotificationWorker>()
+        .setInitialDelay(delay.inWholeMilliseconds.coerceAtLeast(0), TimeUnit.MILLISECONDS)
+        .setInputData(
+            workDataOf(
+                EXTRA_PAYKIT_PAYMENT_REQUEST_ID to subscription.paymentRequestId,
+                EXTRA_PAYKIT_PAYER_IDENTITY to payerIdentity,
+                EXTRA_PAYKIT_COUNTERPARTY to subscription.counterparty,
+                EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT to period.startsAt.toString(),
+            )
+        )
+        .addTag(WORK_TAG)
+        .build()
+
+    private fun updateScheduledOffsetDays(days: Int) {
+        scheduledOffsetDays = days
+        preferences.edit().putInt(SCHEDULED_OFFSET_DAYS_KEY, days).apply()
     }
 
     private fun updateScheduledWorkNames(workNames: Set<String>) {
@@ -152,7 +188,7 @@ class PaykitSubscriptionWorkClient @Inject constructor(
 class PaykitSubscriptionNotificationWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val clock: Clock,
+    @SubscriptionClock private val clock: Clock,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         val startsAt = inputData.getString(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT)

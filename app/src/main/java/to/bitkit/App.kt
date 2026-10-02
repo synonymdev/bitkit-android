@@ -16,6 +16,7 @@ import to.bitkit.env.Env
 import to.bitkit.services.BluetoothInit
 import to.bitkit.services.PubkyAuthHandlerRegistrar
 import to.bitkit.utils.Logger
+import to.bitkit.utils.SubscriptionClockOffsetSync
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -32,6 +33,9 @@ internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var pubkyAuthHandlerRegistrar: PubkyAuthHandlerRegistrar
 
+    @Inject
+    lateinit var subscriptionClockOffsetSync: SubscriptionClockOffsetSync
+
     override val workManagerConfiguration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -47,6 +51,7 @@ internal open class App : Application(), Configuration.Provider {
         // Initialize btleplug for Bluetooth support (required before any BLE usage)
         BluetoothInit.ensureInitialized()
         pubkyAuthHandlerRegistrar.start()
+        subscriptionClockOffsetSync.start()
     }
 
     private fun installUncaughtExceptionLogger() {
