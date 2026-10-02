@@ -729,19 +729,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         try {
             advanceTimeBy(30.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(paykitPaymentRequestRepo, atLeast(2)).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo, atLeast(2)).refresh(processOutgoingMessages = true)
             for (interval in listOf(60.seconds, 120.seconds, 120.seconds)) {
                 clearInvocations(pubkyRepo, paykitPaymentRequestRepo)
                 advanceTimeBy(interval.inWholeMilliseconds - 1)
                 runCurrent()
                 verify(pubkyRepo, never()).republishIdentityIfNeeded()
-                verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
-                verify(paykitPaymentRequestRepo, atLeast(1)).refresh(syncPrivateMessages = false)
+                verify(paykitPaymentRequestRepo, never()).refresh(processOutgoingMessages = true)
+                verify(paykitPaymentRequestRepo, atLeast(1)).refresh(processOutgoingMessages = false)
 
                 advanceTimeBy(1)
                 runCurrent()
                 verify(pubkyRepo).republishIdentityIfNeeded()
-                verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+                verify(paykitPaymentRequestRepo).refresh(processOutgoingMessages = true)
             }
         } finally {
             sut.stopPaykitPaymentRequestPolling()
@@ -835,13 +835,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         try {
             runCurrent()
 
-            verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo).refresh(processOutgoingMessages = true)
             clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
 
             advanceTimeBy(29.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(paykitPaymentRequestRepo, atLeast(1)).refresh(syncPrivateMessages = false)
-            verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo, atLeast(1)).refresh(processOutgoingMessages = false)
+            verify(paykitPaymentRequestRepo, never()).refresh(processOutgoingMessages = true)
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
             verify(paykitPaymentProofRepo, never()).reconcile()
 
@@ -6855,7 +6855,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.retryIncomingPaymentRequest(request.id)
         advanceUntilIdle()
 
-        verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+        verify(paykitPaymentRequestRepo).refresh(processOutgoingMessages = true)
         verify(privatePaykitRepo, atLeast(1)).beginPaymentRequest(request)
         assertEquals(request.id, sut.sendUiState.value.incomingPaymentRequestId)
         assertTrue(sut.currentSheet.value is Sheet.Send)
@@ -7283,7 +7283,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, "bitkit")
-        verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+        verify(paykitPaymentRequestRepo).refresh(processOutgoingMessages = true)
     }
 
     @Test
