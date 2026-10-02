@@ -145,13 +145,15 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         rows = listOf(Activity.Lightning(original))
         whenever(contacts.contactsForPaymentHash(original.id)).thenReturn(setOf(BUYER))
         var cacheReads = 0
-        whenever(cacheStore.data).thenReturn(flow {
-            if (++cacheReads == 2) {
-                sut.update(original.id, edited)
-                rows = listOf(edited)
-            }
-            emit(cacheData.value)
-        })
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                if (++cacheReads == 2) {
+                    sut.update(original.id, edited)
+                    rows = listOf(edited)
+                }
+                emit(cacheData.value)
+            },
+        )
 
         assertFalse(sut.backfillPaykitContacts())
         assertEquals(listOf<Activity>(edited), updates)
