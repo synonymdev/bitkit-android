@@ -167,6 +167,8 @@ data class PaykitPrivateReceiverPathSelection(
     val error: Throwable?,
 )
 
+class PubkyFileNotFoundError : AppError("Pubky file not found")
+
 internal object PaykitReceiverPaths {
     const val WALLET = "bitkit/wallet"
     const val SERVER = "bitkit/server"
@@ -556,7 +558,7 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray =
-        publicRead { it.fetchPubkyFileBounded(uri, maxBytes) } ?: throw AppError("Pubky file not found")
+        publicRead { it.fetchPubkyFileBounded(uri, maxBytes) } ?: throw PubkyFileNotFoundError()
 
     suspend fun publishPaykitProfile(profile: PaykitProfile): PaykitProfileRecord {
         isSetup.await()

@@ -11,6 +11,7 @@ import coil3.request.CachePolicy
 import coil3.request.Options
 import coil3.size.Size
 import coil3.toUri
+import com.synonym.paykit.PaykitException
 import okio.FileSystem
 import okio.Path.Companion.toOkioPath
 import org.junit.Rule
@@ -21,11 +22,13 @@ import org.mockito.kotlin.description
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.services.PubkyFileNotFoundError
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.forEachCase
@@ -37,6 +40,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -54,7 +60,12 @@ class PubkyImageFetcherTest : BaseUnitTest() {
 
     private val pubkyService = mock<PubkyService>()
     private val cacheEpoch = PubkyImageCacheEpoch()
-    private val factory = PubkyImageFetcher.Factory(pubkyService, cacheEpoch)
+    private var nowMillis = 0L
+    private val clock = object : Clock {
+        override fun now(): Instant = Instant.fromEpochMilliseconds(nowMillis)
+    }
+    private val failures = PubkyImageFailureCache(cacheEpoch, clock)
+    private val factory = PubkyImageFetcher.Factory(pubkyService, cacheEpoch, clock)
     private val options = Options(ApplicationProvider.getApplicationContext(), size = Size.ORIGINAL)
 
     @Test
@@ -273,11 +284,86 @@ class PubkyImageFetcherTest : BaseUnitTest() {
         }
     }
 
+    @Test
+    fun `a remembered permanent failure skips the network until the image cache is cleared`() = test {
+        listOf(
+            PermanentFailureCase("missing file", PubkyFileNotFoundError()),
+            PermanentFailureCase("missing blob", PubkyFileNotFoundError(), descriptor = true),
+            PermanentFailureCase("oversize blob", oversizeError(), descriptor = true),
+            PermanentFailureCase("profile not found", PaykitException.NotFound("not_found", "fetch Pubky file")),
+        ).forEachCase({ it.name }) { case ->
+            reset(pubkyService)
+            val epoch = PubkyImageCacheEpoch()
+            val failures = PubkyImageFailureCache(epoch, clock)
+            val failingUri = if (case.descriptor) BLOB_URI else IMAGE_URI
+            if (case.descriptor) {
+                whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)).thenReturn(DESCRIPTOR_BYTES)
+            }
+            whenever(pubkyService.fetchFile(failingUri, PUBKY_IMAGE_MAX_BYTES))
+                .thenAnswer { throw AppError(case.error) }
+            runCatching { createFetcher(epoch = epoch, failures = failures).fetch() }
+            nowMillis += 1.hours.inWholeMilliseconds
+
+            assertFailsWith<PubkyImageRecentlyFailedError>(case.name) {
+                createFetcher(epoch = epoch, failures = failures).fetch()
+            }
+            verify(pubkyService, description(case.name)).fetchFile(failingUri, PUBKY_IMAGE_MAX_BYTES)
+
+            epoch.advance()
+            runCatching { createFetcher(epoch = epoch, failures = failures).fetch() }
+            verify(pubkyService, times(2).description(case.name)).fetchFile(failingUri, PUBKY_IMAGE_MAX_BYTES)
+        }
+    }
+
+    @Test
+    fun `a transient failure is fetched again once its window has passed`() = test {
+        whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES))
+            .thenAnswer { throw AppError(PaykitException.Transport("transport_error", "fetch Pubky file")) }
+            .thenReturn(IMAGE_BYTES)
+        assertFailsWith<AppError> { createFetcher(failures = failures).fetch() }
+        nowMillis += PUBKY_IMAGE_TRANSIENT_FAILURE_TTL.inWholeMilliseconds - 1
+
+        assertFailsWith<PubkyImageRecentlyFailedError> { createFetcher(failures = failures).fetch() }
+        verify(pubkyService).fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)
+        nowMillis += 1
+
+        assertContentEquals(IMAGE_BYTES, createFetcher(failures = failures).fetch().bytes())
+        verify(pubkyService, times(2)).fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)
+    }
+
+    @Test
+    fun `a failure is not remembered when the image cache is cleared during its fetch or the fetch is cancelled`() =
+        test {
+            listOf<Pair<String, () -> Throwable>>(
+                "cleared during the fetch" to {
+                    cacheEpoch.advance()
+                    AppError(PubkyFileNotFoundError())
+                },
+                "cancelled" to { CancellationException() },
+            ).forEachCase({ it.first }) { (name, failure) ->
+                reset(pubkyService)
+                val failures = PubkyImageFailureCache(cacheEpoch, clock)
+                whenever(pubkyService.fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES))
+                    .thenAnswer { throw failure() }
+                    .thenReturn(IMAGE_BYTES)
+                runCatching { createFetcher(failures = failures).fetch() }
+
+                assertContentEquals(IMAGE_BYTES, createFetcher(failures = failures).fetch().bytes(), name)
+                verify(pubkyService, times(2).description(name)).fetchFile(IMAGE_URI, PUBKY_IMAGE_MAX_BYTES)
+            }
+        }
+
+    private fun oversizeError() = PaykitException.Protocol(
+        "protocol_error",
+        "fetch Pubky file: resource exceeds maximum size of $PUBKY_IMAGE_MAX_BYTES bytes",
+    )
+
     private fun createFetcher(
         diskCache: DiskCache? = null,
         options: Options = this.options,
         epoch: PubkyImageCacheEpoch = cacheEpoch,
-    ) = PubkyImageFetcher(IMAGE_URI, options, pubkyService, diskCache, epoch)
+        failures: PubkyImageFailureCache = PubkyImageFailureCache(epoch, clock),
+    ) = PubkyImageFetcher(IMAGE_URI, options, pubkyService, diskCache, epoch, failures)
 
     private fun createDiskCache() = DiskCache.Builder()
         .directory(tempFolder.newFolder())
@@ -312,3 +398,5 @@ class PubkyImageFetcherTest : BaseUnitTest() {
 }
 
 private class FetcherTestError(message: String) : AppError(message)
+
+private class PermanentFailureCase(val name: String, val error: Throwable, val descriptor: Boolean = false)

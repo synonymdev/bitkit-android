@@ -128,13 +128,22 @@ Disk cache rules:
 - Each clear first advances `PubkyImageCacheEpoch`. The fetcher reads it before going to the network and commits its write only while it is unchanged, so a fetch in flight across a clear does not re-populate the cleared directory
 - Avatars are public data, and the directory is app-private
 
+Failed fetches are remembered by URI in `PubkyImageFailureCache`, owned by the fetcher factory, so an avatar that cannot load is not fetched again each time a row recomposes or reappears:
+
+- A missing file or blob (`PubkyFileNotFoundError`, `PaykitException.NotFound`) and an invalid response, such as a file over the 1 MiB limit (`PaykitException.Protocol`), are remembered until the image cache is next cleared
+- Any other failure, such as a transport error, is remembered for 60 seconds (`PUBKY_IMAGE_TRANSIENT_FAILURE_TTL`). The SDK reports a key it cannot resolve the same way as a network failure, so such a key is retried every minute
+- A descriptor whose blob fetch failed counts as a failure of the descriptor URI, with the blob's failure deciding how long it is kept
+- While a failure is remembered, the fetcher fails at once with `PubkyImageRecentlyFailedError` and the image shows its error state. A disk cache hit still wins
+- Advancing `PubkyImageCacheEpoch`, as sign-out and a switch to another identity do, forgets every failure, and a failure of a fetch that a clear overtook or that was cancelled is not remembered
+
 ### Loading Flow
 
 1. Coil checks memory cache → return if hit
 2. `PubkyImageFetcher.fetch()` checks the disk cache → return if hit, without waiting for Paykit setup or using the network
-3. On a miss, the fetcher limits the successful response body to 1 MiB
-4. If the response is a JSON file descriptor with a Pubky `src`, follow the indirection with the same limit
-5. The fetcher writes a fully successful result to the disk cache unless the directory was cleared during the fetch, then Coil decodes it and caches it in memory
+3. A URI whose fetch failed recently fails at once, without using the network
+4. Otherwise the fetcher limits the successful response body to 1 MiB
+5. If the response is a JSON file descriptor with a Pubky `src`, follow the indirection with the same limit
+6. The fetcher writes a fully successful result to the disk cache unless the directory was cleared during the fetch, then Coil decodes it and caches it in memory
 
 The bound is enforced while successful response bodies are read, before the bytes cross the FFI boundary. HTTP error
 bodies can still be buffered by the Pubky client before Paykit regains control.
@@ -166,8 +175,8 @@ bodies can still be buffered by the Pubky client before Paykit regains control.
 | `services/PubkyService.kt` | FFI wrapper |
 | `repositories/PubkyRepo.kt` | Session management and identity adoption |
 | `data/sharedpubky/SharedPubkyClient.kt` | Reads Pubky Ring's shared pubky provider |
-| `data/PubkyImageFetcher.kt` | Coil fetcher for pubky:// URIs |
-| `data/PubkyImageCacheEpoch.kt` | Clear counter that keeps in-flight fetches out of a cleared disk cache |
+| `data/PubkyImageFetcher.kt` | Coil fetcher for pubky:// URIs, with its cache of failed fetches |
+| `data/PubkyImageCacheEpoch.kt` | Clear counter that keeps in-flight fetches out of a cleared disk cache and resets the failed fetches |
 | `di/ImageModule.kt` | Hilt module providing ImageLoader |
 | `data/PubkyStore.kt` | DataStore for cached profile metadata |
 | `models/PubkyProfile.kt` | Domain model |

@@ -7,7 +7,8 @@ import javax.inject.Singleton
 /**
  * Counts clears of the Pubky image disk cache. [PubkyImageFetcher] reads it before a network fetch and commits
  * the fetched image only while it is unchanged, so a fetch in flight across a clear cannot re-populate the
- * cleared directory. Advance it before clearing the directory.
+ * cleared directory, and [PubkyImageFailureCache] forgets every failed fetch once it changes. Advance it before
+ * clearing the directory.
  */
 @Singleton
 class PubkyImageCacheEpoch @Inject constructor() {
