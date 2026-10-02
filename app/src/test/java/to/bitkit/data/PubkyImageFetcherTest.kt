@@ -1,5 +1,6 @@
 package to.bitkit.data
 
+import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
 import coil3.decode.DataSource
@@ -45,7 +46,7 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(application = Application::class, sdk = [34])
 class PubkyImageFetcherTest : BaseUnitTest() {
     companion object {
         private const val IMAGE_URI = "pubky://image"

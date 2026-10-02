@@ -58,7 +58,7 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
    failing, relax the throttle.
 2. **Cached header:** an active Pubky profile with a name and an avatar, PIN off, and Profile
    opened once on this install so the cache is filled. The journey does that as its first steps.
-3. **Ring rows (not a listed capability):** Pubky Ring (`app.pubkyring`) installed on the same
+3. **Ring rows (not a listed capability):** Pubky Ring (`to.pubky.ring`) installed on the same
    device with at least two identities, at least one with a published profile name, and no active
    Pubky identity in Bitkit. Bitkit reads Ring's shared pubky provider only when both apps are
    signed with the same key, so a dev build needs a Ring build signed with `app/debug.keystore`.
@@ -74,15 +74,14 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
 
 ## Gotchas
 
-- **The session can restore after the profile button is tapped.** The button then opens the Pubky
-  choice screen, which moves on to Profile by itself once the session is back.
+- **The session can restore after the profile button is tapped.** Profile then shows a spinner with
+  no name (`ProfileLoading`) until the session is back, and only then the cached header.
 - **Every choice row shares one test tag.** Tell the rows apart by their key caption. iOS gives each
   row its own identifier; see the identifier table in `journeys/README.md`.
 - **The avatar has no text.** Check it from a screenshot rather than `android layout`.
 - **Contacts can open the wrong screen right after a relaunch.** While the session is still
-  restoring, the menu's Contacts item opens the contacts intro or the Pubky choice screen instead,
-  and the choice screen moves on to Profile once the session is back. Return to the home screen and
-  open Contacts again.
+  restoring, the menu's Contacts item opens the contacts intro or Profile instead. Return to the
+  home screen and open Contacts again.
 - **The edit form calls the notes field "Bio".** `contacts-list-loading.xml` keeps the iOS wording;
   the field carries `ProfileEditBio`.
 
@@ -92,10 +91,9 @@ All four journeys share their file names and journey names with `bitkit-ios`. Ev
 identifiers as testTags rather than iOS ids, drops the iOS `predicate exists` wait argument and runs
 `adb` instead of `xcrun simctl`; the differences below are the rest.
 
-- **Cached profile header while loading.** Two steps differ. While the session is still restoring,
-  the profile button opens the Pubky choice screen, which moves on to Profile by itself, so that
-  step waits for the choice screen where iOS waits for a bare initialization spinner. Android also
-  adds a screenshot check that the cached header shows the profile's avatar: the avatar comes from
+- **Cached profile header while loading.** While the session is still restoring, Android shows a
+  bare spinner on Profile (`ProfileLoading`), as iOS does, so one step differs. Android adds a
+  screenshot check that the cached header shows the profile's avatar: the avatar comes from
   the Pubky image disk cache that synonymdev/bitkit-android#1399 adds, so the check is what shows
   it works without the network. iOS shows the cached avatar too but does not check it.
 - **Pubky ring choice rows.** Every row is `PubkyChoiceIdentity` and every lookup spinner

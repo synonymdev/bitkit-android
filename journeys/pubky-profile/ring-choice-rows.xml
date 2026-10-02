@@ -6,7 +6,7 @@
     whose identity has no profile. It also verifies that tapping a row shows a spinner on that row
     only and disables every row until adoption finishes.
 
-    Precondition (not a listed capability): Pubky Ring (package app.pubkyring) installed on the same
+    Precondition (not a listed capability): Pubky Ring (package to.pubky.ring) installed on the same
     device with at least two identities, at least one of them with a published profile name.
     Bitkit reads Ring's shared pubky provider only when Ring is signed with the same key as the
     Bitkit build, so a dev build needs a Ring build signed with this repository's

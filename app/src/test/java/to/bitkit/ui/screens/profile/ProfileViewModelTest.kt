@@ -1,8 +1,11 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
@@ -149,6 +152,124 @@ class ProfileViewModelTest : BaseUnitTest() {
             assertNull(state.profile)
             assertFalse(state.isLoading)
             assertNull(state.cachedProfile)
+        }
+    }
+
+    @Test
+    fun `session restore keeps loading and shows the cached profile only once its key is known`() = test {
+        val publicKeyFlow = MutableStateFlow<String?>(null)
+        val isRestoringFlow = MutableStateFlow(true)
+        val cachedProfile = createCachedProfile(publicKey = "pubkyalice")
+        val sut = createSut(
+            publicKeyFlow = publicKeyFlow,
+            isRestoringFlow = isRestoringFlow,
+            cachedProfile = cachedProfile,
+        )
+        advanceUntilIdle()
+
+        sut.uiState.test {
+            var state = awaitItem()
+            assertTrue(state.isLoading)
+            assertNull(state.cachedProfile)
+
+            publicKeyFlow.value = "pubkyalice"
+            state = awaitItem()
+            assertTrue(state.isLoading)
+            assertEquals(cachedProfile, state.cachedProfile)
+
+            isRestoringFlow.value = false
+            state = awaitItem()
+            assertFalse(state.isLoading)
+            assertNull(state.cachedProfile)
+        }
+    }
+
+    @Test
+    fun `disconnect finishes private cleanup after the screen is closed`() = test {
+        val sut = createSut()
+        val forget = CompletableDeferred<Result<Boolean>>()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).doSuspendableAnswer { forget.await() }
+        advanceUntilIdle()
+
+        sut.signOut()
+        advanceUntilIdle()
+        sut.viewModelScope.cancel()
+        forget.complete(Result.success(true))
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+    }
+
+    @Test
+    fun `disconnect forgets unrestored identity without remote cleanup`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.success(true))
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any()))
+            .thenReturn(Result.failure(AppError("No session")))
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.signOut()
+            advanceUntilIdle()
+            assertEquals(ProfileEffect.SignedOut, awaitItem())
+        }
+
+        assertFalse(sut.uiState.value.isSigningOut)
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo).closeAndClear()
+    }
+
+    @Test
+    fun `failed local disconnect preserves private state`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.failure(AppError("Storage failed")))
+        advanceUntilIdle()
+
+        sut.signOut()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isSigningOut)
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+    }
+
+    @Test
+    fun `profile retry stays loading until session and profile are available`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        val restore = CompletableDeferred<Unit>()
+        val loaded = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.restoreSessionIfNeeded()).doSuspendableAnswer {
+            restore.await()
+            false
+        }
+        whenever(pubkyRepo.loadProfile()).doSuspendableAnswer { loaded.await() }
+        clearInvocations(pubkyRepo)
+
+        sut.uiState.test {
+            awaitItem()
+            sut.loadProfile()
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.isLoading)
+            verify(pubkyRepo, never()).loadProfile()
+
+            sut.loadProfile()
+            restore.complete(Unit)
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.isLoading)
+            verify(pubkyRepo, times(1)).restoreSessionIfNeeded()
+            loaded.complete(Unit)
+            advanceUntilIdle()
+            assertFalse(sut.uiState.value.isLoading)
+            whenever(pubkyRepo.restoreSessionIfNeeded()).thenReturn(true)
+            clearInvocations(pubkyRepo)
+            sut.loadProfile()
+            advanceUntilIdle()
+            verify(pubkyRepo, never()).loadProfile()
+            assertFalse(sut.uiState.value.isLoading)
+            cancelAndIgnoreRemainingEvents()
         }
     }
 
@@ -339,16 +460,21 @@ class ProfileViewModelTest : BaseUnitTest() {
         profile: PubkyProfile? = null,
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),
         publicKey: String? = "pubkyalice",
+        publicKeyFlow: MutableStateFlow<String?> = MutableStateFlow(publicKey),
         isLoading: Boolean = false,
         isLoadingFlow: MutableStateFlow<Boolean> = MutableStateFlow(isLoading),
+        isRestoringFlow: MutableStateFlow<Boolean> = MutableStateFlow(false),
         cachedProfile: PubkyCachedProfile? = null,
         onLoadProfile: () -> Unit = {},
     ): ProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
+        whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
-        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(publicKey))
+        whenever(pubkyRepo.publicKey).thenReturn(publicKeyFlow)
         whenever(pubkyRepo.isLoadingProfile).thenReturn(isLoadingFlow)
+        whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringFlow)
         whenever(pubkyRepo.cachedProfile).thenReturn(MutableStateFlow(cachedProfile))
+        whenever { pubkyRepo.restoreSessionIfNeeded() }.thenReturn(false)
         whenever { pubkyRepo.loadProfile() }.thenAnswer { onLoadProfile() }
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))

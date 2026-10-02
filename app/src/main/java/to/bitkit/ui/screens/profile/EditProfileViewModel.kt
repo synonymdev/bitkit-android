@@ -10,13 +10,16 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -155,6 +158,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun showDeleteConfirmation() {
+        if (_uiState.value.isBusy) return
         _uiState.update { it.copy(showDeleteDialog = true) }
     }
 
@@ -164,6 +168,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun save() {
         viewModelScope.launch {
+            if (_uiState.value.isBusy) return@launch
             _uiState.update { it.copy(isSaving = true) }
             val state = _uiState.value
 
@@ -226,65 +231,59 @@ class EditProfileViewModel @Inject constructor(
 
     fun disconnectProfile() {
         viewModelScope.launch {
-            _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
-            val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-            if (cleanupResult.isFailure) {
-                val error = requireNotNull(cleanupResult.exceptionOrNull()) {
-                    "Private Paykit cleanup failed without an error"
+            if (_uiState.value.isBusy) return@launch
+            _uiState.update { it.copy(showDeleteFailureDialog = false, isDeleting = true) }
+            try {
+                val result = runSuspendCatching {
+                    withContext(NonCancellable) {
+                        if (!pubkyRepo.forgetUnrestoredIdentity().getOrThrow()) {
+                            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
+                            pubkyRepo.signOut().getOrThrow()
+                        }
+                        privatePaykitRepo.closeAndClear()
+                    }
                 }
-                _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__disconnect_error),
-                    description = error.message,
-                )
-                return@launch
-            }
-
-            val result = pubkyRepo.signOut()
-            if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear()
-                _uiState.update { it.copy(isSaving = false) }
-                _effects.emit(EditProfileEffect.DisconnectSuccess)
-            } else {
-                val error = requireNotNull(result.exceptionOrNull()) { "Disconnect failed without an error" }
-                _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__disconnect_error),
-                    description = error.message,
-                )
+                if (result.isSuccess) {
+                    _effects.emit(EditProfileEffect.DisconnectSuccess)
+                } else {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__disconnect_error),
+                        description = result.exceptionOrNull()?.message,
+                    )
+                }
+            } finally {
+                _uiState.update { it.copy(isDeleting = false) }
             }
         }
     }
 
     private suspend fun attemptDeleteProfile() {
+        if (_uiState.value.isBusy) return
         _uiState.update {
             it.copy(
                 showDeleteDialog = false,
                 showDeleteFailureDialog = false,
-                isSaving = true,
+                isDeleting = true,
             )
         }
-        privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-        val result = pubkyRepo.deleteProfileWithSessionRetry()
-        if (result.isSuccess) {
-            privatePaykitRepo.closeAndClear()
-            _uiState.update { it.copy(isSaving = false) }
-            ToastEventBus.send(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.profile__delete_success),
-            )
-            _effects.emit(EditProfileEffect.DeleteSuccess)
-        } else {
-            val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
-            Logger.error("Failed to delete profile", error, context = TAG)
-            _uiState.update {
-                it.copy(
-                    isSaving = false,
-                    showDeleteFailureDialog = true,
+        try {
+            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+            val result = pubkyRepo.deleteProfileWithSessionRetry()
+            if (result.isSuccess) {
+                privatePaykitRepo.closeAndClear()
+                ToastEventBus.send(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.profile__delete_success),
                 )
+                _effects.emit(EditProfileEffect.DeleteSuccess)
+            } else {
+                val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
+                Logger.error("Failed to delete profile", error, context = TAG)
+                _uiState.update { it.copy(showDeleteFailureDialog = true) }
             }
+        } finally {
+            _uiState.update { it.copy(isDeleting = false) }
         }
     }
 }
@@ -301,11 +300,14 @@ data class EditProfileUiState(
     val newAvatarBytes: ByteArray? = null,
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
+    val isDeleting: Boolean = false,
     val showDeleteDialog: Boolean = false,
     val showDeleteFailureDialog: Boolean = false,
     val showAddLinkSheet: Boolean = false,
     val showAddTagSheet: Boolean = false,
-)
+) {
+    val isBusy: Boolean get() = isSaving || isDeleting
+}
 
 sealed interface EditProfileEffect {
     data object SaveSuccess : EditProfileEffect

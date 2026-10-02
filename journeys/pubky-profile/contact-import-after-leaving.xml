@@ -5,7 +5,7 @@
     them up again is covered by journeys/contacts/import-all-contacts.xml and
     import-selected-contacts.xml.
 
-    Precondition (not a listed capability): Pubky Ring (package app.pubkyring) installed on the same
+    Precondition (not a listed capability): Pubky Ring (package to.pubky.ring) installed on the same
     device and signed with this repository's app/debug.keystore, as for the pubky ring choice
     rows journey, with an identity that follows many pubkys on pubky.app (62, as in
     import-all-contacts.xml), so the import takes long enough to leave. An onboarded dev wallet with

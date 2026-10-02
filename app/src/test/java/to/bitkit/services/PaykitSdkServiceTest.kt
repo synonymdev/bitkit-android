@@ -1105,7 +1105,7 @@ class PaykitSdkServiceTest {
         val sharedPubky = mock<SharedPubkyClient>()
         val provider = PaykitSdkSessionProvider(keychain, sharedPubky)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
-        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn("app.pubkyring:$RING_PUBKY")
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn("to.pubky.ring:$RING_PUBKY")
         whenever(sharedPubky.readCredential(RING_PUBKY)).thenReturn(null)
 
         assertEquals(RING_PUBKY, provider.adoptedPubky())

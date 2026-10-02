@@ -399,7 +399,7 @@ private fun LoadingState() {
         contentAlignment = Alignment.Center,
         modifier = Modifier.fillMaxSize()
     ) {
-        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp).testTag("ProfileLoading"))
     }
 }
 
