@@ -89,8 +89,9 @@ sealed class PubkyContactError(message: String) : AppError(message) {
 
 /**
  * One sign-in of a Pubky identity. Work the user starts in it, such as a contact edit that first waits for a profile
- * lookup, checks [PubkyRepo.isCurrent] before it writes, so it stops once that identity signs out or another signs in,
- * even when the same identity signs straight back in. It holds no secret.
+ * lookup, checks [PubkyRepo.isCurrent] before it writes, so it stops once that identity signs out or the next sign-in
+ * starts. Every sign-in starts a new one, adopting a Ring identity included, even when it signs in the same identity
+ * again; restoring or refreshing the session of the identity already signed in does not. It holds no secret.
  */
 class PubkySignIn internal constructor(val publicKey: String, internal val generation: Long)
 
@@ -403,7 +404,7 @@ class PubkyRepo @Inject constructor(
                 }
                 is InitResult.Restored -> {
                     _sessionRestorationFailed.update { false }
-                    _publicKey.update { result.publicKey }
+                    continueSignIn(result.publicKey)
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
                 }
                 is InitResult.RestorationFailed -> {
@@ -549,7 +550,7 @@ class PubkyRepo @Inject constructor(
 
                         val prefixedPublicKey = rawPublicKey.ensurePubkyPrefix()
                         clearProfileIfIdentityChanged(prefixedPublicKey)
-                        _publicKey.update { prefixedPublicKey }
+                        startSignIn(prefixedPublicKey)
                         notifyBackupStateChanged()
                         Logger.info("Adopted ring identity for '${redacted(rawPublicKey)}'", context = TAG)
                         prefixedPublicKey
@@ -665,7 +666,7 @@ class PubkyRepo @Inject constructor(
         return PubkySignIn(publicKey, generation)
     }
 
-    /** Whether [signIn] has not ended: its identity has neither signed out nor been replaced since. */
+    /** Whether [signIn] has not ended: its identity has not signed out and no other sign-in has started since. */
     fun isCurrent(signIn: PubkySignIn): Boolean =
         signInGeneration.get() == signIn.generation && _publicKey.value == signIn.publicKey
 
@@ -835,7 +836,7 @@ class PubkyRepo @Inject constructor(
             tags = tags,
             status = null,
         )
-        _publicKey.update { publicKey }
+        startSignIn(publicKey)
         setProfile(createdProfile)
         cacheMetadata(createdProfile)
         settingsStore.setPubkyProfileSetupPending(false)
@@ -1140,10 +1141,10 @@ class PubkyRepo @Inject constructor(
 
     /**
      * Saves a contact's label and keeps the rest of its profile as the contact's local override. The edit belongs to
-     * [signIn]: once that identity signs out or another signs in, it fails with [PubkyContactError.SignInChanged]
-     * before the save, or once the save has run, before the override and the contact row are written. Sign-out
-     * clears the overrides, so a save that lands after it must not write one back, least of all for the next identity,
-     * which may have saved a contact with the same key.
+     * [signIn]: once that identity signs out or the next sign-in starts, it fails with
+     * [PubkyContactError.SignInChanged] before the save, or once the save has run, before the override and the contact
+     * row are written. Sign-out clears the overrides, so a save that lands after it must not write one back, least of
+     * all for the next identity, which may have saved a contact with the same key.
      */
     @Suppress("LongParameterList")
     suspend fun updateContact(
@@ -1406,7 +1407,7 @@ class PubkyRepo @Inject constructor(
                     }
                 }
 
-                _publicKey.update { publicKey }
+                startSignIn(publicKey)
                 var pendingSaved = false
                 try {
                     settingsStore.setPubkyProfileSetupPending(true)
@@ -1507,7 +1508,7 @@ class PubkyRepo @Inject constructor(
                         val secretKeyHex = deriveLocalSecretKeyFromWalletSeed()
                         keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex)
                         pubkyService.signIn(secretKeyHex)
-                        _publicKey.update { pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix() }
+                        startSignIn(pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix())
                     }
 
                     PubkySessionBackupKind.ExternalSession -> Unit
@@ -1541,7 +1542,7 @@ class PubkyRepo @Inject constructor(
             val publicKey = pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
 
             notifyBackupStateChanged()
-            _publicKey.update { publicKey }
+            continueSignIn(publicKey)
 
             true
         }
@@ -1897,6 +1898,17 @@ class PubkyRepo @Inject constructor(
     private fun setProfile(profile: PubkyProfile?) {
         profileWriteGeneration.incrementAndGet()
         _profile.update { profile }
+    }
+
+    private fun startSignIn(publicKey: String) {
+        // First, so the sign-in it replaces has ended before the key is published, even when it is the same identity.
+        signInGeneration.incrementAndGet()
+        _publicKey.update { publicKey }
+    }
+
+    private fun continueSignIn(publicKey: String) {
+        // Restoring or refreshing the session already signed in keeps its sign-in, so an edit under way still saves.
+        if (_publicKey.value != publicKey) startSignIn(publicKey)
     }
 
     private suspend fun clearAuthenticatedState(

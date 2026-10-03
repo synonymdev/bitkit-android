@@ -3330,6 +3330,83 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a contact edit saves nothing once its identity is adopted again after another identity`() = test {
+        val store = stubGatedPubkyStore()
+        val identity = stubRingCredential()
+        val anotherIdentity = stubRingCredential(VALID_CONTACT_KEY_B, secret = "another_ring_secret")
+        whenever(pubkyService.signIn(any())).thenReturn(Unit)
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        val signIn = checkNotNull(sut.currentSignIn())
+
+        assertTrue(sut.adoptRingIdentity(anotherIdentity).isSuccess)
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
+
+        assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
+        assertFalse(sut.isCurrent(signIn))
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull())
+        assertEquals(emptyMap(), store.data.contactProfileOverrides)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `a contact edit saves nothing once its Ring identity is adopted again while signed in`() = test {
+        val store = stubGatedPubkyStore()
+        val identity = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        val signIn = checkNotNull(sut.currentSignIn())
+
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
+
+        assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
+        assertFalse(sut.isCurrent(signIn))
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull())
+        assertEquals(emptyMap(), store.data.contactProfileOverrides)
+        assertTrue(sut.isCurrent(checkNotNull(sut.currentSignIn())))
+    }
+
+    @Test
+    fun `a contact edit started before the session of its identity is refreshed still saves`() = test {
+        val store = stubGatedPubkyStore()
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.signIn("local_secret")).thenReturn(Unit)
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        val signIn = checkNotNull(sut.currentSignIn())
+
+        assertEquals(true, sut.refreshSessionIfPossible().getOrNull())
+        val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
+
+        assertTrue(result.isSuccess)
+        assertTrue(sut.isCurrent(signIn))
+        verify(pubkyService).saveContact(VALID_CONTACT_KEY_A, "Alice", expectedIdentity = VALID_SELF_KEY)
+        assertEquals(listOf("Friend"), store.data.contactProfileOverrides[VALID_CONTACT_KEY_A]?.tags)
+    }
+
+    @Test
+    fun `a sign-in taken while a sign-out resets the store ends once the identity is restored`() = test {
+        val store = stubGatedPubkyStore()
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        var signInDuringSignOut: PubkySignIn? = null
+        whenever(pubkyStore.reset()).thenAnswer {
+            signInDuringSignOut = sut.currentSignIn()
+            store.data = PubkyStoreData()
+            Unit
+        }
+        assertTrue(sut.signOut().isSuccess)
+        val signIn = checkNotNull(signInDuringSignOut)
+
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
+
+        assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull())
+        assertEquals(emptyMap(), store.data.contactProfileOverrides)
+    }
+
+    @Test
     fun `a contact edit saves through the SDK for its own identity only`() = test {
         val store = stubGatedPubkyStore()
         authenticateForTesting(publicKey = VALID_SELF_KEY)
@@ -3909,10 +3986,10 @@ class PubkyRepoTest : BaseUnitTest() {
         status = status,
     )
 
-    private suspend fun stubRingCredential(): String {
-        val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
-        whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("ring_secret"))
-        whenever(pubkyService.publicKeyFromSecret("ring_secret")).thenReturn(ringPubky)
+    private suspend fun stubRingCredential(publicKey: String = VALID_SELF_KEY, secret: String = "ring_secret"): String {
+        val ringPubky = publicKey.removePrefix("pubky")
+        whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success(secret))
+        whenever(pubkyService.publicKeyFromSecret(secret)).thenReturn(ringPubky)
         return ringPubky
     }
 
