@@ -2312,6 +2312,34 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initialize preserves saved session on temporary failures`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        val failures = listOf(
+            PaykitException.ConcurrentUpdate("concurrent_update", "Locked"),
+            PaykitException.SharedStateBusy("shared_state_busy", "Pending write"),
+            PaykitException.Transport("transport_error", "Offline"),
+        )
+        var currentFailure: PaykitException? = null
+        whenever(pubkyService.importSession("saved_session")).thenAnswer {
+            currentFailure?.let { throw AppError(it) }
+            VALID_SELF_KEY
+        }
+        for (failure in failures) {
+            currentFailure = failure
+            sut.initialize()
+            assertFalse(sut.isAuthenticated.value)
+            verify(pubkyService, never()).signIn(any())
+            verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
+        }
+        verify(pubkyService, times(failures.size)).importSession("saved_session")
+
+        currentFailure = null
+        assertTrue(sut.restoreSessionIfNeeded())
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
     fun `initialize should complete contacts load after contact fetch failure`() = test {
         val session = "saved_session"
         val unprefixedPublicKey = VALID_SELF_KEY.removePrefix("pubky")

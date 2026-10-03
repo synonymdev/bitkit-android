@@ -162,6 +162,7 @@ import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitPaymentRequestRefreshMode
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitSubscription
@@ -878,10 +879,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true) {
+    private suspend fun refreshIncomingPaykitPaymentRequests(
+        mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
+    ) {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
-        if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
-        paykitPaymentRequestRepo.refresh(syncPrivateMessages = refreshMaintenance).onSuccess {
+        if (mode == PaykitPaymentRequestRefreshMode.FULL) paykitPaymentProofRepo.reconcile()
+        paykitPaymentRequestRepo.refresh(mode).onSuccess {
             activityRepo.backfillPaykitContacts()
             presentNextIncomingPaykitPaymentRequest()
         }
@@ -916,7 +919,13 @@ class AppViewModel @Inject constructor(
                     pubkyRepo.republishIdentityIfNeeded()
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
                 }
-                refreshIncomingPaykitPaymentRequests(refreshMaintenance)
+                refreshIncomingPaykitPaymentRequests(
+                    if (refreshMaintenance) {
+                        PaykitPaymentRequestRefreshMode.FULL
+                    } else {
+                        PaykitPaymentRequestRefreshMode.INBOX
+                    },
+                )
                 if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
             }
         }
@@ -941,7 +950,7 @@ class AppViewModel @Inject constructor(
             requestedPaymentRequestTags = persistentListOf()
         }
         viewModelScope.launch {
-            refreshIncomingPaykitPaymentRequests(refreshMaintenance = false)
+            refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED)
         }
     }
 

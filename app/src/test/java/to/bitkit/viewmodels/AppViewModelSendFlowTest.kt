@@ -138,6 +138,7 @@ import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitPaymentRequestRefreshMode
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitRecurrenceUnit
@@ -745,7 +746,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private message sync and identity republish follow maintenance intervals`() = test {
+    fun `outbound maintenance and identity republish follow maintenance intervals`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
@@ -753,19 +754,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         try {
             advanceTimeBy(30.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(paykitPaymentRequestRepo, atLeast(2)).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo, atLeast(2)).refresh(PaykitPaymentRequestRefreshMode.FULL)
             for (interval in listOf(60.seconds, 60.seconds, 60.seconds)) {
                 clearInvocations(pubkyRepo, paykitPaymentRequestRepo)
                 advanceTimeBy(interval.inWholeMilliseconds - 1)
                 runCurrent()
                 verify(pubkyRepo, never()).republishIdentityIfNeeded()
-                verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
-                verify(paykitPaymentRequestRepo, atLeast(1)).refresh(syncPrivateMessages = false)
+                verify(paykitPaymentRequestRepo, never()).refresh(PaykitPaymentRequestRefreshMode.FULL)
+                verify(paykitPaymentRequestRepo, atLeast(1)).refresh(PaykitPaymentRequestRefreshMode.INBOX)
 
                 advanceTimeBy(1)
                 runCurrent()
                 verify(pubkyRepo).republishIdentityIfNeeded()
-                verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+                verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
             }
         } finally {
             sut.stopPaykitPaymentRequestPolling()
@@ -776,8 +777,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `slow inbox refresh counts toward maintenance deadline`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
-        whenever(paykitPaymentRequestRepo.refresh(true)).thenReturn(Result.success(Unit))
-        whenever(paykitPaymentRequestRepo.refresh(false)).doSuspendableAnswer {
+        whenever(paykitPaymentRequestRepo.refresh(PaykitPaymentRequestRefreshMode.FULL))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh(PaykitPaymentRequestRefreshMode.INBOX)).doSuspendableAnswer {
             kotlinx.coroutines.delay(25.seconds)
             Result.success(Unit)
         }
@@ -815,7 +817,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCurrent()
             assertFalse(prepared.isCompleted)
             verify(privatePaykitRepo, never()).awaitContactPreparation()
-            verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
             verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
         } finally {
             prepared.complete(Unit)
@@ -910,13 +912,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         try {
             runCurrent()
 
-            verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
             clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
 
             advanceTimeBy(29.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(paykitPaymentRequestRepo, atLeast(1)).refresh(syncPrivateMessages = false)
-            verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
+            verify(paykitPaymentRequestRepo, atLeast(1)).refresh(PaykitPaymentRequestRefreshMode.INBOX)
+            verify(paykitPaymentRequestRepo, never()).refresh(PaykitPaymentRequestRefreshMode.FULL)
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
             verify(paykitPaymentProofRepo, never()).reconcile()
 
@@ -1345,8 +1347,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onPaykitSubscriptionNotificationTapped(testPublicKey, targetRequest.id)
         runCurrent()
 
-        verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = false)
-        verify(paykitPaymentRequestRepo, never()).refresh(syncPrivateMessages = true)
+        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.STORED)
+        verify(paykitPaymentRequestRepo, never()).refresh(PaykitPaymentRequestRefreshMode.FULL)
         verify(paykitPaymentProofRepo, never()).reconcile()
         verify(privatePaykitRepo, never()).awaitContactPreparation()
         verify(privatePaykitRepo).beginPaymentRequest(targetRequest)
@@ -7029,7 +7031,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.retryIncomingPaymentRequest(request.id)
         advanceUntilIdle()
 
-        verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
         verify(privatePaykitRepo, atLeast(1)).beginPaymentRequest(request)
         assertEquals(request.id, sut.sendUiState.value.incomingPaymentRequestId)
         assertTrue(sut.currentSheet.value is Sheet.Send)
@@ -7457,7 +7459,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, "bitkit")
-        verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
+        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
     }
 
     @Test

@@ -252,6 +252,12 @@ sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
     data object SubscriptionTooLong : PaykitPaymentRequestError("Subscription proposal exceeds the message size limit")
 }
 
+enum class PaykitPaymentRequestRefreshMode {
+    STORED,
+    INBOX,
+    FULL,
+}
+
 @Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 @Singleton
 class PaykitPaymentRequestRepo @Inject constructor(
@@ -450,7 +456,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    suspend fun refresh(syncPrivateMessages: Boolean = true): Result<Unit> {
+    suspend fun refresh(mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
         return withContext(ioDispatcher) {
@@ -460,7 +466,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         clearStateLocked()
                         return@withLock
                     }
-                    runSuspendCatching { synchronizeLocked(generation, expectedIdentity, syncPrivateMessages) }
+                    runSuspendCatching { synchronizeLocked(generation, expectedIdentity, mode) }
                         .onFailure { discardExpiredRequestsLocked() }
                         .getOrThrow()
                 }
@@ -986,10 +992,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun synchronizeLocked(
         generation: Long,
         expectedIdentity: String?,
-        syncPrivateMessages: Boolean = true,
+        mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
     ) {
-        if (syncPrivateMessages) {
-            processPendingMessages()
+        if (mode == PaykitPaymentRequestRefreshMode.FULL) processPendingMessages()
+        if (mode != PaykitPaymentRequestRefreshMode.STORED) {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         }
         val now = clock.now()

@@ -51,6 +51,7 @@ import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isPaykitIdentityError
+import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HomegateResponse
@@ -434,6 +435,10 @@ class PubkyRepo @Inject constructor(
                 val publicKey = pubkyService.importSession(savedSessionSecret).ensurePubkyPrefix()
                 InitResult.Restored(publicKey)
             }.getOrElse {
+                if (it.isPaykitTemporarilyUnavailable()) {
+                    Logger.warn("Deferred session restoration, keeping saved session", it, context = TAG)
+                    return@getOrElse InitResult.RestorationFailed
+                }
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
                 resolveSignedInSession(savedSessionSecret, storedSecretKeyHex ?: adoptedSecretKeyHex())
             }
