@@ -31,6 +31,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.PubkyStore
@@ -198,6 +199,86 @@ class PaykitSdkServiceWipeTest {
                 verify(bootstrap, never()).importSession(eq("queued"), anyOrNull(), any(), any())
             }
         }
+    }
+
+    @Test
+    fun `public read waiting to build an sdk when a wipe starts fails without building one`() = runTest {
+        val keychain = mock<Keychain>()
+        val releaseLocked = CompletableDeferred<Unit>()
+        whenever(keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)).doSuspendableAnswer { releaseLocked.await() }
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.fetchPubkyFollows(RING_PUBKY)).thenReturn(listOf("follow"))
+        var handlesCreated = 0
+        val service = PaykitSdkService(mock(), keychain, mock()) {
+            handlesCreated++
+            sdk
+        }
+
+        val locked = async(start = CoroutineStart.UNDISPATCHED) { service.clearState() }
+        val read = async(start = CoroutineStart.UNDISPATCHED) {
+            assertFailsWith<PaykitException.Storage> { service.fetchPubkyFollows(RING_PUBKY) }
+        }
+        val wipe = async(start = CoroutineStart.UNDISPATCHED) { service.withWalletWipe { handlesCreated } }
+        releaseLocked.complete(Unit)
+
+        locked.await()
+        assertEquals("wallet_wipe_in_progress", read.await().code)
+        assertEquals(0, wipe.await())
+        assertEquals(0, handlesCreated)
+        verify(sdk, never()).fetchPubkyFollows(any())
+    }
+
+    @Test
+    fun `public reads during a wipe are rejected except for the wipe itself`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        whenever(sdk.fetchPubkyFollows(RING_PUBKY)).thenReturn(listOf("follow"))
+        var handlesCreated = 0
+        val service = PaykitSdkService(mock(), mock(), mock()) {
+            handlesCreated++
+            sdk
+        }
+        service.contactRecords()
+        val cleanupStarted = CompletableDeferred<Unit>()
+        val releaseWipe = CompletableDeferred<Unit>()
+        val wipe = async {
+            service.withWalletWipe {
+                service.contactRecords()
+                assertEquals(listOf("follow"), service.fetchPubkyFollows(RING_PUBKY))
+                cleanupStarted.complete(Unit)
+                releaseWipe.await()
+            }
+        }
+        cleanupStarted.await()
+
+        val rejected = assertFailsWith<PaykitException.Storage> { service.fetchPubkyFollows(RING_PUBKY) }
+        assertEquals("wallet_wipe_in_progress", rejected.code)
+        verify(sdk, times(1)).fetchPubkyFollows(RING_PUBKY)
+        assertEquals(2, handlesCreated)
+
+        releaseWipe.complete(Unit)
+        wipe.await()
+        assertEquals(listOf("follow"), service.fetchPubkyFollows(RING_PUBKY))
+        assertEquals(3, handlesCreated)
+    }
+
+    @Test
+    fun `public read that a wipe overtakes fails without delaying the wipe`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        val releaseRead = CompletableDeferred<List<String>>()
+        whenever(sdk.fetchPubkyFollows(RING_PUBKY)).doSuspendableAnswer { releaseRead.await() }
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        service.contactRecords()
+        val read = async(start = CoroutineStart.UNDISPATCHED) {
+            assertFailsWith<PaykitException.Storage> { service.fetchPubkyFollows(RING_PUBKY) }
+        }
+
+        service.withWalletWipe {}
+        assertFalse(read.isCompleted)
+        releaseRead.complete(listOf("follow"))
+
+        assertEquals("wallet_wipe_in_progress", read.await().code)
     }
 
     private fun stubReceiverNoiseSecret(keychain: Keychain) {

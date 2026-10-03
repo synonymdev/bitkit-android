@@ -79,6 +79,38 @@ class PaykitSdkOperationLockTest {
     }
 
     @Test
+    fun `unlocked work skips the lock but not wipe admission`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val releaseActive = CompletableDeferred<Unit>()
+        val active = launch { lock.withLock { releaseActive.await() } }
+        runCurrent()
+        assertEquals("unlocked", lock.withoutLock { "unlocked" })
+
+        val releaseOvertaken = CompletableDeferred<Unit>()
+        val overtaken = async {
+            assertFailsWith<PaykitException.Storage> { lock.withoutLock { releaseOvertaken.await() } }
+        }
+        runCurrent()
+        val releaseWipe = CompletableDeferred<Unit>()
+        val wipe = launch {
+            lock.withWalletWipe {
+                assertEquals("owner", lock.withoutLock { "owner" })
+                releaseWipe.await()
+            }
+        }
+        runCurrent()
+        assertFailsWith<PaykitException.Storage> { lock.withoutLock { error("unlocked work ran during wipe") } }
+        releaseOvertaken.complete(Unit)
+        assertEquals("wallet_wipe_in_progress", overtaken.await().code)
+
+        releaseActive.complete(Unit)
+        releaseWipe.complete(Unit)
+        active.join()
+        wipe.join()
+        assertEquals("fresh", lock.withoutLock { "fresh" })
+    }
+
+    @Test
     fun `cancelled queued operation never executes`() = runTest {
         val lock = PaykitSdkOperationLock()
         val release = CompletableDeferred<Unit>()
