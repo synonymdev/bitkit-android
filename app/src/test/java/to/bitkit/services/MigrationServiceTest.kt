@@ -51,4 +51,31 @@ class MigrationServiceTest : BaseUnitTest() {
         assertTrue(requests.isEmpty())
         assertTrue(result.isEmpty())
     }
+
+    @Test
+    fun `unapplied metadata keeps only tags whose activity is missing`() {
+        val metadata = RNMetadata(
+            tags = mapOf("known" to listOf("sent"), "missing" to listOf("received")),
+            lastUsedTags = listOf("sent"),
+        )
+
+        val remaining = unappliedRnMetadata(metadata, setOf("missing"))
+
+        assertEquals(mapOf("missing" to listOf("received")), remaining?.tags)
+        assertEquals(null, remaining?.lastUsedTags)
+    }
+
+    @Test
+    fun `unapplied metadata is dropped when every tag was applied`() {
+        val metadata = RNMetadata(tags = mapOf("known" to listOf("sent")), lastUsedTags = listOf("sent"))
+
+        assertEquals(null, unappliedRnMetadata(metadata, emptySet()))
+    }
+
+    @Test
+    fun `unapplied metadata is dropped when there are no tags`() {
+        val metadata = RNMetadata(tags = null, lastUsedTags = listOf("sent"))
+
+        assertEquals(null, unappliedRnMetadata(metadata, setOf("missing")))
+    }
 }

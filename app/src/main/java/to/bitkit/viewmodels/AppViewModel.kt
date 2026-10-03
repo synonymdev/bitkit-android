@@ -1576,22 +1576,9 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun completeRNRemoteBackupRestore() {
-        val channelMigration = buildChannelMigrationIfAvailable()
-
-        if (channelMigration != null) {
-            lightningRepo.stop().onFailure {
-                Logger.error("Failed to stop node during remote restore restart", it, context = TAG)
-            }
-            delay(REMOTE_RESTORE_NODE_RESTART_DELAY_MS)
-            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
-                .onSuccess {
-                    migrationService.consumePendingChannelMigration()
-                    walletRepo.syncNodeAndWallet()
-                    walletRepo.syncBalances()
-                }
-                .onFailure { e ->
-                    Logger.error("Failed to restart node after remote restore: $e", e, context = TAG)
-                }
+        if (!applyPendingChannelMigration()) {
+            finishMigrationWithError()
+            return
         }
 
         lightningRepo.getPayments().onSuccess { activityRepo.syncLdkNodePayments(it) }
@@ -1617,6 +1604,30 @@ class AppViewModel @Inject constructor(
         )
     }
 
+    private suspend fun applyPendingChannelMigration(): Boolean {
+        val channelMigration = buildChannelMigrationIfAvailable() ?: return true
+        lightningRepo.stop().onFailure {
+            Logger.error("Failed to stop node during remote restore restart", it, context = TAG)
+        }
+        if (lightningRepo.lightningState.value.nodeLifecycleState.isRunningOrStarting()) {
+            Logger.error("Node still running, pending channel migration was not applied", context = TAG)
+            return false
+        }
+        delay(REMOTE_RESTORE_NODE_RESTART_DELAY_MS)
+        var applied = false
+        lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
+            .onSuccess {
+                migrationService.consumePendingChannelMigration()
+                walletRepo.syncNodeAndWallet()
+                walletRepo.syncBalances()
+                applied = true
+            }
+            .onFailure { e ->
+                Logger.error("Failed to restart node after remote restore", e, context = TAG)
+            }
+        return applied
+    }
+
     private suspend fun completeMigration() {
         if (isCompletingMigration) return
         isCompletingMigration = true
@@ -1629,7 +1640,10 @@ class AppViewModel @Inject constructor(
             }
             activityRepo.markAllUnseenActivitiesAsSeen()
 
-            migrationService.consumePendingChannelMigration()
+            if (!applyPendingChannelMigration()) {
+                finishMigrationWithError()
+                return@runCatching
+            }
 
             walletRepo.syncNodeAndWallet()
                 .onSuccess { finishMigrationSuccessfully() }
