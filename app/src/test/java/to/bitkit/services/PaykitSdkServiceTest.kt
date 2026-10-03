@@ -17,6 +17,7 @@ import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
+import com.synonym.paykit.PrivateStreamIntakeReport
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyIdentityCapability
@@ -81,7 +82,7 @@ class PaykitSdkServiceTest {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `request discovery timeout excludes time queued for the SDK`() = runTest {
+    fun `request discovery completes while unrelated SDK work is blocked`() = runTest {
         val sdk = mock<PaykitSdk>()
         val releaseContacts = CompletableDeferred<Unit>()
         whenever { sdk.contactRecords() }.doSuspendableAnswer {
@@ -101,14 +102,35 @@ class PaykitSdkServiceTest {
         val contacts = async { service.contactRecords() }
         runCurrent()
         val discovery = async { service.canReceivePaymentRequests(RING_PUBKY) }
-        advanceTimeBy(6.seconds.inWholeMilliseconds)
         runCurrent()
 
-        assertFalse(discovery.isCompleted)
-        verify(sdk, never()).paykitAppRegistry(any())
-        releaseContacts.complete(Unit)
+        try {
+            assertTrue(discovery.isCompleted)
+            assertFalse(contacts.isCompleted)
+            assertEquals(true, discovery.await())
+        } finally {
+            releaseContacts.complete(Unit)
+        }
         contacts.await()
-        assertEquals(true, discovery.await())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `request discovery discards a result from a replaced runtime`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val releaseLookup = CompletableDeferred<Unit>()
+        whenever { sdk.paykitAppRegistry(RING_PUBKY) }.doSuspendableAnswer {
+            releaseLookup.await()
+            null
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val discovery = async { service.canReceivePaymentRequests(RING_PUBKY) }
+        runCurrent()
+        service.clearState()
+        releaseLookup.complete(Unit)
+
+        assertNull(discovery.await())
+        assertEquals(false, service.canReceivePaymentRequests(RING_PUBKY))
     }
 
     @Test
@@ -161,6 +183,40 @@ class PaykitSdkServiceTest {
         verify(sdk, times(2)).ensureLinkWithPeer(RING_PUBKY, 1u)
         verify(sdk).prepareAndResolvePrivateContactPayment(RING_PUBKY, null, null, 1u)
         verify(sdk).prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null, 1u)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `scoped private receive holds mutation lock and tracks backup changes`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val report = mock<PrivateStreamIntakeReport>()
+        val releaseReceive = CompletableDeferred<Unit>()
+        var revision = "before"
+        whenever(sdk.stateRevision()).thenAnswer { revision }
+        whenever(sdk.backupStateRevision()).thenAnswer { revision }
+        whenever(sdk.receivePrivateMessages(RING_PUBKY)).doSuspendableAnswer {
+            releaseReceive.await()
+            revision = "received"
+            report
+        }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val receive = async { service.receivePrivateMessages(RING_PUBKY) }
+        runCurrent()
+        val contacts = async { service.contactRecords() }
+        runCurrent()
+        try {
+            assertFalse(contacts.isCompleted)
+            verify(sdk, never()).contactRecords()
+        } finally {
+            releaseReceive.complete(Unit)
+        }
+
+        assertSame(report, receive.await())
+        assertEquals(emptyList(), contacts.await())
+        assertEquals(1L, service.backupStateVersion.value)
+        verify(sdk).receivePrivateMessages(RING_PUBKY)
+        verify(sdk, never()).receivePrivateMessagesFromLinkedPeers()
     }
 
     @Test

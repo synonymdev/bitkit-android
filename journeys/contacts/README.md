@@ -24,3 +24,17 @@ after deletion. Unavailable private-link lookups are retried after five minutes 
 For Import All, include the identity's own key in the following list. Repeat with a spelling that changes only the final z-base32 padding bits, which still represents the same 32-byte key. The preview friend count and saved contacts exclude that identity, while the other follows import normally. Carry the same self-follow checks and padding-alias repeat in the matching iOS journey.
 
 Network and storage fault injection are outside journey-runner capabilities. Manually disable connectivity after the preview has loaded: importing the prepared contacts must still finish. Simulate a failed local save: stay on import, preserve successful saves, and retry only missing contacts without claiming complete success. On Android, a failed Continue on the payment-sharing screen should offer recovery guidance and leave saved contacts intact.
+
+## Foreground wait isolation
+
+Hold an unrelated contact's background preparation in progress, then open a saved, linked contact
+and request or pay it. The selected contact must be eligible for its own lookup before the full
+contact scan finishes. Hold its public capability lookup separately: this public read must not
+retain the shared-state operation queue used by payment resolution, withdrawal, and wallet backup.
+Identity, link, and request execution checks still run and may wait for shared-state access.
+
+Retry private messages for one contact while other contacts have pending outbound work. Only the
+selected retry contacts should be sent to or read from in that drain. Repeat during sharing OFF,
+with one withdrawal failing: OFF remains immediate, cleanup remains pending on failure, and no new
+publication starts. Record action-to-result time separately from SDK lock and network waits; these
+fault-injection checks do not establish staging latency or a guaranteed completion deadline.

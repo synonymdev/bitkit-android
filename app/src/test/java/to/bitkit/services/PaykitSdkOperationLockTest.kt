@@ -17,6 +17,27 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class PaykitSdkOperationLockTest {
     @Test
+    fun `public reads do not block mutation but reject results across wallet wipe`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val releaseRead = CompletableDeferred<Unit>()
+        val read = async {
+            assertFailsWith<PaykitException.Storage> {
+                lock.withPublicRead { releaseRead.await() }
+            }
+        }
+        runCurrent()
+        lock.withLock { }
+        lock.withWalletWipe {
+            assertFailsWith<PaykitException.Storage> {
+                lock.withPublicRead { error("read admitted during wipe") }
+            }
+        }
+        releaseRead.complete(Unit)
+        assertEquals("wallet_wipe_in_progress", read.await().code)
+        assertEquals("fresh", lock.withPublicRead { "fresh" })
+    }
+
+    @Test
     fun `wipe drains active work rejects queued work and permits cleanup and fresh work`() = runTest {
         val lock = PaykitSdkOperationLock()
         val releaseActive = CompletableDeferred<Unit>()

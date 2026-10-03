@@ -27,6 +27,8 @@ import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -1172,6 +1174,90 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             sut.eligibleTargets.value,
         )
         verifyBlocking(paykitSdkService, times(1)) { canReceivePaymentRequests(COUNTERPARTY) }
+    }
+
+    @Test
+    fun `recipient discovery bounds public lookups without a slow peer blocking later peers`() = test {
+        val keys = "yb".flatMap { first ->
+            "ybndrfg8ejkmcpqxot1uwisza345h769".map { second ->
+                COUNTERPARTY.replace("pubky3r", "pubky$first$second")
+            }
+        }.take(61)
+        whenever(paykitSdkService.identityStatus()).thenReturn(
+            IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(keys.map { linkedPeer(it, LinkedPeerState.LINKED) })
+        whenever(paykitSdkService.canReceivePaymentRequests(any())).thenReturn(true)
+        sut.refreshEligibleTargets(keys).getOrThrow()
+        val releaseSlowPeer = CompletableDeferred<Unit>()
+        val completedPeers = mutableSetOf<String>()
+        var active = 0
+        var maxActive = 0
+        whenever(paykitSdkService.canReceivePaymentRequests(any())).doSuspendableAnswer {
+            val publicKey = it.getArgument<String>(0)
+            active++
+            maxActive = maxOf(maxActive, active)
+            try {
+                if (publicKey == keys.first()) {
+                    releaseSlowPeer.await()
+                    null
+                } else {
+                    delay(500.milliseconds)
+                    completedPeers += publicKey
+                    if (publicKey == keys[1]) throw PaykitException.Transport("transport", "Registry unavailable")
+                    true
+                }
+            } finally {
+                active--
+            }
+        }
+        val startedAt = testScheduler.currentTime
+        val discovery = async { sut.refreshEligibleTargets(keys, force = true).getOrThrow() }
+        try {
+            runCurrent()
+            assertEquals(8, active)
+            advanceTimeBy(4500)
+            runCurrent()
+            assertEquals(keys.drop(1).toSet(), completedPeers)
+            assertFalse(discovery.isCompleted)
+            assertEquals(1, active)
+        } finally {
+            releaseSlowPeer.complete(Unit)
+        }
+        discovery.await()
+
+        assertEquals(4500L, testScheduler.currentTime - startedAt)
+        assertEquals(8, maxActive)
+        assertEquals(0, active)
+        assertEquals(keys.map(::PaykitPaymentRequestTarget), sut.eligibleTargets.value)
+    }
+
+    @Test
+    fun `cancelling recipient discovery cancels every active public lookup`() = test {
+        val keys = "ybndrfg8e".map { COUNTERPARTY.replace("pubky3", "pubky$it") }
+        whenever(paykitSdkService.identityStatus()).thenReturn(
+            IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(keys.map { linkedPeer(it, LinkedPeerState.LINKED) })
+        var active = 0
+        whenever(paykitSdkService.canReceivePaymentRequests(any())).doSuspendableAnswer {
+            active++
+            try {
+                awaitCancellation()
+            } finally {
+                active--
+            }
+        }
+        val discovery = async { sut.refreshEligibleTargets(keys) }
+        runCurrent()
+        assertEquals(8, active)
+
+        discovery.cancel()
+        discovery.join()
+
+        assertEquals(0, active)
+        verify(paykitSdkService, times(8)).canReceivePaymentRequests(any())
+        assertTrue(sut.eligibleTargets.value.isEmpty())
     }
 
     @Test

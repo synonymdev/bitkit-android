@@ -773,7 +773,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `maintenance waits for contact preparation before inbox and target refresh`() = test {
+    fun `maintenance discovers targets and refreshes inbox without joining all contact preparation`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
@@ -788,11 +788,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             advanceTimeBy(1)
             runCurrent()
-            verify(paykitPaymentRequestRepo, never()).refresh(any())
-            verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
-
-            prepared.complete(Unit)
-            runCurrent()
+            assertFalse(prepared.isCompleted)
+            verify(privatePaykitRepo, never()).awaitContactPreparation()
             verify(paykitPaymentRequestRepo).refresh(syncPrivateMessages = true)
             verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
         } finally {
@@ -8487,10 +8484,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         clearInvocations(paykitPaymentRequestRepo)
         pubkyContactsLoadVersion.value = 1L
         runCurrent()
-        verify(paykitPaymentRequestRepo, never()).refresh(any())
-        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
-
-        prepared.complete(Unit)
+        assertFalse(prepared.isCompleted)
+        verify(privatePaykitRepo, never()).awaitContactPreparation()
         advanceUntilIdle()
 
         verify(privatePaykitRepo).scheduleSavedContactPreparation(any<Collection<String>>())

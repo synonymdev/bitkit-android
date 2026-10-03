@@ -15,6 +15,22 @@ internal class PaykitSdkOperationLock {
     private var generation = 0L
     private var isWiping = false
 
+    /** Admits identity-independent public reads without holding the mutation lock. */
+    suspend fun <T> withPublicRead(operation: suspend () -> T): T {
+        val admittedGeneration = synchronized(stateLock) {
+            checkAvailable()
+            generation
+        }
+        currentCoroutineContext().ensureActive()
+        val result = operation()
+        currentCoroutineContext().ensureActive()
+        synchronized(stateLock) {
+            checkAvailable()
+            if (admittedGeneration != generation) throw wipeError()
+        }
+        return result
+    }
+
     suspend fun <T> withLock(operation: suspend () -> T): T {
         val wipeContext = currentCoroutineContext()[WipeContext]
         if (synchronized(stateLock) {

@@ -15,6 +15,9 @@ import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +26,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -262,6 +267,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "PaykitPaymentRequestRepo"
+
+        /** Maximum number of concurrent public capability lookups per discovery. */
+        private const val PAYMENT_REQUEST_DISCOVERY_CONCURRENCY = 8
     }
 
     private val operationMutex = Mutex()
@@ -1160,9 +1168,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
     ): PaykitPaymentRequestTargetDiscovery {
         var isComplete = true
         val failedPublicKeys = mutableSetOf<String>()
-        val targets = context.savedPublicKeys.mapNotNull { publicKey ->
-            if (publicKey !in context.linkedPublicKeys) return@mapNotNull null
-            val lookup = runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey) }
+        val linkedKeys = context.savedPublicKeys.filter { it in context.linkedPublicKeys }
+        val targets = paymentRequestCapabilities(linkedKeys).mapNotNull { (publicKey, lookup) ->
             val capable = lookup
                 .onFailure {
                     Logger.warn(
@@ -1194,6 +1201,17 @@ class PaykitPaymentRequestRepo @Inject constructor(
             isComplete = isComplete,
             failedPublicKeys = failedPublicKeys,
         )
+    }
+
+    private suspend fun paymentRequestCapabilities(publicKeys: List<String>) = coroutineScope {
+        val permits = Semaphore(PAYMENT_REQUEST_DISCOVERY_CONCURRENCY)
+        publicKeys.map { publicKey ->
+            async {
+                permits.withPermit {
+                    publicKey to runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey) }
+                }
+            }
+        }.awaitAll()
     }
 
     private fun acceptedPaymentEndpointIdentifiers(settings: SettingsData): List<String> = buildList {

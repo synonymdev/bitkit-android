@@ -181,7 +181,10 @@ class PaykitSdkService @Inject constructor(
     private var isSetup = CompletableDeferred<Unit>()
     private var setupFailed = false
     private var platformInitializer: () -> Unit = { PaykitAndroid.initializeOrThrow(context) }
+
+    @Volatile
     private var sdk: PaykitSdk? = null
+
     private var cachedPaykitKey: PaykitKeyGeneration? = null
     private var cachedBackupState: PaykitBackupStateSnapshot? = null
     private val _backupStateVersion = MutableStateFlow(0L)
@@ -689,6 +692,15 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    suspend fun receivePrivateMessages(counterparty: String) = run {
+        isSetup.await()
+        operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                handle.receivePrivateMessages(counterparty)
+            }
+        }
+    }
+
     suspend fun processOutboundPrivateMessages(counterparty: String) = run {
         isSetup.await()
         operationLock.withLock {
@@ -738,15 +750,17 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    /** Returns null when the registry lookup times out, excluding queued SDK work. */
+    /** Returns null on timeout or runtime replacement; public reads do not hold the mutation lock. */
     suspend fun canReceivePaymentRequests(publicKey: String): Boolean? {
         isSetup.await()
-        return operationLock.withLock {
-            withTimeoutOrNull(PAYMENT_REQUEST_DISCOVERY_TIMEOUT) {
-                handle().paykitAppRegistry(publicKey)?.apps?.any {
+        return operationLock.withPublicRead {
+            val handle = sdk ?: operationLock.withLock { handle() }
+            val result = withTimeoutOrNull(PAYMENT_REQUEST_DISCOVERY_TIMEOUT) {
+                handle.paykitAppRegistry(publicKey)?.apps?.any {
                     it.capabilities.paymentRequests && it.capabilities.outgoingPayments
                 } == true
             }
+            result.takeIf { sdk === handle }
         }
     }
 
@@ -1203,7 +1217,7 @@ class PaykitSdkService @Inject constructor(
         /** Maximum time identity maintenance may delay its caller. */
         private val IDENTITY_REPUBLISH_WAIT_TIMEOUT = 5.seconds
 
-        /** Maximum duration of a payment-request capability lookup after acquiring the SDK lock. */
+        /** Maximum duration of a public payment-request capability lookup. */
         private val PAYMENT_REQUEST_DISCOVERY_TIMEOUT = 5.seconds
 
         fun localSecretKey(secretKeyHex: String): PubkyLocalSecretKey =

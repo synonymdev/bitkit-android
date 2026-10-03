@@ -762,7 +762,6 @@ class AppViewModel @Inject constructor(
                 .onFailure { Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG) }
             privatePaykitRepo.pruneUnsavedContactState(state.contactKeys)
                 .onFailure { Logger.warn("Failed to prune private Paykit contact state", it, context = TAG) }
-            privatePaykitRepo.awaitContactPreparation()
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
             refreshIncomingPaykitPaymentRequests()
             refreshPaymentRequestTargets(force = true)
@@ -790,7 +789,6 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
             }
         privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
-        privatePaykitRepo.awaitContactPreparation()
         refreshIncomingPaykitPaymentRequests()
         refreshPaymentRequestTargets(force = true)
     }
@@ -890,7 +888,6 @@ class AppViewModel @Inject constructor(
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
-            privatePaykitRepo.awaitContactPreparation()
             refreshIncomingPaykitPaymentRequests()
             refreshPaymentRequestTargets()
             var maintenanceIntervalIndex = 0
@@ -906,7 +903,6 @@ class AppViewModel @Inject constructor(
                     if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
                     pubkyRepo.republishIdentityIfNeeded()
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
-                    privatePaykitRepo.awaitContactPreparation()
                 }
                 refreshIncomingPaykitPaymentRequests(refreshMaintenance)
                 if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
