@@ -45,6 +45,36 @@ class PaykitAllowanceTest : BaseUnitTest() {
     // region Records
 
     @Test
+    fun `only a received proposal from the allower is an offer`() {
+        val fromAllower = fixtures.allowance(
+            role = PaykitAllowance.Role.ALLOWEE,
+            state = AllowanceLifecycleState.PROPOSED,
+            isProposedByMe = false,
+        )
+        assertTrue(fromAllower.isOfferFromAllower)
+        assertTrue(fromAllower.isAnswerable)
+
+        val fromAllowee = fixtures.allowance(
+            role = PaykitAllowance.Role.ALLOWER,
+            state = AllowanceLifecycleState.PROPOSED,
+            isProposedByMe = false,
+        )
+        assertFalse(fromAllowee.isOfferFromAllower)
+        assertTrue(fromAllowee.isAnswerable)
+
+        for (role in PaykitAllowance.Role.entries) {
+            val sent = fixtures.allowance(role = role, state = AllowanceLifecycleState.PROPOSED, isProposedByMe = true)
+            assertFalse(sent.isOfferFromAllower)
+        }
+        val answered = fixtures.allowance(
+            role = PaykitAllowance.Role.ALLOWEE,
+            state = AllowanceLifecycleState.ACCEPTED,
+            isProposedByMe = false,
+        )
+        assertFalse(answered.isOfferFromAllower)
+    }
+
+    @Test
     fun `record reads back sats, anchor, role and allowlist`() {
         val allowlist = listOf(fixtures.lightningIdentifier, fixtures.onchainIdentifier)
         val record = fixtures.record(
@@ -586,11 +616,12 @@ internal object PaykitAllowanceFixtures {
         monthlyAnchor: Instant? = septemberAnchor,
         expiresAt: Instant? = null,
         lastEventAt: Instant? = null,
+        isProposedByMe: Boolean = role == PaykitAllowance.Role.ALLOWER,
     ) = PaykitAllowance(
         id = PaykitAllowance.Id(counterparty, allowanceId),
         role = role,
         lifecycleState = state,
-        isProposedByMe = role == PaykitAllowance.Role.ALLOWER,
+        isProposedByMe = isProposedByMe,
         perPaymentMaxSats = perPaymentMaxSats,
         monthlyLimitSats = monthlyLimitSats,
         monthlyAnchor = monthlyAnchor,

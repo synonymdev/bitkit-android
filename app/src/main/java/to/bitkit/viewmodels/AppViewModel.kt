@@ -153,6 +153,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.PaykitAllowanceEntry
 import to.bitkit.repositories.PaykitAllowanceError
 import to.bitkit.repositories.PaykitAllowanceEvent
 import to.bitkit.repositories.PaykitAllowanceRepo
@@ -894,6 +895,7 @@ class AppViewModel @Inject constructor(
         paykitPaymentRequestRepo.refresh(syncPrivateMessages = refreshMaintenance).onSuccess {
             activityRepo.backfillPaykitContacts()
             paykitAllowanceRepo.refresh()
+            announceAcceptedAllowanceOffers(paykitAllowanceRepo.acceptOffersFromAllowers())
             if (paykitAllowanceRepo.processIncomingRequests(paykitPaymentRequestRepo.pendingRequests.value)) {
                 paykitPaymentRequestRepo.refresh()
             }
@@ -928,6 +930,18 @@ class AppViewModel @Inject constructor(
             )
 
             PaykitAllowanceEvent.LedgerChanged -> Unit
+        }
+    }
+
+    private fun announceAcceptedAllowanceOffers(offers: List<PaykitAllowanceEntry>) {
+        offers.forEach { offer ->
+            notifyAllowanceEvent(
+                type = Toast.ToastType.SUCCESS,
+                title = context.getString(R.string.subscriptions__allowance_offer_accepted_title),
+                description = context.getString(R.string.subscriptions__allowance_offer_accepted_description)
+                    .replace("{name}", allowanceContactName(offer.counterparty)),
+                testTag = "AllowanceOfferAcceptedToast",
+            )
         }
     }
 

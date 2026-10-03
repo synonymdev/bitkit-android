@@ -107,6 +107,7 @@ class PaykitAllowanceRepo @Inject constructor(
     private val refreshMutex = Mutex()
     private val publishLock = Any()
     private val isProcessingRequests = AtomicBoolean(false)
+    private val isAcceptingOffers = AtomicBoolean(false)
     private val manualRequestSignatures = ConcurrentHashMap<PaykitPaymentRequestId, Int>()
     private val _allowances = MutableStateFlow<List<PaykitAllowance>>(emptyList())
     private val _localState = MutableStateFlow(PaykitAllowanceLocalState())
@@ -245,6 +246,29 @@ class PaykitAllowanceRepo @Inject constructor(
         paykitSdkService.acceptAllowance(it.counterparty, it.allowanceId)
     }
 
+    /**
+     * Accepts the offers that make this wallet the allowee and returns the ones now active so the caller can tell the
+     * user. A failed accept stays unanswered and is tried again on the next refresh.
+     */
+    suspend fun acceptOffersFromAllowers(): List<PaykitAllowanceEntry> = withContext(ioDispatcher) {
+        if (activeIdentity == null) return@withContext emptyList()
+        val offers = _entries.value.filter { entry ->
+            val answerable = entry.allowances.filter { it.isAnswerable }
+            answerable.isNotEmpty() && answerable.all { it.isOfferFromAllower }
+        }
+        if (offers.isEmpty() || !isAcceptingOffers.compareAndSet(false, true)) return@withContext emptyList()
+
+        try {
+            offers.filter { offer ->
+                accept(offer.id).onFailure {
+                    Logger.warn("Failed to accept an allowance offer", it, context = TAG)
+                }.isSuccess
+            }
+        } finally {
+            isAcceptingOffers.set(false)
+        }
+    }
+
     suspend fun reject(entryId: String): Result<Unit> = respond(entryId) {
         paykitSdkService.rejectAllowance(it.counterparty, it.allowanceId)
     }
@@ -292,11 +316,12 @@ class PaykitAllowanceRepo @Inject constructor(
 
     // region Presentation
 
-    /** The first received proposal that still needs an answer and was not shown yet. */
+    /** The first received proposal that needs the user's answer and was not shown yet; offers are accepted instead. */
     fun proposalForPresentation(): PaykitAllowanceEntry? {
         val presented = _localState.value.presentedProposalIds
         return _entries.value.firstOrNull { entry ->
-            entry.isAnswerable && entry.allowances.none { it.allowanceId in presented }
+            entry.allowances.any { it.isAnswerable && !it.isOfferFromAllower } &&
+                entry.allowances.none { it.allowanceId in presented }
         }
     }
 

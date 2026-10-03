@@ -78,6 +78,13 @@ data class PaykitAllowance(
 
     val isAnswerable: Boolean get() = lifecycleState == AllowanceLifecycleState.PROPOSED && !isProposedByMe
 
+    /**
+     * A received proposal whose proposer took the allower role, which leaves this wallet the allowee. The money and the
+     * decision are the allower's, so Bitkit accepts it without asking. A received proposal that makes this wallet the
+     * allower (a payee asking for an allowance) is not an offer and waits for the user's decision.
+     */
+    val isOfferFromAllower: Boolean get() = isAnswerable && role == Role.ALLOWEE
+
     fun status(now: Instant): Status = when (lifecycleState) {
         AllowanceLifecycleState.PROPOSED -> if (isProposedByMe) Status.AWAITING_ANSWER else Status.AWAITING_MY_ANSWER
         AllowanceLifecycleState.ACCEPTED -> when {
