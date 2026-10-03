@@ -394,6 +394,94 @@ class PrivatePaykitRepo @Inject constructor(
         result
     }
 
+    /**
+     * Resolves the payee's current private endpoint for an automatic Allowance payment. Only endpoints that the
+     * Allowance and the request both accept qualify, and only ones this wallet can pay without asking: a bolt11
+     * invoice for exactly the requested amount (or amount-less), or an unused on-chain address. Public endpoints
+     * are never used. Returns null when nothing qualifies.
+     */
+    suspend fun resolveAllowancePayment(
+        request: PaykitPaymentRequest,
+        eligibleIdentifiers: List<String>,
+    ): Result<PrivatePaykitAllowancePayment?> = withContext(serializedDispatcher) {
+        runSuspendCatching {
+            if (request.isExpired(clock.now())) return@runSuspendCatching null
+            val publicKey = normalizedPublicKey(request.counterparty) ?: return@runSuspendCatching null
+            val consumedVersion = ensureState().contacts[publicKey]?.consumedPrivatePaymentListVersion
+            val prepared = paykitSdkService.prepareAndResolvePrivatePaymentRequest(
+                counterparty = publicKey,
+                paymentRequestId = request.paymentRequestId,
+                afterPrivatePaymentListVersion = consumedVersion,
+            )
+            val resolution = prepared.resolution
+            if (
+                resolution.state == PrivatePaymentResolutionState.RECOVERY_PENDING ||
+                resolution.status == PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST
+            ) {
+                // The last list was already paid from; a new one arrives once the payee sees that payment settle.
+                schedulePendingPrivateMessageDrainRetries(
+                    reason = "allowance payment",
+                    retryKeys = listOf(publicKey),
+                )
+                throw PaykitAllowanceError.PaymentListPending
+            }
+            val paymentListVersion = resolution.privatePaymentListVersion ?: return@runSuspendCatching null
+
+            val eligible = eligibleIdentifiers.toSet() intersect request.acceptedPaymentEndpointIdentifiers.toSet()
+            val candidates = prepared.resolution.payableEndpoints
+                .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload)?.copy(appId = it.appId) }
+                .filter {
+                    it.methodId.rawValue in eligible && (it.methodId == MethodId.Bolt11 || it.methodId.isOnchain)
+                }
+            val payable = privatePayableEndpoints(candidates, publicKey, allowUsedOnchainAddress = false)
+            allowancePayment(
+                request = request,
+                payable = payable,
+                paymentListVersion = paymentListVersion,
+            )
+        }
+    }
+
+    private suspend fun allowancePayment(
+        request: PaykitPaymentRequest,
+        payable: List<Endpoint>,
+        paymentListVersion: ULong,
+    ): PrivatePaykitAllowancePayment? = PublicPaykitRepo.payablePreferenceOrder
+        .mapNotNull { methodId -> payable.firstOrNull { it.methodId == methodId } }
+        .firstNotNullOfOrNull { allowancePayment(request, it, paymentListVersion) }
+
+    private suspend fun allowancePayment(
+        request: PaykitPaymentRequest,
+        endpoint: Endpoint,
+        paymentListVersion: ULong,
+    ): PrivatePaykitAllowancePayment? {
+        val appId = endpoint.appId ?: return null
+        val context = PrivatePaykitPaymentContext(
+            paymentAppsByEndpoint = mapOf(endpoint.methodId.rawValue to appId),
+            paymentListVersion = paymentListVersion,
+        )
+        if (endpoint.methodId != MethodId.Bolt11) {
+            return PrivatePaykitAllowancePayment(
+                endpoint = endpoint,
+                appId = appId,
+                context = context,
+                lightningPaymentHash = null,
+                lightningInvoiceHasAmount = false,
+            )
+        }
+        val invoice = runSuspendCatching { (coreService.decode(endpoint.value) as? Scanner.Lightning)?.invoice }
+            .getOrNull()
+            ?: return null
+        if (!request.acceptsLightningInvoiceAmountSats(invoice.amountSatoshis)) return null
+        return PrivatePaykitAllowancePayment(
+            endpoint = endpoint,
+            appId = appId,
+            context = context,
+            lightningPaymentHash = invoice.paymentHash.toHex().lowercase(),
+            lightningInvoiceHasAmount = invoice.amountSatoshis != 0uL,
+        )
+    }
+
     suspend fun consumePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,

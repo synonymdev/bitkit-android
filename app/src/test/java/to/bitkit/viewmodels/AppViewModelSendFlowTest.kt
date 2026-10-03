@@ -138,6 +138,7 @@ import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitRecurrenceUnit
@@ -239,6 +240,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
+    private val paykitAllowanceRepo = mock<PaykitAllowanceRepo>()
     private val paykitPaymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val paykitPaymentRequestDiagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val samRockRepo = mock<SamRockRepo>()
@@ -451,6 +453,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isExpired(any())).thenReturn(false)
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
         whenever(paykitPaymentProofRepo.onchainPaymentResolutions).thenReturn(onchainPaymentResolutions)
+        whenever(paykitAllowanceRepo.events).thenReturn(MutableSharedFlow())
+        whenever { paykitAllowanceRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever { paykitAllowanceRepo.beginManualPayment(any(), any()) }.thenReturn(Result.success(null))
+        whenever { paykitAllowanceRepo.processIncomingRequests(any()) }.thenReturn(false)
+        whenever { paykitAllowanceRepo.isAutomaticallyHandling(any()) }.thenReturn(false)
         whenever { paykitPaymentProofRepo.prepare(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever {
             paykitPaymentProofRepo.associateLightningPayment(any(), any(), any(), eq("bitkit"))
@@ -547,6 +554,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         privatePaykitRepo = privatePaykitRepo,
         contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         paykitPaymentRequestRepo = paykitPaymentRequestRepo,
+        paykitAllowanceRepo = paykitAllowanceRepo,
         paykitPaymentProofRepo = paykitPaymentProofRepo,
         paykitPaymentRequestDiagnostics = paykitPaymentRequestDiagnostics,
         refreshContactPaykitLink = refreshContactPaykitLink,

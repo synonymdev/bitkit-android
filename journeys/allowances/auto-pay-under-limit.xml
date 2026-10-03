@@ -1,0 +1,22 @@
+<journey name="Auto Pay Under Limit">
+  <description>
+    A request within both limits is paid without the payer seeing a sheet. The payer only gets a
+    "Payment Executed" notification, the payee receives the payment, and the payer's Payments tab and
+    allowance detail both account for it. Requires the Active allowance from set-and-accept.xml and
+    notification permission granted on the payer.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with the $5 a payment, $50 a month allowance from set-and-accept.xml Active, and the payer's notification permission granted</action>
+    <action>On the payee instance, open the drawer menu, tap Subscriptions, tap the Payments tab (testTag "Tab-payments") and tap Request Payment (testTag "PaymentRequestCreate")</action>
+    <action>Send the payer a one-time Payment Request for $2 with the note "Devlog"</action>
+    <action>Switch to the payer instance, with Bitkit in the foreground on the home screen</action>
+    <action>Verify that within about five seconds no Payment Request sheet opens and the bell (testTag "PaymentRequestsBell") shows no pending request</action>
+    <action>Verify a "Payment Executed" notification with the text "Auto-pay sent $2.00 to &lt;payee&gt;" is posted, reading it back with `adb shell dumpsys notification --noredact`; without notification permission it is a toast that only a screenshot catches</action>
+    <action>Switch to the payee instance and verify the payment arrives, either as the Received Instant Bitcoin sheet or as a $2.00 "Received from &lt;payer&gt;" row in Activity</action>
+    <action>Switch to the payer instance, open the drawer menu, tap Subscriptions and tap the Payments tab</action>
+    <action>Verify the "Devlog" row (testTag "PaymentRequestRow-&lt;paymentRequestId&gt;") is listed with a subtitle ending in "· Auto-paid"</action>
+    <action>Tap the Allowances tab, then tap the payee's row</action>
+    <action>Verify the detail sheet (testTag "AllowanceDetail") shows PAID AUTOMATICALLY "$2.00" (testTag "AllowancePaidSoFar") and the explanation "Requests within these limits are paid automatically. Anything above them asks you first." (testTag "AllowanceDetailStatus")</action>
+    <action>Open Activity from the home screen and verify the newest row reads "Sent to &lt;payee&gt;" for $2.00</action>
+  </actions>
+</journey>

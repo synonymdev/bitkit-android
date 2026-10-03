@@ -1,0 +1,22 @@
+<journey name="Monthly Cap Reached">
+  <description>
+    Requests keep paying themselves until the month's allowance is used up; the first request that
+    would exceed it is left to the payer with a "Limit Reached" notification and the ordinary Payment
+    Request sheet. The journey uses a $5 a payment, $10 a month allowance so two $4 requests fit and
+    the third does not. The second request can take a few extra seconds: after a payment the payee
+    publishes a new private payment list, and the payer waits for it rather than asking.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with no Active allowance between them and the payer's notification permission granted</action>
+    <action>On the payer instance, set an allowance for the payee as in set-and-accept.xml, but with the $5 stop (testTag "AllowancePerPaymentStop-1") and the $10 stop (testTag "AllowanceMonthlyStop-0"), and have the payee accept it</action>
+    <action>Verify the payer's row reads "Active · $5 a payment" with "$ 10.00" over "Monthly limit"</action>
+    <action>On the payee instance, send the payer a one-time Payment Request for $4 with the note "Cap1"</action>
+    <action>On the payer instance, verify it is paid without a sheet and a "Payment Executed" notification reads "Auto-pay sent $4.00 to &lt;payee&gt;"</action>
+    <action>On the payee instance, wait for the payment to arrive, then send a second $4 request with the note "Cap2"</action>
+    <action>On the payer instance, verify it is paid without a sheet within about fifteen seconds, and a second "Payment Executed" notification is posted</action>
+    <action>On the payee instance, send a third $4 request with the note "Cap3"</action>
+    <action>On the payer instance, verify a "Limit Reached" notification reads "A $4.00 request from &lt;payee&gt; is above your allowance. Review it to pay." and the Payment Request sheet opens for $4.00</action>
+    <action>Dismiss the request (testTag "PaymentRequestDismiss-&lt;paymentRequestId&gt;")</action>
+    <action>Open Subscriptions, tap the Allowances tab, tap the payee's row and verify PAID AUTOMATICALLY (testTag "AllowancePaidSoFar") reads "$8.00"</action>
+  </actions>
+</journey>

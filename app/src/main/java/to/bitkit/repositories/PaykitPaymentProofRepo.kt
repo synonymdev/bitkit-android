@@ -70,6 +70,8 @@ data class PendingPaykitPaymentProof(
     val onchainAmountSats: ULong? = null,
     val onchainWalletId: String = WalletScope.default,
     val onchainMatchingTransactionIdsBeforeAttempt: Set<String> = emptySet(),
+    /** Set only for an automatic Allowance payment, from its submitted attempt. Manual payments omit it. */
+    val allowanceId: String? = null,
 )
 
 data class PaykitOnchainPaymentProofResolution(
@@ -140,10 +142,20 @@ class PaykitPaymentProofRepo @Inject constructor(
         paymentEndpointIdentifier: String,
         paymentAppId: String,
         kind: PaykitPaymentProofKind,
+    ): Result<Unit> = prepare(request, paymentEndpointIdentifier, paymentAppId, kind, allowanceId = null)
+
+    /** [allowanceId] is set only for an automatic Allowance payment; the submitted proof carries it. */
+    suspend fun prepare(
+        request: PaykitPaymentRequest,
+        paymentEndpointIdentifier: String,
+        paymentAppId: String,
+        kind: PaykitPaymentProofKind,
+        allowanceId: String?,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             operationMutex.withLock {
                 val proof = pendingProof(request, paymentEndpointIdentifier, paymentAppId, kind)
+                    .copy(allowanceId = allowanceId)
                 val currentProofs = loadProofs()
                 if (currentProofs.any { it.isStartedFor(proof.identity, request.id) }) {
                     throw PaykitPaymentRequestError.OperationInProgress
@@ -549,6 +561,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 paymentAppId = proof.paymentAppId,
                 proofJson = proofJson,
                 billingPeriod = proof.billingPeriod,
+                allowanceId = proof.allowanceId,
             )
             Logger.info("Queued a Paykit payment proof for private delivery", context = TAG)
             runSuspendCatching { paykitSdkService.processPendingPrivateMessages() }

@@ -577,6 +577,41 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `automatic acceptance saves this install as owner before it runs and keeps the request payable here`() = test {
+        val proposed = paymentRequestRecord()
+        val accepted = proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val requestId = PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY)
+
+        val result = sut.acceptOnThisInstall(request) {
+            verify(presentationStore).addAcceptedOneTimeId(LOCAL_IDENTITY, requestId)
+            "accepted"
+        }
+
+        assertEquals("accepted", result.getOrThrow())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(accepted))
+        sut.refresh().getOrThrow()
+        sut.ensurePaymentAllowed(request).getOrThrow()
+    }
+
+    @Test
+    fun `failed automatic acceptance drops this install as owner`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+
+        val result = sut.acceptOnThisInstall<Unit>(request) { error("claimed by another app") }
+
+        assertTrue(result.isFailure)
+        verify(presentationStore).removeAcceptedOneTimeIds(
+            LOCAL_IDENTITY,
+            setOf(PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY)),
+        )
+    }
+
+    @Test
     fun `local acceptance survives refresh and reconnect without accepting twice`() = test {
         val proposed = paymentRequestRecord()
         val accepted = proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)

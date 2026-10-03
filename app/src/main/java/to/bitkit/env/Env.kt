@@ -169,6 +169,10 @@ internal object Env {
 
     val homegateUrl: String
         get() {
+            // An explicit E2E_HOMEGATE_URL wins on every backend, as on iOS: demos run their own homegate.
+            if (isE2eTest && BuildConfig.E2E_HOMEGATE_OVERRIDE.isNotBlank()) {
+                return BuildConfig.E2E_HOMEGATE_OVERRIDE
+            }
             if (isLocalE2eBackend) {
                 return e2eHomegateUrl
             }
