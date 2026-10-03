@@ -278,10 +278,8 @@ class PrivatePaykitRepo @Inject constructor(
                 if (!cleanupPending) updateContactSharingCleanupPending(true)
                 removePublishedEndpoints().getOrThrow()
                 clearUnsavedContactState(savedPublicKeys).getOrThrow()
+                syncPaykitAppAfterCleanup().getOrThrow()
                 updateContactSharingCleanupPending(false)
-                publicPaykitRepo.syncPaykitApp().onFailure {
-                    updateContactSharingCleanupPending(true)
-                }.getOrThrow()
             }
             retryPendingDeletedContactEndpointRemoval(savedPublicKeys).getOrThrow()
         }.onFailure {
@@ -326,10 +324,8 @@ class PrivatePaykitRepo @Inject constructor(
                 updateContactSharingCleanupPending(true)
                 removePublishedEndpoints().getOrThrow()
                 clearUnsavedContactState(savedPublicKeys).getOrThrow()
+                syncPaykitAppAfterCleanup().getOrThrow()
                 updateContactSharingCleanupPending(false)
-                publicPaykitRepo.syncPaykitApp().onFailure {
-                    updateContactSharingCleanupPending(true)
-                }.getOrThrow()
             }
         }
 
@@ -344,8 +340,8 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             updateContactSharingCleanupPending(true)
             removePublishedEndpoints().getOrThrow()
+            syncPaykitAppAfterCleanup().getOrThrow()
             updateContactSharingCleanupPending(false)
-            publicPaykitRepo.syncPaykitApp().getOrThrow()
         }.onFailure {
             updateContactSharingCleanupPending(true)
             Logger.warn("Failed to remove private Paykit endpoints during '$context'", it, context = TAG)
@@ -1433,8 +1429,14 @@ class PrivatePaykitRepo @Inject constructor(
 
             clearPublishedEndpointCache(normalizedKeys.filterNot { it in failedPublicKeys })
             firstError?.let { throw it }
-            publicPaykitRepo.syncPaykitApp().getOrThrow()
+            if (publicKeys != null) publicPaykitRepo.syncPaykitApp().getOrThrow()
         }.onFailure {
+            runSuspendCatching { settingsStore.update { it.copy(publicPaykitCleanupPending = true) } }
+                .onFailure(it::addSuppressed)
+        }
+
+    private suspend fun syncPaykitAppAfterCleanup(): Result<Unit> =
+        publicPaykitRepo.syncPaykitApp().onFailure {
             runSuspendCatching { settingsStore.update { it.copy(publicPaykitCleanupPending = true) } }
                 .onFailure(it::addSuppressed)
         }

@@ -498,6 +498,63 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, never()).clearPrivatePaymentList(OTHER_CONTACT_KEY)
         verify(paykitSdkService, never()).clearPrivatePaymentList(recoveringPublicKey)
         assertFalse(cacheData.value.cleanupPending)
+        verify(publicPaykitRepo).syncPaykitApp()
+    }
+
+    @Test
+    fun `full cleanup preserves registry failures and retries with or without contacts`() = test {
+        val cleanups = listOf<suspend () -> Result<Unit>>(
+            { sut.disableSharingAndPruneUnsavedContactState(emptyList()) },
+            { sut.retryPendingEndpointRemoval(emptyList()) },
+            { sut.removePublishedEndpointsForCleanup("test") },
+        )
+        val failure = AppError("Registry unavailable")
+        for (cleanup in cleanups) {
+            for (hasContacts in listOf(false, true)) {
+                settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+                cacheData.value = PrivatePaykitCacheData(
+                    contacts = if (hasContacts) mapOf(CONTACT_KEY to cachedPublishedContact()) else emptyMap(),
+                    cleanupPending = true,
+                )
+                whenever(paykitSdkService.linkedPeers()).thenReturn(
+                    if (hasContacts) listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)) else emptyList(),
+                )
+                whenever(publicPaykitRepo.syncPaykitApp()).thenReturn(Result.failure(failure), Result.success(Unit))
+                clearInvocations(publicPaykitRepo)
+                sut = createSut()
+
+                assertEquals(failure, cleanup().exceptionOrNull())
+                assertTrue(cacheData.value.cleanupPending)
+                assertTrue(settingsData.value.publicPaykitCleanupPending)
+                verify(publicPaykitRepo).syncPaykitApp()
+                clearInvocations(publicPaykitRepo)
+
+                cleanup().getOrThrow()
+
+                assertFalse(cacheData.value.cleanupPending)
+                assertTrue(cacheData.value.contacts.isEmpty())
+                verify(publicPaykitRepo).syncPaykitApp()
+            }
+        }
+    }
+
+    @Test
+    fun `cancelled registry synchronization leaves private cleanup pending`() = test {
+        cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
+        sut = createSut()
+        whenever(publicPaykitRepo.syncPaykitApp()).doSuspendableAnswer { awaitCancellation() }
+
+        val cleanup = async { sut.disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY)) }
+        runCurrent()
+        try {
+            verify(publicPaykitRepo).syncPaykitApp()
+            assertTrue(cacheData.value.cleanupPending)
+        } finally {
+            cleanup.cancel()
+        }
+
+        assertFailsWith<CancellationException> { cleanup.await() }
+        assertTrue(cacheData.value.cleanupPending)
     }
 
     @Test
@@ -520,7 +577,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             sut = createSut(publicRepo)
             var capability = true
             var failed = false
+            var registryCalls = 0
             doSuspendableAnswer {
+                registryCalls++
                 val enabled = it.getArgument<Boolean>(0)
                 assertFalse(enabled, "Cleanup must not enable private payments")
                 if (!failed && failureStage == "disable capability") {
@@ -545,12 +604,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertTrue(cacheData.value.cleanupPending, failureStage)
             assertTrue(capability, failureStage)
             assertTrue(settingsData.value.publicPaykitCleanupPending, failureStage)
+            assertEquals(if (failureStage == "withdraw") 0 else 1, registryCalls)
 
             sut.retryPendingEndpointRemoval(listOf(CONTACT_KEY)).getOrThrow()
 
             assertFalse(capability, failureStage)
             assertFalse(cacheData.value.cleanupPending, failureStage)
             assertFalse(cacheData.value.contacts[CONTACT_KEY]?.hasPublishedPrivatePaymentList == true, failureStage)
+            assertEquals(if (failureStage == "withdraw") 1 else 2, registryCalls)
         }
     }
 
@@ -602,6 +663,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(result.isSuccess)
         verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY) }
+        verify(publicPaykitRepo).syncPaykitApp()
         assertTrue(cacheData.value.contacts.isEmpty())
     }
 
@@ -766,6 +828,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         verify(paykitSdkService).clearPrivatePaymentList(CONTACT_KEY)
+        verify(publicPaykitRepo).syncPaykitApp()
         verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any())
         verify(paykitSdkService, never()).processOutboundPrivateMessages(any())
         verify(paykitSdkService, never()).receivePrivateMessages(any())
