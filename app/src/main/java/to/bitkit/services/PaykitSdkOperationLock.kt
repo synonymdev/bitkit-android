@@ -15,41 +15,28 @@ internal class PaykitSdkOperationLock {
     private var generation = 0L
     private var isWiping = false
 
-    /** Admits identity-independent public reads without holding the mutation lock. */
-    suspend fun <T> withPublicRead(operation: suspend () -> T): T {
-        val admittedGeneration = synchronized(stateLock) {
-            checkAvailable()
-            generation
-        }
-        currentCoroutineContext().ensureActive()
-        val result = operation()
-        currentCoroutineContext().ensureActive()
-        synchronized(stateLock) {
-            checkAvailable()
-            if (admittedGeneration != generation) throw wipeError()
-        }
-        return result
-    }
-
     suspend fun <T> withLock(operation: suspend () -> T): T {
-        val wipeContext = currentCoroutineContext()[WipeContext]
-        if (synchronized(stateLock) {
-                isWiping && wipeContext?.owner === this && wipeContext.generation == generation
-            }
-        ) {
-            return operation()
-        }
-        val admittedGeneration = synchronized(stateLock) {
-            checkAvailable()
-            generation
-        }
+        if (ownsWipe()) return operation()
+        val admittedGeneration = admit()
         return mutex.withLock {
             currentCoroutineContext().ensureActive()
-            synchronized(stateLock) {
-                checkAvailable()
-                if (admittedGeneration != generation) throw wipeError()
-            }
+            checkAdmitted(admittedGeneration)
             operation()
+        }
+    }
+
+    /**
+     * Runs [operation] without the lock but under the wallet wipe admission of [withLock]: it is rejected while a wipe
+     * is in progress. A wipe cannot drain work that does not hold the lock, so a result that a wipe overtakes is
+     * discarded and the caller gets the wipe error instead.
+     */
+    suspend fun <T> withoutLock(operation: suspend () -> T): T {
+        if (ownsWipe()) return operation()
+        val admittedGeneration = admit()
+        currentCoroutineContext().ensureActive()
+        return operation().also {
+            currentCoroutineContext().ensureActive()
+            checkAdmitted(admittedGeneration)
         }
     }
 
@@ -66,6 +53,23 @@ internal class PaykitSdkOperationLock {
         } finally {
             synchronized(stateLock) { isWiping = false }
         }
+    }
+
+    private suspend fun ownsWipe(): Boolean {
+        val wipeContext = currentCoroutineContext()[WipeContext]
+        return synchronized(stateLock) {
+            isWiping && wipeContext?.owner === this && wipeContext.generation == generation
+        }
+    }
+
+    private fun admit(): Long = synchronized(stateLock) {
+        checkAvailable()
+        generation
+    }
+
+    private fun checkAdmitted(admittedGeneration: Long) = synchronized(stateLock) {
+        checkAvailable()
+        if (admittedGeneration != generation) throw wipeError()
     }
 
     private fun checkAvailable() {

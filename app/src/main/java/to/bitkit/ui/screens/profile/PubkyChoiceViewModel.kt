@@ -1,7 +1,7 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -9,14 +9,17 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
@@ -49,9 +52,10 @@ class PubkyChoiceViewModel @Inject constructor(
     }
 
     fun onIdentityClick(pubky: String) {
+        if (_uiState.value.adoptingPubky != null) return
+        _uiState.update { it.copy(adoptingPubky = pubky) }
         viewModelScope.launch {
-            _uiState.update { it.copy(adoptingPubky = pubky) }
-            pubkyRepo.adoptRingIdentity(pubky)
+            pubkyRepo.adoptRingIdentity(pubky) { rowProfile(pubky) }
                 .onSuccess { hasProfile ->
                     if (hasProfile) {
                         pubkyRepo.prepareImport().onFailure {
@@ -93,23 +97,34 @@ class PubkyChoiceViewModel @Inject constructor(
                 Logger.warn("Failed to list ring identities", it, context = TAG)
                 persistentListOf()
             }
-            val identities = pubkys.map { pubky ->
-                val profile = pubkyRepo.fetchRemoteProfile(pubky).getOrNull()
-                val truncatedKey = PubkyPublicKeyFormat.display(pubky)
-                RingIdentity(
-                    pubky = pubky,
-                    caption = truncatedKey.uppercase(),
-                    name = profile?.name?.takeIf { it.isNotBlank() } ?: truncatedKey,
-                    imageUrl = profile?.imageUrl,
-                )
-            }.toImmutableList()
-
+            val identities = pubkys.map { RingIdentity(pubky = it, isLookingUp = true) }.toImmutableList()
             _uiState.update { it.copy(isLoading = false, identities = identities) }
+            pubkys.forEach { launch { lookUpProfile(it) } }
+        }
+    }
+
+    private fun rowProfile(pubky: String): PubkyProfile? =
+        _uiState.value.identities.firstOrNull { it.pubky == pubky }?.profile
+
+    private suspend fun lookUpProfile(pubky: String) {
+        var profile: PubkyProfile? = null
+        try {
+            profile = pubkyRepo.fetchDisplayProfile(pubky)
+                .getOrNull()
+                ?.takeIf { PubkyPublicKeyFormat.matches(it.publicKey, pubky) }
+                ?.takeIf { currentCoroutineContext().isActive }
+        } finally {
+            _uiState.update { state ->
+                val identities = state.identities.map {
+                    if (it.pubky == pubky) it.copy(profile = profile ?: it.profile, isLookingUp = false) else it
+                }
+                state.copy(identities = identities.toImmutableList())
+            }
         }
     }
 }
 
-@Immutable
+@Stable
 data class PubkyChoiceUiState(
     val isLoading: Boolean = true,
     val identities: ImmutableList<RingIdentity> = persistentListOf(),
@@ -117,13 +132,16 @@ data class PubkyChoiceUiState(
     val navigateToProfile: Boolean = false,
 )
 
-@Immutable
+@Stable
 data class RingIdentity(
     val pubky: String,
-    val caption: String,
-    val name: String,
-    val imageUrl: String?,
-)
+    val profile: PubkyProfile? = null,
+    val isLookingUp: Boolean = false,
+) {
+    val caption: String get() = PubkyPublicKeyFormat.display(pubky).uppercase()
+    val name: String get() = profile?.name?.takeIf { it.isNotBlank() } ?: PubkyPublicKeyFormat.display(pubky)
+    val imageUrl: String? get() = profile?.imageUrl
+}
 
 sealed interface PubkyChoiceEffect {
     data object NavigateToCreateProfile : PubkyChoiceEffect

@@ -1,0 +1,34 @@
+<journey name="contact import after leaving">
+  <description>
+    A contact import keeps saving after you leave the import overview, and when it finishes it leaves
+    you where you went instead of opening Pay Contacts. Saving the prepared follows without looking
+    them up again is covered by journeys/contacts/import-all-contacts.xml and
+    import-selected-contacts.xml.
+
+    Precondition (not a listed capability): Pubky Ring (package to.pubky.ring) installed on the same
+    device and signed with this repository's app/debug.keystore, as for the pubky ring choice
+    rows journey, with an identity that follows many pubkys on pubky.app (62, as in
+    import-all-contacts.xml), so the import takes long enough to leave. An onboarded dev wallet with
+    Paykit enabled (the default), PIN off and no active Pubky identity in Bitkit. The journey adopts
+    that identity and saves its follows as contacts, so sign out of it in Bitkit before running the
+    journey again. See README.md.
+
+    The import saves only to the device and can finish before Back is tapped; if Pay Contacts opens
+    first, report "already imported" rather than failing.
+
+    Android differs from iOS only in identifiers. Every Ring row carries the same testTag, so tell
+    the rows apart by their key caption, and the overview's profile and friend count carry no
+    testTag, so read the "Import" title and the count from its "N friends" text; see the Identifiers
+    table in journeys/README.md.
+  </description>
+  <actions>
+    <action>Tap the header profile button (testTag "ProfileButton"); if the profile intro (testTag "ProfileIntro") shows, tap Continue (testTag "ProfileIntro-button")</action>
+    <action>Tap the Ring row (testTag "PubkyChoiceIdentity", told apart by its key caption) of the identity that follows many pubkys</action>
+    <action>Wait for the contact import overview (no testTag; titled "Import") and note the number of friends the summary (no testTag; "N friends") shows</action>
+    <action>Tap Import All (testTag "ContactImportOverviewImportAll") and straight away tap Back (testTag "NavigationBack"). If Pay Contacts (testTag "PayContactsContinue") shows instead, the import finished first: report "already imported" and stop</action>
+    <action>Verify Home shows (testTag "ProfileButton")</action>
+    <action>Wait ten seconds and verify Home still shows and Pay Contacts (testTag "PayContactsContinue") has not opened</action>
+    <action>Tap the menu button (testTag "HeaderMenu"), then Contacts (testTag "DrawerContacts"); if the contacts intro shows, tap its continue button</action>
+    <action>Verify Contacts lists one row (testTag "Contact_&lt;pubky&gt;") for each of the friends the overview counted</action>
+  </actions>
+</journey>

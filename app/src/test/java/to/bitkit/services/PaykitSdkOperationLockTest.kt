@@ -22,19 +22,17 @@ class PaykitSdkOperationLockTest {
         val releaseRead = CompletableDeferred<Unit>()
         val read = async {
             assertFailsWith<PaykitException.Storage> {
-                lock.withPublicRead { releaseRead.await() }
+                lock.withoutLock { releaseRead.await() }
             }
         }
         runCurrent()
         lock.withLock { }
         lock.withWalletWipe {
-            assertFailsWith<PaykitException.Storage> {
-                lock.withPublicRead { error("read admitted during wipe") }
-            }
+            assertEquals("cleanup", lock.withoutLock { "cleanup" })
         }
         releaseRead.complete(Unit)
         assertEquals("wallet_wipe_in_progress", read.await().code)
-        assertEquals("fresh", lock.withPublicRead { "fresh" })
+        assertEquals("fresh", lock.withoutLock { "fresh" })
     }
 
     @Test
@@ -97,6 +95,38 @@ class PaykitSdkOperationLockTest {
         var ran = false
         lock.withLock { ran = true }
         assertTrue(ran)
+    }
+
+    @Test
+    fun `unlocked work skips the lock but not wipe admission`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val releaseActive = CompletableDeferred<Unit>()
+        val active = launch { lock.withLock { releaseActive.await() } }
+        runCurrent()
+        assertEquals("unlocked", lock.withoutLock { "unlocked" })
+
+        val releaseOvertaken = CompletableDeferred<Unit>()
+        val overtaken = async {
+            assertFailsWith<PaykitException.Storage> { lock.withoutLock { releaseOvertaken.await() } }
+        }
+        runCurrent()
+        val releaseWipe = CompletableDeferred<Unit>()
+        val wipe = launch {
+            lock.withWalletWipe {
+                assertEquals("owner", lock.withoutLock { "owner" })
+                releaseWipe.await()
+            }
+        }
+        runCurrent()
+        assertFailsWith<PaykitException.Storage> { lock.withoutLock { error("unlocked work ran during wipe") } }
+        releaseOvertaken.complete(Unit)
+        assertEquals("wallet_wipe_in_progress", overtaken.await().code)
+
+        releaseActive.complete(Unit)
+        releaseWipe.complete(Unit)
+        active.join()
+        wipe.join()
+        assertEquals("fresh", lock.withoutLock { "fresh" })
     }
 
     @Test

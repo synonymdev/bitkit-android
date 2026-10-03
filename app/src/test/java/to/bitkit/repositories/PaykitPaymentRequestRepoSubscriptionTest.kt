@@ -405,7 +405,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
         )
-        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY))
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any()))
             .thenReturn(true)
 
         listOf(null, byteArrayOf(0, 1, 2)).forEach { icon ->
@@ -546,7 +546,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
         )
-        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY))
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any()))
             .thenReturn(true)
         whenever(
             paykitSdkService.identityStatus()
@@ -1138,7 +1138,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
         )
-        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY)).thenReturn(true)
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(true)
         whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY)))
             .thenAnswer { invocation ->
                 val proposal = invocation.getArgument<PaykitPaymentRequestProposalTerms>(1)

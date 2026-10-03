@@ -60,13 +60,14 @@ import com.synonym.paykit.SdkPubkySessionProvider
 import com.synonym.paykit.defaultConfig
 import com.synonym.paykit.defaultPubkyClientConfig
 import com.synonym.paykit.parsePubkyAuthUrl
+import com.synonym.paykit.paykitAuthorizerSessionCapabilities
 import com.synonym.paykit.pubkyPublicKeyFromSecret
 import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
-import com.synonym.paykit.requiredSessionCapabilities
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -75,9 +76,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
@@ -108,6 +112,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -151,6 +156,68 @@ data class PaykitPaymentRequestRecurrenceTerms(
     val endsAt: String? = null,
 )
 
+class PubkyFileNotFoundError : AppError("Pubky file not found")
+
+/** Which public read slots a public Pubky read may use. */
+enum class PaykitReadLane {
+    /**
+     * A read for what the user is looking at or waiting on; it takes only a shared read slot, and a freed read slot
+     * goes to it before any waiting bulk read.
+     */
+    Interactive,
+
+    /** A background read over many keys; it also takes a bulk slot, so bulk reads never fill every read slot. */
+    Bulk,
+}
+
+/** A public Pubky read that ran out of the timeout its caller gave it once it held a read slot. */
+class PaykitReadTimeoutError(timeout: Duration) : AppError("Public Pubky read timed out after $timeout")
+
+private class TimedRead<T>(val value: T)
+
+private class PaykitPublicReadSlots(slots: Int) {
+    private val lock = Any()
+    private var free = slots
+    private val interactiveWaiters = ArrayDeque<CompletableDeferred<Unit>>()
+    private val bulkWaiters = ArrayDeque<CompletableDeferred<Unit>>()
+
+    suspend fun <T> withSlot(lane: PaykitReadLane, block: suspend () -> T): T {
+        acquire(lane)
+        return try {
+            block()
+        } finally {
+            release()
+        }
+    }
+
+    private suspend fun acquire(lane: PaykitReadLane) {
+        val waiters = when (lane) {
+            PaykitReadLane.Interactive -> interactiveWaiters
+            PaykitReadLane.Bulk -> bulkWaiters
+        }
+        val slot = synchronized(lock) {
+            if (free > 0) {
+                free--
+                return
+            }
+            CompletableDeferred<Unit>().also(waiters::addLast)
+        }
+        try {
+            slot.await()
+        } catch (error: CancellationException) {
+            if (synchronized(lock) { !waiters.remove(slot) }) release()
+            throw error
+        }
+    }
+
+    private fun release() {
+        val next = synchronized(lock) {
+            (interactiveWaiters.removeFirstOrNull() ?: bulkWaiters.removeFirstOrNull()).also { if (it == null) free++ }
+        }
+        next?.complete(Unit)
+    }
+}
+
 @Singleton
 @Suppress("TooManyFunctions", "LargeClass")
 class PaykitSdkService @Inject constructor(
@@ -172,11 +239,16 @@ class PaykitSdkService @Inject constructor(
     }
     private val cachedBootstrap by lazy { bootstrapFactory() }
     private val identityRepublishMutex = Mutex()
+
+    @Volatile
+    private var identityRepublishJob: Job? = null
     private var republishPublicKey: String? = null
     private var nextIdentityRepublishAt = 0L
     private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationLock = PaykitSdkOperationLock()
+    private val publicReadSlots = PaykitPublicReadSlots(PUBLIC_READ_PERMITS)
+    private val bulkReadPermits = Semaphore(BULK_READ_PERMITS)
     private val setupMutex = Mutex()
     private var isSetup = CompletableDeferred<Unit>()
     private var setupFailed = false
@@ -266,9 +338,19 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun republishIdentityIfNeeded(publicKey: String? = null, now: Long = nowMillis()) {
+        val publication = launchIdentityRepublish(publicKey, now)
+        withTimeoutOrNull(IDENTITY_REPUBLISH_WAIT_TIMEOUT) {
+            publication.join()
+            identityRepublishJob?.join()
+            true
+        } ?: Logger.debug("Continuing while Pubky identity publication is pending", context = TAG)
+    }
+
+    private suspend fun launchIdentityRepublish(publicKey: String?, now: Long = nowMillis()): Job {
         currentCoroutineContext().ensureActive()
-        val publication = launch {
+        return launch {
             if (!identityRepublishMutex.tryLock()) return@launch
+            identityRepublishJob = currentCoroutineContext().job
             try {
                 withTimeoutOrNull(IDENTITY_REPUBLISH_TIMEOUT) {
                     runSuspendCatching {
@@ -298,8 +380,6 @@ class PaykitSdkService @Inject constructor(
                 identityRepublishMutex.unlock()
             }
         }
-        withTimeoutOrNull(IDENTITY_REPUBLISH_WAIT_TIMEOUT) { publication.join() }
-            ?: Logger.debug("Continuing while Pubky identity publication is pending", context = TAG)
     }
 
     /** Rebroadcasts the identity record when one exists. Returns false only when the network reports none. */
@@ -330,7 +410,7 @@ class PaykitSdkService @Inject constructor(
             val result = bootstrap().importSession(
                 sessionSecret = secret,
                 localSecretKey = sessionProvider.loadLocalSecretKey(),
-                requiredCapabilities = requiredSessionCapabilities(),
+                requiredCapabilities = paykitAuthorizerSessionCapabilities(),
             )
 
             activateBootstrapResult(
@@ -465,12 +545,8 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray {
-        isSetup.await()
-        return operationLock.withLock {
-            handle().fetchPubkyFileBounded(uri, maxBytes) ?: throw AppError("Pubky file not found")
-        }
-    }
+    suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray =
+        publicRead { it.fetchPubkyFileBounded(uri, maxBytes) } ?: throw PubkyFileNotFoundError()
 
     suspend fun publishPaykitProfile(profile: PaykitProfile): PaykitProfileRecord {
         isSetup.await()
@@ -512,19 +588,11 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun fetchPubkyProfile(publicKey: String): PubkyProfile? {
-        isSetup.await()
-        return operationLock.withLock {
-            handle().fetchPubkyProfile(publicKey)?.profile
-        }
-    }
+    suspend fun fetchPubkyProfile(publicKey: String): PubkyProfile? =
+        publicRead { it.fetchPubkyProfile(publicKey) }?.profile
 
-    suspend fun fetchPubkyFollows(publicKey: String): List<String> {
-        isSetup.await()
-        return operationLock.withLock {
-            handle().fetchPubkyFollows(publicKey, maxEntries = 10_000u)
-        }
-    }
+    suspend fun fetchPubkyFollows(publicKey: String): List<String> =
+        publicRead { it.fetchPubkyFollows(publicKey, maxEntries = 10_000u) }
 
     suspend fun contactRecords(): List<ContactRecord> {
         isSetup.await()
@@ -544,10 +612,16 @@ class PaykitSdkService @Inject constructor(
         publicKey: String,
         label: String?,
         restorePrivateConnection: Boolean = false,
+        expectedIdentity: String? = null,
     ): ContactRecord {
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
+                if (expectedIdentity != null) {
+                    check(PubkyPublicKeyFormat.matches(handle.identityStatus()?.publicKey, expectedIdentity)) {
+                        "Paykit identity changed before saving the contact"
+                    }
+                }
                 val existing = handle.contactRecord(publicKey)
                 check(restorePrivateConnection || existing != null) { "Contact no longer exists" }
                 val update = ContactUpdate(publicKey, label)
@@ -599,11 +673,10 @@ class PaykitSdkService @Inject constructor(
     suspend fun resolveContactProfile(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
-    ): ProfileResolution? {
-        isSetup.await()
-        return operationLock.withLock {
-            handle().resolveProfile(publicKey, allowPubkyProfileFallback)
-        }
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+        timeout: Duration? = null,
+    ): ProfileResolution? = publicRead(lane, timeout) {
+        it.resolveProfile(publicKey, allowPubkyProfileFallback)
     }
 
     suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean) {
@@ -630,7 +703,7 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    fun requiredCapabilities(): String = requiredSessionCapabilities()
+    fun requiredCapabilities(): String = paykitAuthorizerSessionCapabilities()
 
     suspend fun syncPrivatePaymentListsWithReservations(
         updates: List<PrivatePaymentListReservationUpdateInput>,
@@ -751,17 +824,16 @@ class PaykitSdkService @Inject constructor(
     }
 
     /** Returns null on timeout or runtime replacement; public reads do not hold the mutation lock. */
-    suspend fun canReceivePaymentRequests(publicKey: String): Boolean? {
-        isSetup.await()
-        return operationLock.withPublicRead {
-            val handle = sdk ?: operationLock.withLock { handle() }
-            val result = withTimeoutOrNull(PAYMENT_REQUEST_DISCOVERY_TIMEOUT) {
-                handle.paykitAppRegistry(publicKey)?.apps?.any {
-                    it.capabilities.paymentRequests && it.capabilities.outgoingPayments
-                } == true
-            }
-            result.takeIf { sdk === handle }
+    suspend fun canReceivePaymentRequests(
+        publicKey: String,
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+    ): Boolean? = publicRead(lane) { handle ->
+        val result = withTimeoutOrNull(PAYMENT_REQUEST_DISCOVERY_TIMEOUT) {
+            handle.paykitAppRegistry(publicKey)?.apps?.any {
+                it.capabilities.paymentRequests && it.capabilities.outgoingPayments
+            } == true
         }
+        result.takeIf { sdk === handle }
     }
 
     suspend fun proposePaymentRequest(
@@ -1081,8 +1153,11 @@ class PaykitSdkService @Inject constructor(
         refreshPaykitKey()
         val handle = handle()
         handle.initialize()
+        if (result.sessionAccess.exportLocalSecretKey() != null) {
+            handle.publishPaykitNoiseKeyAuthorization()
+        }
         publishAppIfLiveSessionAvailable(handle)
-        republishIdentityIfNeeded(publicKey = result.publicKey)
+        launchIdentityRepublish(publicKey = result.publicKey)
     }
 
     private suspend fun clearRegisteredIdentityActivationLocked() = withContext(NonCancellable) {
@@ -1186,6 +1261,41 @@ class PaykitSdkService @Inject constructor(
         sdkFactory().also { sdk = it }
     }
 
+    /**
+     * Runs [block] on the SDK instance without [operationLock]. [block] may only call unauthenticated public
+     * Pubky reads, never session, secret, state-blob or publishing APIs. Without an instance it builds one under
+     * [operationLock], because building one outside it would race [resetRuntime] and a wallet wipe, but reads
+     * under its read slot. Like a locked call, a read that starts during a wallet wipe is rejected, and one that the
+     * wipe overtakes fails instead of returning its result across the wipe. A [PaykitReadLane.Bulk] read takes a
+     * bulk permit before its read slot, always in that order, so bulk reads hold at most [BULK_READ_PERMITS] read
+     * slots and the rest stay free for interactive reads. A freed read slot goes to the oldest waiting interactive
+     * read before any waiting bulk read, also one already queued for a slot, and reads of one lane start in the order
+     * they asked for a slot. A [timeout] limits only the time [block] runs once the read holds its read slot, so
+     * waiting for a slot never counts; a read that runs out is cancelled, gives back its slots and fails with
+     * [PaykitReadTimeoutError].
+     */
+    private suspend fun <T> publicRead(
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+        timeout: Duration? = null,
+        block: suspend (PaykitSdk) -> T,
+    ): T {
+        isSetup.await()
+        return operationLock.withoutLock {
+            val existing = sdk ?: operationLock.withLock { handle() }
+            val read: suspend () -> T = { withReadTimeout(timeout) { block(existing) } }
+            when (lane) {
+                PaykitReadLane.Interactive -> publicReadSlots.withSlot(lane, read)
+                PaykitReadLane.Bulk -> bulkReadPermits.withPermit { publicReadSlots.withSlot(lane, read) }
+            }
+        }
+    }
+
+    private suspend fun <T> withReadTimeout(timeout: Duration?, block: suspend () -> T): T {
+        if (timeout == null) return block()
+        val read = withTimeoutOrNull(timeout) { TimedRead(block()) } ?: throw PaykitReadTimeoutError(timeout)
+        return read.value
+    }
+
     private fun bootstrap() = cachedBootstrap
 
     private fun approvalBootstrap(authUrl: String, approvedClientId: String): PubkySessionBootstrap {
@@ -1219,6 +1329,12 @@ class PaykitSdkService @Inject constructor(
 
         /** Maximum duration of a public payment-request capability lookup. */
         private val PAYMENT_REQUEST_DISCOVERY_TIMEOUT = 5.seconds
+
+        /** Maximum concurrent public Pubky reads that run outside the operation lock. */
+        private const val PUBLIC_READ_PERMITS = 6
+
+        /** Maximum concurrent bulk public reads, which leaves the other read permits to interactive reads. */
+        private const val BULK_READ_PERMITS = 4
 
         fun localSecretKey(secretKeyHex: String): PubkyLocalSecretKey =
             PubkyLocalSecretKey(secretKeyHex.fromHex())

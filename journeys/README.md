@@ -161,6 +161,10 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `onchain-receive/*` | port pending in synonymdev/bitkit-ios#588, which wires `onchainTransactionConfirmed` into the same received-sheet flow but carries no `journeys/` files. Two adaptations when it lands: iOS suppresses replayed historical receives with a `pendingRestoreActivitySeen` flag cleared by the first post-restore on-chain sync, not the one-hour block-timestamp guard used here, so a stale-confirmation step has to drive a restore instead of a clock; and iOS has no foreground-service path, so `confirmed-only-background-notification.xml` has no counterpart |
 | `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
 | `deeplinks/pubky-contact.xml` | ported — same contact routing and unlock behavior |
+| `pubky-profile/cached-profile-header.xml` | same file, journey name and steps — one step differs: Android adds a screenshot check of the cached avatar, which comes from the Pubky image disk cache synonymdev/bitkit-android#1399 adds |
+| `pubky-profile/ring-choice-rows.xml` | same file, journey name and steps — Android names the rows and their lookup spinners differently (see [Identifiers](#identifiers)), checks that rows are disabled by tapping another row instead of reading the snapshot's Targets, needs no second tap on the profile button, and names the import overview by its "Import" title |
+| `pubky-profile/contact-import-after-leaving.xml` | same file, journey name and steps — Android names the Ring rows differently and has no identifiers on the import overview's profile and friend count, so those steps name the screen text here; see [Identifiers](#identifiers). synonymdev/bitkit-android#1399 adds `ContactImportOverviewImportAll`, the only contact import testTag the journeys use, under its iOS name |
+| `pubky-profile/contacts-list-loading.xml` | same file, journey name and steps — only the relaunch commands differ |
 | `deeplinks/screen-deeplink.xml`, `deeplinks/sheet-deeplink.xml` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
@@ -211,10 +215,14 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
 | Payment Request detail screen | `PaymentRequestDetailsScreen` | `PaymentRequestDetailScreen` |
+| Pubky Ring choice row | `PubkyChoiceIdentity` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRing_<pubky>` |
+| Pubky Ring choice row lookup spinner | `PubkyChoiceIdentityLookup` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRingLookup_<pubky>` |
+| Contact import overview profile and friend count | — *(no tag; the "Import" title and the "N friends" text)* | `ContactImportOverviewProfile`, `ContactImportOverviewSummary` |
 
-Two of those are unreconciled rather than intentional: the Send screen emitting both
-`AvailableAmount` and `available_balance`, and the background-payments row name. Settling either is a
-code change on one side, not a journey change.
+Three of those are unreconciled rather than intentional: the Send screen emitting both
+`AvailableAmount` and `available_balance`, the background-payments row name, and the Pubky Ring choice
+row. Settling any of them is a code change on one side, not a journey change. The contact import
+row names Android testTags not added yet; adding them with the iOS names would settle it too.
 
 `SubscriptionRow-<id>` matches on both platforms. iOS appends the billing period to
 `PaymentRequestRow` because every recurring payment of one subscription shares the same id, so a

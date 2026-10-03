@@ -194,6 +194,31 @@ class PubkyIdentityRepublishTest {
     }
 
     @Test
+    fun `approval republish waits for a gated publication`() = runTest {
+        val gate = CompletableDeferred<Boolean>()
+        val bootstrap = mock<PubkySessionBootstrap>()
+        whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer { gate.await() }
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            { bootstrap },
+            StandardTestDispatcher(testScheduler),
+            settingsStore = mock(),
+        ) { mock() }
+
+        val approval = async { service.republishIdentityIfNeeded(publicKey, now = 0) }
+        runCurrent()
+
+        verify(bootstrap).republishIdentity("pubky$publicKey")
+        assertFalse(approval.isCompleted)
+        gate.complete(true)
+        runCurrent()
+        assertTrue(approval.isCompleted)
+        assertEquals(0L, currentTime)
+    }
+
+    @Test
     fun `publication timeout releases single flight for a throttled retry`() = runTest {
         val bootstrap = mock<PubkySessionBootstrap>()
         var cancelled = false
@@ -217,9 +242,10 @@ class PubkyIdentityRepublishTest {
         assertEquals(5_000L, currentTime)
         assertFalse(cancelled)
         service.republishIdentityIfNeeded(publicKey, now = 60_000)
+        assertEquals(10_000L, currentTime)
         verify(bootstrap).republishIdentity("pubky$publicKey")
 
-        advanceTimeBy(24_999)
+        advanceTimeBy(19_999)
         runCurrent()
         assertFalse(cancelled)
         advanceTimeBy(1)

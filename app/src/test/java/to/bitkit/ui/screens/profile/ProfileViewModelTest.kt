@@ -9,8 +9,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
-import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
@@ -19,14 +19,18 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -34,6 +38,151 @@ class ProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `init loads the profile unless a profile load is in flight`() = test {
+        val loaded = createProfile()
+        listOf(
+            InitLoadCase("none loaded", profile = null, isLoading = false, loads = 1),
+            InitLoadCase("loaded for the current key", profile = loaded, isLoading = false, loads = 1),
+            InitLoadCase("loaded for another key", loaded.copy(publicKey = "pubkybob"), isLoading = false, loads = 1),
+            InitLoadCase("load in flight", profile = null, isLoading = true, loads = 0),
+        ).forEachCase({ it.name }) { case ->
+            clearInvocations(pubkyRepo)
+            val sut = createSut(case.profile, isLoading = case.isLoading)
+            advanceUntilIdle()
+
+            verify(pubkyRepo, times(case.loads).description(case.name)).loadProfile()
+            assertEquals(case.profile, sut.uiState.value.profile, case.name)
+        }
+    }
+
+    @Test
+    fun `init loads once more only when the in-flight load fails`() = test {
+        listOf(
+            Triple("succeeds", createProfile(), 0),
+            Triple("fails", null, 1),
+        ).forEachCase({ it.first }) { (case, loaded, loads) ->
+            clearInvocations(pubkyRepo)
+            val profileFlow = MutableStateFlow<PubkyProfile?>(null)
+            val isLoadingFlow = MutableStateFlow(true)
+            createSut(
+                profileFlow = profileFlow,
+                isLoadingFlow = isLoadingFlow,
+                onLoadProfile = {
+                    isLoadingFlow.value = true
+                    isLoadingFlow.value = false
+                },
+            )
+            advanceUntilIdle()
+
+            profileFlow.value = loaded
+            isLoadingFlow.value = false
+            advanceUntilIdle()
+
+            verify(pubkyRepo, times(loads).description(case)).loadProfile()
+        }
+    }
+
+    @Test
+    fun `retry loads the profile even when it is already loaded`() = test {
+        val sut = createSut(createProfile())
+        advanceUntilIdle()
+
+        sut.loadProfile()
+        advanceUntilIdle()
+
+        verify(pubkyRepo, times(2)).loadProfile()
+    }
+
+    @Test
+    fun `initial state is seeded from the repository`() = test {
+        val profile = createProfile()
+        val sut = createSut(profile = profile, isLoading = true)
+
+        assertEquals(profile, sut.uiState.value.profile)
+        assertEquals("pubkyalice", sut.uiState.value.publicKey)
+        assertTrue(sut.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `cached profile shows while loading only when its owner is the public key`() = test {
+        listOf(
+            Triple("same owner", "pubkyalice" to "pubkyalice", true),
+            Triple("other owner", "pubkyalice" to "pubkybob", false),
+            Triple("no public key", null to "pubkyalice", false),
+        ).forEachCase({ it.first }) { (case, keys, shown) ->
+            clearInvocations(pubkyRepo)
+            val (publicKey, owner) = keys
+            val cachedProfile = createCachedProfile(publicKey = owner)
+            val sut = createSut(publicKey = publicKey, isLoading = true, cachedProfile = cachedProfile)
+
+            assertEquals(cachedProfile.takeIf { shown }, sut.uiState.value.cachedProfile, case)
+        }
+    }
+
+    @Test
+    fun `first state shows the cached profile for the load started in init`() = test {
+        val isLoadingFlow = MutableStateFlow(false)
+        val cachedProfile = createCachedProfile(publicKey = "pubkyalice")
+        val sut = createSut(
+            isLoadingFlow = isLoadingFlow,
+            cachedProfile = cachedProfile,
+            onLoadProfile = { isLoadingFlow.value = true },
+        )
+
+        assertTrue(sut.uiState.value.isLoading)
+        assertEquals(cachedProfile, sut.uiState.value.cachedProfile)
+    }
+
+    @Test
+    fun `failed load hides the cached profile so the retry state shows`() = test {
+        val isLoadingFlow = MutableStateFlow(true)
+        val sut = createSut(
+            isLoadingFlow = isLoadingFlow,
+            cachedProfile = createCachedProfile(publicKey = "pubkyalice"),
+        )
+
+        sut.uiState.test {
+            assertNotNull(awaitItem().cachedProfile)
+
+            isLoadingFlow.value = false
+
+            val state = awaitItem()
+            assertNull(state.profile)
+            assertFalse(state.isLoading)
+            assertNull(state.cachedProfile)
+        }
+    }
+
+    @Test
+    fun `session restore keeps loading and shows the cached profile only once its key is known`() = test {
+        val publicKeyFlow = MutableStateFlow<String?>(null)
+        val isRestoringFlow = MutableStateFlow(true)
+        val cachedProfile = createCachedProfile(publicKey = "pubkyalice")
+        val sut = createSut(
+            publicKeyFlow = publicKeyFlow,
+            isRestoringFlow = isRestoringFlow,
+            cachedProfile = cachedProfile,
+        )
+        advanceUntilIdle()
+
+        sut.uiState.test {
+            var state = awaitItem()
+            assertTrue(state.isLoading)
+            assertNull(state.cachedProfile)
+
+            publicKeyFlow.value = "pubkyalice"
+            state = awaitItem()
+            assertTrue(state.isLoading)
+            assertEquals(cachedProfile, state.cachedProfile)
+
+            isRestoringFlow.value = false
+            state = awaitItem()
+            assertFalse(state.isLoading)
+            assertNull(state.cachedProfile)
+        }
+    }
 
     @Test
     fun `disconnect finishes private cleanup after the screen is closed`() = test {
@@ -122,6 +271,19 @@ class ProfileViewModelTest : BaseUnitTest() {
             assertFalse(sut.uiState.value.isLoading)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `cached profile keeps profile edits disabled until the profile loads`() = test {
+        val sut = createSut(isLoading = true, cachedProfile = createCachedProfile(publicKey = "pubkyalice"))
+        advanceUntilIdle()
+
+        sut.addTag("Bitcoin")
+        sut.removeTag("Founder")
+        advanceUntilIdle()
+
+        assertNull(sut.uiState.value.profile)
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
     }
 
     @Test
@@ -293,18 +455,27 @@ class ProfileViewModelTest : BaseUnitTest() {
         }
     }
 
+    @Suppress("LongParameterList")
     private fun createSut(
         profile: PubkyProfile? = null,
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),
+        publicKey: String? = "pubkyalice",
+        publicKeyFlow: MutableStateFlow<String?> = MutableStateFlow(publicKey),
+        isLoading: Boolean = false,
+        isLoadingFlow: MutableStateFlow<Boolean> = MutableStateFlow(isLoading),
+        isRestoringFlow: MutableStateFlow<Boolean> = MutableStateFlow(false),
+        cachedProfile: PubkyCachedProfile? = null,
+        onLoadProfile: () -> Unit = {},
     ): ProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
-        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
-        whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(false))
-        whenever(pubkyRepo.isRestoringSession).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.publicKey).thenReturn(publicKeyFlow)
+        whenever(pubkyRepo.isLoadingProfile).thenReturn(isLoadingFlow)
+        whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringFlow)
+        whenever(pubkyRepo.cachedProfile).thenReturn(MutableStateFlow(cachedProfile))
         whenever { pubkyRepo.restoreSessionIfNeeded() }.thenReturn(false)
-        whenever { pubkyRepo.loadProfile() }.thenReturn(Unit)
+        whenever { pubkyRepo.loadProfile() }.thenAnswer { onLoadProfile() }
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
@@ -318,6 +489,12 @@ class ProfileViewModelTest : BaseUnitTest() {
         )
     }
 
+    private fun createCachedProfile(publicKey: String) = PubkyCachedProfile(
+        publicKey = publicKey,
+        name = "Alice",
+        imageUri = "pubky://avatar",
+    )
+
     private fun createProfile(tags: List<String> = listOf("Founder")) = PubkyProfile(
         publicKey = "pubkyalice",
         name = "Alice",
@@ -328,5 +505,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         status = null,
     )
 }
+
+private class InitLoadCase(val name: String, val profile: PubkyProfile?, val isLoading: Boolean, val loads: Int)
 
 private class ProfileTestAppError(message: String) : AppError(message)

@@ -52,6 +52,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.satsToMsat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitPaymentRequestRecurrenceTerms
+import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.isBitkitPaymentRequest
 import to.bitkit.utils.AppError
@@ -494,7 +495,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     val context = targetContext(savedPublicKeys, expectedIdentity)
                     if (!force && context == cachedTargetContext) return@discovery
                     val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
-                    val discovery = context?.let { eligibleTargets(it, previousTargets) }
+                    val discovery = context?.let { eligibleTargets(it, previousTargets, PaykitReadLane.Bulk) }
                         ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
                     operationMutex.withLock operation@{
                         if (!isCurrentState(generation, expectedIdentity)) return@operation
@@ -1165,11 +1166,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun eligibleTargets(
         context: PaykitPaymentRequestTargetContext,
         previousTargets: Map<String, PaykitPaymentRequestTarget> = emptyMap(),
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
     ): PaykitPaymentRequestTargetDiscovery {
         var isComplete = true
         val failedPublicKeys = mutableSetOf<String>()
         val linkedKeys = context.savedPublicKeys.filter { it in context.linkedPublicKeys }
-        val targets = paymentRequestCapabilities(linkedKeys).mapNotNull { (publicKey, lookup) ->
+        val targets = paymentRequestCapabilities(linkedKeys, lane).mapNotNull { (publicKey, lookup) ->
             val capable = lookup
                 .onFailure {
                     Logger.warn(
@@ -1203,12 +1205,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
         )
     }
 
-    private suspend fun paymentRequestCapabilities(publicKeys: List<String>) = coroutineScope {
+    private suspend fun paymentRequestCapabilities(publicKeys: List<String>, lane: PaykitReadLane) = coroutineScope {
         val permits = Semaphore(PAYMENT_REQUEST_DISCOVERY_CONCURRENCY)
         publicKeys.map { publicKey ->
             async {
                 permits.withPermit {
-                    publicKey to runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey) }
+                    publicKey to runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey, lane) }
                 }
             }
         }.awaitAll()

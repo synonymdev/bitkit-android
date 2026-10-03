@@ -199,6 +199,58 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adding a tag to a contact still showing its label waits for its profile`() = test {
+        whenever(context.getString(any())).thenReturn("")
+        val contacts = MutableStateFlow(listOf(createContact()))
+        whenever(pubkyRepo.contacts).thenReturn(contacts)
+        val resolved = createContact().copy(name = "Alice", bio = "Hello", imageUrl = "https://example.com/a.jpg")
+        val lookup = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.resolvePendingContactProfile(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            lookup.await()
+            contacts.value = listOf(resolved)
+        }
+        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+            .thenReturn(Result.success(Unit))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.addTag("Bitcoin")
+        advanceUntilIdle()
+        verify(pubkyRepo, never()).updateContact(any(), any(), any(), anyOrNull(), any(), any())
+        lookup.complete(Unit)
+        advanceUntilIdle()
+
+        verify(pubkyRepo).updateContact(
+            publicKey = TEST_PUBLIC_KEY,
+            name = "Alice",
+            bio = "Hello",
+            imageUrl = "https://example.com/a.jpg",
+            links = emptyList(),
+            tags = listOf("Bitcoin"),
+        )
+    }
+
+    @Test
+    fun `adding a tag to a contact whose profile lookup failed saves it under its label`() = test {
+        whenever(context.getString(any())).thenReturn("")
+        val labelOnly = PubkyProfile.forDisplay(TEST_PUBLIC_KEY, "Alice", imageUrl = null)
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(labelOnly)))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+            .thenReturn(Result.success(Unit))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.showAddTagSheet()
+
+        sut.addTag("Bitcoin")
+        advanceUntilIdle()
+
+        verify(pubkyRepo).updateContact(TEST_PUBLIC_KEY, "Alice", "", null, emptyList(), listOf("Bitcoin"))
+        assertFalse(sut.uiState.value.showAddTagSheet)
+        assertEquals(listOf("Bitcoin"), sut.uiState.value.tags)
+        verify(pubkyRepo, times(2)).resolvePendingContactProfile(TEST_PUBLIC_KEY)
+    }
+
+    @Test
     fun `failed tag addition stays open and can be retried`() = test {
         whenever(context.getString(any())).thenReturn("")
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact(tags = listOf("Friend")))))

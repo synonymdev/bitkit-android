@@ -757,7 +757,7 @@ fun ContentView(
                 hasSeenShopIntro = hasSeenShopIntro,
                 onBeforeNavigate = { destination ->
                     if (shouldDiscardPendingImport(navController.currentDestination, destination)) {
-                        appViewModel.clearPendingPubkyImport()
+                        appViewModel.discardPendingPubkyImport()
                     }
                 },
                 hasSeenProfileIntro = hasSeenProfileIntro,
