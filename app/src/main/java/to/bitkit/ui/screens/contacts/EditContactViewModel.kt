@@ -204,11 +204,14 @@ class EditContactViewModel @Inject constructor(
         _uiState.update { it.copy(showDeleteDialog = false) }
     }
 
+    /** The save belongs to the Pubky sign-in it was made in, and stops quietly once that sign-in has ended. */
     fun save() {
         val state = _uiState.value
+        val signIn = pubkyRepo.currentSignIn() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             pubkyRepo.updateContact(
+                signIn = signIn,
                 publicKey = publicKey,
                 name = state.name,
                 bio = state.bio,
@@ -223,7 +226,11 @@ class EditContactViewModel @Inject constructor(
                 )
                 _effects.emit(EditContactEffect.SaveSuccess)
             }.onFailure {
-                Logger.error("Failed to save contact '$publicKey'", it, context = TAG)
+                if (pubkyRepo.isCurrent(signIn)) {
+                    Logger.error("Failed to save contact '$publicKey'", it, context = TAG)
+                } else {
+                    Logger.info("Dropped a contact edit after the Pubky sign-in ended", context = TAG)
+                }
                 _uiState.update { it.copy(isSaving = false) }
             }
         }
