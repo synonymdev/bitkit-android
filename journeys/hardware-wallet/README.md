@@ -2,9 +2,9 @@
 
 AI-driven UI test journeys for the home-screen hardware wallet features, designed to run
 against the deterministic Trezor emulator from `synonymdev/bitkit-docker` — no physical
-Trezor required. Journeys follow the `android` CLI journey XML format: natural-language
-`<action>` steps evaluated sequentially against the running app; any failed step fails
-the journey.
+Trezor required; see `docs/trezor-emulator.md` for the emulator and build-flag setup.
+Journeys follow the `android` CLI journey XML format: natural-language `<action>` steps
+evaluated sequentially against the running app; any failed step fails the journey.
 
 ## What the Bridge emulator does and does not simulate
 
@@ -48,12 +48,17 @@ instead of UI interactions.
    ```sh
    TREZOR_PASSPHRASE_PROTECTION=true ../bitkit-docker/scripts/trezor-emulator start
    ```
-3. For a physical phone, reverse the Bridge port and install with Bridge enabled:
+3. For a physical phone, reverse the Bridge and Electrum ports and install with Bridge enabled:
    ```sh
    ../bitkit-docker/scripts/trezor-emulator adb
-   TREZOR_BRIDGE=true TREZOR_BRIDGE_URL=http://127.0.0.1:21325 ./gradlew installDevDebug
+   adb reverse tcp:60001 tcp:60001
+   TREZOR_BRIDGE=true TREZOR_BRIDGE_URL=http://127.0.0.1:21325 \
+     TREZOR_ELECTRUM_URL=tcp://127.0.0.1:60001 ./gradlew installDevDebug
    ```
-   For an Android emulator use `TREZOR_BRIDGE_URL=http://10.0.2.2:21325`.
+   For an Android emulator use `http://10.0.2.2:21325` and `tcp://10.0.2.2:60001` instead.
+   `TREZOR_ELECTRUM_URL` keeps the hardware wallet watchers on the local regtest node so
+   coins mined from `bitkit-docker` show up; see `docs/trezor-emulator.md` for the full
+   flag reference.
 4. A wallet must exist in the app (onboarding completed) on regtest (dev flavor).
 
 ## Journeys
