@@ -39,6 +39,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeView
@@ -128,7 +129,22 @@ fun SendSheet(
             val navController = rememberNavController()
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
-                    appViewModel.completeHardwareContactPayment(result.txId)
+                    val proofComplete = appViewModel.completeHardwareContactPayment(
+                        result.txId, result.walletId, result.paymentRequestId, result.paymentIdentity,
+                    )
+                    if (!proofComplete) {
+                        navController.navigateTo(
+                            SendRoute.Pending(
+                                paymentHash = result.txId,
+                                amount = result.amountSats.toLong(),
+                                walletId = result.walletId,
+                                observeResolution = false,
+                                isOnchain = true,
+                            )
+                        ) { popUpTo(navController.graph.id) { inclusive = true } }
+                        hwSendViewModel.completeBroadcast()
+                        return@collect
+                    }
                     appViewModel.onSendSuccess(
                         details = NewTransactionSheetDetails(
                             type = NewTransactionSheetType.ONCHAIN,
@@ -174,7 +190,13 @@ fun SendSheet(
                         is SendEffect.NavigateToComingSoon -> navController.navigateTo(SendRoute.ComingSoon)
                         is SendEffect.NavigateToContacts -> navController.navigateTo(SendRoute.ContactSelect)
                         is SendEffect.NavigateToPending -> navController.navigateTo(
-                            SendRoute.Pending(it.paymentHash, it.amount, observeResolution = it.observeResolution)
+                            SendRoute.Pending(
+                                it.paymentHash,
+                                it.amount,
+                                observeResolution = it.observeResolution,
+                                isOnchain = it.isOnchain,
+                                refusalReason = it.refusalReason,
+                            )
                         ) { popUpTo(startDestination) { inclusive = true } }
                         is SendEffect.NavigateToError -> navController.navigateTo(
                             SendRoute.errorFromFailure(
@@ -314,13 +336,23 @@ fun SendSheet(
                         ?.toULong()
                         ?.takeIf { rate -> rate > 0uL }
                         ?: HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE
+                    val paymentIdentity = appViewModel.hardwarePaymentIdentity()
                     HwSendSignScreen(
                         walletId = walletId,
                         sendUiState = uiState,
+                        paymentIdentity = paymentIdentity,
                         satsPerVByte = satsPerVByte,
                         viewModel = hwSendViewModel,
-                        prepareContactPayment = appViewModel::prepareHardwareContactPayment,
-                        authorizeContactPayment = appViewModel::authorizeHardwareContactPayment,
+                        prepareContactPayment = {
+                            appViewModel.prepareHardwareContactPayment(
+                                walletId, uiState.address, uiState.incomingPaymentRequestId, paymentIdentity,
+                            )
+                        },
+                        authorizeContactPayment = { hasAttemptedBroadcast ->
+                            appViewModel.authorizeHardwareContactPayment(
+                                hasAttemptedBroadcast, uiState.incomingPaymentRequestId, paymentIdentity,
+                            )
+                        },
                         onBack = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle
@@ -463,6 +495,9 @@ fun SendSheet(
                         paymentHash = route.paymentHash,
                         amount = route.amount,
                         observeResolution = route.observeResolution,
+                        isOnchain = route.isOnchain,
+                        walletId = route.walletId,
+                        refusalReason = route.refusalReason,
                         onPaymentSuccess = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
@@ -487,7 +522,7 @@ fun SendSheet(
                             }
                         },
                         onClose = { appViewModel.hideSheet() },
-                        onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId) },
+                        onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId, route.walletId) },
                         viewModel = hiltViewModel<SendPendingViewModel>(),
                     )
                 }
@@ -661,6 +696,9 @@ sealed interface SendRoute {
         val paymentHash: String,
         val amount: Long,
         val observeResolution: Boolean = true,
+        val isOnchain: Boolean = false,
+        val walletId: String = WalletScope.default,
+        val refusalReason: String? = null,
         val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
         val paymentRequest: String? = null,
     ) : InternalOnly

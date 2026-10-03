@@ -26,6 +26,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
@@ -374,6 +375,48 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(Result.success(signedTx))
         whenever(hwWalletRepo.broadcastFunding(signedTx)).thenReturn(Result.success(broadcast))
         return PaymentFixture(funding, signedTx, broadcast)
+    }
+
+    @Test
+    fun `core completed hardware result retains original request and never rebroadcasts while proof is pending`() = test {
+        val fixture = stubSuccessfulPayment()
+        val originalId = PaykitPaymentRequestId("original-request", "counterparty", "receiver")
+        val original = request().copy(paymentRequestId = originalId, paymentIdentity = "original-identity")
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+
+        assertEquals(originalId, sut.results.first().paymentRequestId)
+        assertEquals("original-identity", sut.results.first().paymentIdentity)
+        // Local proof work has not consumed the result yet: neither this request nor another may resend.
+        sut.signAndBroadcast(original)
+        sut.signAndBroadcast(original.copy(paymentRequestId = originalId.copy(paymentRequestId = "different-request")))
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `hardware Shop core result does not create Sent activity before exact observation`() = test {
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty", "receiver"))
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+        verify(activityService, never()).createSentOnchainActivityFromSendResult(
+            any(), any(), any(), any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(),
+        )
+        verify(activityRepo, never()).notifyPaymentActivityChanged()
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `ordinary hardware Core result preserves existing Sent activity behavior`() = test {
+        val fixture = stubSuccessfulPayment()
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            fixture.broadcast.txId, ADDRESS, AMOUNT_SATS, fixture.broadcast.miningFeeSats,
+            fixture.broadcast.feeRate, false, null, WALLET_ID,
+        )
     }
 
     private fun request() = HwSendRequest(

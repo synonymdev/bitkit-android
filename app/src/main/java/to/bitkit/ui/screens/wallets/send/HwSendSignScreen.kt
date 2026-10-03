@@ -41,6 +41,7 @@ private const val SEND_SIGN_VISUAL_TOP_RATIO = 0.54f
 fun HwSendSignScreen(
     walletId: String,
     sendUiState: SendUiState,
+    paymentIdentity: String?,
     satsPerVByte: ULong,
     viewModel: HwSendViewModel,
     prepareContactPayment: suspend () -> Boolean,
@@ -54,6 +55,8 @@ fun HwSendSignScreen(
         amountSats = sendUiState.amount,
         satsPerVByte = satsPerVByte,
         tags = sendUiState.selectedTags,
+        paymentRequestId = sendUiState.incomingPaymentRequestId,
+        paymentIdentity = paymentIdentity,
     )
 
     val onBackRequest: () -> Unit = { if (!uiState.isSigning && !uiState.isBroadcastUnresolved) onBack() }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +28,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodyM
@@ -46,16 +48,24 @@ fun SendPendingScreen(
     paymentHash: String,
     amount: Long,
     observeResolution: Boolean = true,
+    isOnchain: Boolean = false,
     onPaymentSuccess: (String, Long) -> Unit,
     onPaymentError: (PendingPaymentResolution.Failure) -> Unit,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
     viewModel: SendPendingViewModel,
+    walletId: String = WalletScope.default,
+    refusalReason: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    if (observeResolution) {
-        LaunchedEffect(Unit) { viewModel.init(paymentHash, amount) }
+    val txid = paymentHash.takeIf { isOnchain && it.matches(Regex("[0-9a-fA-F]{64}")) }
+    LaunchedEffect(Unit) {
+        if (isOnchain) {
+            viewModel.initOnchain(txid, amount, walletId)
+        } else if (observeResolution) {
+            viewModel.init(paymentHash, amount)
+        }
     }
 
     uiState.resolution?.takeIf { observeResolution }?.let { resolution ->
@@ -71,21 +81,27 @@ fun SendPendingScreen(
         }
     }
 
-    Content(
+    SendPendingContent(
         amount = if (observeResolution) uiState.amount else amount,
+        isOnchain = isOnchain,
         activityId = uiState.activityId,
+        txid = txid,
+        refusalReason = refusalReason,
         onClose = onClose,
         onViewDetails = onViewDetails,
     )
 }
 
 @Composable
-private fun Content(
+internal fun SendPendingContent(
     amount: Long,
+    isOnchain: Boolean,
     activityId: String?,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
     modifier: Modifier = Modifier,
+    txid: String? = null,
+    refusalReason: String? = null,
 ) {
     Column(
         modifier = modifier
@@ -104,7 +120,26 @@ private fun Content(
             BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
 
             VerticalSpacer(32.dp)
-            BodyM(stringResource(R.string.wallet__send_pending__description), color = Colors.White64)
+            BodyM(
+                stringResource(
+                    if (isOnchain) R.string.wallet__send_pending__onchain_description
+                    else R.string.wallet__send_pending__description,
+                ),
+                color = Colors.White64,
+            )
+
+            if (isOnchain) {
+                refusalReason?.let {
+                    VerticalSpacer(16.dp)
+                    BodyM(stringResource(R.string.wallet__send_pending__refusal, it), color = Colors.White64)
+                }
+                txid?.let {
+                    VerticalSpacer(16.dp)
+                    SelectionContainer {
+                        BodyM(stringResource(R.string.wallet__send_pending__txid, it), color = Colors.White64)
+                    }
+                }
+            }
 
             FillHeight()
             HourglassAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -154,8 +189,9 @@ private fun HourglassAnimation(modifier: Modifier = Modifier) {
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendPendingContent(
                 amount = 50_000L,
+                isOnchain = false,
                 activityId = null,
                 onClose = {},
                 onViewDetails = {},

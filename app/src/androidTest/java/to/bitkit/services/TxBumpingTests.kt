@@ -10,6 +10,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
+import to.bitkit.repositories.OnchainSendOutcome
+import kotlin.test.assertIs
 import org.junit.Test
 import org.junit.runner.RunWith
 import to.bitkit.data.keychain.Keychain
@@ -148,11 +150,12 @@ class TxBumpingTests {
         val lowFeeRate = 1uL // 1 sat/vbyte (very low)
 
         println("Sending $sendAmount sats to $destinationAddress with low fee rate of $lowFeeRate sat/vbyte")
-        val originalTxId = lightningService.send(
+        val outcome = lightningService.send(
             address = destinationAddress,
             sats = sendAmount,
             satsPerVByte = lowFeeRate,
         )
+        val originalTxId = assertIs<OnchainSendOutcome.Accepted>(outcome).txid
 
         lightningService.sync()
 

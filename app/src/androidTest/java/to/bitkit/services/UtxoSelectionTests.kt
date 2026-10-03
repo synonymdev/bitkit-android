@@ -10,6 +10,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
+import to.bitkit.repositories.OnchainSendOutcome
+import kotlin.test.assertIs
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
@@ -203,12 +205,13 @@ class UtxoSelectionTests {
         val feeRate = 1uL // 1 sat/vbyte
 
         println("Sending $sendAmount sats to $destinationAddress using specific UTXOs")
-        val txId = lightningService.send(
+        val outcome = lightningService.send(
             address = destinationAddress,
             sats = sendAmount,
             satsPerVByte = feeRate,
             utxosToSpend = utxosToSpend
         )
+        val txId = assertIs<OnchainSendOutcome.Accepted>(outcome).txid
 
         assertTrue(txId.isNotEmpty(), "Transaction ID should not be empty")
         println("Transaction sent successfully with txid: $txId")

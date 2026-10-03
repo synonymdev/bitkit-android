@@ -203,6 +203,29 @@ class ActivityRepo @Inject constructor(
         walletId: String = WalletScope.default,
     ): OnchainActivity? = coreService.activity.getOnchainActivityByTxId(txid, walletId)
 
+    /** Local follow-up after the original hardware wallet independently observed this exact outgoing tx. */
+    suspend fun completeObservedHardwarePayment(
+        walletId: String,
+        txid: String,
+        address: String,
+        amountSats: ULong,
+        fee: ULong,
+        feeRate: ULong,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            require(walletId != WalletScope.default)
+            coreService.activity.createSentOnchainActivityFromSendResult(
+                txid = txid, address = address, amount = amountSats, fee = fee, feeRate = feeRate,
+                isTransfer = false, channelId = null, walletId = walletId,
+            )
+            // The Core writer logs storage errors internally. Read back before completing the proof.
+            val activity = getOnchainActivityByTxId(txid, walletId)
+            check(activity?.walletId == walletId && activity.txId.equals(txid, true) &&
+                activity.txType == PaymentType.SENT) { "Original hardware payment activity is not durable" }
+            notifyPaymentActivityChanged()
+        }
+    }
+
     /**
      * Checks if a transaction is inbound (received) by looking up the payment direction.
      */

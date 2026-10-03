@@ -1,7 +1,10 @@
 package to.bitkit.ui.screens.wallets.send
 
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -35,6 +38,41 @@ class SendPendingViewModelTest : BaseUnitTest() {
             Result.failure(Exception("not found"))
         )
         sut = createViewModel()
+    }
+
+    @Test
+    fun `onchain activity enables original wallet Details without resolving acceptance`() = test {
+        val txid = "ab".repeat(32)
+        val onchainActivity = mock<OnchainActivity> { on { id } doReturn "queued-local-activity" }
+        val activity = mock<Activity.Onchain> { on { v1 } doReturn onchainActivity }
+        whenever(
+            activityRepo.findActivityByPaymentId(
+                txid,
+                ActivityFilter.ONCHAIN,
+                PaymentType.SENT,
+                true,
+                "original-wallet"
+            )
+        )
+            .thenReturn(Result.success(activity))
+        pendingPaymentRepo.resolve(PendingPaymentResolution.Success(txid, amountWithFeeSats = 9_999L))
+
+        sut.initOnchain(txid, amount, "original-wallet")
+        advanceUntilIdle()
+
+        assertEquals("queued-local-activity", sut.uiState.value.activityId)
+        assertEquals(amount, sut.uiState.value.amount)
+        assertNull(sut.uiState.value.resolution)
+        assertEquals(false, pendingPaymentRepo.isActive(txid))
+    }
+
+    @Test
+    fun `missing onchain txid never uses request identifier as Details or acceptance`() = test {
+        sut.initOnchain("request-id", amount)
+        advanceUntilIdle()
+        assertNull(sut.uiState.value.activityId)
+        assertNull(sut.uiState.value.resolution)
+        org.mockito.kotlin.verifyNoInteractions(activityRepo)
     }
 
     @Test

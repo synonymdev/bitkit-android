@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.ext.rawId
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
@@ -42,6 +43,18 @@ class SendPendingViewModel @Inject constructor(
         }
         findActivity(paymentHash)
         observeResolution(paymentHash)
+    }
+
+    // Local activity is only a Details target; it cannot resolve or acknowledge an on-chain send.
+    fun initOnchain(txid: String?, amount: Long, walletId: String = WalletScope.default) {
+        if (isInitialized) return
+        isInitialized = true
+        _uiState.update { it.copy(amount = amount) }
+        if (txid == null || !txid.matches(Regex("[0-9a-fA-F]{64}"))) return
+        viewModelScope.launch {
+            activityRepo.findActivityByPaymentId(txid, ActivityFilter.ONCHAIN, PaymentType.SENT, true, walletId)
+                .onSuccess { activity -> _uiState.update { it.copy(activityId = activity.rawId()) } }
+        }
     }
 
     override fun onCleared() {

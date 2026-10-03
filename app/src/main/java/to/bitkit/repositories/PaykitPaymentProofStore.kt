@@ -39,6 +39,7 @@ class PaykitPaymentProofStore @Inject constructor(
         identity: String,
     ): Map<PaykitPaymentRequestId, PaykitPaymentProofKind> = load()
         .filter { PubkyPublicKeyFormat.matches(it.identity, identity) && it.proofData != null }
+        .filter { it.kind != PaykitPaymentProofKind.Onchain || it.onchainAcceptanceVerified }
         .associate { it.requestId to it.kind }
 
     fun inFlightRequestIds(identity: String): Set<PaykitPaymentRequestId> = load()

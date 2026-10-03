@@ -50,6 +50,7 @@ import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
@@ -127,6 +128,7 @@ class LightningRepo @Inject constructor(
     private val lnurlService: LnurlService,
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
+    private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val connectivityRepo: ConnectivityRepo,
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
@@ -553,6 +555,25 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun onEvent(event: Event) {
+        val observedTxid = when (event) {
+            is Event.OnchainTransactionReceived -> event.txid
+            is Event.OnchainTransactionConfirmed -> event.txid
+            else -> null
+        }
+        if (observedTxid != null) {
+            runSuspendCatching {
+                val observed = onchainSendAttemptStore.observeExactTransaction(observedTxid)
+                val attempt = observed ?: onchainSendAttemptStore.current()
+                if (attempt != null && attempt.txid.equals(observedTxid, ignoreCase = true) &&
+                    attempt.hasPositiveEvidence && !attempt.localFollowupComplete &&
+                    !attempt.isTransfer && attempt.requestId == null
+                ) {
+                    finishOnchainSendLocally(attempt)
+                    onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+                }
+            }
+                .onFailure { Logger.warn("Failed to record exact on-chain transaction observation", it, context = TAG) }
+        }
         handleLdkEvent(event)
         recordProbeOutcome(event)
         val settledReceiveInvoice: SettledReceiveInvoice?
@@ -1457,7 +1478,10 @@ class LightningRepo @Inject constructor(
         tags: List<String> = emptyList(),
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
-    ): Result<Txid> = executeWhenNodeRunning("sendOnChain") {
+        requestId: PaykitPaymentRequestId? = null,
+        orderId: String? = null,
+        transferContext: OnchainTransferContext? = null,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
         // Ensure wallet is synced before sending to have up-to-date state
@@ -1481,37 +1505,124 @@ class LightningRepo @Inject constructor(
 
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
-        beforeSendAttempt()
-        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
-        onBroadcast(txId)
+        val attempt = runSuspendCatching {
+            onchainSendAttemptStore.admit(
+                walletId = WalletScope.default,
+                requestId = requestId,
+                orderId = orderId,
+                address = address,
+                amountSats = sats,
+                isMaxAmount = isMaxAmount,
+                feeRateSatsPerVByte = satsPerVByte,
+                isTransfer = isTransfer,
+                channelId = channelId,
+                tags = tags,
+                transferContext = transferContext,
+                beforeSendAttempt = beforeSendAttempt,
+            )
+        }.getOrElse {
+            val error = if (it is OnchainSendBlockedError || it is OnchainSendAttemptUnreadableError) {
+                it
+            } else {
+                OnchainSendNotDispatchedError(it)
+            }
+            return@executeWhenNodeRunning Result.failure(error)
+        }
+        val nodeResult = runSuspendCatching {
+            lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount, attempt.walletIndex)
+        }
+        val failure = nodeResult.exceptionOrNull()
+        if (failure != null) {
+            if (failure is NodeException || failure is ServiceError.NodeNotSetup) {
+                onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+                return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(failure))
+            }
+            return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(failure))
+        }
+        val outcome = nodeResult.getOrThrow()
+        val recorded = runSuspendCatching { onchainSendAttemptStore.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex) }
+            .getOrElse { error ->
+                if (outcome !is OnchainSendOutcome.Accepted) {
+                    return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, outcome.txid))
+                }
+                Logger.warn("Failed to persist accepted on-chain outcome; admission stays blocked", error, context = TAG)
+                attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = outcome.txid)
+            }
 
+        if (outcome !is OnchainSendOutcome.Accepted) return@executeWhenNodeRunning Result.success(outcome)
+        val txId = outcome.txid
+        runSuspendCatching { onBroadcast(txId) }
+            .onFailure { Logger.warn("Failed to continue accepted on-chain send", it, context = TAG) }
+
+        runSuspendCatching { finishOnchainSendLocally(recorded) }
+            .onFailure { Logger.warn("Failed to finish accepted on-chain send locally", it, context = TAG) }
+        runSuspendCatching { syncState() }
+            .onFailure { Logger.warn("Failed to sync after accepted on-chain send", it, context = TAG) }
+        Result.success(outcome)
+    }
+
+    private suspend fun finishOnchainSendLocally(attempt: OnchainSendAttempt) {
+        val txId = requireNotNull(attempt.txid) { "On-chain send has no transaction id" }
         val preActivityMetadata = PreActivityMetadata(
-            walletId = WalletScope.default,
+            walletId = attempt.walletId,
             paymentId = txId,
             createdAt = nowTimestamp().toEpochMilli().toULong(),
-            tags = tags,
+            tags = attempt.tags,
             paymentHash = null,
             txId = txId,
-            address = address,
+            address = attempt.address,
             isReceive = false,
-            feeRate = satsPerVByte,
-            isTransfer = isTransfer,
-            channelId = channelId ?: "",
+            feeRate = attempt.feeRateSatsPerVByte,
+            isTransfer = attempt.isTransfer,
+            channelId = attempt.channelId ?: "",
         )
-        preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata)
-
+        preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata).getOrThrow()
         coreService.activity.createSentOnchainActivityFromSendResult(
             txid = txId,
-            address = address,
-            amount = sats,
+            address = attempt.address,
+            amount = attempt.amountSats,
             fee = 0u,
-            feeRate = satsPerVByte,
-            isTransfer = isTransfer,
-            channelId = channelId,
+            feeRate = attempt.feeRateSatsPerVByte,
+            isTransfer = attempt.isTransfer,
+            channelId = attempt.channelId,
+            walletId = attempt.walletId,
         )
+        check(coreService.activity.getOnchainActivityByTxId(txId, attempt.walletId) != null) {
+            "Accepted on-chain transaction has no durable local activity"
+        }
+    }
 
-        syncState()
-        Result.success(txId)
+    suspend fun completeAcceptedOrdinaryFollowup(txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt != null && !attempt.isTransfer && attempt.requestId == null &&
+            attempt.txid.equals(txid, ignoreCase = true) && attempt.hasPositiveEvidence
+        ) {
+            runSuspendCatching {
+                finishOnchainSendLocally(attempt)
+                onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+            }.onFailure { Logger.warn("Failed to finish accepted ordinary send locally", it, context = TAG) }
+        }
+    }
+
+    suspend fun completeAcceptedTransferFollowup(orderId: String, txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt?.orderId == orderId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            finishOnchainSendLocally(attempt)
+            onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        }
+    }
+
+    suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
+
+    suspend fun completeAcceptedShopFollowup(requestId: PaykitPaymentRequestId, txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt?.requestId == requestId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        }
     }
 
     suspend fun determineUtxosToSpend(

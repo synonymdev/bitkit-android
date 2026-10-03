@@ -63,6 +63,7 @@ class MnemonicInputFieldTest {
                     focusRequester = focusRequester,
                     isFocused = false,
                     index = 0,
+                    isFocused = true,
                 )
             }
         }

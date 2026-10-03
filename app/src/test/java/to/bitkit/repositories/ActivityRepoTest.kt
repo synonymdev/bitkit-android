@@ -24,6 +24,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
@@ -154,6 +155,31 @@ class ActivityRepoTest : BaseUnitTest() {
             cacheStore = cacheStore,
             transferRepo = transferRepo,
             clock = clock,
+        )
+    }
+
+    @Test
+    fun `observed hardware payment completes only after original Sent activity is durable`() = test {
+        val txid = "ab".repeat(32)
+        val wallet = "original-hardware-wallet"
+        val original = baseOnchainActivity.copy(walletId = wallet, txId = txid)
+        whenever(coreService.activity.getOnchainActivityByTxId(txid, wallet))
+            .thenReturn(null)
+            .thenReturn(original.copy(walletId = "different-wallet"))
+            .thenReturn(original)
+        val before = sut.activitiesChanged.value
+
+        assertTrue(sut.completeObservedHardwarePayment(wallet, txid, original.address, original.value,
+            original.fee, original.feeRate).isFailure)
+        assertEquals(before, sut.activitiesChanged.value)
+        assertTrue(sut.completeObservedHardwarePayment(wallet, txid, original.address, original.value,
+            original.fee, original.feeRate).isFailure)
+        assertEquals(before, sut.activitiesChanged.value)
+        sut.completeObservedHardwarePayment(wallet, txid, original.address, original.value,
+            original.fee, original.feeRate).getOrThrow()
+        assertTrue(sut.activitiesChanged.value > before)
+        verify(coreService.activity, times(3)).createSentOnchainActivityFromSendResult(
+            txid, original.address, original.value, original.fee, original.feeRate, false, null, wallet,
         )
     }
 
