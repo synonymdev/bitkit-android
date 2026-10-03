@@ -1,6 +1,6 @@
 <journey name="Delete and Readd Private Contact">
   <description>
-    Verifies that deleting a contact stops incoming private Payment Requests until the user explicitly adds the contact again. Requires two authenticated Bitkit instances saved as each other's contacts and linked on receiver path "bitkit/wallet". The payer must have no active subscription with the requester. No payment needs to be sent.
+    Verifies that deleting a contact stops incoming private Payment Requests until the user explicitly adds the contact again. Requires two authenticated Bitkit instances saved as each other's contacts and linked as identities. The payer must have no active subscription with the requester. No payment needs to be sent.
   </description>
   <actions>
     <action>On the requester, send the payer contact a Payment Request for 5,000 sats with the note "Before deletion"</action>
@@ -14,7 +14,11 @@
     <action>Verify no Payment Request confirmation appears for "After deletion" and no payable request from the deleted contact appears in Payment Requests</action>
     <action>Restart the payer app, return Home, and wait for two foreground request polling intervals</action>
     <action>Verify requests from the deleted contact remain unavailable for payment</action>
+    <action>Move the requester app to the background</action>
     <action>On the payer, explicitly add the requester's Pubky key as a contact again</action>
+    <action>While the requester remains in the background, return Home, reopen Contacts, and verify the saved contact remains visible</action>
+    <action>Keep the payer in the foreground for two minutes, then background and foreground it twice while the requester remains in the background</action>
+    <action>Bring the requester app back to the foreground</action>
     <action>Keep both apps in the foreground until the private connection is established again</action>
     <action>On the requester, send a new Payment Request with the note "After readd"</action>
     <action>On the payer, open "After readd" from Payment Requests and verify its Payment Request confirmation shows the saved contact name</action>

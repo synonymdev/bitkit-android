@@ -11,7 +11,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
+import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContactsViewModelTest : BaseUnitTest() {
     private val pubkyRepo: PubkyRepo = mock()
-    private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase = mock()
+    private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase = mock()
     private val contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     private val isLoadingContacts = MutableStateFlow(false)
     private val contactsLoadVersion = MutableStateFlow(0L)
@@ -37,7 +37,7 @@ class ContactsViewModelTest : BaseUnitTest() {
 
     @Test
     fun `full screen loading shows only until the saved records first load`() = test {
-        val sut = ContactsViewModel(pubkyRepo, refreshContactPaykitReceivers)
+        val sut = ContactsViewModel(pubkyRepo, refreshContactPaykitLink)
         backgroundScope.launch { sut.uiState.collect {} }
         isLoadingContacts.value = true
         advanceUntilIdle()

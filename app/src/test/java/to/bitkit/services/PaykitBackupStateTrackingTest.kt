@@ -10,6 +10,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -79,5 +80,82 @@ class PaykitBackupStateTrackingTest : BaseUnitTest() {
         assertTrue(job.isCancelled)
         assertEquals("after", revision)
         assertEquals(1, changes)
+    }
+
+    @Test
+    fun `unchanged operations reuse the backup fingerprint`() = test {
+        var snapshot: PaykitBackupStateSnapshot? = null
+        var reads = 0
+        var changes = 0
+        repeat(3) {
+            withPaykitBackupStateTracking(
+                readRevision = {
+                    reads++
+                    "content"
+                },
+                readStateRevision = { "state" },
+                cachedSnapshot = snapshot,
+                onSnapshot = { snapshot = it },
+                onChange = { changes++ },
+            ) {}
+        }
+        assertEquals(1, reads)
+        assertEquals(0, changes)
+        assertEquals(PaykitBackupStateSnapshot("state", "content"), snapshot)
+    }
+
+    @Test
+    fun `changed state revisions still compare backup content`() = test {
+        for ((cachedState, finalContent, expectedReads) in listOf(
+            Triple("before", "content", 1),
+            Triple("before", "changed", 1),
+            Triple("stale", "changed", 2),
+        )) {
+            var state = "before"
+            var content = "content"
+            var reads = 0
+            var changes = 0
+            var snapshot: PaykitBackupStateSnapshot? = null
+            withPaykitBackupStateTracking(
+                readRevision = {
+                    reads++
+                    content
+                },
+                readStateRevision = { state },
+                cachedSnapshot = PaykitBackupStateSnapshot(cachedState, "content"),
+                onSnapshot = { snapshot = it },
+                onChange = { changes++ },
+            ) {
+                state = "after"
+                content = finalContent
+            }
+            assertEquals(expectedReads, reads)
+            assertEquals(if (finalContent == "content") 0 else 1, changes)
+            assertEquals(PaykitBackupStateSnapshot("after", finalContent), snapshot)
+        }
+    }
+
+    @Test
+    fun `failed writes recheck backup content even when the local revision is unchanged`() = test {
+        var snapshot: PaykitBackupStateSnapshot? = PaykitBackupStateSnapshot("state", "before")
+        var reads = 0
+        var changes = 0
+        val failure = AppError("Write outcome unknown")
+        val thrown = assertFailsWith<AppError> {
+            withPaykitBackupStateTracking(
+                readRevision = {
+                    reads++
+                    "after"
+                },
+                readStateRevision = { "state" },
+                cachedSnapshot = snapshot,
+                onSnapshot = { snapshot = it },
+                onChange = { changes++ },
+            ) { throw failure }
+        }
+        assertSame(failure, thrown)
+        assertEquals(1, reads)
+        assertEquals(1, changes)
+        assertNull(snapshot)
     }
 }

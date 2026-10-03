@@ -1,39 +1,51 @@
 package to.bitkit.models
 
 import androidx.compose.runtime.Immutable
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.utils.AppError
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-enum class PubkyAuthClaim(val wireValue: String) {
-    WATCH_ONLY_ACCOUNT_V1("watch-only-account-v1"),
-    ;
+@Immutable
+@JvmInline
+value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
+    constructor(vararg items: Item) : this(items.sortedBy { it.ordinal }.toImmutableList())
+
+    init {
+        require(items.isNotEmpty() && items.distinct().size == items.size)
+    }
+
+    enum class Item(val wireValue: String) {
+        PAYKIT_ACCESS_V1("paykit-access-v1"),
+        WATCH_ONLY_ACCOUNT_V1("watch-only-account-v1"),
+    }
+
+    val wireValue: String get() = items.joinToString(".") { it.wireValue }
+    val includesWatchOnlyAccount: Boolean get() = Item.WATCH_ONLY_ACCOUNT_V1 in items
+    val includesPaykitAccess: Boolean get() = Item.PAYKIT_ACCESS_V1 in items
 
     companion object {
         /** Query parameter used for Bitkit-specific Pubky auth claims. */
         const val QUERY_PARAMETER = "x-bitkit-claim"
 
-        /** Both public and private Paykit Server capabilities required by the watch-only setup flow. */
-        const val WATCH_ONLY_ACCOUNT_CAPABILITIES =
-            "/pub/paykit/v0/bitkit/server/:rw,/pub/paykit/v0/private/bitkit/server/:rw"
+        /** Exact Pubky storage scope required by Bitkit companion claims. */
+        const val REQUIRED_CAPABILITIES = "/pub/paykit/:rw"
 
-        private val watchOnlyAccountCapabilitySet = WATCH_ONLY_ACCOUNT_CAPABILITIES.split(",").toSet()
+        /** Matches the required storage scope, allowing surrounding whitespace but no duplicate capabilities. */
+        fun matchesRequiredCapabilities(capabilities: String) =
+            capabilities.trim() == REQUIRED_CAPABILITIES
 
-        /**
-         * Matches exactly the required public and private capabilities regardless of ordering or surrounding spaces.
-         */
-        fun matchesWatchOnlyAccountCapabilities(capabilities: String) =
-            capabilitySet(capabilities) == watchOnlyAccountCapabilitySet
-
-        private fun capabilitySet(capabilities: String): Set<String>? {
-            val entries = capabilities.split(",").map { it.trim() }
-            if (entries.any { it.isEmpty() }) return null
-            return entries.toSet()
+        /** Preserves the received item order because the SDK signs and routes using this exact string. */
+        fun fromWireValue(value: String): PubkyAuthClaim? {
+            val items = value.split(".").map { token ->
+                Item.entries.firstOrNull { it.wireValue == token } ?: return null
+            }
+            if (items.distinct().size != items.size) return null
+            return PubkyAuthClaim(items.toImmutableList())
         }
-
-        fun fromWireValue(value: String) = entries.firstOrNull { it.wireValue == value }
     }
 }
 
@@ -189,8 +201,6 @@ data class PubkyAuthRequest(
             capabilities: String,
         ): Result<PubkyAuthClaim?> = when {
             claimValues.size > 1 -> Result.failure(PubkyAuthRequestError.DuplicateBitkitClaim)
-            claimValues.isEmpty() && PubkyAuthClaim.matchesWatchOnlyAccountCapabilities(capabilities) ->
-                Result.failure(PubkyAuthRequestError.MissingBitkitClaim)
             claimValues.isEmpty() -> Result.success(null)
             else -> validateBitkitClaimValue(claimValues.first(), capabilities)
         }
@@ -202,7 +212,7 @@ data class PubkyAuthRequest(
             val claim = PubkyAuthClaim.fromWireValue(claimValue)
                 ?: return Result.failure(PubkyAuthRequestError.UnsupportedBitkitClaim(claimValue))
 
-            return if (PubkyAuthClaim.matchesWatchOnlyAccountCapabilities(capabilities)) {
+            return if (PubkyAuthClaim.matchesRequiredCapabilities(capabilities)) {
                 Result.success(claim)
             } else {
                 Result.failure(PubkyAuthRequestError.InvalidBitkitClaimCapabilities)

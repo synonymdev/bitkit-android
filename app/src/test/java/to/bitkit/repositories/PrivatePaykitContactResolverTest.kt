@@ -9,6 +9,7 @@ import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PrivatePaykitContactCacheData
 import to.bitkit.data.PrivatePaykitStoredInvoiceData
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.test.BaseUnitTest
 import javax.inject.Provider
 import kotlin.test.assertEquals
@@ -23,6 +24,7 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
 
     private val cacheStore = mock<PrivatePaykitCacheStore>()
     private val addressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
+    private val paymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val cacheData = MutableStateFlow(PrivatePaykitCacheData())
 
     private lateinit var sut: PrivatePaykitContactResolver
@@ -30,11 +32,49 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(cacheStore.data).thenReturn(cacheData)
+        whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(PaykitReceivedPaymentContacts.Empty)
         sut = PrivatePaykitContactResolver(
             ioDispatcher = testDispatcher,
             cacheStore = cacheStore,
             addressReservationRepo = Provider { addressReservationRepo },
+            paymentRequestRepo = Provider { paymentRequestRepo },
         )
+    }
+
+    @Test
+    fun `shared request invoice hash resolves without local invoice reservations`() = test {
+        val shared = mock<PaykitReceivedPaymentContacts>()
+        whenever(shared.contactsForPaymentHash(PAYMENT_HASH)).thenReturn(setOf(CONTACT_KEY))
+        whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(shared)
+
+        assertEquals(
+            PubkyPublicKeyFormat.normalized(CONTACT_KEY),
+            sut.contactPublicKeyForPrivateInvoicePaymentHash(PAYMENT_HASH)
+        )
+    }
+
+    @Test
+    fun `conflicting local reservation and shared request stay unattributed`() = test {
+        val shared = mock<PaykitReceivedPaymentContacts>()
+        whenever(shared.contactsForAddresses(listOf(PRIVATE_ADDRESS)))
+            .thenReturn(setOf(PaykitReceivedPaymentContactsTest.BUYER))
+        whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(shared)
+        whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).thenReturn(CONTACT_KEY)
+
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf(PRIVATE_ADDRESS)))
+    }
+
+    @Test
+    fun `identity changes while resolving discard old shared request matches`() = test {
+        val shared = mock<PaykitReceivedPaymentContacts>()
+        whenever(shared.contactsForAddresses(listOf(PRIVATE_ADDRESS))).thenReturn(setOf(CONTACT_KEY))
+        whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(shared)
+        whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).thenAnswer {
+            whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(PaykitReceivedPaymentContacts.Empty)
+            null
+        }
+
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf(PRIVATE_ADDRESS)))
     }
 
     @Test
@@ -42,12 +82,10 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         cacheData.value = PrivatePaykitCacheData(
             contacts = mapOf(
                 CONTACT_KEY to PrivatePaykitContactCacheData(
-                    localInvoicesByReceiverPath = mapOf(
-                        "bitkit/wallet" to PrivatePaykitStoredInvoiceData(
-                            bolt11 = "lnbcrt1private",
-                            paymentHash = PAYMENT_HASH,
-                            expiresAt = 1_700_000_000L,
-                        ),
+                    localInvoice = PrivatePaykitStoredInvoiceData(
+                        bolt11 = "lnbcrt1private",
+                        paymentHash = PAYMENT_HASH,
+                        expiresAt = 1_700_000_000L,
                     ),
                 ),
             ),
@@ -55,7 +93,7 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
 
         val result = sut.contactPublicKeyForPrivateInvoicePaymentHash(PAYMENT_HASH)
 
-        assertEquals(CONTACT_KEY, result)
+        assertEquals(PubkyPublicKeyFormat.normalized(CONTACT_KEY), result)
     }
 
     @Test
@@ -70,7 +108,7 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
 
         val result = sut.contactPublicKeyForPrivateInvoicePaymentHash(PAYMENT_HASH)
 
-        assertEquals(CONTACT_KEY, result)
+        assertEquals(PubkyPublicKeyFormat.normalized(CONTACT_KEY), result)
     }
 
     @Test
@@ -85,8 +123,29 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
             .thenReturn(CONTACT_KEY)
 
-        val result = sut.contactPublicKeyForPrivateOnchainAddresses(listOf(PRIVATE_ADDRESS))
+        val result = sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf(PRIVATE_ADDRESS))
 
-        assertEquals(CONTACT_KEY, result)
+        assertEquals(PubkyPublicKeyFormat.normalized(CONTACT_KEY), result)
+    }
+
+    @Test
+    fun `shared request is not a local address reservation`() = test {
+        val shared = mock<PaykitReceivedPaymentContacts>()
+        whenever(shared.contactsForAddresses(listOf(PRIVATE_ADDRESS))).thenReturn(setOf(CONTACT_KEY))
+        whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(shared)
+
+        assertNull(sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+        whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).thenReturn(CONTACT_KEY)
+        assertEquals(CONTACT_KEY, sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+    }
+
+    @Test
+    fun `unrelated output cannot supply a contact for the receiving address`() = test {
+        val outputs = listOf("wallet-address", PRIVATE_ADDRESS)
+        whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).thenReturn(CONTACT_KEY)
+
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses("wallet-address", outputs))
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(null, outputs))
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf("wallet-address")))
     }
 }

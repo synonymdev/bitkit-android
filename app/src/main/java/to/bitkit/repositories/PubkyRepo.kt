@@ -3,8 +3,8 @@ package to.bitkit.repositories
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import coil3.ImageLoader
-import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -51,11 +51,13 @@ import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isPaykitIdentityError
+import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HomegateResponse
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
@@ -64,7 +66,6 @@ import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitReadTimeoutError
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -434,6 +435,10 @@ class PubkyRepo @Inject constructor(
                 val publicKey = pubkyService.importSession(savedSessionSecret).ensurePubkyPrefix()
                 InitResult.Restored(publicKey)
             }.getOrElse {
+                if (it.isPaykitTemporarilyUnavailable()) {
+                    Logger.warn("Deferred session restoration, keeping saved session", it, context = TAG)
+                    return@getOrElse InitResult.RestorationFailed
+                }
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
                 resolveSignedInSession(savedSessionSecret, storedSecretKeyHex ?: adoptedSecretKeyHex())
             }
@@ -1094,7 +1099,6 @@ class PubkyRepo @Inject constructor(
             pubkyService.saveContact(
                 prefixedKey,
                 profile.name,
-                relevantReceiverPaths(prefixedKey),
                 restorePrivateConnection = true,
             )
             _publicKey.value?.let { cacheSessionContactProfiles(it, listOf(profile)) }
@@ -1104,16 +1108,6 @@ class PubkyRepo @Inject constructor(
             }
             markContactsLoaded()
             Logger.info("Added contact '${redacted(prefixedKey)}'", context = TAG)
-        }
-    }
-
-    suspend fun refreshContactReceiverPaths(publicKey: String): Result<Unit> = runSuspendCatching {
-        withContext(ioDispatcher) {
-            val prefixedKey = requireAddableContactPublicKey(publicKey = publicKey, allowExisting = true)
-            val contact = _contacts.value.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, prefixedKey) }
-                ?: return@withContext
-            pubkyService.saveContact(prefixedKey, contact.name, relevantReceiverPaths(prefixedKey))
-            Logger.info("Refreshed contact receiver paths for '${redacted(prefixedKey)}'", context = TAG)
         }
     }
 
@@ -1200,7 +1194,6 @@ class PubkyRepo @Inject constructor(
                 if (profile.publicKey in existing) continue
                 check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
                 runSuspendCatching {
-                    // The preview already resolved this profile. Receiver discovery runs during contact refresh.
                     pubkyService.saveContact(
                         profile.publicKey,
                         profile.name,
@@ -1412,17 +1405,21 @@ class PubkyRepo @Inject constructor(
         unsignedPayload: ByteArray,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
+            val claim = PubkyAuthRequest.parseBitkitClaim(
+                authUrl,
+                PubkyAuthClaim.REQUIRED_CAPABILITIES,
+            ).getOrThrow() ?: throw PubkyAuthRequestError.MissingBitkitClaim
             val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
                 "No secret key available — use Ring to manage authorizations"
             }
             pubkyService.approveAuthWithCompanionClaim(
                 authUrl = authUrl,
-                expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
+                expectedCapabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES,
                 approvedClientId = approvedClientId,
                 secretKeyHex = secretKeyHex,
                 claim = PubkyAuthCompanionClaim(
                     queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
-                    claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
+                    claimType = claim.wireValue,
                     unsignedPayload = unsignedPayload,
                 ),
             )
@@ -1742,7 +1739,7 @@ class PubkyRepo @Inject constructor(
             lane = lane,
         )?.let(::profileFromResolution)
 
-    private fun profileFromResolution(resolution: ContactProfileResolution): PubkyProfile {
+    private fun profileFromResolution(resolution: ProfileResolution): PubkyProfile {
         val prefixedKey = resolution.publicKey.ensurePubkyPrefix()
         resolution.paykitProfile?.let {
             return PubkyProfile.fromPaykitProfile(prefixedKey, it)
@@ -1756,14 +1753,6 @@ class PubkyRepo @Inject constructor(
             imageUrl = resolution.imageUri,
         )
     }
-
-    private suspend fun relevantReceiverPaths(publicKey: String): List<String> =
-        runSuspendCatching {
-            pubkyService.discoverRelevantReceiverPaths(publicKey)
-        }.onFailure {
-            Logger.warn("Failed to discover Paykit receivers for '${redacted(publicKey)}'", it, context = TAG)
-        }.getOrNull()
-            ?: listOf(PaykitReceiverPaths.WALLET)
 
     private suspend fun upsertContactProfileOverride(profile: PubkyProfile) {
         val prefixedKey = profile.publicKey.ensurePubkyPrefix()
@@ -1918,20 +1907,11 @@ class PubkyRepo @Inject constructor(
         settingsStore.setPubkyProfileSetupPending(false)
     }
 
-    private fun requireAddableContactPublicKey(publicKey: String, allowExisting: Boolean = false): String {
-        val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
-        return requireValidAddableContactPublicKey(prefixedKey, allowExisting)
-    }
-
     private fun requireCanonicalAddableContactPublicKey(
         publicKey: String,
         allowExisting: Boolean = false,
     ): String {
         val prefixedKey = PubkyPublicKeyFormat.canonicalized(publicKey)
-        return requireValidAddableContactPublicKey(prefixedKey, allowExisting)
-    }
-
-    private fun requireValidAddableContactPublicKey(prefixedKey: String?, allowExisting: Boolean): String {
         contactValidationError(prefixedKey, allowExisting)?.let { throw it }
         return checkNotNull(prefixedKey) { "Normalized pubky key is required" }
     }

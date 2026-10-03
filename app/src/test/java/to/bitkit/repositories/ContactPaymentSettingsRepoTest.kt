@@ -1,12 +1,21 @@
 package to.bitkit.repositories
 
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -16,7 +25,9 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.PubkyProfile
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -43,7 +54,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
             Unit
         }
         whenever { publicPaykitRepo.syncPublishedEndpoints(any()) }.thenReturn(Result.success(Unit))
-        whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
+        whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
@@ -105,7 +116,10 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        inOrder(privatePaykitRepo, publicPaykitRepo) {
+            verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        }
     }
 
     @Test
@@ -134,8 +148,10 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
-        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+        inOrder(privatePaykitRepo, publicPaykitRepo) {
+            verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        }
     }
 
     @Test
@@ -152,6 +168,180 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+    }
+
+    @Test
+    fun `failed public cleanup keeps sharing disabled and retains its retry`() = test {
+        val cleanupResults = listOf(Result.success(Unit), Result.failure(ContactPaymentSettingsTestError("withdrawal")))
+        for (privateCleanup in cleanupResults) {
+            settingsFlow.value = SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                sharesPrivatePaykitEndpoints = true,
+            )
+            val failure = ContactPaymentSettingsTestError("app update failed")
+            whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).thenReturn(Result.failure(failure))
+            whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()))
+                .thenReturn(privateCleanup)
+
+            val result = createSut().setEnabled(false)
+
+            assertSame(failure, result.exceptionOrNull())
+            assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+            assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+            assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+            verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = true)
+            verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+        }
+    }
+
+    @Test
+    fun `enabling waits for both withdrawal phases even when cleanup fails`() = test {
+        val cleanupResults = listOf(Result.success(Unit), Result.failure(ContactPaymentSettingsTestError("withdrawal")))
+        for (cleanupResult in cleanupResults) {
+            clearInvocations(privatePaykitRepo, publicPaykitRepo)
+            settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = true, sharesPrivatePaykitEndpoints = true)
+            val privateCleanup = CompletableDeferred<Unit>()
+            val publicCleanup = CompletableDeferred<Unit>()
+            whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()))
+                .doSuspendableAnswer {
+                    privateCleanup.await()
+                    cleanupResult
+                }
+            whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).doSuspendableAnswer {
+                publicCleanup.await()
+                cleanupResult
+            }
+            val sut = createSut()
+
+            val disable = async { sut.setEnabled(false) }
+            runCurrent()
+            val enable = async { sut.setEnabled(true) }
+            runCurrent()
+
+            assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+            assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+            assertFalse(enable.isCompleted)
+            verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = true)
+            privateCleanup.complete(Unit)
+            runCurrent()
+
+            assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+            assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+            assertFalse(enable.isCompleted)
+            verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = true)
+            publicCleanup.complete(Unit)
+
+            assertEquals(cleanupResult.isSuccess, disable.await().isSuccess)
+            assertTrue(enable.await().isSuccess)
+            assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+            assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+            inOrder(privatePaykitRepo, publicPaykitRepo) {
+                verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+                verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+                verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
+                verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY))
+            }
+        }
+    }
+
+    @Test
+    fun `sharing changes wait for failed enable rollback`() = test {
+        val rollback = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>()))
+            .thenReturn(Result.failure(ContactPaymentSettingsTestError("private setup failed")))
+        whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()))
+            .doSuspendableAnswer {
+                rollback.await()
+                Result.success(Unit)
+            }
+        val sut = createSut()
+
+        val enable = async { sut.setEnabled(true) }
+        runCurrent()
+        val disable = async { sut.setEnabled(false) }
+        runCurrent()
+
+        assertFalse(disable.isCompleted)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        rollback.complete(Unit)
+
+        assertTrue(enable.await().isFailure)
+        assertTrue(disable.await().isSuccess)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+    }
+
+    @Test
+    fun `foreground cleanup coalesces and sharing waits for it`() = test {
+        val cleanup = CompletableDeferred<Unit>()
+        var cleanupCount = 0
+        val sut = createSut()
+        val reconciliation = launch {
+            sut.reconcilePendingEndpoints {
+                cleanupCount++
+                cleanup.await()
+            }
+        }
+        runCurrent()
+        sut.reconcilePendingEndpoints { cleanupCount++ }
+        val enable = async { sut.setEnabled(true) }
+        runCurrent()
+
+        assertEquals(1, cleanupCount)
+        assertFalse(enable.isCompleted)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = true)
+        cleanup.complete(Unit)
+        reconciliation.join()
+
+        assertTrue(enable.await().isSuccess)
+        sut.reconcilePendingEndpoints { cleanupCount++ }
+        assertEquals(2, cleanupCount)
+    }
+
+    @Test
+    fun `cancelling queued enable does not publish or block later changes`() = test {
+        val cleanup = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()))
+            .doSuspendableAnswer {
+                cleanup.await()
+                Result.success(Unit)
+            }
+        val sut = createSut()
+        val disable = async { sut.setEnabled(false) }
+        runCurrent()
+        val enable = async { sut.setEnabled(true) }
+        runCurrent()
+
+        assertFalse(enable.isCompleted)
+        enable.cancelAndJoin()
+        cleanup.complete(Unit)
+
+        assertTrue(disable.await().isSuccess)
+        assertTrue(sut.setEnabled(false).isSuccess)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = true)
+        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+    }
+
+    @Test
+    fun `cancelling foreground cleanup releases waiting sharing change`() = test {
+        val sut = createSut()
+        val reconciliation = launch {
+            sut.reconcilePendingEndpoints { awaitCancellation() }
+        }
+        runCurrent()
+        val enable = async { sut.setEnabled(true) }
+        runCurrent()
+
+        assertFalse(enable.isCompleted)
+        reconciliation.cancelAndJoin()
+
+        assertTrue(enable.await().isSuccess)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
     }
 
     private fun createSut() = ContactPaymentSettingsRepo(
