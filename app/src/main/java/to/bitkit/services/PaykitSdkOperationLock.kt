@@ -33,7 +33,11 @@ internal class PaykitSdkOperationLock {
     suspend fun <T> withoutLock(operation: suspend () -> T): T {
         if (ownsWipe()) return operation()
         val admittedGeneration = admit()
-        return operation().also { checkAdmitted(admittedGeneration) }
+        currentCoroutineContext().ensureActive()
+        return operation().also {
+            currentCoroutineContext().ensureActive()
+            checkAdmitted(admittedGeneration)
+        }
     }
 
     suspend fun <T> withWalletWipe(operation: suspend () -> T): T {

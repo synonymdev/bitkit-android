@@ -19,7 +19,6 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -85,8 +84,8 @@ internal val PublicPaykitPaymentResult.incomingPaymentRequestFailureReason:
     }
 
 data class PrivatePaykitPaymentContext(
-    val receiverPath: String,
-    val paymentListVersion: ULong,
+    val paymentAppsByEndpoint: Map<String, String>,
+    val paymentListVersion: ULong?,
 )
 
 @OptIn(ExperimentalTime::class)
@@ -213,18 +212,18 @@ class PublicPaykitRepo @Inject constructor(
         runSuspendCatching {
             if (!publish) {
                 val endpointError = runSuspendCatching { removePublishedEndpoints() }.exceptionOrNull()
-                val markerError = syncLocalReceiverMarker(publicSharingEnabled = false).exceptionOrNull()
+                val appError = syncPaykitApp().exceptionOrNull()
                 if (endpointError != null) {
-                    markerError?.let(endpointError::addSuppressed)
+                    appError?.let(endpointError::addSuppressed)
                     throw endpointError
                 }
-                markerError?.let { throw it }
+                appError?.let { throw it }
                 settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
                 return@runSuspendCatching
             }
 
             val desired = buildWalletEndpoints(refresh = true)
-            syncLocalReceiverMarker(publicSharingEnabled = true).getOrThrow()
+            syncPaykitApp().getOrThrow()
             applyPublishedEndpoints(desired)
             settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
         }
@@ -240,7 +239,7 @@ class PublicPaykitRepo @Inject constructor(
                 forceRefreshLightning = forceRefreshLightning,
                 requireEndpoint = requireEndpoint,
             )
-            syncLocalReceiverMarker(publicSharingEnabled = true).getOrThrow()
+            syncPaykitApp().getOrThrow()
             applyPublishedEndpoints(desired)
             settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
         }
@@ -263,26 +262,19 @@ class PublicPaykitRepo @Inject constructor(
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
             paykitSdkService.resolvePublicContactPayment(
                 counterparty = normalizedKey,
-                receiverPath = PaykitReceiverPaths.WALLET,
             ).payableEndpoints
-                .mapNotNull { parseEndpoint(it.identifier, it.payload) }
-                .associateBy { it.methodId }
-                .values
+                .mapNotNull { parseEndpoint(it.identifier, it.payload)?.copy(appId = it.appId) }
                 .sortedBy { endpoint -> payablePreferenceOrder.indexOf(endpoint.methodId) }
         }
     }
 
-    suspend fun syncLocalReceiverMarker(
-        publicSharingEnabled: Boolean? = null,
+    suspend fun syncPaykitApp(
         privateSharingEnabled: Boolean? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val settings = settingsStore.data.first()
-            val publicSharing = publicSharingEnabled ?: settings.sharesPublicPaykitEndpoints
             val privateSharing = privateSharingEnabled ?: settings.sharesPrivatePaykitEndpoints
-            paykitSdkService.syncLocalReceiverMarker(
-                isDiscoverable = publicSharing || privateSharing,
-            )
+            paykitSdkService.syncPaykitApp(privatePaymentsEnabled = privateSharing)
         }
     }
 
@@ -454,6 +446,7 @@ data class Endpoint(
     val min: String? = null,
     val max: String? = null,
     val rawPayload: String,
+    val appId: String? = null,
 ) {
     val paymentRequest: String
         get() = value

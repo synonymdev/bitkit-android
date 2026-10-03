@@ -52,7 +52,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         override fun now() = now
     }
     private val eligibleTargets = MutableStateFlow<List<PaykitPaymentRequestTarget>>(emptyList())
-    private val target = PaykitPaymentRequestTarget(TEST_PUBLIC_KEY, "bitkit/wallet")
+    private val target = PaykitPaymentRequestTarget(TEST_PUBLIC_KEY)
     private val openedPayment = PublicPaykitPaymentResult.Opened(
         paymentRequest = "bitcoin:bcrt1qtest",
         privatePaymentContext = null,

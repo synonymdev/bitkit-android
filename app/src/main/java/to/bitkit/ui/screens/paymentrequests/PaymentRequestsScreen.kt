@@ -665,7 +665,7 @@ private fun List<PaykitSubscription>.nameFor(request: PaykitPaymentRequest): Str
 }
 
 private val PaykitPaymentRequest.lazyListKey: String
-    get() = "$paymentRequestId|$counterparty|$counterpartyReceiverPath|${billingPeriod?.startsAt ?: ""}"
+    get() = "$paymentRequestId|$counterparty|${billingPeriod?.startsAt ?: ""}"
 
 internal val PaykitPaymentRequest.paymentRailIconColor
     get() = if (paymentProofKind == PaykitPaymentProofKind.Lightning) Colors.Purple else Colors.Brand
@@ -692,7 +692,6 @@ private fun PaymentRailIcon(request: PaykitPaymentRequest, paymentWasSent: Boole
 private val previewRequest = PaykitPaymentRequest(
     paymentRequestId = "payment-request",
     counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-    counterpartyReceiverPath = "bitkit/wallet",
     amountValue = "0.00025",
     amountSats = 25_000uL,
     note = "Dinner",

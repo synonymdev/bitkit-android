@@ -43,6 +43,7 @@ class PubkyIdentityRepublishTest {
                 mock(),
                 { bootstrap },
                 StandardTestDispatcher(testScheduler),
+                settingsStore = mock(),
             ) { mock() }
 
             service.republishIdentityIfNeeded(publicKey, now = 2_592_000_000)
@@ -73,6 +74,7 @@ class PubkyIdentityRepublishTest {
             mock(),
             { bootstrap },
             StandardTestDispatcher(testScheduler),
+            settingsStore = mock(),
         ) { mock() }
 
         service.republishIdentityIfNeeded(publicKey, now = 0)
@@ -100,6 +102,7 @@ class PubkyIdentityRepublishTest {
             context = mock(),
             keychain = mock(),
             pubkyStore = mock(),
+            settingsStore = mock(),
             bootstrapFactory = {
                 factories++
                 bootstrap
@@ -129,6 +132,7 @@ class PubkyIdentityRepublishTest {
                 context = mock(),
                 keychain = mock(),
                 pubkyStore = mock(),
+                settingsStore = mock(),
                 bootstrapFactory = { bootstrap },
                 ioDispatcher = StandardTestDispatcher(testScheduler),
                 sdkFactory = { mock() },
@@ -153,6 +157,7 @@ class PubkyIdentityRepublishTest {
             mock(),
             { bootstrap },
             StandardTestDispatcher(testScheduler),
+            settingsStore = mock(),
         ) { sdk }
         val otherKey = publicKey.dropLast(1) + "y"
 
@@ -176,6 +181,7 @@ class PubkyIdentityRepublishTest {
             mock(),
             { bootstrap },
             StandardTestDispatcher(testScheduler),
+            settingsStore = mock(),
         ) { mock() }
         val first = async { service.republishIdentityIfNeeded(publicKey, now = 0) }
         runCurrent()
@@ -198,6 +204,7 @@ class PubkyIdentityRepublishTest {
             mock(),
             { bootstrap },
             StandardTestDispatcher(testScheduler),
+            settingsStore = mock(),
         ) { mock() }
 
         val approval = async { service.republishIdentityIfNeeded(publicKey, now = 0) }
@@ -228,6 +235,7 @@ class PubkyIdentityRepublishTest {
             mock(),
             { bootstrap },
             StandardTestDispatcher(testScheduler),
+            settingsStore = mock(),
         ) { mock() }
 
         service.republishIdentityIfNeeded(publicKey, now = 0)
@@ -262,6 +270,7 @@ class PubkyIdentityRepublishTest {
             mock(),
             { bootstrap },
             StandardTestDispatcher(testScheduler),
+            settingsStore = mock(),
         ) { mock() }
         var continued = false
         val cancelledCaller = async {

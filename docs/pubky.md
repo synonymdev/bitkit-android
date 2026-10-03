@@ -27,12 +27,23 @@ Delegates Pubky operations to `PaykitSdkService`, which uses:
 
 - **paykit-ffi** (`com.synonym:paykit-android`) — session management, auth approval, profile/contact resolution, and bounded file fetching
   - `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, `fetchPubkyFileBounded()`
-- **bitkit-core** (`com.synonym:bitkit-core-android`) — mnemonic-to-seed conversion for receiver noise-key derivation
-  - `mnemonicToSeed()`
+
+Paykit derives the delegated Paykit key from the active Pubky identity secret and the App Registry's current key generation. Authorized apps share encrypted Pubky-hosted Paykit state; Bitkit retains wallet-owned address reservations and pending payment proofs locally.
+
+The Android dependency is `com.synonym:paykit-android` from GitHub Packages, pinned in `gradle/libs.versions.toml`. Paykit is excluded from Maven-local resolution. Companion authorization and key-sharing consent are described in [Pubky Auth companion claims](pubky-auth-companion-claims.md).
 
 Session, state, key and publishing calls are serialized by `PaykitSdkService`'s operation lock. The public reads — `fetchFile()` (`fetchPubkyFileBounded()`), `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, and the receiver reads `discoverRelevantReceiverPaths()`, `privateReceiverPathSelection()` and `paymentRequestReceiverPaths()` (`paykitReceiverPaths()` and `paykitReceiverMarker()`) — run outside that lock, at most 6 at once, and are cancelled with their caller. Only unauthenticated public reads may use that path. Reading or saving a contact record stays under the lock, so a caller that discovers receiver paths and then saves them takes the lock only for the save. A wallet wipe still applies to the public reads: one that needs an SDK instance builds it under the lock, one that starts during the wipe fails the way a locked call does, and one that the wipe overtakes fails instead of returning its result, while the wipe's own cleanup can still read.
 
 Each public read names a lane. An interactive read, for something the user is looking at or waiting on — the user's own profile, avatars and other files, Pubky Ring choice rows, the follow lookups of `prepareImport()` that an adopted Ring row waits on, a single contact opened from Add Contact or the contact screen, and the receiver reads for one contact the user pays or sends a payment request to — takes one of the 6 read slots. A bulk read — the contacts list's background profile refresh, private sync's receiver discovery and marker reads, and the payment request target refresh over all saved contacts — first takes one of 4 bulk slots and then a read slot, so bulk work never holds more than 4 read slots and at least 2 stay free for interactive reads. A freed read slot goes to the oldest waiting interactive read before any waiting bulk read, also one already queued for a read slot, so a lookup the user waits on never waits behind bulk reads that asked for a slot first. Within each lane reads are first come, first served, and a cancelled read gives back the slots it holds. A caller can give `resolveContactProfile()` a timeout, which counts only while the read holds its read slot; a read that runs out is cancelled, gives back its slots and fails with `PaykitReadTimeoutError`, an ordinary error rather than a cancellation.
+
+### Received Payment Attribution
+
+Shared Payment Requests can identify a received payment's payer even when another authorized app
+created the request. Attribution uses the request's immutable, accepted Bitcoin destinations, not
+current contact endpoints or unverified payment proofs. Bitkit validates the network, checks every
+known transaction output or the received Lightning payment hash, and leaves ambiguous matches
+unlabelled. A successful shared-state refresh backfills only incoming activity with no contact;
+existing labels and notes remain unchanged. Snapshots are scoped to the active Pubky identity.
 
 ## Repository Layer (`PubkyRepo`)
 
