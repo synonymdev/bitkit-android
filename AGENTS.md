@@ -6,6 +6,77 @@ This file provides guidance to Codex, Claude Code, and Cursor when working with 
 
 Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
+## Agent workflow
+
+### Verification
+
+- For code changes, keep the full gate: run `just compile`, `just test`, and `just lint` before
+  reporting completion or the final PR creation/update/push. Follow the batching and focused rerun
+  guidance under Rules; targeted checks during development do not replace this gate.
+- Fix relevant local check failures caused by the change and rerun the affected checks before
+  reporting work as complete, asking the user to run those checks, pushing, or creating/updating a PR.
+- If a check is blocked by missing prerequisites or fails for an unrelated reason, investigate and
+  report the command, cause, and remaining verification. Do not mark blocked, skipped, or unrun
+  checks as passed or describe validation as complete.
+- For user-visible changes, run the relevant journeys when their prerequisites are available; report
+  any missing prerequisites and untested flows explicitly.
+- In the final handoff, report the commands run and their results, including failures and blockers.
+  Documentation-only changes need documentation checks such as `git diff --check` and validation of
+  changed references, not an application build or device run.
+
+### Independent review (recommended)
+
+Before marking a PR ready for human review, preferably run an independent review using a subagent
+with fresh context. Give the reviewer the requirements, scope, acceptance criteria, applicable
+repository guidelines, and base/head revisions (or the working-tree diff for uncommitted changes).
+Include intentional platform differences, but do not pass the implementation conversation or its
+justification of the solution. The reviewer should inspect the diff, callers, and surrounding code
+independently. Address actionable findings and recheck the affected changes.
+
+The reviewer may use the same model as the implementation agent. A separate context is the
+recommendation; using a different model is not required. If subagents are unavailable, use a separate
+review session when practical. Do not describe a self-review as an independent review.
+
+### Review summary metadata
+
+AI reviewers should end each review summary with `Reviewer model: <model name>` and
+`Reasoning effort: <effort>` on separate lines, including reviews with no findings. Include this
+footer once per review, not on each inline comment. It describes that review round and complements
+the PR's Models used section; it is informational, not an approval or quality claim.
+
+Use the model and effort actually used for the review, checking available session/run metadata
+first. Use `Unknown` for an unrecorded model or effort, and `Not exposed` for a reasoning setting
+the tool does not expose. Never copy the implementation model or infer settings from tool names.
+If multiple model/effort combinations contributed, list each pair in the footer. Unassisted human
+reviews do not need it; AI-assisted human reviews should identify the AI model and effort used.
+
+### PR relationships
+
+Use optional `Twin:`, `Companion:`, and `Dependency:` lines for confirmed related PRs, following
+`.agents/commands/pr.md`. A twin is the matching change in the other native Bitkit app; a companion
+is related coordinated work such as E2E coverage; a dependency is a prerequisite. Omit absent
+relationships and use repository-qualified PR references so cross-repository numbers are unambiguous.
+
+### Models used
+
+Include `### Models used` in the PR body with `Planning/scoping`, `Implementation`, and a single
+`Review` entry. Record the model names reported by the tools as work proceeds, including subagent
+reviews. For each phase, list each distinct model/effort pair once, separated by commas; repeated
+reviews with the same pair do not add entries. The same model may appear in all three phases.
+Do not add per-round model rows. Optionally add `Review rounds: N` when the number of completed
+review passes is known; omit the count when unknown and do not count parallel reviewers as rounds.
+
+Record reasoning effort alongside each model as `` `model-name` (reasoning: `medium`) ``. Check
+available session/run metadata before using `Unknown`. Use `reasoning: Unknown` when unrecorded,
+or `reasoning: Not exposed` when the tool does not expose a setting. Do not infer effort from the
+model name or apply the current setting to earlier work. Preserve all known model/effort pairs when
+updating the section; collapse older per-round rows into the single Review entry.
+
+This section is informational, not a quality score, verification result, or approval requirement.
+Use `Not used` when a phase had no AI involvement and `Unknown` when the model was not recorded;
+never infer a model from a tool name. If no review occurred, write `Review: Not performed`.
+`Not used` and `Not performed` need no reasoning value. See `.agents/commands/pr.md` for formatting.
+
 ## Build Commands
 
 ```sh

@@ -2,6 +2,16 @@
 
 When performing a code review, respond in English.
 
+## Review summary metadata
+
+Follow `AGENTS.md` under "Review summary metadata": end the review summary with
+`Reviewer model: <model name>` and `Reasoning effort: <effort>` on separate lines, once per review
+(including no-findings reviews), not on each inline comment. Check available session/run metadata
+for the actual model and effort; use `Unknown` if unrecorded or `Not exposed` if a reasoning setting
+is not exposed. Do not infer values from the tool name or copy the implementation model. If multiple
+model/effort combinations contributed, list each pair. This is informational and does not replace
+the PR's Models used section. Unassisted human reviews do not need this footer.
+
 ## Architecture & Patterns
 
 When performing a code review, ensure ViewModels are never injected as dependencies into services or repositories. Only Android activities and composable functions should use ViewModels.
