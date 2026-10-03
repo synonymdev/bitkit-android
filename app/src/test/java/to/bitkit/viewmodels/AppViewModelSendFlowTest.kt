@@ -28,6 +28,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
@@ -118,6 +119,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
@@ -253,6 +255,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val needsPairingCode = MutableStateFlow(false)
     private val pairingCodeRequestId = MutableStateFlow<Long?>(null)
     private val settingsData = MutableStateFlow(SettingsData())
+    private val contactPaymentSettingsRepo by lazy {
+        ContactPaymentSettingsRepo(settingsStore, publicPaykitRepo, privatePaykitRepo, pubkyRepo, testDispatcher)
+    }
     private val isRecoveryMode = MutableStateFlow(false)
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
@@ -515,6 +520,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         nodeServiceFgState = nodeServiceFgState,
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
+        contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         paykitPaymentRequestRepo = paykitPaymentRequestRepo,
         paykitPaymentProofRepo = paykitPaymentProofRepo,
         paykitPaymentRequestDiagnostics = paykitPaymentRequestDiagnostics,
@@ -8518,6 +8524,82 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
         verify(privatePaykitRepo).scheduleSavedContactPreparation(emptySet<String>())
         verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
+    }
+
+    @Test
+    fun `private Paykit refresh skips cleanup throughout sharing disable`() = test {
+        settingsData.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitCleanupPending = true,
+        )
+        val privateCleanup = CompletableDeferred<Unit>()
+        val publicCleanup = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()))
+            .doSuspendableAnswer {
+                privateCleanup.await()
+                Result.success(Unit)
+            }
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).doSuspendableAnswer {
+            publicCleanup.await()
+            Result.success(Unit)
+        }
+
+        val disable = async { contactPaymentSettingsRepo.setEnabled(false) }
+        runCurrent()
+        assertFalse(settingsData.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsData.value.sharesPrivatePaykitEndpoints)
+        sut.refreshPrivatePaykitEndpoints()
+        runCurrent()
+
+        verify(privatePaykitRepo, never()).retryPendingEndpointRemoval(any<Collection<String>>())
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+
+        privateCleanup.complete(Unit)
+        runCurrent()
+        sut.refreshPrivatePaykitEndpoints()
+        runCurrent()
+
+        verify(privatePaykitRepo, never()).retryPendingEndpointRemoval(any<Collection<String>>())
+        verify(publicPaykitRepo, times(1)).syncPublishedEndpoints(publish = false)
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+        publicCleanup.complete(Unit)
+        assertTrue(disable.await().isSuccess)
+    }
+
+    @Test
+    fun `private Paykit refresh coalesces private and public cleanup`() = test {
+        settingsData.value = SettingsData(publicPaykitCleanupPending = true)
+        val privateCleanup = CompletableDeferred<Unit>()
+        val publicCleanup = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.retryPendingEndpointRemoval(any<Collection<String>>())).doSuspendableAnswer {
+            privateCleanup.await()
+            Result.success(Unit)
+        }
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).doSuspendableAnswer {
+            publicCleanup.await()
+            Result.success(Unit)
+        }
+
+        sut.refreshPrivatePaykitEndpoints()
+        runCurrent()
+        sut.refreshPrivatePaykitEndpoints()
+        runCurrent()
+
+        verify(privatePaykitRepo, times(1)).retryPendingEndpointRemoval(emptyList())
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        privateCleanup.complete(Unit)
+        runCurrent()
+        sut.refreshPrivatePaykitEndpoints()
+        runCurrent()
+
+        verify(privatePaykitRepo, times(1)).retryPendingEndpointRemoval(emptyList())
+        verify(publicPaykitRepo, times(1)).syncPublishedEndpoints(publish = false)
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+        publicCleanup.complete(Unit)
+        runCurrent()
+        assertFalse(settingsData.value.publicPaykitCleanupPending)
     }
 
     @Test

@@ -10,6 +10,10 @@ and retain both cleanup jobs without republishing cleared private lists. Restore
 foreground the app. Cleanup must finish while sharing stays off. Repeat with only the trailing
 public endpoint or app-registry update failing.
 
+Hold withdrawal in progress and foreground the app. It must not start another cleanup. Request
+sharing on again before withdrawal finishes: publication must wait until the earlier cleanup ends,
+then leave sharing on. Repeat while a foreground cleanup is already running.
+
 Import journeys require a disposable identity with a known following list. They save local Bitkit contacts; payment sharing remains a separate step.
 
 Continue waits for public payment setup, not private linking with every imported contact.

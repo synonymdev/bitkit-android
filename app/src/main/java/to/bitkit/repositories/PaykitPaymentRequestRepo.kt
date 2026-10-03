@@ -594,7 +594,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         proposal = proposal,
                         expectedIdentity = expectedIdentity,
                     )
-                    val reports = processPendingMessages()
+                    val reports = processPendingMessages(target.publicKey)
 
                     val request = record.toCreatedPaykitPaymentRequest(
                         draft = draft.copy(note = note),
@@ -667,7 +667,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             proposal = proposal,
             expectedIdentity = expectedIdentity,
         )
-        val deliveryStatus = if (proposalWasSent(record, processPendingMessages())) {
+        val deliveryStatus = if (proposalWasSent(record, processPendingMessages(target.publicKey))) {
             PaykitPaymentRequestDeliveryStatus.Sent
         } else {
             PaykitPaymentRequestDeliveryStatus.Queued
@@ -1337,8 +1337,22 @@ class PaykitPaymentRequestRepo @Inject constructor(
         scheduleExpirationLocked()
     }
 
-    private suspend fun processPendingMessages(): List<OutboundPrivateCounterpartySendReport> =
-        runSuspendCatching { paykitSdkService.processPendingPrivateMessages() }
+    private suspend fun processPendingMessages(
+        counterparty: String? = null,
+    ): List<OutboundPrivateCounterpartySendReport> =
+        runSuspendCatching {
+            if (counterparty == null) {
+                paykitSdkService.processPendingPrivateMessages()
+            } else {
+                listOf(
+                    OutboundPrivateCounterpartySendReport(
+                        counterparty = counterparty,
+                        report = paykitSdkService.processOutboundPrivateMessages(counterparty),
+                        error = null,
+                    ),
+                )
+            }
+        }
             .onSuccess(::logOutboundFailures)
             .onFailure { Logger.warn("Failed to deliver pending Paykit private messages", it, context = TAG) }
             .getOrDefault(emptyList())

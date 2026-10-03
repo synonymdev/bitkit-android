@@ -689,6 +689,15 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    suspend fun processOutboundPrivateMessages(counterparty: String) = run {
+        isSetup.await()
+        operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                handle.processOutboundPrivateMessages(counterparty)
+            }
+        }
+    }
+
     suspend fun processPendingPrivateMessages(): List<OutboundPrivateCounterpartySendReport> {
         isSetup.await()
         return operationLock.withLock {

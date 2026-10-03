@@ -4,6 +4,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -21,11 +23,24 @@ class ContactPaymentSettingsRepo @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
+    private val sharingMutex = Mutex()
+
     val isEnabled: Flow<Boolean> = settingsStore.data.map { it.areContactPaymentsEnabled() }
 
     suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
-        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
-        if (isEnabled) enable(contacts) else disable(contacts)
+        sharingMutex.withLock {
+            val contacts = pubkyRepo.contacts.value.map { it.publicKey }
+            if (isEnabled) enable(contacts) else disable(contacts)
+        }
+    }
+
+    suspend fun reconcilePendingEndpoints(reconcile: suspend () -> Unit) = withContext(ioDispatcher) {
+        if (!sharingMutex.tryLock()) return@withContext
+        try {
+            reconcile()
+        } finally {
+            sharingMutex.unlock()
+        }
     }
 
     private suspend fun enable(contacts: List<String>): Result<Unit> {

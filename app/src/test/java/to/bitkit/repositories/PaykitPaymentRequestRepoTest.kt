@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.validateBitcoinAddress
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
@@ -98,6 +99,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun setUp() = test {
         schedulerOriginMillis = testDispatcher.scheduler.currentTime
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
+        whenever(paykitSdkService.processOutboundPrivateMessages(any())).thenReturn(
+            OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
+        )
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
         whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
@@ -1032,9 +1036,21 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `proposal revalidates only the selected saved contact`() = test {
+    fun `proposal revalidates and drains only the selected saved contact`() = test {
         val target = PaykitPaymentRequestTarget(COUNTERPARTY)
         val stalledDiscovery = CompletableDeferred<Unit>()
+        val unrelatedDelivery = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.processPendingPrivateMessages()).doSuspendableAnswer {
+            unrelatedDelivery.await()
+            emptyList()
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(SECOND_IDENTITY)).doSuspendableAnswer {
+            unrelatedDelivery.await()
+            OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(COUNTERPARTY)).thenReturn(
+            OutboundPrivateSendReport(listOf(7uL), listOf(7uL), emptyList(), emptyList(), emptyList()),
+        )
         whenever(
             paykitSdkService.identityStatus()
         ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
@@ -1055,7 +1071,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paymentRequestRecord(
                 role = PaymentRequestLocalRole.PAYEE,
                 counterparty = COUNTERPARTY,
-            ),
+            ).copy(proposalOutboundMessageId = 7uL),
         )
 
         val proposal = async {
@@ -1067,9 +1083,16 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         }
         runCurrent()
 
-        assertTrue(proposal.isCompleted)
-        proposal.await().getOrThrow()
+        val completedBeforeUnrelatedDelivery = proposal.isCompleted
+        unrelatedDelivery.complete(Unit)
+        stalledDiscovery.complete(Unit)
+        val creation = proposal.await().getOrThrow()
+        assertTrue(completedBeforeUnrelatedDelivery)
+        assertEquals(PaykitPaymentRequestDeliveryStatus.Sent, creation.request.deliveryStatus)
         verifyBlocking(paykitSdkService, never()) { canReceivePaymentRequests(SECOND_IDENTITY) }
+        verify(paykitSdkService).processOutboundPrivateMessages(COUNTERPARTY)
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(SECOND_IDENTITY)
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
     }
 
     @Test

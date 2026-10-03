@@ -144,6 +144,7 @@ import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
@@ -257,6 +258,7 @@ class AppViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
     private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
     private val paykitPaymentRequestDiagnostics: PaykitPaymentRequestDiagnostics,
@@ -1342,25 +1344,27 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
-        privatePaykitRepo.retryPendingEndpointRemoval(contactKeys)
-            .onFailure {
-                Logger.warn("Failed to retry private Paykit endpoint removal for '$reason'", it, context = TAG)
-            }
-
-        val settings = settingsStore.data.first()
-        if (settings.publicPaykitCleanupPending) {
-            val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
-                publicPaykitRepo.syncCurrentPublishedEndpoints()
-            } else {
-                publicPaykitRepo.syncPublishedEndpoints(publish = false)
-            }
-            reconciliationResult
-                .onSuccess {
-                    settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                }
+        contactPaymentSettingsRepo.reconcilePendingEndpoints {
+            privatePaykitRepo.retryPendingEndpointRemoval(contactKeys)
                 .onFailure {
-                    Logger.warn("Failed to reconcile public Paykit state for '$reason'", it, context = TAG)
+                    Logger.warn("Failed to retry private Paykit endpoint removal for '$reason'", it, context = TAG)
                 }
+
+            val settings = settingsStore.data.first()
+            if (settings.publicPaykitCleanupPending) {
+                val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
+                    publicPaykitRepo.syncCurrentPublishedEndpoints()
+                } else {
+                    publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                }
+                reconciliationResult
+                    .onSuccess {
+                        settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                    }
+                    .onFailure {
+                        Logger.warn("Failed to reconcile public Paykit state for '$reason'", it, context = TAG)
+                    }
+            }
         }
     }
 

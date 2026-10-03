@@ -6,6 +6,7 @@ import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
@@ -93,6 +94,9 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     fun setUp() = test {
         schedulerOriginMillis = testDispatcher.scheduler.currentTime
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
+        whenever(paykitSdkService.processOutboundPrivateMessages(any())).thenReturn(
+            OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
+        )
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
         whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
@@ -316,18 +320,32 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     fun `creator proposal sends recurring terms and stays queued until delivery`() = test {
         val target = stubSubscriptionProposal()
         val expiresAt = clock.now().plus(60.seconds)
+        val unrelatedDelivery = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.processPendingPrivateMessages()).doSuspendableAnswer {
+            unrelatedDelivery.await()
+            emptyList()
+        }
 
-        val creation = sut.proposeSubscription(
-            draft = PaykitSubscriptionDraft(
-                amountSats = 100_000uL,
-                name = " Monthly support ",
-                description = " Thank you ",
-                frequency = PaykitRecurrenceUnit.Month,
-                expiresAt = expiresAt,
-            ),
-            target = target,
-            savedPublicKeys = listOf(COUNTERPARTY),
-        ).getOrThrow()
+        val proposal = async {
+            sut.proposeSubscription(
+                draft = PaykitSubscriptionDraft(
+                    amountSats = 100_000uL,
+                    name = " Monthly support ",
+                    description = " Thank you ",
+                    frequency = PaykitRecurrenceUnit.Month,
+                    expiresAt = expiresAt,
+                ),
+                target = target,
+                savedPublicKeys = listOf(COUNTERPARTY),
+            )
+        }
+        runCurrent()
+        val completedBeforeUnrelatedDelivery = proposal.isCompleted
+        unrelatedDelivery.complete(Unit)
+        val creation = proposal.await().getOrThrow()
+        assertTrue(completedBeforeUnrelatedDelivery)
+        verify(paykitSdkService).processOutboundPrivateMessages(COUNTERPARTY)
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
 
         val captured = argumentCaptor<PaykitPaymentRequestProposalTerms>()
         verifyBlocking(paykitSdkService) {
