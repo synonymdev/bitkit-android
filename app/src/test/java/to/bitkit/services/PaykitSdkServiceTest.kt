@@ -506,13 +506,17 @@ class PaykitSdkServiceTest {
 
     @Test
     fun `deletion blocks the identity before removing the contact`() = runTest {
-        for (failBlock in listOf(false, true)) {
+        for ((state, failBlock) in listOf(
+            LinkedPeerState.LINKED to false,
+            LinkedPeerState.LINKED to true,
+            null to false,
+            null to true,
+        )) {
             val sdk = mock<PaykitSdk>()
             whenever(sdk.paymentRequests()).thenReturn(emptyList())
             val contact = mock<ContactRecord>()
             whenever(sdk.contactRecord(RING_PUBKY)).thenReturn(contact)
-            val peer = contactPeer(LinkedPeerState.LINKED)
-            whenever(sdk.linkedPeers()).thenReturn(listOf(peer))
+            whenever(sdk.linkedPeers()).thenReturn(listOfNotNull(state?.let { contactPeer(it) }))
             if (failBlock) {
                 whenever(sdk.blockPeer(RING_PUBKY))
                     .thenThrow(IllegalStateException("storage failure"))

@@ -664,7 +664,7 @@ class PaykitSdkService @Inject constructor(
                         Logger.warn("Failed to withdraw private endpoints before contact deletion", it, context = TAG)
                     }
                 }
-                peers.forEach { handle.blockPeer(publicKey) }
+                handle.blockPeer(publicKey)
                 handle.removeContact(publicKey)
             }
         }
