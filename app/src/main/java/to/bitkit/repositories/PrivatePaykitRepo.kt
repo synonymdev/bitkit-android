@@ -501,7 +501,6 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun handleOnchainActivity(receivedAddresses: Collection<String> = emptyList()): Result<Unit> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                if (!canPublishPrivateEndpoints()) return@runSuspendCatching
                 val publicKeys = if (receivedAddresses.isEmpty()) {
                     addressReservationRepo.contactsWithUsedReservedAddresses()
                 } else {
@@ -510,6 +509,7 @@ class PrivatePaykitRepo @Inject constructor(
                     }
                 }.filter { it in knownSavedContactKeys }.distinct()
                 if (publicKeys.isEmpty()) return@runSuspendCatching
+                if (!canPublishPrivateEndpoints()) return@runSuspendCatching
 
                 publishLocalEndpoints(publicKeys, reason = "on-chain rotation").getOrThrow()
             }
@@ -1633,7 +1633,6 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun hasPrivatePaymentAccessForCurrentProfile(): Boolean = runSuspendCatching {
-        pubkyService.currentPublicKey() ?: return@runSuspendCatching false
         paykitSdkService.hasPrivatePaymentAccess()
     }.getOrDefault(false)
 

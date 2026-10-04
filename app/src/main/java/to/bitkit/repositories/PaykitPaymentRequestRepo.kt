@@ -285,6 +285,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val processingLock = Any()
     private val processingRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private val stateGeneration = AtomicLong()
+    private val completedRefreshVersion = AtomicLong()
+    private var completedRefreshGeneration = -1L
+    private var completedRefreshProofVersion = -1L
+    private var completedRefreshMode = PaykitPaymentRequestRefreshMode.STORED
     private val repoScope = appScope(ioDispatcher, TAG)
     private var expirationJob: Job? = null
     private var cachedTargetContext: PaykitPaymentRequestTargetContext? = null
@@ -456,9 +460,16 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    suspend fun refresh(mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL): Result<Unit> {
+    suspend fun refresh(mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL): Result<Unit> =
+        refresh(mode, forceFresh = false)
+
+    suspend fun refreshAfterStateChange(): Result<Unit> =
+        refresh(PaykitPaymentRequestRefreshMode.FULL, forceFresh = true)
+
+    private suspend fun refresh(mode: PaykitPaymentRequestRefreshMode, forceFresh: Boolean): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
+        val refreshVersion = completedRefreshVersion.get()
         return withContext(ioDispatcher) {
             runSuspendCatching {
                 operationMutex.withLock {
@@ -466,9 +477,22 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         clearStateLocked()
                         return@withLock
                     }
+                    if (!isCurrentState(generation, expectedIdentity)) return@withLock
+                    val proofVersion = paymentProofStore.backupStateVersion.value
+                    val hasFreshSnapshot = completedRefreshVersion.get() != refreshVersion &&
+                        completedRefreshGeneration == generation && completedRefreshProofVersion == proofVersion
+                    if (!forceFresh && hasFreshSnapshot && mode <= completedRefreshMode) {
+                        return@withLock
+                    }
                     runSuspendCatching { synchronizeLocked(generation, expectedIdentity, mode) }
                         .onFailure { discardExpiredRequestsLocked() }
                         .getOrThrow()
+                    if (isCurrentState(generation, expectedIdentity)) {
+                        completedRefreshMode = mode
+                        completedRefreshGeneration = generation
+                        completedRefreshProofVersion = proofVersion
+                        completedRefreshVersion.incrementAndGet()
+                    }
                 }
             }.onFailure {
                 Logger.warn("Failed to refresh incoming Paykit payment requests", it, context = TAG)

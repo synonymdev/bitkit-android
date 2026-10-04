@@ -29,6 +29,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -88,6 +90,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val presentationStore = mock<PaykitPaymentRequestPresentationStore>()
     private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val paymentProofStore = mock<PaykitPaymentProofStore>()
+    private val proofStateVersion = MutableStateFlow(0L)
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val subscriptionNotificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
     private var schedulerOriginMillis = 0L
@@ -121,6 +124,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).thenReturn(PaykitSubscriptionPresentationState())
         whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptyMap())
         whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(paymentProofStore.backupStateVersion).thenReturn(proofStateVersion)
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         sut = PaykitPaymentRequestRepo(
@@ -163,6 +167,106 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(paykitSdkService).processPendingPrivateMessages()
         verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers()
+    }
+
+    @Test
+    fun `overlapping refreshes reuse a completed full refresh`() = test {
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            reading.complete(Unit)
+            resume.await()
+            emptyList()
+        }
+        val first = async { sut.refresh() }
+        reading.await()
+        val queued = PaykitPaymentRequestRefreshMode.entries.map { mode -> async { sut.refresh(mode) } }
+        runCurrent()
+        resume.complete(Unit)
+
+        first.await().getOrThrow()
+        queued.forEach { it.await().getOrThrow() }
+        verify(paykitSdkService).allPaymentRequests(anyOrNull())
+        verify(paykitSdkService).processPendingPrivateMessages()
+
+        sut.refresh().getOrThrow()
+        verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
+    }
+
+    @Test
+    fun `full refresh still runs after an overlapping inbox refresh`() = test {
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            reading.complete(Unit)
+            resume.await()
+            emptyList()
+        }
+        val inbox = async { sut.refresh(PaykitPaymentRequestRefreshMode.INBOX) }
+        reading.await()
+        val full = async { sut.refresh() }
+        runCurrent()
+        resume.complete(Unit)
+
+        inbox.await().getOrThrow()
+        full.await().getOrThrow()
+        verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
+        verify(paykitSdkService).processPendingPrivateMessages()
+    }
+
+    @Test
+    fun `queued refresh retries a failed refresh`() = test {
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        var attempts = 0
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            if (attempts++ == 0) {
+                reading.complete(Unit)
+                resume.await()
+                throw PaykitPaymentRequestError.RequestUnavailable
+            }
+            emptyList()
+        }
+        val failed = async { sut.refresh() }
+        reading.await()
+        val retry = async { sut.refresh() }
+        runCurrent()
+        resume.complete(Unit)
+
+        assertTrue(failed.await().isFailure)
+        retry.await().getOrThrow()
+        verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
+    }
+
+    @Test
+    fun `overlapping refresh rereads proof state changed after the first snapshot`() = test {
+        val record = paymentRequestRecord()
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(setOf(requestId))
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(settingsStore.data).thenReturn(
+            flow {
+                reading.complete(Unit)
+                resume.await()
+                emit(SettingsData(sharesPrivatePaykitEndpoints = true))
+            },
+        )
+        val first = async { sut.refresh() }
+        reading.await()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        proofStateVersion.value += 1
+        val afterFailure = async { sut.refresh() }
+        runCurrent()
+        resume.complete(Unit)
+        first.await().getOrThrow()
+        afterFailure.await().getOrThrow()
+
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
+        verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
     }
 
     @Test

@@ -21,6 +21,7 @@ import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -108,6 +109,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         ).thenReturn(PaykitSubscriptionPresentationState())
         whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptyMap())
         whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(paymentProofStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         sut = PaykitPaymentRequestRepo(
@@ -568,7 +570,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
-    fun `subscription clock offset makes the next billing period due`() = test {
+    fun `subscription clock change refreshes periods after an overlapping refresh`() = test {
         val proposal = paymentRequestRecord()
         val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposal), listOf(active))
@@ -585,8 +587,21 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             sut.pendingRequests.value.mapNotNull { it.billingPeriod?.startsAt },
         )
 
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            reading.complete(Unit)
+            resume.await()
+            listOf(active)
+        }
+        val first = async { sut.refresh() }
+        reading.await()
         subscriptionOffset = 31.days
-        sut.refresh().getOrThrow()
+        val afterClockChange = async { sut.refreshAfterStateChange() }
+        runCurrent()
+        resume.complete(Unit)
+        first.await().getOrThrow()
+        afterClockChange.await().getOrThrow()
 
         assertEquals(
             listOf(Instant.parse("2027-01-01T08:00:00Z"), Instant.parse("2027-02-01T08:00:00Z")),

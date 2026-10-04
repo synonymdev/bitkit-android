@@ -155,6 +155,25 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `handleOnchainActivity skips SDK access when no contact address was used`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        whenever(addressReservationRepo.contactsWithUsedReservedAddresses()).thenReturn(emptyList())
+
+        sut.handleOnchainActivity().getOrThrow()
+
+        verify(paykitSdkService, never()).hasPrivatePaymentAccess()
+        verify(pubkyService, never()).currentPublicKey()
+    }
+
+    @Test
+    fun `hasPrivatePaymentAccess uses one SDK identity check`() = test {
+        assertTrue(sut.hasPrivatePaymentAccess())
+
+        verify(paykitSdkService).hasPrivatePaymentAccess()
+        verify(pubkyService, never()).currentPublicKey()
+    }
+
+    @Test
     fun `prepareSavedContacts publishes private reservations through SDK`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,
