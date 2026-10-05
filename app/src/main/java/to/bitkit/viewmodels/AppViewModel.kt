@@ -15,6 +15,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAuthData
@@ -153,6 +154,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
 import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
@@ -4171,6 +4173,14 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         amount: ULong,
     ) {
+        val originalPayer = preparedPaymentProofRequest?.let {
+            paykitPaymentProofRepo.captureOriginalOnchainPayer(it).getOrElse { error ->
+                releasePrivatePaymentListIfNeeded(contactPaymentContext)
+                cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                handlePaymentPreparationFailure(error, contactPaymentContext)
+                return
+            }
+        }
         val address = _sendUiState.value.address
         val tags = _sendUiState.value.selectedTags
         var proofRequest = preparedPaymentProofRequest
@@ -4181,10 +4191,15 @@ class AppViewModel @Inject constructor(
             amount = amount,
             tags = tags,
             requestId = incomingPaymentRequest?.id,
+            payerIdentity = originalPayer,
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
                     paymentProofStarted = true
+                    paykitPaymentProofRepo.verifyOriginalOnchainPayer(
+                        preparedPaymentProofRequest,
+                        requireNotNull(originalPayer),
+                    ).getOrThrow()
                 }
                 incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
                 sendAttempted = true
@@ -4319,6 +4334,62 @@ class AppViewModel @Inject constructor(
             )
             hideSheet()
         }
+    }
+
+    suspend fun retryOriginalOnchainSend(
+        original: OnchainSendAttempt,
+        feeRateSatsPerVByte: ULong,
+    ): Result<OnchainSendOutcome> {
+        val request = original.requestId?.let { id ->
+            (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
+                .firstOrNull { it.id == id }
+        }
+        if (original.requestId != null && request == null) {
+            return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+        }
+        val result = lightningRepo.retryOriginalOnchainSend(
+            original.attemptId,
+            original.walletId,
+            feeRateSatsPerVByte,
+        ) { attempt ->
+            check(
+                attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
+                    attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
+            )
+            attempt.orderId?.let { orderId ->
+                val order = blocktankRepo.fetchOrders(listOf(orderId)).getOrThrow().singleOrNull { it.id == orderId }
+                check(order != null && order.payment?.onchain?.address == attempt.address)
+                val originalContext = requireNotNull(attempt.transferContext)
+                check(order.state2 == BtOrderState2.CREATED)
+                check(order.clientBalanceSat == originalContext.originalOrderClientBalanceSats)
+                check(order.feeSat == originalContext.originalOrderFeeSats)
+                check(kotlin.time.Instant.parse(order.orderExpiresAt) > kotlin.time.Clock.System.now())
+            }
+            if (request != null) {
+                val currentRequest =
+                    (
+                        paykitPaymentRequestRepo.pendingRequests.value +
+                            paykitPaymentRequestRepo.paymentRequestHistory.value
+                        )
+                        .firstOrNull { it.id == attempt.requestId }
+                        ?: throw PaykitPaymentRequestError.RequestUnavailable
+                paykitPaymentRequestRepo.ensurePaymentAllowed(currentRequest).getOrThrow()
+                paykitPaymentProofRepo.authorizeOnchainRecovery(attempt).getOrThrow()
+            }
+        }
+        if (result.getOrNull() is OnchainSendOutcome.Accepted) {
+            runSuspendCatching {
+                val winner = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
+                if (request != null) {
+                    paykitPaymentProofRepo.completeRecoveredOnchainPayment(request, winner)
+                } else if (winner.isTransfer) {
+                    transferRepo.resumeAcceptedFunding().getOrThrow()
+                } else {
+                    lightningRepo.completeAcceptedOrdinaryFollowup(requireNotNull(winner.txid))
+                }
+            }.onFailure { Logger.warn("Failed to finish original recovered send locally", it, context = TAG) }
+        }
+        return result
     }
 
     private fun showUnresolvedOnchainSend(
@@ -4715,20 +4786,22 @@ class AppViewModel @Inject constructor(
         amount: ULong,
         tags: List<String> = emptyList(),
         requestId: PaykitPaymentRequestId? = null,
+        payerIdentity: String? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
     ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
-            address = address,
-            sats = amount,
-            speed = _sendUiState.value.speed,
-            utxosToSpend = _sendUiState.value.selectedUtxos,
-            isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
-                amount == walletRepo.balanceState.value.maxSendOnchainSats,
-            tags = tags,
-            requestId = requestId,
-            beforeSendAttempt = beforeSendAttempt,
-            onBroadcast = onBroadcast,
-        )
+        address = address,
+        sats = amount,
+        speed = _sendUiState.value.speed,
+        utxosToSpend = _sendUiState.value.selectedUtxos,
+        isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
+            amount == walletRepo.balanceState.value.maxSendOnchainSats,
+        tags = tags,
+        requestId = requestId,
+        payerIdentity = payerIdentity,
+        beforeSendAttempt = beforeSendAttempt,
+        onBroadcast = onBroadcast,
+    )
 
     private suspend fun sendLightning(
         bolt11: String,

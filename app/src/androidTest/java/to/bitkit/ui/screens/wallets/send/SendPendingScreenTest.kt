@@ -82,7 +82,7 @@ class SendPendingScreenTest {
         composeTestRule.onNodeWithText("Test backend refusal", substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("ab".repeat(32), substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("Payment Pending").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Bitkit will block another send", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Other payments remain blocked", substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("Details").assertIsNotEnabled()
         composeTestRule.onNodeWithText("Retry").assertDoesNotExist()
         composeTestRule.onNodeWithText("Payment Sent").assertDoesNotExist()

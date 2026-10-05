@@ -36,8 +36,8 @@ import to.bitkit.utils.asNodeException
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.time.Instant
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /** New proof kinds must be readable on both platforms before either platform writes them to a wallet backup. */
 @Serializable
@@ -242,6 +242,72 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
     }
 
+    suspend fun captureOriginalOnchainPayer(request: PaykitPaymentRequest): Result<String> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
+            operationMutex.withLock {
+                val proof = loadProofs().singleOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id &&
+                        it.kind == PaykitPaymentProofKind.Onchain && !it.paymentStarted
+                } ?: throw PaykitPaymentRequestError.RequestUnavailable
+                requireNotNull(PubkyPublicKeyFormat.normalized(proof.identity))
+            }
+        }
+    }
+
+    suspend fun verifyOriginalOnchainPayer(request: PaykitPaymentRequest, payerIdentity: String): Result<Unit> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
+                if (!PubkyPublicKeyFormat.matches(identity, payerIdentity)) {
+                    throw PaykitPaymentRequestError.RequestUnavailable
+                }
+                operationMutex.withLock {
+                    check(
+                        loadProofs().any {
+                            it.isStartedFor(payerIdentity, request.id) && it.kind == PaykitPaymentProofKind.Onchain
+                        }
+                    )
+                }
+            }
+        }
+
+    /** Authorize a successor against the existing payer proof without preparing or consuming private context again. */
+    suspend fun authorizeOnchainRecovery(attempt: OnchainSendAttempt): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            operationMutex.withLock {
+                val current = lightningRepo.currentOnchainSendAttempt()
+                val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
+                if (current != attempt || !attempt.isUnresolved) {
+                    throw PaykitPaymentRequestError.OperationInProgress
+                }
+                if (attempt.originalInputs.isNullOrEmpty() || attempt.candidateTxids.isEmpty()) {
+                    throw PaykitPaymentRequestError.OperationInProgress
+                }
+                if (attempt.walletId != WalletScope.default || attempt.payerIdentity == null ||
+                    !PubkyPublicKeyFormat.matches(identity, attempt.payerIdentity)
+                ) {
+                    throw PaykitPaymentRequestError.OperationInProgress
+                }
+                val proof = loadProofs().singleOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.matchesOriginalShopAttempt(attempt)
+                } ?: throw PaykitPaymentRequestError.RequestUnavailable
+                if (proof.proofData != null || proof.onchainAcceptanceVerified) {
+                    throw PaykitPaymentRequestError.OperationInProgress
+                }
+            }
+        }
+    }
+
+    suspend fun completeRecoveredOnchainPayment(request: PaykitPaymentRequest, attempt: OnchainSendAttempt): Boolean =
+        withContext(ioDispatcher) {
+            val proof = operationMutex.withLock {
+                loadProofs().singleOrNull { it.matchesOriginalShopAttempt(attempt) }
+            } ?: return@withContext false
+            val txid = attempt.txid ?: return@withContext false
+            completeOnchainPayment(request, txid, proof.paymentEndpointIdentifier)
+        }
+
     suspend fun completeOnchainPayment(
         request: PaykitPaymentRequest,
         txid: String,
@@ -255,16 +321,23 @@ class PaykitPaymentProofRepo @Inject constructor(
 
         val identity = currentIdentity() ?: return@withContext false
         if (acceptedOutcome != null && !acceptedOutcome.txid.equals(txid, ignoreCase = true)) return@withContext false
-        val attempt = if (acceptedOutcome == null) {
-            runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
-        } else {
+        val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
+            .getOrElse { return@withContext false }
+        val hasCandidateFamily = attempt?.candidateTxids?.isNotEmpty() == true
+        fun hasPositiveEvidence(proof: PendingPaykitPaymentProof): Boolean =
+            if (hasCandidateFamily) {
+                attempt.matchesPositiveShopProof(proof) && attempt?.txid.equals(txid, ignoreCase = true)
+            } else {
+                acceptedOutcome != null ||
+                    (attempt.matchesPositiveShopProof(proof) && attempt?.txid.equals(txid, ignoreCase = true))
+            }
+        val fallbackProof = if (hasCandidateFamily) {
             null
+        } else {
+            runSuspendCatching {
+                pendingProof(request, paymentEndpointIdentifier, PaykitPaymentProofKind.Onchain)
+            }.getOrNull()
         }
-        fun hasPositiveEvidence(proof: PendingPaykitPaymentProof): Boolean = acceptedOutcome != null ||
-            (attempt.matchesPositiveShopProof(proof) && attempt?.txid.equals(txid, ignoreCase = true))
-        val fallbackProof = runSuspendCatching {
-            pendingProof(request, paymentEndpointIdentifier, PaykitPaymentProofKind.Onchain)
-        }.getOrNull()
         val completed = operationMutex.withLock {
             val completion = runSuspendCatching {
                 val proofs = loadProofs().toMutableList()
@@ -273,9 +346,15 @@ class PaykitPaymentProofRepo @Inject constructor(
                         it.requestId == request.id &&
                         it.kind == PaykitPaymentProofKind.Onchain &&
                         it.paymentStarted &&
-                        it.paymentIdentifier == null &&
+                        (
+                            it.paymentIdentifier == null ||
+                                (hasCandidateFamily && it.matchesOriginalShopAttempt(requireNotNull(attempt)))
+                            ) &&
                         it.proofData == null
                 }
+                if (hasCandidateFamily && index < 0) return@runSuspendCatching false
+                val originalProof = if (index >= 0) proofs[index] else fallbackProof
+                if (originalProof == null || !hasPositiveEvidence(originalProof)) return@runSuspendCatching false
                 val proof = if (index >= 0) {
                     proofs[index].copy(
                         paymentIdentifier = txid.lowercase(),
@@ -304,7 +383,8 @@ class PaykitPaymentProofRepo @Inject constructor(
                     context = TAG,
                 )
             }
-            if (completion.isFailure && fallbackProof != null && hasPositiveEvidence(fallbackProof)) {
+            val canAttemptFallback = completion.isFailure && !hasCandidateFamily
+            if (canAttemptFallback && fallbackProof != null && hasPositiveEvidence(fallbackProof)) {
                 val proof = fallbackProof.copy(
                     paymentStarted = true,
                     paymentIdentifier = txid.lowercase(),
@@ -594,9 +674,20 @@ class PaykitPaymentProofRepo @Inject constructor(
         return retained
     }
 
+    private fun PendingPaykitPaymentProof.matchesOriginalShopAttempt(attempt: OnchainSendAttempt): Boolean =
+        paymentStarted && kind == PaykitPaymentProofKind.Onchain && requestId == attempt.requestId &&
+            attempt.payerIdentity != null && PubkyPublicKeyFormat.matches(identity, attempt.payerIdentity) &&
+            onchainWalletId == attempt.walletId && onchainAddress == attempt.address &&
+            onchainAmountSats == attempt.amountSats &&
+            (paymentIdentifier == null || attempt.candidateTxids.any { it.equals(paymentIdentifier, true) })
+
     private fun OnchainSendAttempt?.matchesPositiveShopProof(proof: PendingPaykitPaymentProof): Boolean =
         this != null && hasPositiveEvidence && requestId == proof.requestId &&
             walletId == proof.onchainWalletId && txid?.isHex(HASH_BYTE_COUNT) == true &&
+            (
+                candidateTxids.isEmpty() ||
+                    (candidateTxids.any { it.equals(txid, true) } && proof.matchesOriginalShopAttempt(this))
+                ) &&
             (proof.proofData == null || proof.proofData.equals(txid, ignoreCase = true))
 
     private suspend fun finishAlreadyQueuedOnchainProof(attempt: OnchainSendAttempt) {

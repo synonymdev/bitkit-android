@@ -427,6 +427,8 @@ class TransferViewModel @Inject constructor(
                 order.feeSat.safe() + plan.miningFeeSats.safe()
             },
             preTransferOnchainSats = plan.totalOnchainBalance,
+            originalOrderClientBalanceSats = order.clientBalanceSat,
+            originalOrderFeeSats = order.feeSat,
         )
         return lightningRepo
             .sendOnChain(

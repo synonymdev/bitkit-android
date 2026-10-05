@@ -1477,8 +1477,13 @@
     <string name="wallet__send_pending__description">This payment is taking a bit longer than expected. You can continue using Bitkit.</string>
     <string name="wallet__send_pending__funding_description">Funding transaction is unresolved. Check its transaction before trying again.</string>
     <string name="wallet__send_pending__nav_title">Payment Pending</string>
-    <string name="wallet__send_pending__onchain_description">The transaction outcome is unresolved. Check its status before trying again. Bitkit will block another send while this outcome is unresolved.</string>
+    <string name="wallet__send_pending__onchain_description">The transaction outcome is unresolved. Check its status before trying again. Other payments remain blocked. If available, use Retry original payment to authorize a fee for the same payment.</string>
     <string name="wallet__send_pending__refusal">Broadcast refused: %1$s</string>
+    <string name="wallet__send_pending__retry_authorize">Authorize retry</string>
+    <string name="wallet__send_pending__retry_description">Retry the original payment using the same amount and inputs. Enter the fee rate you authorize in sat/vB. A higher fee may be unavailable; Bitkit will never reduce the payment or add other inputs.</string>
+    <string name="wallet__send_pending__retry_error">The original payment could not be retried. Its funds remain protected. There may be insufficient funds for the chosen fee. Try another fee or check the transaction status.</string>
+    <string name="wallet__send_pending__retry_invalid_fee">Enter a valid positive fee rate in sat/vB.</string>
+    <string name="wallet__send_pending__retry_title">Retry original payment</string>
     <string name="wallet__send_pending__txid">Transaction ID: %1$s</string>
     <string name="wallet__send_quickpay__already_paid">This invoice has already been paid.</string>
     <string name="wallet__send_quickpay__currency_conversion">Currency conversion failed</string>

@@ -1168,7 +1168,15 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
-            transferContext = eq(OnchainTransferContext(txTotalSats = 100_000uL, preTransferOnchainSats = 100_000uL)),
+            transferContext = eq(
+                OnchainTransferContext(
+                    txTotalSats = 100_000uL,
+                    preTransferOnchainSats = 100_000uL,
+                    originalOrderClientBalanceSats = order.clientBalanceSat,
+                    originalOrderFeeSats = order.feeSat,
+                ),
+            ),
+            payerIdentity = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(blocktankRepo, times(1)).createOrder(eq(order.clientBalanceSat), eq(order.lspBalanceSat), any())
@@ -1209,7 +1217,15 @@ class TransferViewModelTest : BaseUnitTest() {
             onBroadcast = any(),
             requestId = anyOrNull(),
             orderId = anyOrNull(),
-            transferContext = eq(OnchainTransferContext(txTotalSats = 38_171uL, preTransferOnchainSats = 41_000uL)),
+            transferContext = eq(
+                OnchainTransferContext(
+                    txTotalSats = 38_171uL,
+                    preTransferOnchainSats = 41_000uL,
+                    originalOrderClientBalanceSats = order.clientBalanceSat,
+                    originalOrderFeeSats = order.feeSat,
+                ),
+            ),
+            payerIdentity = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1226,6 +1242,7 @@ class TransferViewModelTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
     }
@@ -1259,6 +1276,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
+                payerIdentity = anyOrNull(),
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
 
@@ -1284,6 +1302,7 @@ class TransferViewModelTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1300,6 +1319,7 @@ class TransferViewModelTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -1454,6 +1474,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 requestId = anyOrNull(),
                 orderId = anyOrNull(),
                 transferContext = anyOrNull(),
+                payerIdentity = anyOrNull(),
             ),
         ).thenReturn(Result.success(OnchainSendOutcome.Unknown(TXID)))
         quoteOrder(order)
@@ -1523,6 +1544,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
+                payerIdentity = anyOrNull(),
             ),
         ).thenReturn(
             Result.failure(AppError("Coin selection failed")),
@@ -1786,6 +1808,7 @@ class TransferViewModelTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
     }
 
@@ -1970,6 +1993,7 @@ class TransferViewModelTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
             anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -1999,6 +2023,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
+                payerIdentity = anyOrNull(),
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
         quoteOrder(order)
@@ -2148,6 +2173,7 @@ class TransferViewModelTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
             anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
         verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
     }
@@ -3467,6 +3493,7 @@ class TransferViewModelTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
     }
 
@@ -3618,6 +3645,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
+                payerIdentity = anyOrNull(),
             ),
         ).thenReturn(Result.success(OnchainSendOutcome.Accepted(TXID)))
     }

@@ -50,7 +50,6 @@ import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
-import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
@@ -69,7 +68,6 @@ import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
-import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -1494,6 +1492,7 @@ class LightningRepo @Inject constructor(
         requestId: PaykitPaymentRequestId? = null,
         orderId: String? = null,
         transferContext: OnchainTransferContext? = null,
+        payerIdentity: String? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
@@ -1532,6 +1531,7 @@ class LightningRepo @Inject constructor(
                 tags = tags,
                 transferContext = transferContext,
                 beforeSendAttempt = beforeSendAttempt,
+                payerIdentity = payerIdentity,
             )
         }.getOrElse {
             val error = if (it is OnchainSendBlockedError || it is OnchainSendAttemptUnreadableError) {
@@ -1541,29 +1541,71 @@ class LightningRepo @Inject constructor(
             }
             return@executeWhenNodeRunning Result.failure(error)
         }
-        val nodeResult = runSuspendCatching {
-            lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount, attempt.walletIndex)
-        }
-        val failure = nodeResult.exceptionOrNull()
-        if (failure != null) {
-            if (failure is NodeException || failure is ServiceError.NodeNotSetup) {
-                onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
-                return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(failure))
-            }
-            return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(failure))
-        }
-        val outcome = nodeResult.getOrThrow()
-        val recorded = runSuspendCatching { onchainSendAttemptStore.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex) }
-            .getOrElse { error ->
-                if (outcome !is OnchainSendOutcome.Accepted) {
-                    return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, outcome.txid))
+        val preparedResult = runSuspendCatching {
+            lightningService.prepareOnchainSend(
+                address,
+                sats,
+                satsPerVByte,
+                utxosForSend,
+                isMaxAmount,
+                attempt.walletIndex
+            )
+                .also { prepared ->
+                    if (!isMaxAmount && utxosForSend != null) {
+                        check(
+                            prepared.receipt.inputs.toSet() == utxosForSend.map {
+                                OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
+                            }.toSet()
+                        )
+                    }
+                    onchainSendAttemptStore.retainPreparedReceipt(
+                        attempt.attemptId,
+                        attempt.walletIndex,
+                        prepared.receipt,
+                        isRecovery = false,
+                    )
                 }
-                Logger.warn("Failed to persist accepted on-chain outcome; admission stays blocked", error, context = TAG)
+        }
+        val prepared = preparedResult.getOrElse {
+            // Preparation and receipt persistence never dispatch. A failed save leaves the preguard if cleanup fails.
+            runSuspendCatching { onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex) }
+            return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(it))
+        }
+        val outcome = runSuspendCatching {
+            onchainSendAttemptStore.broadcastPreparedCandidate(
+                attempt.attemptId,
+                attempt.walletIndex,
+                prepared.receipt.txid,
+                prepared::broadcast,
+            )
+        }.getOrElse { error ->
+            val winner = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull()
+            if (winner?.attemptId == attempt.attemptId && winner.hasPositiveEvidence) {
+                OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
+            } else {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
+            }
+        }
+        val recorded = runSuspendCatching {
+            onchainSendAttemptStore.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex)
+        }.getOrElse { error ->
+            val winner = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull()
+            if (winner?.hasPositiveEvidence == true) {
+                winner
+            } else {
+                if (outcome !is OnchainSendOutcome.Accepted || !outcome.txid.equals(prepared.receipt.txid, true)) {
+                    return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
+                }
                 attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = outcome.txid)
             }
-
-        if (outcome !is OnchainSendOutcome.Accepted) return@executeWhenNodeRunning Result.success(outcome)
-        val txId = outcome.txid
+        }
+        val winningOutcome = if (recorded.hasPositiveEvidence) {
+            OnchainSendOutcome.Accepted(requireNotNull(recorded.txid))
+        } else {
+            outcome
+        }
+        if (winningOutcome !is OnchainSendOutcome.Accepted) return@executeWhenNodeRunning Result.success(winningOutcome)
+        val txId = winningOutcome.txid
         runSuspendCatching { onBroadcast(txId) }
             .onFailure { Logger.warn("Failed to continue accepted on-chain send", it, context = TAG) }
 
@@ -1571,15 +1613,70 @@ class LightningRepo @Inject constructor(
             .onFailure { Logger.warn("Failed to finish accepted on-chain send locally", it, context = TAG) }
         runSuspendCatching { syncState() }
             .onFailure { Logger.warn("Failed to sync after accepted on-chain send", it, context = TAG) }
-        Result.success(outcome)
+        Result.success(winningOutcome)
+    }
+
+    private val recoveryCoordinator by lazy {
+        OnchainSendCoordinator(
+            onchainSendAttemptStore,
+            object : OnchainPreparedSender {
+                override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend =
+                    error("Initial sends use sendOnChain admission")
+
+                override suspend fun prepareRecovery(
+                    attempt: OnchainSendAttempt,
+                    feeRateSatsPerVByte: ULong,
+                ): PreparedOnchainSend {
+                    val inputs = requireNotNull(attempt.originalInputs)
+                    val outputs = lightningService.listSpendableOutputs().getOrThrow()
+                    val selected = inputs.map { input ->
+                        outputs.singleOrNull { it.outpoint.txid == input.txid && it.outpoint.vout == input.vout }
+                            ?: throw OnchainSendBlockedError(attempt)
+                    }
+                    return lightningService.prepareOnchainSend(
+                        attempt.address,
+                        attempt.amountSats,
+                        feeRateSatsPerVByte,
+                        selected,
+                        false,
+                        attempt.walletIndex,
+                    )
+                }
+            },
+            bgDispatcher
+        )
+    }
+
+    suspend fun retryOriginalOnchainSend(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("retryOriginalOnchainSend") {
+        val result = recoveryCoordinator.retryOriginal(attemptId, walletId, feeRateSatsPerVByte, authorizeOriginal)
+        if (result.getOrNull() is OnchainSendOutcome.Accepted) {
+            runSuspendCatching {
+                onchainSendAttemptStore.current()?.takeIf { it.hasPositiveEvidence }?.let {
+                    finishOnchainSendLocally(
+                        it
+                    )
+                }
+            }.onFailure { Logger.warn("Failed to finish recovered on-chain send locally", it, context = TAG) }
+        }
+        result
     }
 
     private suspend fun finishOnchainSendLocally(attempt: OnchainSendAttempt) {
+        val originalFollowup = attempt.backupFollowup
+        check(
+            !attempt.restoredFromBackup || originalFollowup != null
+        ) { "Original local follow-up context is unavailable" }
+        check(originalFollowup?.contact == null) { "Unsupported original contact follow-up" }
         val txId = requireNotNull(attempt.txid) { "On-chain send has no transaction id" }
         val preActivityMetadata = PreActivityMetadata(
             walletId = attempt.walletId,
             paymentId = txId,
-            createdAt = nowTimestamp().toEpochMilli().toULong(),
+            createdAt = originalFollowup?.createdAtMillis?.toULong() ?: nowMillis().toULong(),
             tags = attempt.tags,
             paymentHash = null,
             txId = txId,
@@ -1594,7 +1691,7 @@ class LightningRepo @Inject constructor(
             txid = txId,
             address = attempt.address,
             amount = attempt.amountSats,
-            fee = 0u,
+            fee = originalFollowup?.feeSats?.toULong() ?: 0uL,
             feeRate = attempt.feeRateSatsPerVByte,
             isTransfer = attempt.isTransfer,
             channelId = attempt.channelId,

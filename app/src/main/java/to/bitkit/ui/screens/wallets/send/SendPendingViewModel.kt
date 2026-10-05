@@ -11,8 +11,13 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.ext.rawId
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.OnchainRecoveryFeeRate
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.utils.Logger
@@ -22,6 +27,7 @@ import javax.inject.Inject
 class SendPendingViewModel @Inject constructor(
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val activityRepo: ActivityRepo,
+    private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
     companion object {
@@ -50,10 +56,54 @@ class SendPendingViewModel @Inject constructor(
         if (isInitialized) return
         isInitialized = true
         _uiState.update { it.copy(amount = amount) }
+        viewModelScope.launch {
+            runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.onSuccess { attempt ->
+                if (attempt?.walletId == walletId &&
+                    (attempt.txid.equals(txid, true) || attempt.candidateTxids.any { it.equals(txid, true) })
+                ) {
+                    _uiState.update { it.copy(amount = attempt.amountSats.toLong()) }
+                }
+                val matchesOriginalWallet = walletId == WalletScope.default && attempt?.walletId == walletId
+                val hasOriginalReceipt = !attempt?.originalInputs.isNullOrEmpty() &&
+                    attempt?.candidateTxids?.any { it.equals(txid, true) } == true
+                if (matchesOriginalWallet && hasOriginalReceipt && attempt?.isUnresolved == true) {
+                    _uiState.update { it.copy(recoveryAttempt = attempt) }
+                }
+            }
+        }
         if (txid == null || !txid.matches(Regex("[0-9a-fA-F]{64}"))) return
         viewModelScope.launch {
             activityRepo.findActivityByPaymentId(txid, ActivityFilter.ONCHAIN, PaymentType.SENT, true, walletId)
                 .onSuccess { activity -> _uiState.update { it.copy(activityId = activity.rawId()) } }
+        }
+    }
+
+    fun retryOriginal(
+        feeRateSatsPerVByte: ULong,
+        retry: suspend (OnchainSendAttempt, ULong) -> Result<OnchainSendOutcome>,
+    ) {
+        val original = _uiState.value.recoveryAttempt ?: return
+        if (_uiState.value.isRecovering) return
+        if (!OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte)) {
+            _uiState.update { it.copy(invalidFeeRate = true, recoveryError = "invalid fee rate") }
+            return
+        }
+        _uiState.update { it.copy(isRecovering = true, recoveryError = null, invalidFeeRate = false) }
+        viewModelScope.launch {
+            try {
+                val result = runSuspendCatching { retry(original, feeRateSatsPerVByte).getOrThrow() }
+                result.onSuccess { outcome ->
+                    _uiState.update {
+                        it.copy(
+                            recoveredTxid = (outcome as? OnchainSendOutcome.Accepted)?.txid,
+                            recoveryError = (outcome as? OnchainSendOutcome.Rejected)?.reason,
+                            currentTxid = outcome.txid,
+                        )
+                    }
+                }.onFailure { error -> _uiState.update { it.copy(recoveryError = error.message) } }
+            } finally {
+                _uiState.update { it.copy(isRecovering = false) }
+            }
         }
     }
 
@@ -96,4 +146,10 @@ data class SendPendingUiState(
     val amount: Long = 0L,
     val activityId: String? = null,
     val resolution: PendingPaymentResolution? = null,
+    val recoveryAttempt: OnchainSendAttempt? = null,
+    val isRecovering: Boolean = false,
+    val invalidFeeRate: Boolean = false,
+    val recoveryError: String? = null,
+    val currentTxid: String? = null,
+    val recoveredTxid: String? = null,
 )

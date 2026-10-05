@@ -1519,6 +1519,8 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `sendOnChain should cache activity meta data`() = test {
+        whenever(onchainSendAttemptStore.broadcastPreparedCandidate(any(), any(), any(), any()))
+            .doSuspendableAnswer { (it.getArgument<suspend () -> OnchainSendOutcome>(3))() }
         val mockSettingsData = SettingsData(
             defaultTransactionSpeed = TransactionSpeed.Fast,
             coinSelectAuto = false // Disable auto coin selection to simplify the test
@@ -1529,7 +1531,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(coreService.activity).thenReturn(mock())
 
         whenever(
-            lightningService.send(
+            lightningService.prepareOnchainSend(
                 address = any(),
                 sats = any(),
                 satsPerVByte = any(),
@@ -1537,7 +1539,7 @@ class LightningRepoTest : BaseUnitTest() {
                 isMaxAmount = any(),
                 walletIndex = any(),
             )
-        ).thenReturn(OnchainSendOutcome.Accepted("testPaymentId"))
+        ).thenReturn(preparedOutcome(OnchainSendOutcome.Accepted("testPaymentId")))
 
         val attempt = OnchainSendAttempt(
             walletId = "test-wallet",
@@ -1554,7 +1556,8 @@ class LightningRepoTest : BaseUnitTest() {
         )
         whenever {
             onchainSendAttemptStore.admit(
-                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(),
+                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
             )
         }
             .thenReturn(attempt)
@@ -1599,25 +1602,25 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `only a direct undispatched node error releases an admitted send`() = test {
+    fun `preparation errors release an admitted send without dispatch`() = test {
         val attempt = pendingSendAttempt()
         val repo = prepareGuardedSend(attempt)
         var sendError: Throwable = NodeException.InvalidAddress("invalid address")
-        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
             .doSuspendableAnswer { throw sendError }
         assertTrue(repo.sendOnChain("address", 1_000uL).exceptionOrNull() is OnchainSendNotDispatchedError)
         verify(onchainSendAttemptStore).releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
 
         sendError = LdkError(NodeException.PersistenceFailed("workflow storage failure"))
-        assertTrue(repo.sendOnChain("address", 1_000uL).exceptionOrNull() is OnchainSendPendingError)
-        verify(onchainSendAttemptStore, times(1)).releaseBeforeDispatch(any(), any())
+        assertTrue(repo.sendOnChain("address", 1_000uL).exceptionOrNull() is OnchainSendNotDispatchedError)
+        verify(onchainSendAttemptStore, times(2)).releaseBeforeDispatch(any(), any())
     }
 
     @Test
     fun `UI cancellation after admission never releases pending guard`() = test {
         val attempt = pendingSendAttempt()
         val repo = prepareGuardedSend(attempt)
-        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
             .thenThrow(CancellationException("screen closed"))
         assertFailsWith<CancellationException> { repo.sendOnChain("address", 1_000uL) }
         verify(onchainSendAttemptStore, never()).releaseBeforeDispatch(any(), any())
@@ -1629,7 +1632,9 @@ class LightningRepoTest : BaseUnitTest() {
         val repo = prepareGuardedSend(attempt)
         val txid = "ab".repeat(32)
         val accepted = OnchainSendOutcome.Accepted(txid)
-        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any())).thenReturn(accepted)
+        whenever(
+            lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        ).thenReturn(preparedOutcome(accepted))
         whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
             .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = txid))
         val result = repo.sendOnChain("address", 1_000uL, onBroadcast = {
@@ -1639,6 +1644,10 @@ class LightningRepoTest : BaseUnitTest() {
         verify(onchainSendAttemptStore, never()).releaseBeforeDispatch(any(), any())
     }
 
+    private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
+        OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
+    ) { outcome }
+
     private fun pendingSendAttempt() = OnchainSendAttempt(
         walletId = "test-wallet", attemptId = "attempt-1", requestId = null, orderId = null,
         address = "address", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
@@ -1646,10 +1655,15 @@ class LightningRepoTest : BaseUnitTest() {
     )
 
     private suspend fun prepareGuardedSend(attempt: OnchainSendAttempt): LightningRepo {
+        whenever(onchainSendAttemptStore.broadcastPreparedCandidate(any(), any(), any(), any()))
+            .doSuspendableAnswer { (it.getArgument<suspend () -> OnchainSendOutcome>(3))() }
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
-        whenever(onchainSendAttemptStore.admit(
-            any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(),
-        )).thenReturn(attempt)
+        whenever(
+            onchainSendAttemptStore.admit(
+                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+            )
+        ).thenReturn(attempt)
         startNodeForTesting()
         return spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
     }
@@ -1694,7 +1708,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
             writes++
-            if (writes == 2) error("transient accepted write failure")
+            if (writes == 3) error("transient accepted write failure")
             saved = it.getArgument(1)
         }
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService)
@@ -1711,8 +1725,8 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(coreService.activity).thenReturn(activityService)
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(activityService.getOnchainActivityByTxId(eq(txid), any())).thenReturn(mock())
-        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any()))
-            .thenReturn(OnchainSendOutcome.Accepted(txid))
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Accepted(txid)))
         startNodeForTesting()
         val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
 
@@ -1726,7 +1740,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(txid, reopened?.txid)
         assertEquals(OnchainSendEvidence.Accepted, reopened?.evidence)
         assertTrue(reopened?.localFollowupComplete == true)
-        verify(lightningService, times(1)).send(any(), any(), any(), anyOrNull(), any(), any())
+        verify(lightningService, times(1)).prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1753,7 +1767,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
         sut.completeAcceptedShopFollowup(requestId, txid)
         verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
-        verify(lightningService, never()).send(any(), any(), any(), anyOrNull(), any(), any())
+        verify(lightningService, never()).prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1775,7 +1789,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
         sut.completeAcceptedTransferFollowup("order-1", txid)
         verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
-        verify(lightningService, never()).send(any(), any(), any(), anyOrNull(), any(), any())
+        verify(lightningService, never()).prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1783,13 +1797,13 @@ class LightningRepoTest : BaseUnitTest() {
         val context = OnchainTransferContext(txTotalSats = 99_000uL, preTransferOnchainSats = 125_000uL)
         val attempt = pendingSendAttempt().copy(isTransfer = true, orderId = "order-1", transferContext = context)
         val repo = prepareGuardedSend(attempt)
-        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
             .doSuspendableAnswer {
                 verify(onchainSendAttemptStore).admit(
                     any(), isNull(), eq("order-1"), any(), any(), any(), any(), eq(true), anyOrNull(), any(),
-                    eq(context), any(),
+                    eq(context), any(), anyOrNull(),
                 )
-                OnchainSendOutcome.Unknown("ab".repeat(32))
+                preparedOutcome(OnchainSendOutcome.Unknown("ab".repeat(32)))
             }
         whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
             .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Unknown, txid = "ab".repeat(32)))

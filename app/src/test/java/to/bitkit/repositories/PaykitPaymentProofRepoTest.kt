@@ -32,14 +32,14 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwConnectedDevice
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.WalletScope
+import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
-import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.wallets.send.HwSendRequest
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
@@ -699,6 +699,154 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             billingPeriod = isNull(),
         )
         assertTrue(proofCaptor.firstValue.contains(txid))
+    }
+
+    @Test
+    fun `typed accepted callback cannot invent proof when original guard cannot be read`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        val original = storedProofs.single()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenThrow(IllegalStateException("guard unavailable"))
+        assertFalse(
+            repo.completeOnchainPayment(
+                request,
+                "ab".repeat(32),
+                MethodId.P2wpkh.rawValue,
+                OnchainSendOutcome.Accepted("ab".repeat(32)),
+            )
+        )
+        assertEquals(listOf(original), storedProofs)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `shared golden restored software proof authorizes and completes exact observed successor`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
+        val state = requireNotNull(backup.paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        wire.validateProofs(state.pendingProofs, WalletScope.default)
+        val attempt = wire.restored("regtest", wire.wallet.binding, WalletScope.default, 2)
+        val repo = paymentProofRepo()
+        repo.restoreBackup(state.pendingProofs)
+        assertEquals(WalletScope.default, storedProofs.single().onchainWalletId)
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(requireNotNull(wire.payerIdentity), true))
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        repo.authorizeOnchainRecovery(attempt).getOrThrow()
+        assertEquals(state.pendingProofs.single().paymentIdentifier, storedProofs.single().paymentIdentifier)
+        val requestId = requireNotNull(wire.requestId)
+        val request = paymentRequest(state.pendingProofs.single().paymentEndpointIdentifier).copy(
+            paymentRequestId = requestId.paymentRequestId,
+            counterparty = requestId.counterparty,
+            counterpartyReceiverPath = requestId.counterpartyReceiverPath,
+            amountSats = attempt.amountSats,
+        )
+        val winner = attempt.copy(evidence = OnchainSendEvidence.Observed)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(winner)
+        assertTrue(repo.completeRecoveredOnchainPayment(request, winner))
+        val completed = storedProofs.single()
+        assertTrue(completed.onchainAcceptanceVerified)
+        assertEquals(winner.txid, completed.paymentIdentifier)
+        assertEquals(winner.txid, completed.proofData)
+        storedProofs = listOf(completed.copy(onchainWalletId = "hardware-wallet", proofData = null))
+        assertFalse(repo.completeRecoveredOnchainPayment(request, winner))
+        storedProofs = listOf(completed.copy(identity = COUNTERPARTY, proofData = null))
+        assertFalse(repo.completeRecoveredOnchainPayment(request, winner))
+    }
+
+    @Test
+    fun `successor winner updates the original payer proof without creating another proof`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val original = "cd".repeat(32)
+        val winner = "ab".repeat(32)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        storedProofs = storedProofs.map { it.copy(paymentIdentifier = original) }
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(
+            acceptedAttempt(request, winner).copy(
+                payerIdentity = LOCAL_IDENTITY,
+                originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                candidateTxids = listOf(original, winner),
+            ),
+        )
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+            .thenThrow(IllegalStateException("delivery temporarily unavailable"))
+
+        assertTrue(
+            repo.completeOnchainPayment(
+                request,
+                winner,
+                MethodId.P2wpkh.rawValue,
+                OnchainSendOutcome.Accepted(winner),
+            )
+        )
+
+        val proof = storedProofs.single()
+        assertEquals(LOCAL_IDENTITY, proof.identity)
+        assertEquals(request.id, proof.requestId)
+        assertEquals(winner, proof.paymentIdentifier)
+        assertEquals(winner, proof.proofData)
+        assertTrue(proof.onchainAcceptanceVerified)
+        assertFalse(repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).isSuccess)
+    }
+
+    @Test
+    fun `original retry authorization retains payer proof and rejects identity switch`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val original = "cd".repeat(32)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        storedProofs = storedProofs.map { it.copy(paymentIdentifier = original) }
+        val proof = storedProofs.single()
+        val attempt = acceptedAttempt(request, original).copy(
+            evidence = OnchainSendEvidence.Unknown,
+            payerIdentity = LOCAL_IDENTITY,
+            originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+            candidateTxids = listOf(original),
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+
+        repo.authorizeOnchainRecovery(attempt).getOrThrow()
+        assertEquals(listOf(proof), storedProofs)
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(COUNTERPARTY, true))
+        storedProofs = listOf(proof, proof.copy(identity = COUNTERPARTY))
+        assertTrue(repo.authorizeOnchainRecovery(attempt).isFailure)
+        assertEquals(listOf(proof, proof.copy(identity = COUNTERPARTY)), storedProofs)
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt.copy(payerIdentity = null))
+        assertTrue(repo.authorizeOnchainRecovery(attempt.copy(payerIdentity = null)).isFailure)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `candidate winner cannot replace a proof bound outside its original family`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val winner = "ab".repeat(32)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        storedProofs = storedProofs.map { it.copy(paymentIdentifier = "ef".repeat(32)) }
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(
+            acceptedAttempt(request, winner).copy(
+                payerIdentity = LOCAL_IDENTITY,
+                originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                candidateTxids = listOf("cd".repeat(32), winner),
+            ),
+        )
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+
+        repo.reconcile()
+
+        assertNull(storedProofs.single().proofData)
+        assertEquals("ef".repeat(32), storedProofs.single().paymentIdentifier)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any())
+        verify(lightningRepo, never()).finishAcceptedShopActivity(any(), any())
     }
 
     @Test

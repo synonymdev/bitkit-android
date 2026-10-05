@@ -37,8 +37,8 @@ import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
-import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.OnchainSendResult
+import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
@@ -68,7 +68,11 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
+import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainRecoveryFeeRate
+import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
@@ -937,43 +941,48 @@ class LightningService internal constructor(
         }
     }
 
-    suspend fun send(
+    /** Prepare without dispatch; the caller must durably retain the receipt before calling broadcast. */
+    suspend fun prepareOnchainSend(
         address: Address,
         sats: ULong,
         satsPerVByte: ULong,
         utxosToSpend: List<SpendableUtxo>? = null,
         isMaxAmount: Boolean = false,
         walletIndex: Int = currentWalletIndex,
-    ): OnchainSendOutcome {
-
-        Logger.info(
-            "Sending $sats sats to $address, satsPerVByte=$satsPerVByte, isMaxAmount = $isMaxAmount",
-            context = TAG,
-        )
-
-        // Keep only this generated NodeError unwrapped: the new contract guarantees it was not dispatched.
-        val result = callOnchainSend {
-            if (currentWalletIndex != walletIndex) throw ServiceError.NodeNotSetup()
-            val node = this.node ?: throw ServiceError.NodeNotSetup()
-            if (isMaxAmount) {
-                node.onchainPayment().sendAllToAddressWithBroadcastResult(
-                    address = address,
-                    retainReserves = true,
-                    feeRate = onchainFeeRateFactory(satsPerVByte),
-                )
-            } else {
-                node.onchainPayment().sendToAddressWithBroadcastResult(
-                    address = address,
-                    amountSats = sats,
-                    feeRate = onchainFeeRateFactory(satsPerVByte),
-                    utxosToSpend = utxosToSpend,
-                )
-            }
+    ): PreparedOnchainSend = callOnchainSend {
+        require(OnchainRecoveryFeeRate.isValid(satsPerVByte))
+        if (currentWalletIndex != walletIndex) throw ServiceError.NodeNotSetup()
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        val prepared = if (isMaxAmount) {
+            originalNode.onchainPayment().prepareSendAllToAddress(
+                address,
+                true,
+                onchainFeeRateFactory(satsPerVByte),
+            )
+        } else {
+            originalNode.onchainPayment().prepareSendToAddress(
+                address,
+                sats,
+                onchainFeeRateFactory(satsPerVByte),
+                utxosToSpend,
+            )
         }
-        return when (result) {
-            is OnchainSendResult.Accepted -> OnchainSendOutcome.Accepted(result.txid)
-            is OnchainSendResult.Rejected -> OnchainSendOutcome.Rejected(result.txid, result.reason)
-            is OnchainSendResult.Unknown -> OnchainSendOutcome.Unknown(result.txid)
+        val receipt = OnchainPreparedReceipt(
+            prepared.txid(),
+            prepared.inputs().map { OnchainSendInput(it.txid, it.vout) },
+            address,
+            prepared.recipientAmountSats(),
+        )
+        PreparedOnchainSend(receipt) {
+            callOnchainSend {
+                // Dispatch only through the handle that signed the original receipt.
+                if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+                when (val result = prepared.broadcast()) {
+                    is OnchainSendResult.Accepted -> OnchainSendOutcome.Accepted(result.txid)
+                    is OnchainSendResult.Rejected -> OnchainSendOutcome.Rejected(result.txid, result.reason)
+                    is OnchainSendResult.Unknown -> OnchainSendOutcome.Unknown(result.txid)
+                }
+            }
         }
     }
 

@@ -16,6 +16,24 @@ import kotlin.time.Instant
 
 class PaykitPaymentStateBackupTest {
     @Test
+    fun `shared active operation survives payment backup reader writer roundtrip`() {
+        val wire = """
+            {"subscriptions":{},"pendingProofs":[],"activeOnchainAttempt":{"version":1,"wallet":{"kind":"software","network":"regtest","binding":"${"ab".repeat(
+            32
+        )}","sourceIndex":"0"},"attemptId":"00000000-0000-4000-8000-000000000001","requestId":null,"orderId":null,"payerIdentity":null,"address":"bcrt1qrecipient","amountSats":"20000","isMaxAmount":false,"status":"unknown","txid":"${"cd".repeat(
+            32
+        )}","rejectionReason":null,"originalInputs":[{"txid":"${"ef".repeat(
+            32
+        )}","vout":"0"}],"candidateTxids":["${"cd".repeat(
+            32
+        )}"],"feeRateSatsPerVByte":"1","followup":null,"transfer":null}}
+        """.trimIndent()
+        val codec = Json { ignoreUnknownKeys = true }
+        val decoded = codec.decodeFromString<PaykitPaymentStateBackup>(wire)
+        assertContains(codec.encodeToString(decoded), "\"activeOnchainAttempt\"")
+    }
+
+    @Test
     fun `payment backup accepts shared wire format and retains pending payment`() {
         WalletScope.pushTestOverride("wallet0").use {
             val fixture = """

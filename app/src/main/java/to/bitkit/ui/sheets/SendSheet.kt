@@ -56,6 +56,7 @@ import to.bitkit.ui.screens.wallets.send.HARDWARE_SIGN_CANCELLED_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.HwSendSignScreen
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
+import to.bitkit.ui.screens.wallets.send.RECOVERY_PIN_CHECK_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.SendAddressScreen
 import to.bitkit.ui.screens.wallets.send.SendAmountScreen
 import to.bitkit.ui.screens.wallets.send.SendCoinSelectionScreen
@@ -437,6 +438,20 @@ fun SendSheet(
                         addButtonTestTag = "SendTagsSubmit",
                     )
                 }
+                composableWithDefaultTransitions<SendRoute.RecoveryPinCheck> {
+                    SendPinCheckScreen(
+                        onBack = {
+                            navController.previousBackStackEntry?.savedStateHandle
+                                ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, false)
+                            navController.popBackStack()
+                        },
+                        onSuccess = {
+                            navController.previousBackStackEntry?.savedStateHandle
+                                ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, true)
+                            navController.popBackStack()
+                        },
+                    )
+                }
                 composableWithDefaultTransitions<SendRoute.PinCheck> {
                     SendPinCheckScreen(
                         onBack = {
@@ -513,12 +528,26 @@ fun SendSheet(
                     val route = it.toRoute<SendRoute.Pending>()
                     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     SendPendingScreen(
+                        savedStateHandle = it.savedStateHandle,
+                        onNavigateToPin = { navController.navigateTo(SendRoute.RecoveryPinCheck) },
                         paymentHash = route.paymentHash,
                         amount = route.amount,
                         observeResolution = route.observeResolution,
                         isOnchain = route.isOnchain,
                         walletId = route.walletId,
                         refusalReason = route.refusalReason,
+                        retryOriginal = appViewModel::retryOriginalOnchainSend,
+                        onRecovered = { txid, originalAmount ->
+                            appViewModel.onSendSuccess(
+                                NewTransactionSheetDetails(
+                                    type = NewTransactionSheetType.ONCHAIN,
+                                    direction = NewTransactionSheetDirection.SENT,
+                                    paymentHashOrTxId = txid,
+                                    sats = originalAmount,
+                                    activityWalletId = route.walletId,
+                                )
+                            )
+                        },
                         onPaymentSuccess = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
@@ -684,6 +713,9 @@ sealed interface SendRoute {
 
     @Serializable
     data object PinCheck : InternalOnly
+
+    @Serializable
+    data object RecoveryPinCheck : InternalOnly
 
     @Serializable
     data object CoinSelection : DeepLinkStart

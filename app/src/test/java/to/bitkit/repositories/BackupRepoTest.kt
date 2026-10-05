@@ -95,6 +95,8 @@ class BackupRepoTest : BaseUnitTest() {
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val paykitPresentationStore = mock<PaykitPaymentRequestPresentationStore>()
     private val keychain = mock<Keychain>()
+    private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
+    private val vssStoreIdProvider = mock<to.bitkit.data.backup.VssStoreIdProvider>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val lightningService = mock<LightningService>()
     private val clock = mock<Clock>()
@@ -111,6 +113,10 @@ class BackupRepoTest : BaseUnitTest() {
     fun setUp() = test {
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(1_000))
         whenever(db.transferDao()).thenReturn(transferDao)
+        whenever(db.configDao()).thenReturn(mock())
+        whenever(db.configDao().getAll()).thenReturn(MutableStateFlow(listOf(to.bitkit.data.entities.ConfigEntity())))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
+        whenever(onchainSendAttemptStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever { transferDao.upsert(any<List<TransferEntity>>()) }.thenReturn(Unit)
         whenever { cacheStore.updateBackupStatus(any(), any()) }.thenReturn(Unit)
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
@@ -143,6 +149,70 @@ class BackupRepoTest : BaseUnitTest() {
         }.thenReturn(Result.success(Unit))
 
         sut = createSut()
+    }
+
+    @Test
+    fun `wallet backup exports and restores shared active guard before original proof`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val golden = json.decodeFromString<WalletBackupV1>(bytes.decodeToString())
+        val state = requireNotNull(golden.paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        val attempt = wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0)
+        whenever(onchainSendAttemptStore.backupSnapshot(0)).thenReturn(attempt)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        whenever(paykitPaymentProofRepo.backupSnapshot()).thenReturn(state.pendingProofs)
+        val data = argumentCaptor<ByteArray>()
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isSuccess)
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.WALLET.name), data.capture()) }
+        val exported = json.decodeFromString<WalletBackupV1>(data.firstValue.decodeToString())
+        assertEquals(wire, exported.paykitPaymentState?.activeOnchainAttempt)
+        stubWalletBackup(paykitPaymentState = state)
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        val ordered = org.mockito.kotlin.inOrder(onchainSendAttemptStore, paykitPaymentProofRepo)
+        ordered.verify(onchainSendAttemptStore).restoreActive(attempt)
+        ordered.verify(paykitPaymentProofRepo).restoreBackup(state.pendingProofs)
+    }
+
+    @Test
+    fun `active guard uses captured backup namespace index instead of assuming index zero`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        whenever(db.configDao().getAll()).thenReturn(MutableStateFlow(listOf(to.bitkit.data.entities.ConfigEntity(2))))
+        whenever(vssStoreIdProvider.getBackupWalletBinding(2)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state)
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        verify(
+            onchainSendAttemptStore
+        ).restoreActive(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 2))
+        verify(
+            onchainSendAttemptStore,
+            never()
+        ).restoreActive(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
+    }
+
+    @Test
+    fun `wrong active binding or proof blocks restore without clearing guard or publishing empty backup`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn("00".repeat(32))
+        stubWalletBackup(paykitPaymentState = state)
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(
+            paykitPaymentState = state.copy(
+                pendingProofs = state.pendingProofs.map {
+                    it.copy(onchainWalletId = "foreign-hardware")
+                }
+            )
+        )
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
     }
 
     @Test
@@ -1136,6 +1206,8 @@ class BackupRepoTest : BaseUnitTest() {
         paykitPaymentRequestRepo = Provider { paykitPaymentRequestRepo },
         paykitPresentationStore = paykitPresentationStore,
         keychain = keychain,
+        onchainSendAttemptStore = onchainSendAttemptStore,
+        vssStoreIdProvider = vssStoreIdProvider,
         preActivityMetadataRepo = preActivityMetadataRepo,
         lightningService = lightningService,
         clock = clock,

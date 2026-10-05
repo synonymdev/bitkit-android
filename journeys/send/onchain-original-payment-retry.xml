@@ -1,0 +1,27 @@
+<journey name="onchain original payment retry">
+  <description>
+    Verifies explicit fee approval and normal spend authentication for retrying one original software
+    on-chain payment. Precondition: an onboarded funded dev wallet, PIN enabled, a synced node, and a
+    retained unresolved prepared-send receipt with its exact original recipient, amount, inputs and
+    candidate transaction IDs. Creating a controlled refusal or response-loss fixture is not provided
+    by the Capabilities table and remains in Manual Tests. A seeded Pending fixture must be labelled
+    as state injection, never as proof of a native fault. Manual Tests must verify the exact backend
+    winning transaction retains the complete original input set and recipient amount, and any original
+    Shop request or Blocktank order completes once without a new request or order. Local activity alone
+    cannot prove these checks. This journey is currently unrun on rc69.
+  </description>
+  <actions>
+    <action>Open the retained original payment's Pending screen and record its displayed transaction ID</action>
+    <action>Verify Pending describes the unresolved outcome and offers Retry original payment</action>
+    <action>Tap Retry original payment</action>
+    <action>Verify the dialog shows the original recipient and amount and prefills the original fee rate</action>
+    <action>Enter an invalid fee rate of 73786976294838207 sat/vB and verify valid positive fee feedback appears and Authorize retry is disabled</action>
+    <action>Enter a valid authorized fee rate that the funded fixture can support and tap Authorize retry</action>
+    <action>Verify the normal payment PIN screen appears before dispatch</action>
+    <action>Go Back without entering the PIN and verify the original Pending payment remains retained</action>
+    <action>Tap Retry original payment again, choose the fixture-supported fee and tap Authorize retry</action>
+    <action>Enter the fixture's normal payment PIN without recording entered digits</action>
+    <action>Wait for Bitcoin Sent only after exact positive evidence, or verify Pending remains with a readable error if fee headroom is insufficient</action>
+    <action>If successful, tap Details then Explore and record the exact winning transaction ID shown by TXID</action>
+  </actions>
+</journey>

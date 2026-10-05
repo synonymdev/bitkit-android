@@ -16,14 +16,16 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.lightningdevkit.ldknode.AddressType
-import org.lightningdevkit.ldknode.FeeRate
-import org.lightningdevkit.ldknode.OnchainSendResult
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OnchainPayment
+import org.lightningdevkit.ldknode.OnchainSendResult
 import org.lightningdevkit.ldknode.OnchainWalletAccount
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
@@ -41,17 +43,17 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
-import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -116,38 +118,51 @@ class LightningServiceTest : BaseUnitTest() {
         assertTrue(sut.canReceive())
     }
 
-    @Test
-    fun `fixed send returns only the generated accepted rejected or unknown outcome`() = test {
-        val txid = "ab".repeat(32)
-        whenever(node.onchainPayment()).thenReturn(onchainPayment)
-        whenever(onchainPayment.sendToAddressWithBroadcastResult("address", 1_000uL, sendFeeRate, null))
-            .thenReturn(OnchainSendResult.Accepted(txid))
-            .thenReturn(OnchainSendResult.Rejected(txid, "non-final"))
-            .thenReturn(OnchainSendResult.Unknown(txid))
-
-        assertEquals(OnchainSendOutcome.Accepted(txid), sut.send("address", 1_000uL, 1uL))
-        assertEquals(OnchainSendOutcome.Rejected(txid, "non-final"), sut.send("address", 1_000uL, 1uL))
-        assertEquals(OnchainSendOutcome.Unknown(txid), sut.send("address", 1_000uL, 1uL))
-        verify(onchainPayment, times(3)).sendToAddressWithBroadcastResult("address", 1_000uL, sendFeeRate, null)
-        verify(onchainPayment, never()).sendToAddress("address", 1_000uL, sendFeeRate, null)
+    private fun preparedNative(txid: String) = mock<org.lightningdevkit.ldknode.PreparedOnchainSend>().also {
+        whenever(it.txid()).thenReturn(txid)
+        whenever(it.inputs()).thenReturn(listOf(org.lightningdevkit.ldknode.OutPoint("11".repeat(32), 0u)))
+        whenever(it.recipientAmountSats()).thenReturn(1_000uL)
     }
 
     @Test
-    fun `send all retains reserves and uses the explicit outcome method once`() = test {
+    fun `fixed preparation captures actual receipt without dispatch and caches broadcast`() = test {
         val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
         whenever(node.onchainPayment()).thenReturn(onchainPayment)
-        whenever(onchainPayment.sendAllToAddressWithBroadcastResult("address", true, sendFeeRate))
-            .thenReturn(OnchainSendResult.Unknown(txid))
+        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
 
-        assertEquals(OnchainSendOutcome.Unknown(txid), sut.send("address", 1_000uL, 1uL, isMaxAmount = true))
-        verify(onchainPayment).sendAllToAddressWithBroadcastResult("address", true, sendFeeRate)
-        verify(onchainPayment, never()).sendAllToAddress("address", true, sendFeeRate)
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1uL)
+        assertEquals(txid, prepared.receipt.txid)
+        assertEquals(1_000uL, prepared.receipt.amountSats)
+        assertEquals(1, prepared.receipt.inputs.size)
+        verify(native, never()).broadcast()
+        repeat(2) { assertEquals(OnchainSendOutcome.Accepted(txid), prepared.broadcast()) }
+        verify(native).broadcast()
+        verify(onchainPayment, never()).sendToAddressWithBroadcastResult(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `initial Max uses native automatic reserve semantics then captures actual amount`() = test {
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        whenever(native.recipientAmountSats()).thenReturn(900uL)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendAllToAddress("address", true, sendFeeRate)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Unknown(txid))
+
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1uL, isMaxAmount = true)
+        assertEquals(900uL, prepared.receipt.amountSats)
+        verify(native, never()).broadcast()
+        assertEquals(OnchainSendOutcome.Unknown(txid), prepared.broadcast())
+        verify(onchainPayment).prepareSendAllToAddress("address", true, sendFeeRate)
+        verify(onchainPayment, never()).sendAllToAddressWithBroadcastResult(any(), any(), anyOrNull())
     }
 
     @Test
     fun `onchain send refuses a different wallet before invoking native payment`() = test {
         assertFailsWith<ServiceError.NodeNotSetup> {
-            sut.send("bcrt1qrecipient", 1_000uL, 1uL, walletIndex = 9)
+            sut.prepareOnchainSend("bcrt1qrecipient", 1_000uL, 1uL, walletIndex = 9)
         }
         verify(node, never()).onchainPayment()
     }

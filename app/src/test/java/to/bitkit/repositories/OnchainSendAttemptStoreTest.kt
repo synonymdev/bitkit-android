@@ -5,7 +5,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import org.junit.Test
-import to.bitkit.services.LightningService
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -13,6 +12,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -21,6 +21,79 @@ import kotlin.test.assertTrue
 
 class OnchainSendAttemptStoreTest : BaseUnitTest() {
     private val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+
+    @Test
+    fun `restored exact candidate observes without resend and unsupported contact cannot acknowledge`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
+        val state = requireNotNull(backup.paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        wire.validateProofs(state.pendingProofs, "wallet0")
+        val original = wire.restored("regtest", wire.wallet.binding, "wallet0", 2)
+        val values = mutableMapOf<Int, String>()
+        val keychain = mock<Keychain>()
+        val service = mock<to.bitkit.services.LightningService>()
+        whenever(service.currentWalletIndex).thenReturn(2)
+        whenever(keychain.loadString(eq(key), any())).thenAnswer { values[it.getArgument(1)] }
+        whenever(keychain.upsertString(eq(key), any(), any())).doSuspendableAnswer {
+            values[it.getArgument(2)] = it.getArgument(1)
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service)
+        store.restoreActive(original)
+        assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
+        assertNull(store.observeExactTransaction("00".repeat(32)))
+        val observed = store.observeExactTransaction(requireNotNull(wire.txid))
+        assertEquals(OnchainSendEvidence.Observed, observed?.evidence)
+        assertEquals(wire.candidateTxids, observed?.candidateTxids)
+        assertFailsWith<IllegalStateException> { store.markLocalFollowupComplete(original.attemptId, 2) }
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service)
+        assertEquals(observed, reopened.current())
+        assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
+        val other = original.copy(attemptId = "00000000-0000-4000-8000-000000000009")
+        assertFailsWith<IllegalStateException> { reopened.restoreActive(other) }
+        assertEquals(observed, reopened.current())
+    }
+
+    @Test
+    fun `restored supported accepted context resets acknowledgement and finishes idempotently`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
+        val wire = requireNotNull(backup.paykitPaymentState?.activeOnchainAttempt)
+        val accepted = wire.copy(status = "accepted", followup = wire.followup?.copy(contact = null))
+            .restored("regtest", wire.wallet.binding, "wallet0", 0)
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        store.restoreActive(accepted)
+        assertTrue(store.current()?.localFollowupComplete == false)
+        assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
+        store.markLocalFollowupComplete(accepted.attemptId, 0)
+        store.markLocalFollowupComplete(accepted.attemptId, 0)
+        assertTrue(store.current()?.localFollowupComplete == true)
+    }
+
+    @Test
+    fun `missing imported followup stays blocked while existing local positive context can acknowledge`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val admitted = store.admitForTest()
+        val local = admitted.copy(backupFollowup = null)
+        saved = kotlinx.serialization.json.Json.encodeToString(OnchainSendAttempt.serializer(), local)
+        store.recordOutcome(local.attemptId, OnchainSendOutcome.Accepted("ab".repeat(32)), 0)
+        store.markLocalFollowupComplete(local.attemptId, 0)
+        assertTrue(store.current()?.localFollowupComplete == true)
+        val imported = requireNotNull(store.current()).copy(restoredFromBackup = true, localFollowupComplete = false)
+        store.restoreActive(imported)
+        assertFailsWith<IllegalStateException> { store.markLocalFollowupComplete(imported.attemptId, 0) }
+        assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
+    }
 
     @Test
     fun `reopen blocks unresolved send until exact transaction is observed and followup is complete`() = test {
@@ -170,7 +243,30 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
     }
 
-    private suspend fun OnchainSendAttemptStore.admitForTest(beforeSendAttempt: suspend () -> Unit = {}): OnchainSendAttempt = admit(
+    @Test
+    fun `late unknown outcome cannot overwrite exact positive observation`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val attempt = store.admitForTest()
+        val txid = "ab".repeat(32)
+        store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Unknown(txid), attempt.walletIndex)
+        store.observeExactTransaction(txid)
+
+        val late = store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Unknown(txid), attempt.walletIndex)
+
+        assertEquals(OnchainSendEvidence.Observed, late.evidence)
+        assertEquals(txid, store.current()?.txid)
+        assertEquals(OnchainSendEvidence.Observed, store.current()?.evidence)
+        assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
+    }
+
+    private suspend fun OnchainSendAttemptStore.admitForTest(
+        beforeSendAttempt: suspend () -> Unit = {
+        }
+    ): OnchainSendAttempt = admit(
         walletId = "wallet-1",
         requestId = null,
         orderId = null,

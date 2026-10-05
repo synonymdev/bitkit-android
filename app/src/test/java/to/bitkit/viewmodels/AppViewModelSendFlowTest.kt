@@ -127,8 +127,8 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainSendAttempt
-import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
+import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
@@ -451,6 +451,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isExpired(any())).thenReturn(false)
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
         whenever(paykitPaymentProofRepo.onchainPaymentResolutions).thenReturn(onchainPaymentResolutions)
+        whenever { paykitPaymentProofRepo.captureOriginalOnchainPayer(any()) }
+            .thenReturn(Result.success("pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"))
+        whenever { paykitPaymentProofRepo.verifyOriginalOnchainPayer(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever {
             paykitPaymentProofRepo.associateLightningPayment(any(), any(), any())
@@ -6470,8 +6473,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
-        verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, OnchainSendOutcome.Accepted("txid"))
+        verify(
+            paykitPaymentProofRepo
+        ).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, OnchainSendOutcome.Accepted("txid"))
     }
 
     @Test
@@ -6613,6 +6619,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
     }
@@ -7259,7 +7266,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertFalse(sut.prepareHardwareContactPayment(walletId, "bcrt1qpaymentrequest", request.id, testPublicKey))
         verify(paykitPaymentRequestRepo, times(1)).accept(request)
         verify(paykitPaymentProofRepo, times(1)).markOnchainPaymentStarted(request, "bcrt1qpaymentrequest", walletId)
-        verify(lightningRepo, never()).sendOnChain(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(
+            lightningRepo,
+            never()
+        ).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
     }
 
     @Test
@@ -7350,7 +7363,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertFalse(sut.completeHardwareContactPayment(txid, walletId, request.id, testPublicKey))
         verify(paykitPaymentProofRepo).completeHardwareOnchainPayment(request.id, walletId, txid, testPublicKey)
-        verify(lightningRepo, never()).sendOnChain(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(
+            lightningRepo,
+            never()
+        ).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
     }
 
     @Test
@@ -7374,7 +7393,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(txid, sut.successSendUiState.value.paymentHashOrTxId)
         assertEquals(walletId, sut.successSendUiState.value.activityWalletId)
         assertEquals(request.amountSats.toLong(), sut.successSendUiState.value.sats)
-        verify(lightningRepo, never()).sendOnChain(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(
+            lightningRepo,
+            never()
+        ).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
     }
 
     @Test
@@ -7971,6 +7996,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
     }
 
@@ -8014,6 +8040,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
     }
 
@@ -8077,6 +8104,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
     }
 
@@ -8139,6 +8167,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             requestId = anyOrNull(),
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
         )
     }
 
@@ -8317,6 +8346,56 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
         verify(lightningRepo).completeAcceptedOrdinaryFollowup(txid)
+    }
+
+    @Test
+    fun `recovery denies paid expired or changed original Blocktank order before broadcast`() = test {
+        val order = to.bitkit.ext.mockOrder().copy(
+            orderExpiresAt = (Clock.System.now() + 60.seconds).toString(),
+        )
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default,
+            attemptId = "original-order-attempt",
+            transferContext = to.bitkit.repositories.OnchainTransferContext(
+                1_200uL,
+                100_000uL,
+                order.clientBalanceSat,
+                order.feeSat,
+            ),
+            requestId = null,
+            orderId = order.id,
+            address = requireNotNull(order.payment?.onchain?.address),
+            amountSats = order.feeSat,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL,
+            isTransfer = true,
+            channelId = null,
+            tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown,
+        )
+        var dispatched = 0
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), any())).doSuspendableAnswer { invocation ->
+            val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(3)
+            runCatching {
+                authorize(original)
+                dispatched += 1
+                OnchainSendOutcome.Accepted("ef".repeat(32))
+            }
+        }
+        val invalidOrders = listOf(
+            order.copy(state2 = com.synonym.bitkitcore.BtOrderState2.PAID),
+            order.copy(orderExpiresAt = (Clock.System.now() - 1.seconds).toString()),
+            order.copy(feeSat = order.feeSat + 1uL),
+            order.copy(clientBalanceSat = order.clientBalanceSat + 1uL),
+        )
+        for (invalidOrder in invalidOrders) {
+            whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(invalidOrder)))
+            assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isFailure)
+        }
+        assertEquals(0, dispatched)
+        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isSuccess)
+        assertEquals(1, dispatched)
     }
 
     @Test
@@ -8880,6 +8959,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 requestId = anyOrNull(),
                 orderId = anyOrNull(),
                 transferContext = anyOrNull(),
+                payerIdentity = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)
