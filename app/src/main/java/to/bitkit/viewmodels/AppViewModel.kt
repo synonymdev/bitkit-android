@@ -987,7 +987,7 @@ class AppViewModel @Inject constructor(
 
     private fun observeIncomingPaykitPaymentRequests() {
         viewModelScope.launch {
-            paykitPaymentProofRepo.proofStateVersion.drop(1).collect {
+            paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey).collect {
                 refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
             }
         }

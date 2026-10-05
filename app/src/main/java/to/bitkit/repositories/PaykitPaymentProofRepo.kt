@@ -6,8 +6,14 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -123,7 +129,29 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
-    val proofStateVersion = store.backupStateVersion
+
+    fun paymentRequestStateChanges(identity: Flow<String?>): Flow<Unit> =
+        combine(identity, store.backupStateVersion) { publicKey, _ ->
+            runSuspendCatching {
+                if (publicKey == null) return@runSuspendCatching null
+                val proofs = store.load().filter { PubkyPublicKeyFormat.matches(it.identity, publicKey) }
+                PaymentRequestProofState(
+                    identity = publicKey,
+                    completedProofKinds = proofs.filter { it.proofData != null }.associate { it.requestId to it.kind },
+                    inFlightRequestIds = proofs.filter { it.paymentStarted }.mapTo(mutableSetOf()) { it.requestId },
+                )
+            }
+        }
+            .distinctUntilChanged { old, new -> old.isSuccess && new.isSuccess && old == new }
+            .drop(1)
+            .map { Unit }
+            .flowOn(ioDispatcher)
+
+    private data class PaymentRequestProofState(
+        val identity: String,
+        val completedProofKinds: Map<PaykitPaymentRequestId, PaykitPaymentProofKind>,
+        val inFlightRequestIds: Set<PaykitPaymentRequestId>,
+    )
 
     suspend fun backupSnapshot(): List<PaykitPaymentStateBackup.Proof> = withContext(ioDispatcher) {
         operationMutex.withLock { store.load().map { PaykitPaymentStateBackup.Proof(it) } }

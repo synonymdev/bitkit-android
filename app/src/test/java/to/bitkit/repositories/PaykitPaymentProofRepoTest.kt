@@ -11,7 +11,14 @@ import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PubkyIdentityCapability
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.NodeException
@@ -30,6 +37,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitSdkService
@@ -43,6 +51,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     companion object {
         private const val LOCAL_IDENTITY = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
@@ -61,6 +70,12 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private var shouldFailNextLoad = false
     private var shouldFailNextSave = false
     private var shouldFailProofRemoval = false
+    private val keychain = mock<Keychain>()
+    private val projectionStore = PaykitPaymentProofStore(keychain)
+    private val projectionIdentity = MutableStateFlow<String?>(LOCAL_IDENTITY)
+    private var storedProjectionJson: String? = null
+    private var unreadableProjectionState = false
+    private var requestStateChanges = 0
 
     @Before
     fun setUp() = test {
@@ -93,6 +108,90 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             }
             storedProofs = proofs
         }
+        whenever(keychain.loadString(any())).thenAnswer {
+            if (unreadableProjectionState) "not-json" else storedProjectionJson
+        }
+        whenever(keychain.upsertString(any(), any())).doSuspendableAnswer {
+            storedProjectionJson = it.getArgument(1)
+        }
+        whenever(keychain.delete(any())).doSuspendableAnswer { storedProjectionJson = null }
+    }
+
+    @Test
+    fun `unstarted proof preparation notifies backup without refreshing requests`() = test {
+        observeRequestStateChanges()
+        val repo = paymentProofRepo(projectionStore)
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        runCurrent()
+        assertEquals(0, requestStateChanges)
+        assertEquals(1L, projectionStore.backupStateVersion.value)
+
+        repo.cancelPreparation(request)
+        runCurrent()
+        assertEquals(0, requestStateChanges)
+        assertEquals(2L, projectionStore.backupStateVersion.value)
+    }
+
+    @Test
+    fun `request refresh follows completed and in flight proof projections`() = test {
+        observeRequestStateChanges()
+        val started = readyLightningProof(PAYMENT_REQUEST_ID).copy(proofData = null)
+        val changes = listOf(
+            listOf(started) to 1,
+            listOf(started.copy(paymentIdentifier = "different-payment")) to 1,
+            listOf(started.copy(proofData = PREIMAGE)) to 2,
+            listOf(started.copy(proofData = PREIMAGE, kind = PaykitPaymentProofKind.Onchain)) to 3,
+            emptyList<PendingPaykitPaymentProof>() to 4,
+        )
+
+        changes.forEach { (proofs, expectedChanges) ->
+            projectionStore.save(proofs)
+            runCurrent()
+            assertEquals(expectedChanges, requestStateChanges)
+        }
+        assertEquals(changes.size.toLong(), projectionStore.backupStateVersion.value)
+    }
+
+    @Test
+    fun `request proof projection is scoped to identity and resets after sign out`() = test {
+        observeRequestStateChanges()
+        projectionStore.save(listOf(readyLightningProof(PAYMENT_REQUEST_ID).copy(identity = COUNTERPARTY)))
+        runCurrent()
+        assertEquals(0, requestStateChanges)
+
+        projectionIdentity.update { COUNTERPARTY }
+        runCurrent()
+        assertEquals(1, requestStateChanges)
+        projectionIdentity.update { null }
+        runCurrent()
+        assertEquals(2, requestStateChanges)
+        projectionStore.save(emptyList())
+        runCurrent()
+        assertEquals(2, requestStateChanges)
+        projectionIdentity.update { LOCAL_IDENTITY }
+        runCurrent()
+        assertEquals(3, requestStateChanges)
+    }
+
+    @Test
+    fun `unreadable proof changes keep requesting refresh and recover after repair`() = test {
+        observeRequestStateChanges()
+        unreadableProjectionState = true
+        repeat(2) { index ->
+            projectionStore.save(emptyList())
+            runCurrent()
+            assertEquals(index + 1, requestStateChanges)
+        }
+
+        unreadableProjectionState = false
+        projectionStore.save(emptyList())
+        runCurrent()
+        assertEquals(3, requestStateChanges)
+        projectionStore.save(emptyList())
+        runCurrent()
+        assertEquals(3, requestStateChanges)
     }
 
     @Test
@@ -791,7 +890,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(listOf(request.id), storedProofs.map { it.requestId })
     }
 
-    private fun paymentProofRepo() = PaykitPaymentProofRepo(
+    private fun TestScope.observeRequestStateChanges() {
+        paymentProofRepo(projectionStore).paymentRequestStateChanges(projectionIdentity)
+            .onEach { requestStateChanges++ }
+            .launchIn(backgroundScope)
+        runCurrent()
+    }
+
+    private fun paymentProofRepo(store: PaykitPaymentProofStore = this.store) = PaykitPaymentProofRepo(
         ioDispatcher = testDispatcher,
         paykitSdkService = paykitSdkService,
         lightningRepo = lightningRepo,
