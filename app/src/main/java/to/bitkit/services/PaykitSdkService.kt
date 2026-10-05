@@ -614,11 +614,18 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    /**
+     * Saves the contact [publicKey]. [expectedIdentity] and [isStillCurrent] are checked under the lock the save runs
+     * under, right before it, so no session can be installed between the checks and the write. A save whose
+     * [isStillCurrent] returns false writes nothing and fails with [PubkyContactError.SignInChanged].
+     */
+    @Suppress("LongParameterList")
     suspend fun saveContact(
         publicKey: String,
         label: String?,
         restorePrivateConnection: Boolean = false,
         expectedIdentity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
     ): ContactRecord {
         isSetup.await()
         return operationLock.withLock {
@@ -629,6 +636,7 @@ class PaykitSdkService @Inject constructor(
                         "Paykit identity changed before saving the contact"
                     }
                 }
+                if (isStillCurrent?.invoke() == false) throw PubkyContactError.SignInChanged
                 val existing = completeSdkCall { handle.contactRecord(publicKey) }
                 check(restorePrivateConnection || existing != null) { "Contact no longer exists" }
                 val update = ContactUpdate(publicKey, label)
