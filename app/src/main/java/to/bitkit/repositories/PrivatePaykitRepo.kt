@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Scanner
+import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentAmountContext
@@ -9,6 +10,7 @@ import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentResolutionState
 import com.synonym.paykit.PrivatePaymentResolutionStatus
+import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -806,8 +808,9 @@ class PrivatePaykitRepo @Inject constructor(
             )
 
             publicationMutex.withLock {
-                if (!isCurrentPublication(generation, identity, requireImmediatePublication)) return@withLock
-                if (!canPublishPrivateEndpoints()) {
+                val status = paykitSdkService.identityStatus()
+                if (!isCurrentPublication(generation, identity, requireImmediatePublication, status)) return@withLock
+                if (!canPublishPrivateEndpoints(status)) {
                     if (requireImmediatePublication) throw PrivatePaykitError.PrivateUnavailable
                     return@withLock
                 }
@@ -850,8 +853,10 @@ class PrivatePaykitRepo @Inject constructor(
         generation: Int,
         identity: String,
         requireImmediatePublication: Boolean,
+        status: IdentityStatus? = null,
     ): Boolean {
-        val isCurrent = generation == preparationGeneration && pubkyService.currentPublicKey() == identity
+        val isCurrent = generation == preparationGeneration &&
+            (status?.publicKey ?: pubkyService.currentPublicKey()) == identity
         if (!isCurrent && requireImmediatePublication) throw PrivatePaykitError.PrivateUnavailable
         return isCurrent
     }
@@ -1621,14 +1626,19 @@ class PrivatePaykitRepo @Inject constructor(
         return paymentHash in paymentHashes
     }
 
-    private suspend fun canPublishPrivateEndpoints(): Boolean {
+    private suspend fun canPublishPrivateEndpoints(status: IdentityStatus? = null): Boolean {
         val settings = settingsStore.data.first()
-        return settings.sharesPrivatePaykitEndpoints &&
+        val locallyEligible = settings.sharesPrivatePaykitEndpoints &&
             !isContactSharingCleanupPending() &&
-            hasPrivatePaymentAccessForCurrentProfile() &&
             App.currentActivity?.value != null &&
             walletRepo.walletExists() &&
             lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
+        if (!locallyEligible) return false
+        return if (status?.publicKey != null) {
+            status.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
+        } else {
+            hasPrivatePaymentAccessForCurrentProfile()
+        }
     }
 
     private suspend fun hasPrivatePaymentAccessForCurrentProfile(): Boolean = runSuspendCatching {

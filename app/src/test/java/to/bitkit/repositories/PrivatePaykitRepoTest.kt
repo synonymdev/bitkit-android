@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
@@ -17,6 +18,7 @@ import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentListSyncChange
 import com.synonym.paykit.PrivatePaymentResolutionState
 import com.synonym.paykit.PrivatePaymentResolutionStatus
+import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -126,6 +128,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(NOW_SECONDS))
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(true)
+        whenever(paykitSdkService.identityStatus())
+            .thenReturn(IdentityStatus(OWN_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         whenever(walletRepo.walletExists()).thenReturn(true)
         whenever { walletRepo.refreshReusableReceiveAddressIfReserved() }.thenReturn(Result.success(Unit))
         whenever { addressReservationRepo.reconcileReservedIndexesWithLdk() }.thenReturn(Result.success(Unit))
@@ -159,13 +163,33 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `handleOnchainActivity skips SDK access when no contact address was used`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        whenever(addressReservationRepo.contactsWithUsedReservedAddresses()).thenReturn(emptyList())
+    fun `handleOnchainActivity skips SDK access when publication is locally unnecessary`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        clearInvocations(paykitSdkService, pubkyService)
 
-        sut.handleOnchainActivity().getOrThrow()
+        for (unavailable in listOf("unused address", "background", "wallet", "node")) {
+            whenever(addressReservationRepo.contactsWithUsedReservedAddresses())
+                .thenReturn(if (unavailable == "unused address") emptyList() else listOf(CONTACT_KEY))
+            App.currentActivity = if (unavailable == "background") {
+                null
+            } else {
+                CurrentActivity().also { it.onActivityStarted(mock<Activity>()) }
+            }
+            whenever(walletRepo.walletExists()).thenReturn(unavailable != "wallet")
+            lightningState.value = LightningState(
+                nodeLifecycleState = if (unavailable == "node") {
+                    NodeLifecycleState.Stopped
+                } else {
+                    NodeLifecycleState.Running
+                },
+            )
+
+            sut.handleOnchainActivity().getOrThrow()
+        }
 
         verify(paykitSdkService, never()).hasPrivatePaymentAccess()
+        verify(paykitSdkService, never()).identityStatus()
         verify(pubkyService, never()).currentPublicKey()
     }
 
@@ -212,13 +236,101 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, never()).ensureLinkWithPeer(CONTACT_KEY)
         verify(paykitSdkService, never()).processPendingPrivateMessages()
         verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
+        verify(paykitSdkService).identityStatus()
+        verify(paykitSdkService).hasPrivatePaymentAccess()
+        verify(pubkyService, times(2)).currentPublicKey()
+
+        clearInvocations(paykitSdkService, pubkyService)
+        whenever(paykitSdkService.identityStatus()).thenReturn(null)
+
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+
+        verify(paykitSdkService).identityStatus()
+        verify(paykitSdkService, times(2)).hasPrivatePaymentAccess()
+        verify(pubkyService, times(3)).currentPublicKey()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false))
     }
 
     @Test
     fun `hasPrivatePaymentAccess returns false when the SDK check fails`() = test {
-        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenThrow(IllegalStateException("Paykit unavailable"))
+        var accessFails = true
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenAnswer {
+            check(!accessFails) { "Paykit unavailable" }
+            true
+        }
 
         assertFalse(sut.hasPrivatePaymentAccess())
+
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        accessFails = false
+        val failures = listOf(AppError("Identity unavailable"), CancellationException("Cancelled"))
+        var failure: Throwable = failures.first()
+        whenever(paykitSdkService.identityStatus()).thenAnswer { throw failure }
+        for (nextFailure in failures) {
+            failure = nextFailure
+
+            if (failure is CancellationException) {
+                assertFailsWith<CancellationException> { sut.prepareSavedContacts(listOf(CONTACT_KEY)) }
+            } else {
+                assertEquals(failure, sut.prepareSavedContacts(listOf(CONTACT_KEY)).exceptionOrNull())
+            }
+        }
+        verify(addressReservationRepo, never()).currentOrRotatedAddress(any())
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+    }
+
+    @Test
+    fun `publication checks identity capability and settings after identity lookup`() = test {
+        for (unavailable in listOf("identity", "capability", "sharing", "cleanup")) {
+            settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+            cacheData.value = PrivatePaykitCacheData()
+            val status = CompletableDeferred<IdentityStatus>()
+            whenever(paykitSdkService.identityStatus()) doSuspendableAnswer { status.await() }
+            val publication = async {
+                sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
+            }
+            runCurrent()
+            assertFalse(publication.isCompleted)
+            if (unavailable == "sharing") {
+                settingsData.value = settingsData.value.copy(sharesPrivatePaykitEndpoints = false)
+            }
+            if (unavailable == "cleanup") cacheData.value = cacheData.value.copy(cleanupPending = true)
+            status.complete(
+                IdentityStatus(
+                    if (unavailable == "identity") OTHER_CONTACT_KEY else OWN_KEY,
+                    if (unavailable == "capability") {
+                        PubkyIdentityCapability.PUBLIC_ONLY
+                    } else {
+                        PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
+                    },
+                ),
+            )
+
+            assertIs<PrivatePaykitError.PrivateUnavailable>(publication.await().exceptionOrNull())
+        }
+        verify(addressReservationRepo, never()).currentOrRotatedAddress(any())
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+    }
+
+    @Test
+    fun `publication rechecks identity after wallet reservation`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        val address = CompletableDeferred<String>()
+        whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)) doSuspendableAnswer {
+            Result.success(address.await())
+        }
+        val publication = async {
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
+        }
+        runCurrent()
+        assertFalse(publication.isCompleted)
+        verify(paykitSdkService).identityStatus()
+        whenever(pubkyService.currentPublicKey()).thenReturn(OTHER_CONTACT_KEY)
+        address.complete(PRIVATE_ADDRESS)
+
+        assertIs<PrivatePaykitError.PrivateUnavailable>(publication.await().exceptionOrNull())
+        verify(pubkyService, times(2)).currentPublicKey()
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
     }
 
     @Test
