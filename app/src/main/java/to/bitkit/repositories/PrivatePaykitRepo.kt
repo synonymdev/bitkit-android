@@ -1039,6 +1039,7 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun drainPendingPrivateMessages(
         reason: String,
         retryKeys: Collection<String>,
+        includeUnsavedPeers: Boolean = false,
     ) {
         val retryKeys = retryKeys.mapNotNull(::normalizedPublicKey).toSet()
         currentCoroutineContext().ensureActive()
@@ -1047,11 +1048,10 @@ class PrivatePaykitRepo @Inject constructor(
             val generation = preparationGeneration
             val alreadyLinkedKeys = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.LINKED }
                 .mapNotNull { normalizedPublicKey(it.counterparty) }.toSet()
-            retryKeys.forEach { retryKey ->
+            (retryKeys - alreadyLinkedKeys).forEach { retryKey ->
                 currentCoroutineContext().ensureActive()
                 if (generation != preparationGeneration) return@runSuspendCatching
-                if (retryKey in alreadyLinkedKeys) return@forEach
-                if (retryKey !in knownSavedContactKeys) return@forEach
+                if (!includeUnsavedPeers && retryKey !in knownSavedContactKeys) return@forEach
                 if (unavailableLinkRetryAt[retryKey]?.let { it > clock.now() } == true) return@forEach
                 runSuspendCatching {
                     paykitSdkService.ensureLinkWithPeer(
@@ -1406,6 +1406,7 @@ class PrivatePaykitRepo @Inject constructor(
                     drainPendingPrivateMessages(
                         reason = "private endpoint cleanup",
                         retryKeys = pendingRetryKeys,
+                        includeUnsavedPeers = true,
                     )
                     pendingRetryKeys = pendingPrivateMessageDrainKeys(preparation.clearedRetryKeys)
                 }

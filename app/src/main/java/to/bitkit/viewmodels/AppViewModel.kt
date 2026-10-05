@@ -397,6 +397,7 @@ class AppViewModel @Inject constructor(
     private var paykitPaymentRequestPollingJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
+    private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
         registerSheet(appUpdateSheet)
         registerSheet(backupSheet)
@@ -887,7 +888,7 @@ class AppViewModel @Inject constructor(
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (mode == PaykitPaymentRequestRefreshMode.FULL) paykitPaymentProofRepo.reconcile()
         val result = if (forceFresh) {
-            paykitPaymentRequestRepo.refreshAfterStateChange()
+            paykitPaymentRequestRepo.refreshAfterStateChange(mode)
         } else {
             paykitPaymentRequestRepo.refresh(mode)
         }
@@ -957,6 +958,17 @@ class AppViewModel @Inject constructor(
             requestedPaymentRequestTags = persistentListOf()
         }
         viewModelScope.launch {
+            val hasIdentity = pubkyRepo.publicKey.value != null ||
+                runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(true)
+            val canPresent = PaykitFeatureFlags.isUiEnabled(settingsStore.isPaykitEnabled.first()) &&
+                walletRepo.walletExists() && hasIdentity
+            if (!canPresent) {
+                if (requestedPaymentRequestId.value == requestId && requestedPaymentRequestIdentity == payerIdentity) {
+                    invalidatePaymentRequestPresentation()
+                    clearRequestedPaymentRequest()
+                }
+                return@launch
+            }
             refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED)
         }
     }
@@ -968,6 +980,11 @@ class AppViewModel @Inject constructor(
     }
 
     private fun observeIncomingPaykitPaymentRequests() {
+        viewModelScope.launch {
+            paykitPaymentProofRepo.proofStateVersion.drop(1).collect {
+                refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
+            }
+        }
         viewModelScope.launch {
             currentSheet.collect { sheet ->
                 if (sheet == null) {
@@ -1009,14 +1026,11 @@ class AppViewModel @Inject constructor(
         }
         if (sheet !is Sheet.Send || currentSheet.value !is Sheet.Send) return
         val request = activeIncomingPaymentRequest() ?: return
-        viewModelScope.launch {
-            if (currentSheet.value !is Sheet.Send || activeIncomingPaymentRequest()?.id != request.id) return@launch
-            if (paykitPaymentRequestRepo.markPresented(request)) {
-                paymentRequestPresentationGeneration++
-                clearRequestedPaymentRequest()
-                clearPaymentRequestPresentationRetry(request.id)
-            }
-        }
+        if (!paykitPaymentRequestRepo.isPending(request)) return
+        completePaymentRequestPresentation(request)
+        paymentRequestPresentationGeneration++
+        clearRequestedPaymentRequest()
+        clearPaymentRequestPresentationRetry(request.id)
     }
 
     private suspend fun presentNextIncomingPaykitPaymentRequest() {
@@ -1057,7 +1071,11 @@ class AppViewModel @Inject constructor(
         val requestedId = requestedPaymentRequestId.value
         return if (requestedId == null) {
             paykitPaymentRequestRepo.automaticPendingRequests().filter { request ->
+                val isCompleting = synchronized(contactPaymentContextLock) {
+                    request.id in paymentRequestPresentationCompletionJobs
+                }
                 !paykitPaymentRequestRepo.isProcessing(request) &&
+                    !isCompleting &&
                     paymentRequestPresentationRetryJobs[request.id]?.isActive != true
             }.takeIf { it.isNotEmpty() }
         } else {
@@ -1193,9 +1211,7 @@ class AppViewModel @Inject constructor(
                     testTag = "PaymentRequestUnavailableToast",
                 )
                 if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
-                viewModelScope.launch {
-                    paykitPaymentRequestRepo.markPresented(request)
-                }
+                completePaymentRequestPresentation(request)
                 return
             } else {
                 PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL
@@ -1294,12 +1310,34 @@ class AppViewModel @Inject constructor(
         paymentRequestPresentationRetryAttempts.clear()
     }
 
+    private fun completePaymentRequestPresentation(request: PaykitPaymentRequest) {
+        synchronized(contactPaymentContextLock) {
+            if (request.id in paymentRequestPresentationCompletionJobs) return
+            val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
+                paykitPaymentRequestRepo.markPresented(request)
+            }
+            paymentRequestPresentationCompletionJobs[request.id] = job
+            job.invokeOnCompletion {
+                synchronized(contactPaymentContextLock) {
+                    paymentRequestPresentationCompletionJobs.remove(request.id, job)
+                }
+            }
+            job.start()
+        }
+    }
+
     private fun resetPaykitPresentationState(
         dismissActiveRequest: Boolean,
         preserveRequestedPaymentRequest: Boolean,
     ) {
         invalidatePaymentRequestPresentation(dismissActiveRequest)
         clearPaymentRequestPresentationRetries()
+        val completions = synchronized(contactPaymentContextLock) {
+            paymentRequestPresentationCompletionJobs.values.toList().also {
+                paymentRequestPresentationCompletionJobs.clear()
+            }
+        }
+        completions.forEach { it.cancel() }
         if (!preserveRequestedPaymentRequest) clearRequestedPaymentRequest()
         paymentRequestSheetTransitionJob?.cancel()
         paymentRequestSheetTransitionJob = null
@@ -3217,6 +3255,7 @@ class AppViewModel @Inject constructor(
         uncertainOnchainPaymentRequestId = null
         val interruptedRequest = synchronized(contactPaymentContextLock) {
             val request = activeContactPaymentContext?.incomingPaymentRequest
+            if (request != null && !retryIncomingRequest) completePaymentRequestPresentation(request)
             activeContactPaymentContext = null
             preparedContactPaymentContext = null
             request
@@ -3229,7 +3268,6 @@ class AppViewModel @Inject constructor(
                 clearRequestedPaymentRequest()
             }
             clearPaymentRequestPresentationRetry(interruptedRequest.id)
-            viewModelScope.launch { paykitPaymentRequestRepo.markPresented(interruptedRequest) }
             return
         }
 

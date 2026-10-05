@@ -6,6 +6,7 @@ import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
@@ -239,15 +240,22 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         val proof = mock<PaymentProofRecord> {
             on { billingPeriod } doReturn requireNotNull(firstPeriod.billingPeriod).sdkValue
             on { paymentEndpointIdentifier } doReturn MethodId.P2wpkh.rawValue
+            on { outboundStatus } doReturn OutboundPrivateMessageStatus.PENDING
         }
+        val paidRecord = record.copy(paymentProofs = listOf(proof))
+        whenever(paykitSdkService.claimPaymentRequestForExecution(COUNTERPARTY, PAYMENT_REQUEST_ID))
+            .thenReturn(paidRecord)
+        assertTrue(sut.subscriptions.value.single().paidPeriods.isEmpty())
+        assertTrue(sut.claimForPayment(firstPeriod).exceptionOrNull() is PaykitPaymentRequestError.RequestUnavailable)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
-            .thenReturn(listOf(record.copy(paymentProofs = listOf(proof))))
+            .thenReturn(listOf(paidRecord))
         subscriptionOffset = 31.days
         sut.refresh().getOrThrow()
 
         assertTrue(sut.ensurePaymentAllowed(firstPeriod).isFailure)
         val nextPeriod = sut.pendingRequests.value.single()
         assertEquals(Instant.parse("2027-02-01T08:00:00Z"), nextPeriod.billingPeriod?.startsAt)
+        sut.claimForPayment(nextPeriod).getOrThrow()
         sut.ensurePaymentAllowed(nextPeriod).getOrThrow()
     }
 
@@ -787,20 +795,20 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             counterparty = COUNTERPARTY,
             billingPeriodStartsAt = "2027-01-01T08:00:00Z",
         )
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)),
+        )
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
         whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
             .thenReturn(mapOf(requestId to PaykitPaymentProofKind.Onchain))
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
-            listOf(
-                paymentRequestRecord(
-                    state = PaymentRequestLifecycleState.ACTIVE_RECURRING,
-                    paymentDeadline = PaymentDeadline.PeriodStart(3600uL),
-                ),
-            ),
-        )
 
-        sut.refresh().getOrThrow()
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.automaticPendingRequests().isEmpty())
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
         assertEquals(requestId, sut.paymentRequestHistory.value.single().id)
         assertEquals(
             PaymentRequestLifecycleState.PROOF_SUBMITTED,

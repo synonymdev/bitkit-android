@@ -5,9 +5,11 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -16,6 +18,77 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PaykitSdkOperationLockTest {
+    @Test
+    fun `interactive work overtakes only queued publication with bounded fairness`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val release = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        val active = launch {
+            lock.withLock(Priority.Background) {
+                events.add("active")
+                release.await()
+            }
+        }
+        runCurrent()
+        val priorities = listOf(
+            Priority.Background,
+            Priority.Background,
+            Priority.Interactive,
+            Priority.Interactive,
+            Priority.Interactive,
+            Priority.Interactive,
+        )
+        val queued = priorities.mapIndexed { index, priority ->
+            launch { lock.withLock(priority) { events.add(index.toString()) } }.also { runCurrent() }
+        }
+        assertEquals(listOf("active"), events)
+        release.complete(Unit)
+        active.join()
+        queued.forEach { it.join() }
+        assertEquals(listOf("active", "2", "3", "4", "0", "5", "1"), events)
+        lock.withLock {}
+    }
+
+    @Test
+    fun `interactive work cannot cross an ordered operation`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val release = CompletableDeferred<Unit>()
+        val active = launch { lock.withLock { release.await() } }
+        runCurrent()
+        val events = mutableListOf<Int>()
+        val priorities = listOf(
+            Priority.Background,
+            Priority.Interactive,
+            Priority.Ordered,
+            Priority.Background,
+            Priority.Interactive,
+        )
+        val queued = priorities.mapIndexed { index, priority ->
+            launch { lock.withLock(priority) { events.add(index) } }.also { runCurrent() }
+        }
+        release.complete(Unit)
+        active.join()
+        queued.forEach { it.join() }
+        assertEquals(listOf(1, 0, 2, 4, 3), events)
+    }
+
+    @Test
+    fun `cancellation after priority handoff releases the lock to publication`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val release = CompletableDeferred<Unit>()
+        val active = launch(UnconfinedTestDispatcher(testScheduler)) { lock.withLock { release.await() } }
+        val background = async { lock.withLock(Priority.Background) { "published" } }
+        val interactive = async { lock.withLock(Priority.Interactive) { error("cancelled operation ran") } }
+        runCurrent()
+
+        release.complete(Unit)
+        assertTrue(active.isCompleted)
+        interactive.cancel()
+        assertFailsWith<CancellationException> { interactive.await() }
+        assertEquals("published", background.await())
+        lock.withLock {}
+    }
+
     @Test
     fun `public reads do not block mutation but reject results across wallet wipe`() = runTest {
         val lock = PaykitSdkOperationLock()
@@ -49,8 +122,10 @@ class PaykitSdkOperationLockTest {
             }
         }
         runCurrent()
-        val queued = async {
-            assertFailsWith<PaykitException.Storage> { lock.withLock { events.add("stale") } }
+        val queued = listOf(Priority.Background, Priority.Interactive).map { priority ->
+            async {
+                assertFailsWith<PaykitException.Storage> { lock.withLock(priority) { events.add("stale") } }
+            }
         }
         runCurrent()
         val wipe = launch {
@@ -66,7 +141,7 @@ class PaykitSdkOperationLockTest {
         releaseActive.complete(Unit)
         runCurrent()
         assertTrue(wipeStarted.isCompleted)
-        assertEquals("wallet_wipe_in_progress", queued.await().code)
+        queued.forEach { assertEquals("wallet_wipe_in_progress", it.await().code) }
         releaseWipe.complete(Unit)
         active.join()
         wipe.join()
@@ -135,12 +210,14 @@ class PaykitSdkOperationLockTest {
         val release = CompletableDeferred<Unit>()
         val active = launch { lock.withLock { release.await() } }
         runCurrent()
-        val queued = async { lock.withLock { error("cancelled operation ran") } }
+        val queued = Priority.entries.map { priority ->
+            async { lock.withLock(priority) { error("cancelled operation ran") } }
+        }
         runCurrent()
-        queued.cancel()
+        queued.forEach { it.cancel() }
         release.complete(Unit)
         active.join()
-        assertFailsWith<CancellationException> { queued.await() }
+        queued.forEach { assertFailsWith<CancellationException> { it.await() } }
         lock.withLock {}
     }
 }

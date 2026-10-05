@@ -273,6 +273,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
+    private val proofStateVersion = MutableStateFlow(0L)
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
     private val nonCanonicalTestPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
@@ -428,7 +429,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.eligibleTargets).thenReturn(MutableStateFlow(emptyList()))
         whenever(paykitPaymentRequestRepo.isCreatingRequest).thenReturn(MutableStateFlow(false))
         whenever { paykitPaymentRequestRepo.refreshEligibleTargets(any(), any()) }.thenReturn(Result.success(Unit))
-        whenever { paykitPaymentRequestRepo.refreshAfterStateChange() }.thenReturn(Result.success(Unit))
+        whenever { paykitPaymentRequestRepo.refreshAfterStateChange(any()) }.thenReturn(Result.success(Unit))
         whenever(paykitPaymentRequestRepo.automaticPendingRequests()).thenAnswer {
             pendingPaykitPaymentRequests.value.filterNot { it.id in surfacedPaykitPaymentRequestIds }
         }
@@ -453,6 +454,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isExpired(any())).thenReturn(false)
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
         whenever(paykitPaymentProofRepo.onchainPaymentResolutions).thenReturn(onchainPaymentResolutions)
+        whenever(paykitPaymentProofRepo.proofStateVersion).thenReturn(proofStateVersion)
         whenever { paykitPaymentProofRepo.prepare(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever {
             paykitPaymentProofRepo.associateLightningPayment(any(), any(), any(), eq("bitkit"))
@@ -1227,35 +1229,64 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `unaffordable request releases manual presentation state`() = test {
+    fun `unaffordable request suppresses automatic preparation while presentation completion waits`() = test {
+        sut.setIsAuthenticated(true)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
         val request = paymentRequest()
-        whenever { paykitPaymentRequestRepo.dismiss(request) }.thenReturn(Result.success(Unit))
+        val bolt11 = "lnbcrt1unaffordablerequest"
+        val finishMark = CompletableDeferred<Unit>()
+        var markingCancelled = false
+        var allowPreparation = true
+        whenever(paykitPaymentRequestRepo.markPresented(any())).doSuspendableAnswer {
+            try {
+                finishMark.await()
+                surfacedPaykitPaymentRequestIds += it.getArgument<PaykitPaymentRequest>(0).id
+                true
+            } finally {
+                markingCancelled = !finishMark.isCompleted
+            }
+        }
+        whenever(privatePaykitRepo.beginPaymentRequest(any())).doSuspendableAnswer {
+            if (!allowPreparation) awaitCancellation()
+            allowPreparation = false
+            Result.success(PublicPaykitPaymentResult.Opened(bolt11, privatePaymentContext(7uL)))
+        }
+        stubLightningScan(bolt11, request.amountSats)
+        whenever(lightningRepo.canSend(request.amountSats)).thenReturn(false)
+        whenever(formatMoneyValue(any())).thenReturn("2,500 sats")
         pendingPaykitPaymentRequests.value = listOf(request)
-        surfacedPaykitPaymentRequestIds += request.id
-        setActiveContactPaymentContext(
-            publicKey = testPublicKey,
-            privatePaymentContext = privatePaymentContext(7uL),
-            incomingPaymentRequest = request,
-        )
-        setRequestedPaymentRequestId(request.id)
+        runCurrent()
 
-        sut.clearActiveContactPaymentContext(retryIncomingRequest = false)
+        pendingPaykitPaymentRequests.value = listOf(request.copy(note = "Updated request"))
         runCurrent()
 
         assertNull(activeContactPaymentContext())
+        assertNull(sut.requestedPaymentRequestId.value)
         verify(paykitPaymentRequestRepo).markPresented(request)
-
-        sut.dismissIncomingPaymentRequest(request)
-        runCurrent()
-
-        assertTrue(sut.rejectingPaymentRequestIds.value.isEmpty())
-        verify(paykitPaymentRequestRepo).dismiss(request)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        verify(toastManager).enqueue(check { assertEquals("InsufficientSpendingToast", it.testTag) })
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
 
-        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        allowPreparation = true
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
         runCurrent()
-        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+
+        assertTrue(sut.currentSheet.value is Sheet.Send)
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(any())
+
+        pendingPaykitPaymentRequests.value = emptyList()
+        pubkyPublicKey.value = null
+        runCurrent()
+        assertTrue(markingCancelled)
+        finishMark.complete(Unit)
+        runCurrent()
+        assertTrue(surfacedPaykitPaymentRequestIds.isEmpty())
     }
 
     @Test
@@ -1364,6 +1395,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `subscription notification target survives initial identity activation`() = test {
         sut.setIsAuthenticated(true)
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
         val otherRequest = paymentRequest().copy(paymentRequestId = "other-subscription")
         val targetRequest = paymentRequest().copy(
             paymentRequestId = "target-subscription",
@@ -1382,6 +1414,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         isPaykitEnabled.value = true
 
         sut.onPaykitSubscriptionNotificationTapped(testPublicKey, targetRequest.id)
+        assertEquals(targetRequest.id, sut.requestedPaymentRequestId.value)
         runCurrent()
         pubkyContactsLoadVersion.value = 1L
         pubkyPublicKey.value = testPublicKey
@@ -1392,18 +1425,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `subscription notification for another identity is ignored`() = test {
+    fun `subscription notification is ignored when unavailable or for another identity`() = test {
         val targetRequest = paymentRequest().copy(
             billingPeriod = PaykitBillingPeriod(
                 startsAt = Instant.parse("2026-08-25T12:00:00Z"),
                 endsAt = Instant.parse("2026-09-01T12:00:00Z"),
             ),
         )
-        pubkyPublicKey.value = testPublicKey
+        for ((enabled, identity) in listOf(false to testPublicKey, true to null, true to "pubky${"a".repeat(52)}")) {
+            isPaykitEnabled.value = enabled
+            pubkyPublicKey.value = identity
+            runCurrent()
+            clearInvocations(privatePaykitRepo, paykitPaymentRequestRepo)
 
-        sut.onPaykitSubscriptionNotificationTapped("pubky${"a".repeat(52)}", targetRequest.id)
+            sut.onPaykitSubscriptionNotificationTapped(testPublicKey, targetRequest.id)
+            runCurrent()
 
-        verify(privatePaykitRepo, never()).beginPaymentRequest(targetRequest)
+            assertNull(sut.requestedPaymentRequestId.value)
+            verify(paykitPaymentRequestRepo, never()).refresh(any())
+            verify(privatePaykitRepo, never()).beginPaymentRequest(targetRequest)
+        }
     }
 
     @Test
@@ -6329,6 +6370,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `incoming payment request opens the existing confirm flow with its fixed amount`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1paymentrequest"
+        val finishMark = CompletableDeferred<Unit>()
+        whenever(paykitPaymentRequestRepo.markPresented(any())).doSuspendableAnswer {
+            finishMark.await()
+            surfacedPaykitPaymentRequestIds += request.id
+            true
+        }
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
@@ -6354,6 +6401,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertFalse(request.id in surfacedPaykitPaymentRequestIds)
 
         sut.onSheetVisible(sut.currentSheet.value)
+        runCurrent()
+        sut.hideSheet()
+        advanceTimeBy(3.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        assertFalse(request.id in surfacedPaykitPaymentRequestIds)
+        finishMark.complete(Unit)
         runCurrent()
 
         assertTrue(request.id in surfacedPaykitPaymentRequestIds)
@@ -7449,6 +7505,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        val completionStarted = CompletableDeferred<Unit>()
+        val finishCompletion = CompletableDeferred<Unit>()
+        whenever(paykitPaymentProofRepo.completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, "bitkit"))
+            .doSuspendableAnswer {
+                proofStateVersion.value += 1
+                completionStarted.complete(Unit)
+                finishCompletion.await()
+            }
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         stubSuccessfulOnchainSend(address, request.amountSats)
@@ -7465,6 +7529,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
+        completionStarted.await()
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        verify(paykitPaymentProofRepo, never()).reconcile()
+        verify(paykitPaymentRequestRepo, never()).refresh(PaykitPaymentRequestRefreshMode.FULL)
+        finishCompletion.complete(Unit)
+        advanceUntilIdle()
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, "bitkit")
         verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
     }
@@ -9110,14 +9180,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 isInitialSubscriptionPayment,
             ),
         )
-    }
-
-    private fun setRequestedPaymentRequestId(id: PaykitPaymentRequestId?) {
-        val field = AppViewModel::class.java.getDeclaredField("_requestedPaymentRequestId")
-        field.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val state = field.get(sut) as MutableStateFlow<PaykitPaymentRequestId?>
-        state.value = id
     }
 
     private fun activeContactPaymentContext(): ContactPaymentContext? {

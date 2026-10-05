@@ -785,7 +785,8 @@ fun ContentView(
 
             BottomSheetOverlayHost(state = bottomSheetOverlayState)
 
-            if (requestedPaymentRequestId != null && currentSheet == null) {
+            val canPreparePaymentRequest = isPaykitEnabled && isProfileAuthenticated
+            if (canPreparePaymentRequest && requestedPaymentRequestId != null && currentSheet == null) {
                 val description = stringResource(R.string.wallet__payment_request)
                 GradientCircularProgressIndicator(
                     modifier = Modifier

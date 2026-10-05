@@ -123,6 +123,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
+    val proofStateVersion = store.backupStateVersion
 
     suspend fun backupSnapshot(): List<PaykitPaymentStateBackup.Proof> = withContext(ioDispatcher) {
         operationMutex.withLock { store.load().map { PaykitPaymentStateBackup.Proof(it) } }

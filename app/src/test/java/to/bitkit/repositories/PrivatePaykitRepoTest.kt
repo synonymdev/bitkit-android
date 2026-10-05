@@ -8,6 +8,7 @@ import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PrivatePaymentListDeliveryFailure
@@ -562,17 +563,35 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
         val recoveringPublicKey = "pubky6rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         var failLookup = true
-        var delivered = false
+        var linked = false
+        var canAdvance = false
+        val pendingOutbound = mutableSetOf(OTHER_CONTACT_KEY, recoveringPublicKey)
         whenever(paykitSdkService.linkedPeers()).thenAnswer {
             if (failLookup) throw AppError("Peer lookup unavailable")
             listOf(
                 linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED),
-                linkedPeer(OTHER_CONTACT_KEY, if (delivered) LinkedPeerState.LINKED else LinkedPeerState.LINKING),
+                linkedPeer(OTHER_CONTACT_KEY, if (linked) LinkedPeerState.LINKED else LinkedPeerState.LINKING),
                 linkedPeer(
                     recoveringPublicKey,
-                    if (delivered) LinkedPeerState.LINKED else LinkedPeerState.RECOVERY_REQUIRED,
+                    if (linked) LinkedPeerState.LINKED else LinkedPeerState.RECOVERY_REQUIRED,
                 ),
             )
+        }
+        whenever(paykitSdkService.ensureLinkWithPeer(any(), any())).thenAnswer {
+            linked = canAdvance
+            LinkedPeerHandshakeReport(
+                it.getArgument(0),
+                if (linked) LinkedPeerState.LINKED else LinkedPeerState.LINKING,
+                1uL,
+                null,
+            )
+        }
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenAnswer {
+            if (linked) pendingOutbound.toList() else emptyList()
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(any())).thenAnswer {
+            pendingOutbound.remove(it.getArgument<String>(0))
+            OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
         }
 
         assertTrue(sut.disableSharingAndPruneUnsavedContactState(emptyList()).isFailure)
@@ -585,12 +604,15 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(cacheData.value.cleanupPending)
         verify(publicPaykitRepo, never()).syncPaykitApp()
 
-        delivered = true
+        canAdvance = true
         sut.retryPendingEndpointRemoval(emptyList()).getOrThrow()
 
         verify(paykitSdkService, times(2)).clearPrivatePaymentLists(
             listOf(CONTACT_KEY, OTHER_CONTACT_KEY, recoveringPublicKey),
         )
+        verify(paykitSdkService, times(2)).ensureLinkWithPeer(OTHER_CONTACT_KEY)
+        verify(paykitSdkService, times(2)).ensureLinkWithPeer(recoveringPublicKey)
+        assertTrue(pendingOutbound.isEmpty())
         assertFalse(cacheData.value.cleanupPending)
         verify(publicPaykitRepo).syncPaykitApp()
     }

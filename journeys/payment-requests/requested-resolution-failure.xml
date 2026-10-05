@@ -2,7 +2,7 @@
   <description>
     Verifies a user explicitly opening an incoming Payment Request receives localized terminal
     feedback after resolution retries exhaust, while the request remains available for another
-    attempt.
+    attempt. Dev settings must be available for the final availability check.
 
     Precondition: onboarded dev wallet with Paykit UI enabled, a profile, and one linked saved
     contact. Seed exactly one proposed incoming Payment Request from that contact with a known
@@ -19,5 +19,8 @@
     <action>Verify the toast title is "Payment Request" and its description is "The payment request is no longer available."</action>
     <action>Verify Payment Requests (testTag "PaymentRequestsScreen") remains visible</action>
     <action>Verify the incoming request row (testTag "PaymentRequestRow-&lt;payment-request-id&gt;") remains visible for a later retry</action>
+    <action>Start another Pay attempt and verify progress (id "PaymentRequestPreparing") appears</action>
+    <action>While preparation is pending, navigate to Dev settings and turn off Enable Paykit UI (id "PaykitUiToggle")</action>
+    <action>Return to the wallet home screen and verify progress (id "PaymentRequestPreparing") is absent and no payment sheet opens</action>
   </actions>
 </journey>

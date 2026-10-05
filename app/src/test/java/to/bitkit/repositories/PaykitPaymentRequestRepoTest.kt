@@ -259,7 +259,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
         proofStateVersion.value += 1
-        val afterFailure = async { sut.refresh() }
+        val afterFailure = async { sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED) }
         runCurrent()
         resume.complete(Unit)
         first.await().getOrThrow()
@@ -267,6 +267,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(requestId, sut.pendingRequests.value.single().id)
         verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
+        verify(paykitSdkService).processPendingPrivateMessages()
+        verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers()
     }
 
     @Test
@@ -1103,7 +1105,20 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh().getOrThrow()
         val request = sut.pendingRequests.value.single()
 
-        assertTrue(sut.markPresented(request))
+        val finishRefresh = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            finishRefresh.await()
+            listOf(paymentRequestRecord())
+        }
+        val refresh = async { sut.refresh() }
+        runCurrent()
+        val marking = async { sut.markPresented(request) }
+        runCurrent()
+        assertFalse(marking.isCompleted)
+        finishRefresh.complete(Unit)
+        refresh.await().getOrThrow()
+        assertTrue(marking.await())
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
 
         assertEquals(listOf(request), sut.pendingRequests.value)
         assertTrue(sut.automaticPendingRequests().isEmpty())
@@ -1127,6 +1142,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `identity switch invalidates an in-flight refresh before waiting for the operation lock`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
         val refreshStarted = CompletableDeferred<Unit>()
         val resumeRefresh = CompletableDeferred<Unit>()
         whenever(paykitSdkService.processPendingPrivateMessages()).doSuspendableAnswer {
@@ -1134,18 +1152,22 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             resumeRefresh.await()
             emptyList()
         }
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
         whenever(presentationStore.load(SECOND_IDENTITY)).thenReturn(emptySet())
 
         val refresh = async { sut.refresh() }
         runCurrent()
         refreshStarted.await()
+        val marking = async { sut.markPresented(request) }
+        runCurrent()
+        assertFalse(marking.isCompleted)
         val activation = async { sut.activate(SECOND_IDENTITY) }
         runCurrent()
         resumeRefresh.complete(Unit)
 
         refresh.await().getOrThrow()
         activation.await()
+        assertFalse(marking.await())
+        verify(presentationStore, never()).save(any(), any())
 
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertTrue(sut.paymentRequestHistory.value.isEmpty())

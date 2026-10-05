@@ -16,5 +16,9 @@
     <action>Close the confirmation without paying</action>
     <action>Open Receive and close it again</action>
     <action>Verify Home remains visible and neither reviewed request reopens automatically</action>
+    <action>On the requester, send a Payment Request above the payer's available balance with the note "Unaffordable request"</action>
+    <action>On the payer, verify an insufficient-balance toast appears once and no payment confirmation opens</action>
+    <action>Allow another pending-request sync, then open Receive and close it; verify the unaffordable request does not automatically prepare again or repeat its toast</action>
+    <action>Open Payment Requests and tap Pay on "Unaffordable request"; verify this explicit retry shows the insufficient-balance toast again</action>
   </actions>
 </journey>

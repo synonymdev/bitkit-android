@@ -399,14 +399,18 @@ class PaykitPaymentRequestRepo @Inject constructor(
         )
     }
 
-    suspend fun markPresented(request: PaykitPaymentRequest): Boolean = withContext(ioDispatcher) {
-        operationMutex.withLock {
-            if (_pendingRequests.value.none { it.id == request.id }) return@withLock false
-            val identity = activeIdentity ?: return@withLock false
-            presentedRequestIds = presentedRequestIds + request.id
-            runSuspendCatching { presentationStore.save(identity, presentedRequestIds) }
-                .onFailure { Logger.warn("Failed to persist surfaced Paykit payment requests", it, context = TAG) }
-            true
+    suspend fun markPresented(request: PaykitPaymentRequest): Boolean {
+        val generation = stateGeneration.get()
+        val identity = activeIdentity ?: return false
+        return withContext(ioDispatcher) {
+            operationMutex.withLock {
+                if (!isCurrentState(generation, identity)) return@withLock false
+                if (_pendingRequests.value.none { it.id == request.id }) return@withLock false
+                presentedRequestIds = presentedRequestIds + request.id
+                runSuspendCatching { presentationStore.save(identity, presentedRequestIds) }
+                    .onFailure { Logger.warn("Failed to persist surfaced Paykit payment requests", it, context = TAG) }
+                true
+            }
         }
     }
 
@@ -463,8 +467,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
     suspend fun refresh(mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL): Result<Unit> =
         refresh(mode, forceFresh = false)
 
-    suspend fun refreshAfterStateChange(): Result<Unit> =
-        refresh(PaykitPaymentRequestRefreshMode.FULL, forceFresh = true)
+    suspend fun refreshAfterStateChange(
+        mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
+    ): Result<Unit> = refresh(mode, forceFresh = true)
 
     private suspend fun refresh(mode: PaykitPaymentRequestRefreshMode, forceFresh: Boolean): Result<Unit> {
         val generation = stateGeneration.get()
@@ -863,7 +868,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
     suspend fun claimForPayment(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             ensurePaymentAllowed(request, forExecution = false).getOrThrow()
-            paykitSdkService.claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
+            val record = paykitSdkService.claimPaymentRequestForExecution(
+                request.counterparty,
+                request.paymentRequestId,
+            )
+            request.billingPeriod?.let { period ->
+                val subscription = record.toPaykitSubscription() ?: throw PaykitPaymentRequestError.RequestUnavailable
+                if (period in subscription.paidPeriods) throw PaykitPaymentRequestError.RequestUnavailable
+            }
             Unit
         }
     }

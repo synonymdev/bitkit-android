@@ -18,6 +18,7 @@
     <action>If the first period was due on acceptance: complete the send flow that opens, then verify the Subscribed confirmation appears</action>
     <action>If no payment was due: verify the Subscribed confirmation appears directly, with no send flow</action>
     <action>Tap Close on the Subscribed confirmation</action>
+    <action>If a payment was made: verify its billing period is no longer offered with Pay or Dismiss, no Payment Requests sheet opens for it, and the home payment-request bell is absent when no other requests are pending</action>
     <action>Verify the sheet dismisses and "Journey Sub" moves from PROPOSALS into the ACTIVE section</action>
     <action>Tap the "Journey Sub" row and verify the detail shows STATUS "Active" and a RENEWS date one month ahead, with no year</action>
     <action>Only when a payment was made: verify the PAYMENTS section lists it titled "Journey Sub" with the payment date as its subtitle. With no payment yet, the section is absent.</action>

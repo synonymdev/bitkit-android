@@ -696,7 +696,12 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun syncPublicEndpoints(endpoints: List<Endpoint>): EndpointSyncReport {
         isSetup.await()
-        return operationLock.withLock {
+        val priority = if (endpoints.isEmpty()) {
+            PaykitSdkOperationLock.Priority.Ordered
+        } else {
+            PaykitSdkOperationLock.Priority.Background
+        }
+        return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
                 handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
             }
@@ -710,7 +715,12 @@ class PaykitSdkService @Inject constructor(
         clearUnlistedLinkedPeers: Boolean,
     ): PrivatePaymentListDeliveryReport {
         isSetup.await()
-        return operationLock.withLock {
+        val priority = if (clearUnlistedLinkedPeers || updates.any { it.reservations.isEmpty() }) {
+            PaykitSdkOperationLock.Priority.Ordered
+        } else {
+            PaykitSdkOperationLock.Priority.Background
+        }
+        return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
                 handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                     updates = updates,
@@ -859,7 +869,7 @@ class PaykitSdkService @Inject constructor(
         expectedIdentity: String,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
             withStateRevisionTracking { handle ->
                 val identityStatus = handle.identityStatus()
                 check(
@@ -985,7 +995,7 @@ class PaykitSdkService @Inject constructor(
         amount: PaymentAmountContext? = null,
     ): PaykitPreparedPrivateContactPayment {
         isSetup.await()
-        val prepared = operationLock.withLock {
+        val prepared = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
             withStateRevisionTracking { handle ->
                 handle.prepareAndResolvePrivateContactPayment(
                     counterparty = counterparty,
@@ -1007,7 +1017,7 @@ class PaykitSdkService @Inject constructor(
         afterPrivatePaymentListVersion: ULong?,
     ): PaykitPreparedPrivateContactPayment {
         isSetup.await()
-        val prepared = operationLock.withLock {
+        val prepared = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
             withStateRevisionTracking {
                 it.prepareAndResolvePrivatePaymentRequest(
                     counterparty,
@@ -1027,7 +1037,7 @@ class PaykitSdkService @Inject constructor(
         counterparty: String,
     ): PaykitPublicContactPaymentResolution {
         isSetup.await()
-        val resolution = operationLock.withLock {
+        val resolution = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
             handle().resolvePublicContactPayment(counterparty, amount = null)
         }
         return resolution.toPaykitPublicContactPaymentResolution()
