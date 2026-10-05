@@ -1379,15 +1379,15 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             val peers = paykitSdkService.linkedPeers()
             val linkedPublicKeys = peers
-                .filter { it.state != LinkedPeerState.NOT_LINKED }
+                .filter {
+                    it.state == LinkedPeerState.LINKED || it.state == LinkedPeerState.LINKING ||
+                        it.state == LinkedPeerState.RECOVERY_REQUIRED
+                }
                 .mapNotNull { normalizedPublicKey(it.counterparty) }
                 .toSet()
-            val discoveredPublicKeys = peers
-                .filter { it.state == LinkedPeerState.LINKED }
-                .mapNotNull { normalizedPublicKey(it.counterparty) }
             val keys = publicKeys ?: (
                 knownSavedContactKeys + ensureState().contacts.keys + pendingDeletedContactCleanupPublicKeys() +
-                    discoveredPublicKeys
+                    linkedPublicKeys
                 )
             val normalizedBatch = normalizedPublicKeyBatch(keys)
             discardInvalidCleanupKeys(normalizedBatch.invalidKeys)

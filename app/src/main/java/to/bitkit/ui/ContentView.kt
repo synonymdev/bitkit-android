@@ -7,8 +7,12 @@ import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,7 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -73,6 +81,7 @@ import to.bitkit.ui.components.BottomSheetOverlayHost
 import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetHandlePlacement
 import to.bitkit.ui.components.SheetHost
@@ -483,6 +492,7 @@ fun ContentView(
         val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
+        val requestedPaymentRequestId by appViewModel.requestedPaymentRequestId.collectAsStateWithLifecycle()
         val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
         val hwSendViewModel = hiltViewModel<HwSendViewModel>()
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
@@ -774,6 +784,19 @@ fun ContentView(
             )
 
             BottomSheetOverlayHost(state = bottomSheetOverlayState)
+
+            if (requestedPaymentRequestId != null && currentSheet == null) {
+                val description = stringResource(R.string.wallet__payment_request)
+                GradientCircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .background(Colors.Gray6, RoundedCornerShape(8.dp))
+                        .padding(24.dp)
+                        .size(32.dp)
+                        .semantics { contentDescription = description }
+                        .testTag("PaymentRequestPreparing")
+                )
+            }
         }
     }
 }

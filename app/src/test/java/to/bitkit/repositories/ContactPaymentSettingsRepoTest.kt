@@ -197,7 +197,8 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     @Test
     fun `enabling waits for both withdrawal phases even when cleanup fails`() = test {
         val cleanupResults = listOf(Result.success(Unit), Result.failure(ContactPaymentSettingsTestError("withdrawal")))
-        for (cleanupResult in cleanupResults) {
+        val cases = cleanupResults.flatMap { result -> listOf(false to result, true to result) }
+        for ((disablePaykit, cleanupResult) in cases) {
             clearInvocations(privatePaykitRepo, publicPaykitRepo)
             settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = true, sharesPrivatePaykitEndpoints = true)
             val privateCleanup = CompletableDeferred<Unit>()
@@ -213,7 +214,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
             }
             val sut = createSut()
 
-            val disable = async { sut.setEnabled(false) }
+            val disable = async { if (disablePaykit) sut.disablePaykit() else sut.setEnabled(false) }
             runCurrent()
             val enable = async { sut.setEnabled(true) }
             runCurrent()

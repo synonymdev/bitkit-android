@@ -562,12 +562,16 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
         val recoveringPublicKey = "pubky6rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         var failLookup = true
+        var delivered = false
         whenever(paykitSdkService.linkedPeers()).thenAnswer {
             if (failLookup) throw AppError("Peer lookup unavailable")
             listOf(
                 linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED),
-                linkedPeer(OTHER_CONTACT_KEY, LinkedPeerState.LINKING),
-                linkedPeer(recoveringPublicKey, LinkedPeerState.RECOVERY_REQUIRED),
+                linkedPeer(OTHER_CONTACT_KEY, if (delivered) LinkedPeerState.LINKED else LinkedPeerState.LINKING),
+                linkedPeer(
+                    recoveringPublicKey,
+                    if (delivered) LinkedPeerState.LINKED else LinkedPeerState.RECOVERY_REQUIRED,
+                ),
             )
         }
 
@@ -577,11 +581,16 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, never()).clearPrivatePaymentLists(any())
 
         failLookup = false
+        assertTrue(sut.retryPendingEndpointRemoval(emptyList()).isFailure)
+        assertTrue(cacheData.value.cleanupPending)
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+
+        delivered = true
         sut.retryPendingEndpointRemoval(emptyList()).getOrThrow()
 
-        verify(paykitSdkService).clearPrivatePaymentLists(listOf(CONTACT_KEY))
-        verify(paykitSdkService, never()).clearPrivatePaymentLists(listOf(OTHER_CONTACT_KEY))
-        verify(paykitSdkService, never()).clearPrivatePaymentLists(listOf(recoveringPublicKey))
+        verify(paykitSdkService, times(2)).clearPrivatePaymentLists(
+            listOf(CONTACT_KEY, OTHER_CONTACT_KEY, recoveringPublicKey),
+        )
         assertFalse(cacheData.value.cleanupPending)
         verify(publicPaykitRepo).syncPaykitApp()
     }

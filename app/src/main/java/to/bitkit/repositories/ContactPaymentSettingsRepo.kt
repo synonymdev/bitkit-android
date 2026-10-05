@@ -10,6 +10,8 @@ import kotlinx.coroutines.withContext
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.areContactPaymentsEnabled
+import to.bitkit.data.hasPublicPaykitPublicationState
+import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import javax.inject.Inject
@@ -40,6 +42,31 @@ class ContactPaymentSettingsRepo @Inject constructor(
             reconcile()
         } finally {
             sharingMutex.unlock()
+        }
+    }
+
+    suspend fun disablePaykit(): Result<Unit> = withContext(ioDispatcher) {
+        sharingMutex.withLock {
+            runSuspendCatching {
+                val previous = settingsStore.data.first()
+                val hadPublicState = previous.hasPublicPaykitPublicationState()
+                settingsStore.update { it.paykitDisabled(markPublicCleanupPending = hadPublicState) }
+                val contacts = pubkyRepo.contacts.value.map { it.publicKey }
+                val privateCleanup = privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
+                val publicCleanup = when {
+                    hadPublicState -> publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                    previous.sharesPrivatePaykitEndpoints -> publicPaykitRepo.syncPaykitApp(
+                        privateSharingEnabled = false,
+                    )
+                    else -> Result.success(Unit)
+                }
+                settingsStore.update { it.copy(publicPaykitCleanupPending = publicCleanup.isFailure) }
+                publicCleanup.exceptionOrNull()?.let { error ->
+                    privateCleanup.exceptionOrNull()?.let(error::addSuppressed)
+                    throw error
+                }
+                privateCleanup.getOrThrow()
+            }
         }
     }
 

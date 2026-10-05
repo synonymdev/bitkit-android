@@ -18,6 +18,7 @@ import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
+import com.synonym.paykit.PrivatePaymentListSyncChange
 import com.synonym.paykit.PrivateStreamIntakeReport
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
@@ -1229,6 +1230,56 @@ class PaykitSdkServiceTest {
         verify(sdk, times(3)).paykitAppRegistry(RING_PUBKY)
         verify(sdk, times(3)).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
         verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any())
+    }
+
+    @Test
+    fun `withdrawal recovers peer before queueing and retains recovery failure`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val peer = contactPeer(LinkedPeerState.RECOVERY_REQUIRED)
+        val other = "pubky5rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        whenever(sdk.linkedPeers()).thenReturn(
+            listOf(peer, contactPeer(LinkedPeerState.LINKED).copy(counterparty = other)),
+        )
+        val failure = AppError("Peer recovery unavailable")
+        var failRecovery = true
+        whenever(sdk.ensureLinkWithPeer(RING_PUBKY, 1u)).thenAnswer {
+            if (failRecovery) throw failure
+            LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKING, 1uL, null)
+        }
+        val keys = listOf(RING_PUBKY, other)
+        val updates = keys.map { PrivatePaymentListReservationUpdateInput(it, emptyList()) }
+        whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)).thenAnswer {
+            PrivatePaymentListDeliveryReport(
+                queued = emptyList(),
+                cleared = (if (failRecovery) listOf(other) else keys).map {
+                    PrivatePaymentListSyncChange(it, 1uL, null)
+                },
+                failedToQueue = if (failRecovery) {
+                    listOf(PrivatePaymentListSyncChange(RING_PUBKY, null, null))
+                } else {
+                    emptyList()
+                },
+                failedToDeliver = emptyList(),
+            )
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        val pending = service.clearPrivatePaymentLists(keys)
+        assertEquals(listOf(RING_PUBKY), pending?.failedToQueue?.map { it.counterparty })
+        assertEquals(listOf(other), pending?.cleared?.map { it.counterparty })
+
+        failRecovery = false
+        val complete = service.clearPrivatePaymentLists(keys)
+        assertTrue(complete?.failedToQueue?.isEmpty() == true)
+        assertEquals(keys, complete?.cleared?.map { it.counterparty })
+        inOrder(sdk) {
+            verify(sdk).ensureLinkWithPeer(RING_PUBKY, 1u)
+            verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
+            verify(sdk).ensureLinkWithPeer(RING_PUBKY, 1u)
+            verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
+        }
+        verify(sdk, never()).ensureLinkWithPeer(other, 1u)
+        verify(sdk, never()).unblockPeer(any())
     }
 
     @Test

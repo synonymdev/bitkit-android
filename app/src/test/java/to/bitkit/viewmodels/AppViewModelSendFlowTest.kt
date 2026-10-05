@@ -1167,6 +1167,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.showPaymentRequests()
         sut.openIncomingPaymentRequestWithTags(request.id, listOf("Lunch"))
+        assertEquals(request.id, sut.requestedPaymentRequestId.value)
         advanceTimeBy(TRANSITION_SCREEN_MS)
         runCurrent()
 
@@ -1180,6 +1181,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
         assertEquals(listOf("Lunch"), sut.sendUiState.value.selectedTags)
         verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+
+        sut.onSheetVisible(sut.currentSheet.value)
+        runCurrent()
+        assertNull(sut.requestedPaymentRequestId.value)
     }
 
     @Test
@@ -1429,6 +1434,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
         verify(paykitPaymentRequestRepo).markPresented(request)
         verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        assertNull(sut.requestedPaymentRequestId.value)
         verify(paykitPaymentRequestDiagnostics, times(15)).logPresentationRejection(
             request.counterparty,
             IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending,
@@ -9107,9 +9113,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     private fun setRequestedPaymentRequestId(id: PaykitPaymentRequestId?) {
-        val field = AppViewModel::class.java.getDeclaredField("requestedPaymentRequestId")
+        val field = AppViewModel::class.java.getDeclaredField("_requestedPaymentRequestId")
         field.isAccessible = true
-        field.set(sut, id)
+        @Suppress("UNCHECKED_CAST")
+        val state = field.get(sut) as MutableStateFlow<PaykitPaymentRequestId?>
+        state.value = id
     }
 
     private fun activeContactPaymentContext(): ContactPaymentContext? {

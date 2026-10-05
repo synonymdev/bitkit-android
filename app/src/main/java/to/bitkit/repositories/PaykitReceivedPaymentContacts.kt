@@ -33,7 +33,7 @@ internal data class PaykitReceivedPaymentContacts private constructor(
                     .filterKeys(terms.acceptedPaymentEndpointIdentifiers::contains)
                 for ((identifier, payload) in acceptedEndpoints) {
                     val endpoint = PublicPaykitRepo.parseEndpoint(identifier, payload, network) ?: continue
-                    val value = endpoint.value
+                    val value = normalizeAddressCase(endpoint.value)
                     runCatching {
                         when {
                             endpoint.methodId.isOnchain && isValidAddress(value, network) -> {
@@ -66,6 +66,15 @@ internal data class PaykitReceivedPaymentContacts private constructor(
             if (record.terms?.amount?.asset != PaykitIssuerInterop.BITCOIN_ASSET) return null
             if (record.counterparty.trim().length > PubkyPublicKeyFormat.maximumInputLength) return null
             return PubkyPublicKeyFormat.normalized(record.counterparty)
+        }
+
+        private fun normalizeAddressCase(value: String): String {
+            if (value != value.uppercase()) return value
+            return if (value.startsWith("BC1") || value.startsWith("TB1") || value.startsWith("BCRT1")) {
+                value.lowercase()
+            } else {
+                value
+            }
         }
 
         private fun isValidAddress(value: String, network: Network): Boolean {

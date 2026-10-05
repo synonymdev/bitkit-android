@@ -13,7 +13,9 @@
   <actions>
     <action>Verify the incoming request row (testTag "PaymentRequestRow-&lt;payment-request-id&gt;") is visible</action>
     <action>Tap Pay (testTag "PaymentRequestPay-&lt;payment-request-id&gt;")</action>
+    <action>Verify progress (id "PaymentRequestPreparing") is visible while the request is being prepared</action>
     <action>Wait up to 35 seconds for the terminal error toast (testTag "PaymentRequestUnavailableToast")</action>
+    <action>Verify progress (id "PaymentRequestPreparing") is no longer visible</action>
     <action>Verify the toast title is "Payment Request" and its description is "The payment request is no longer available."</action>
     <action>Verify Payment Requests (testTag "PaymentRequestsScreen") remains visible</action>
     <action>Verify the incoming request row (testTag "PaymentRequestRow-&lt;payment-request-id&gt;") remains visible for a later retry</action>

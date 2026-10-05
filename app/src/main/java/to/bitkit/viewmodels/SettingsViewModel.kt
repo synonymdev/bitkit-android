@@ -21,17 +21,13 @@ import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.hasPaykitState
-import to.bitkit.data.hasPublicPaykitPublicationState
-import to.bitkit.data.paykitDisabled
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ContactPaymentSettingsRepo
-import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitError
-import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -45,8 +41,6 @@ class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val pubkyRepo: PubkyRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
-    private val publicPaykitRepo: PublicPaykitRepo,
-    private val privatePaykitRepo: PrivatePaykitRepo,
     private val widgetsStore: WidgetsStore,
     private val widgetsRepo: WidgetsRepo,
 ) : ViewModel() {
@@ -276,39 +270,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     private suspend fun clearPaykitState() {
-        val previousSettings = settingsStore.data.first()
-        val hadPublicPaykitState = previousSettings.hasPublicPaykitPublicationState()
-        val hadPrivatePaykitState = previousSettings.sharesPrivatePaykitEndpoints
-        settingsStore.update {
-            it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
-        }
-        removePaykitEndpoints(hadPublicPaykitState, hadPrivatePaykitState)
-    }
-
-    private suspend fun removePaykitEndpoints(hadPublicPaykitState: Boolean, hadPrivatePaykitState: Boolean) {
-        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
-
-        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
+        contactPaymentSettingsRepo.disablePaykit()
             .onFailure {
-                Logger.warn("Failed to remove private Paykit endpoints after disabling Paykit UI", it, context = TAG)
+                Logger.warn("Failed to remove Paykit endpoints after disabling Paykit UI", it, context = TAG)
             }
-
-        if (hadPublicPaykitState) {
-            publicPaykitRepo.syncPublishedEndpoints(publish = false)
-                .onSuccess {
-                    settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                }
-                .onFailure {
-                    settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
-                    Logger.warn("Failed to remove public Paykit endpoints after disabling Paykit UI", it, context = TAG)
-                }
-        } else if (hadPrivatePaykitState) {
-            publicPaykitRepo.syncPaykitApp(privateSharingEnabled = false)
-                .onFailure {
-                    settingsStore.update { settings -> settings.copy(publicPaykitCleanupPending = true) }
-                    Logger.warn("Failed to update Paykit app capabilities after disabling Paykit UI", it, context = TAG)
-                }
-        }
     }
 
     val isPinEnabled = settingsStore.data.map { it.isPinEnabled }

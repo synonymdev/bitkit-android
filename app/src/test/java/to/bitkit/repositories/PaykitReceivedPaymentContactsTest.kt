@@ -42,7 +42,7 @@ class PaykitReceivedPaymentContactsTest {
         const val TESTNET_ADDRESS = "tb1qexample"
 
         /** Network-ambiguous prefixes reported as testnet by the mocked decoder. */
-        val LEGACY_ADDRESSES = listOf("mlegacy", "nlegacy", "2legacy")
+        val LEGACY_ADDRESSES = listOf("mLegacy", "nlegacy", "2legacy")
 
         /** Regtest on-chain endpoint identifier for address fixtures. */
         const val METHOD = "btc-regtest-p2wpkh"
@@ -91,6 +91,24 @@ class PaykitReceivedPaymentContactsTest {
         val contacts = index(receivedRequest())
         assertEquals(setOf(BUYER), contacts.contactsForAddresses(listOf(ADDRESS)))
         assertTrue(contacts.contactsForAddresses(listOf(OTHER_ADDRESS)).isEmpty())
+    }
+
+    @Test
+    fun `address normalization preserves validation and ambiguity`() = withDecoder {
+        val uppercase = receivedRequest(endpoints = mapOf(METHOD to payload(ADDRESS.uppercase())))
+        assertEquals(setOf(BUYER), index(uppercase).contactsForAddresses(listOf(ADDRESS)))
+        for (mixedCase in listOf("B" + ADDRESS.drop(1), "b" + ADDRESS.uppercase().drop(1))) {
+            val request = receivedRequest(endpoints = mapOf(METHOD to payload(mixedCase)))
+            assertTrue(index(request).contactsForAddresses(listOf(ADDRESS)).isEmpty())
+        }
+        val legacy = LEGACY_ADDRESSES.first()
+        val legacyContacts = index(receivedRequest(endpoints = mapOf(METHOD to payload(legacy))))
+        assertEquals(setOf(BUYER), legacyContacts.contactsForAddresses(listOf(legacy)))
+        assertTrue(legacyContacts.contactsForAddresses(listOf(legacy.lowercase())).isEmpty())
+        assertEquals(
+            setOf(BUYER, OTHER_BUYER),
+            index(uppercase, receivedRequest(counterparty = OTHER_BUYER)).contactsForAddresses(listOf(ADDRESS)),
+        )
     }
 
     @Test

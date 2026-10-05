@@ -83,6 +83,16 @@ class SettingsViewModelTest : BaseUnitTest() {
         whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
+        val sharingRepo = ContactPaymentSettingsRepo(
+            settingsStore,
+            publicPaykitRepo,
+            privatePaykitRepo,
+            pubkyRepo,
+            testDispatcher,
+        )
+        whenever { contactPaymentSettingsRepo.disablePaykit() }.doSuspendableAnswer {
+            sharingRepo.disablePaykit()
+        }
 
         sut = createViewModel()
     }
@@ -253,8 +263,6 @@ class SettingsViewModelTest : BaseUnitTest() {
         settingsStore = settingsStore,
         pubkyRepo = pubkyRepo,
         contactPaymentSettingsRepo = contactPaymentSettingsRepo,
-        publicPaykitRepo = publicPaykitRepo,
-        privatePaykitRepo = privatePaykitRepo,
         widgetsStore = widgetsStore,
         widgetsRepo = widgetsRepo,
     )

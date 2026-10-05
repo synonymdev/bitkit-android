@@ -739,7 +739,8 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                val blockedPeers = handle.linkedPeers().filter { it.state == LinkedPeerState.BLOCKED }
+                val peers = handle.linkedPeers()
+                val blockedPeers = peers.filter { it.state == LinkedPeerState.BLOCKED }
                 val updates = counterparties.filterNot { counterparty ->
                     blockedPeers.any {
                         PubkyPublicKeyFormat.matches(it.counterparty, counterparty)
@@ -750,6 +751,19 @@ class PaykitSdkService @Inject constructor(
                 if (publicKey != null) {
                     val app = handle.paykitAppRegistry(publicKey)?.apps?.find { it.appId == "bitkit" }
                     if (app?.capabilities?.privatePayments == false) return@withStateRevisionTracking null
+                }
+                for (update in updates) {
+                    if (peers.any {
+                            it.state == LinkedPeerState.RECOVERY_REQUIRED &&
+                                PubkyPublicKeyFormat.matches(it.counterparty, update.counterparty)
+                        }
+                    ) {
+                        runSuspendCatching {
+                            handle.ensureLinkWithPeer(update.counterparty, 1u)
+                        }.onFailure {
+                            Logger.warn("Failed to recover private Paykit link before withdrawal", it, context = TAG)
+                        }
+                    }
                 }
                 handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                     updates = updates,
