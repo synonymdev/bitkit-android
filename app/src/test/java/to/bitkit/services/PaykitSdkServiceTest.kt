@@ -17,6 +17,7 @@ import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
+import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivateStreamIntakeReport
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
@@ -1174,8 +1175,8 @@ class PaykitSdkServiceTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(LinkedPeerState.BLOCKED)))
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-        assertNull(service.clearPrivatePaymentList(RING_PUBKY))
-        verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any())
+        assertNull(service.clearPrivatePaymentLists(listOf(RING_PUBKY)))
+        verify(sdk, never()).syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())
     }
 
     @Test
@@ -1191,10 +1192,43 @@ class PaykitSdkServiceTest {
         )
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
 
-        assertNull(service.clearPrivatePaymentList(RING_PUBKY))
+        assertNull(service.clearPrivatePaymentLists(listOf(RING_PUBKY)))
 
-        verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any())
+        verify(sdk, never()).syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())
         verify(sdk, never()).publishPaykitApp(any(), any())
+    }
+
+    @Test
+    fun `withdrawal batches preflight and delegates repeated empty lists`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val other = "pubky5rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val blocked = "pubky6rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val blockedPeer = contactPeer(LinkedPeerState.BLOCKED).copy(counterparty = blocked)
+        val capabilities = PaykitAppCapabilities(true, true, false, true)
+        whenever(sdk.linkedPeers()).thenReturn(listOf(blockedPeer))
+        whenever(sdk.identityStatus()).thenReturn(
+            IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
+        )
+        whenever(sdk.paykitAppRegistry(RING_PUBKY)).thenReturn(
+            PaykitAppRegistry(1u, null, listOf(PaykitApp("bitkit", "Bitkit", capabilities)), null, emptyMap()),
+        )
+        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+        val updates = listOf(RING_PUBKY, other).map { PrivatePaymentListReservationUpdateInput(it, emptyList()) }
+        whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)).thenReturn(report)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        assertNull(service.clearPrivatePaymentLists(emptyList()))
+        verifyNoInteractions(sdk)
+        val recreatedService = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        for (client in listOf(service, service, recreatedService)) {
+            assertEquals(report, client.clearPrivatePaymentLists(listOf(RING_PUBKY, other, blocked)))
+        }
+
+        verify(sdk, times(3)).linkedPeers()
+        verify(sdk, times(3)).identityStatus()
+        verify(sdk, times(3)).paykitAppRegistry(RING_PUBKY)
+        verify(sdk, times(3)).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
+        verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any())
     }
 
     @Test

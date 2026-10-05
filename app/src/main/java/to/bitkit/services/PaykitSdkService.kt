@@ -732,26 +732,29 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun clearPrivatePaymentList(
-        counterparty: String,
+    suspend fun clearPrivatePaymentLists(
+        counterparties: List<String>,
     ): PrivatePaymentListDeliveryReport? {
+        if (counterparties.isEmpty()) return null
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                if (
-                    handle.linkedPeers().any {
-                        it.state == LinkedPeerState.BLOCKED &&
-                            PubkyPublicKeyFormat.matches(it.counterparty, counterparty)
+                val blockedPeers = handle.linkedPeers().filter { it.state == LinkedPeerState.BLOCKED }
+                val updates = counterparties.filterNot { counterparty ->
+                    blockedPeers.any {
+                        PubkyPublicKeyFormat.matches(it.counterparty, counterparty)
                     }
-                ) {
-                    return@withStateRevisionTracking null
-                }
+                }.map { PrivatePaymentListReservationUpdateInput(it, emptyList()) }
+                if (updates.isEmpty()) return@withStateRevisionTracking null
                 val publicKey = handle.identityStatus()?.publicKey
                 if (publicKey != null) {
                     val app = handle.paykitAppRegistry(publicKey)?.apps?.find { it.appId == "bitkit" }
                     if (app?.capabilities?.privatePayments == false) return@withStateRevisionTracking null
                 }
-                handle.clearPrivatePaymentListAndProcessOutbound(counterparty)
+                handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
+                    updates = updates,
+                    clearUnlistedLinkedPeers = false,
+                )
             }
         }
     }

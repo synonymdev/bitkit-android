@@ -10,6 +10,7 @@ import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentRequestLifecycleState
+import com.synonym.paykit.PrivatePaymentListDeliveryFailure
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentListSyncChange
@@ -136,7 +137,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             LinkedPeerHandshakeReport(it.getArgument(0), LinkedPeerState.LINKED, 1uL, null)
         }
         whenever { paykitSdkService.pendingOutboundPrivateCounterparties() }.thenReturn(emptyList())
-        whenever { paykitSdkService.clearPrivatePaymentList(any()) }.thenReturn(privateListDeliveryReport())
+        whenever { paykitSdkService.clearPrivatePaymentLists(any()) }.thenAnswer {
+            privateListDeliveryReport(clearedCounterparties = it.getArgument(0))
+        }
         whenever { publicPaykitRepo.beginPayment(any()) }
             .thenReturn(Result.success(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic")))
         whenever { publicPaykitRepo.payableEndpoints(any()) }.thenAnswer { it.getArgument<List<Endpoint>>(0) }
@@ -488,7 +491,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(cleanup.isSuccess, cleanup.exceptionOrNull().toString())
         verifyBlocking(addressReservationRepo, never()) { currentOrRotatedAddress(any()) }
         verifyBlocking(paykitSdkService, never()) { syncPrivatePaymentListsWithReservations(any(), any()) }
-        verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentList(any()) }
+        verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentLists(any()) }
     }
 
     @Test
@@ -508,14 +511,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(sut.disableSharingAndPruneUnsavedContactState(emptyList()).isFailure)
         assertTrue(cacheData.value.contacts.isEmpty())
         assertTrue(cacheData.value.cleanupPending)
-        verify(paykitSdkService, never()).clearPrivatePaymentList(any())
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any())
 
         failLookup = false
         sut.retryPendingEndpointRemoval(emptyList()).getOrThrow()
 
-        verify(paykitSdkService).clearPrivatePaymentList(CONTACT_KEY)
-        verify(paykitSdkService, never()).clearPrivatePaymentList(OTHER_CONTACT_KEY)
-        verify(paykitSdkService, never()).clearPrivatePaymentList(recoveringPublicKey)
+        verify(paykitSdkService).clearPrivatePaymentLists(listOf(CONTACT_KEY))
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(listOf(OTHER_CONTACT_KEY))
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(listOf(recoveringPublicKey))
         assertFalse(cacheData.value.cleanupPending)
         verify(publicPaykitRepo).syncPaykitApp()
     }
@@ -614,7 +617,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                     throw AppError("Delivery unavailable")
                 }
                 privateListDeliveryReport()
-            }.whenever(paykitSdkService).clearPrivatePaymentList(CONTACT_KEY)
+            }.whenever(paykitSdkService).clearPrivatePaymentLists(listOf(CONTACT_KEY))
 
             val result = sut.disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
 
@@ -681,7 +684,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val result = sut.disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
 
         assertTrue(result.isSuccess)
-        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentLists(listOf(CONTACT_KEY)) }
         verify(publicPaykitRepo).syncPaykitApp()
         assertTrue(cacheData.value.contacts.isEmpty())
     }
@@ -695,7 +698,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
         settingsData.value = settingsData.value.copy(sharesPrivatePaykitEndpoints = false)
-        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY) }.thenReturn(
+        whenever { paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY)) }.thenReturn(
             privateListDeliveryReport(
                 failedToQueue = listOf(
                     PrivatePaymentListSyncChange(
@@ -743,7 +746,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.retryPendingEndpointRemoval(listOf(CONTACT_KEY)).getOrThrow()
 
-        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentLists(listOf(CONTACT_KEY)) }
         assertFalse(cacheData.value.cleanupPending)
     }
 
@@ -777,7 +780,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitOnchainEnabled = true,
         )
         sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
-        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY) }.thenReturn(
+        whenever { paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY)) }.thenReturn(
             privateListDeliveryReport(
                 failedToQueue = listOf(
                     PrivatePaymentListSyncChange(
@@ -803,7 +806,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitOnchainEnabled = true,
         )
         sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
-        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY) }
+        whenever { paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY)) }
             .thenReturn(privateListDeliveryReport(clearedCounterparties = listOf(CONTACT_KEY)))
         whenever { paykitSdkService.pendingOutboundPrivateCounterparties() }
             .thenReturn(listOf(CONTACT_KEY))
@@ -833,7 +836,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         assertTrue(cacheData.value.contacts.isEmpty())
         assertTrue(cacheData.value.deletedContactCleanupPendingPublicKeys.isEmpty())
-        verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentList(any()) }
+        verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentLists(any()) }
     }
 
     @Test
@@ -846,7 +849,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val result = sut.removePublishedEndpointsForCleanup("test")
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
-        verify(paykitSdkService).clearPrivatePaymentList(CONTACT_KEY)
+        verify(paykitSdkService).clearPrivatePaymentLists(listOf(CONTACT_KEY))
         verify(publicPaykitRepo).syncPaykitApp()
         verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any())
         verify(paykitSdkService, never()).processOutboundPrivateMessages(any())
@@ -881,8 +884,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val result = sut.removePublishedEndpointsForCleanup("test")
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
-        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY) }
-        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentLists(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)) }
         verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
         verify(paykitSdkService, never()).ensureLinkWithPeer(eq(OTHER_CONTACT_KEY), any())
         verifyBlocking(paykitSdkService, atLeast(1)) { linkedPeers() }
@@ -910,8 +912,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val result = sut.retryPendingEndpointRemoval(emptyList())
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
-        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY) }
-        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentLists(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)) }
         verifyBlocking(paykitSdkService, atLeast(1)) { linkedPeers() }
         assertTrue(cacheData.value.contacts.isEmpty())
         assertTrue(cacheData.value.deletedContactCleanupPendingPublicKeys.isEmpty())
@@ -945,7 +946,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut = createSut()
         val cleanupStarted = CompletableDeferred<Unit>()
         val resumeCleanup = CompletableDeferred<Unit>()
-        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY) }
+        whenever { paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY)) }
             .doSuspendableAnswer {
                 cleanupStarted.complete(Unit)
                 resumeCleanup.await()
@@ -974,31 +975,33 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `cleanup isolates a failed contact while clearing successful contacts`() = test {
-        cacheData.value = PrivatePaykitCacheData(
-            contacts = mapOf(
-                CONTACT_KEY to cachedPublishedContact(),
-                OTHER_CONTACT_KEY to cachedPublishedContact(),
-            ),
-        )
-        sut = createSut()
-        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY) }.thenReturn(
-            privateListDeliveryReport(
-                failedToQueue = listOf(
-                    PrivatePaymentListSyncChange(
-                        counterparty = CONTACT_KEY,
-                        outboundMessageId = null,
-                        error = mock(),
-                    ),
+        for (failQueue in listOf(true, false)) {
+            cacheData.value = PrivatePaykitCacheData(
+                contacts = mapOf(
+                    CONTACT_KEY to cachedPublishedContact(),
+                    OTHER_CONTACT_KEY to cachedPublishedContact(),
                 ),
-            ),
-        )
+            )
+            sut = createSut()
+            whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY, OTHER_CONTACT_KEY))).thenReturn(
+                privateListDeliveryReport(
+                    clearedCounterparties = listOf(OTHER_CONTACT_KEY),
+                    failedToQueue = if (failQueue) listOf(privateListSyncChange(CONTACT_KEY)) else emptyList(),
+                    failedToDeliver = if (failQueue) {
+                        emptyList()
+                    } else {
+                        listOf(PrivatePaymentListDeliveryFailure(CONTACT_KEY.removePrefix("pubky"), null, null, mock()))
+                    },
+                ),
+            )
 
-        val result = sut.removePublishedEndpointsForCleanup("test")
+            val result = sut.removePublishedEndpointsForCleanup("test")
 
-        assertTrue(result.isFailure)
-        assertTrue(CONTACT_KEY in cacheData.value.contacts)
-        assertTrue(OTHER_CONTACT_KEY !in cacheData.value.contacts)
-        assertTrue(cacheData.value.cleanupPending)
+            assertTrue(result.isFailure)
+            assertTrue(CONTACT_KEY in cacheData.value.contacts)
+            assertTrue(OTHER_CONTACT_KEY !in cacheData.value.contacts)
+            assertTrue(cacheData.value.cleanupPending)
+        }
     }
 
     @Test
@@ -1897,6 +1900,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         queuedCounterparties: List<String> = emptyList(),
         clearedCounterparties: List<String> = emptyList(),
         failedToQueue: List<PrivatePaymentListSyncChange> = emptyList(),
+        failedToDeliver: List<PrivatePaymentListDeliveryFailure> = emptyList(),
     ) = PrivatePaymentListDeliveryReport(
         queued = queuedCounterparties.map {
             PrivatePaymentListSyncChange(
@@ -1913,7 +1917,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             )
         },
         failedToQueue = failedToQueue,
-        failedToDeliver = emptyList(),
+        failedToDeliver = failedToDeliver,
     )
 
     private fun cachedPublishedContact() = PrivatePaykitContactCacheData(

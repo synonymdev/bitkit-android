@@ -1445,35 +1445,30 @@ class PrivatePaykitRepo @Inject constructor(
         publicKeys: Collection<String>,
         linkedPublicKeys: Set<String>,
     ): PrivateEndpointCleanupPreparation {
-        val failedPublicKeys = mutableSetOf<String>()
-        val clearedRetryKeys = mutableListOf<String>()
-        var firstError: Throwable? = null
-        publicKeys.forEach { publicKey ->
-            if (publicKey !in linkedPublicKeys &&
-                state?.contacts?.get(publicKey)?.hasPublishedPrivatePaymentList != true
-            ) {
-                return@forEach
-            }
-            runSuspendCatching {
-                val report = paykitSdkService.clearPrivatePaymentList(publicKey)
-                    ?: return@runSuspendCatching false
-                logPrivatePaymentListDeliveryFailures(report, "cleanup")
-                if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
-                    throw PrivatePaykitError.PrivateUnavailable
-                }
-                true
-            }.onSuccess {
-                if (it) clearedRetryKeys += publicKey
-            }.onFailure {
-                Logger.warn(
-                    "Failed to clear private Paykit endpoints for '${redacted(publicKey)}': ${it::class.simpleName}",
-                    context = TAG,
-                )
-                failedPublicKeys += publicKey
-                firstError = firstError ?: it
-            }
+        val cleanupKeys = publicKeys.filter {
+            it in linkedPublicKeys || state?.contacts?.get(it)?.hasPublishedPrivatePaymentList == true
         }
-        return PrivateEndpointCleanupPreparation(clearedRetryKeys, failedPublicKeys, firstError)
+        if (cleanupKeys.isEmpty()) return PrivateEndpointCleanupPreparation(emptyList(), emptySet(), null)
+
+        return runSuspendCatching {
+            val report = paykitSdkService.clearPrivatePaymentLists(cleanupKeys)
+                ?: return@runSuspendCatching PrivateEndpointCleanupPreparation(emptyList(), emptySet(), null)
+            logPrivatePaymentListDeliveryFailures(report, "cleanup")
+            val failedPublicKeys = (
+                report.failedToQueue.map { it.counterparty } +
+                    report.failedToDeliver.map { it.counterparty }
+                ).mapNotNull(::normalizedPublicKey).toSet()
+            val clearedRetryKeys = report.cleared.mapNotNull { normalizedPublicKey(it.counterparty) }
+                .filterNot { it in failedPublicKeys }
+            PrivateEndpointCleanupPreparation(
+                clearedRetryKeys,
+                failedPublicKeys,
+                PrivatePaykitError.PrivateUnavailable.takeIf { failedPublicKeys.isNotEmpty() },
+            )
+        }.getOrElse {
+            Logger.warn("Failed to clear private Paykit endpoints: ${it::class.simpleName}", context = TAG)
+            PrivateEndpointCleanupPreparation(emptyList(), cleanupKeys.toSet(), it)
+        }
     }
 
     private suspend fun clearPublishedEndpointCache(publicKeys: Collection<String>) {
