@@ -746,6 +746,25 @@ private val SubscriptionRoute.id: PaykitSubscriptionId
         is SubscriptionRoute.Cancel -> id
     }
 
+/** Keeps the Review & Subscribe layout on screen while the first payment of an accepted subscription is sent. */
+@Composable
+fun SubscriptionFirstPaymentProgress(
+    subscription: PaykitSubscription,
+    contact: PubkyProfile,
+    modifier: Modifier = Modifier,
+) {
+    SubscriptionReview(
+        subscription = subscription,
+        contact = contact,
+        payOnAcceptance = true,
+        now = rememberSubscriptionNow(persistentListOf(subscription)),
+        onDetails = {},
+        onSubscribe = { true },
+        isPaying = true,
+        modifier = modifier
+    )
+}
+
 @Composable
 private fun SubscriptionReview(
     subscription: PaykitSubscription,
@@ -754,11 +773,13 @@ private fun SubscriptionReview(
     now: Instant,
     onDetails: () -> Unit,
     onSubscribe: suspend () -> Boolean,
+    modifier: Modifier = Modifier,
+    isPaying: Boolean = false,
 ) {
-    var loading by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(isPaying) }
     val scope = rememberCoroutineScope()
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
@@ -798,7 +819,7 @@ private fun SubscriptionReview(
             modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally)
         )
         FillHeight()
-        if (subscription.isProposalActionable(now)) {
+        if (loading || subscription.isProposalActionable(now)) {
             SwipeToConfirm(
                 text = stringResource(
                     if (payOnAcceptance) {
@@ -809,6 +830,7 @@ private fun SubscriptionReview(
                 ),
                 color = Colors.Brand,
                 loading = loading,
+                confirmed = isPaying,
                 onConfirm = {
                     loading = true
                     scope.launch {
@@ -1002,7 +1024,7 @@ private fun SubscriptionCancel(
     }
 }
 
-private fun List<PubkyProfile>.contactFor(subscription: PaykitSubscription): PubkyProfile =
+internal fun List<PubkyProfile>.contactFor(subscription: PaykitSubscription): PubkyProfile =
     firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, subscription.counterparty) }
         ?: PubkyProfile.placeholder(subscription.counterparty)
 

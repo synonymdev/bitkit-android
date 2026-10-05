@@ -126,6 +126,7 @@ fun SendConfirmScreen(
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onNavigateToPin: () -> Unit,
+    autoPayContent: (@Composable () -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var isLoading by rememberSaveable { mutableStateOf(false) }
@@ -188,6 +189,7 @@ fun SendConfirmScreen(
         showBiometrics = showBiometrics,
         canGoBack = canGoBack,
         initialShowDetails = uiState.isInitialSubscriptionPayment && !uiState.shouldAutomaticallyPay,
+        autoPayContent = autoPayContent,
         onBack = onBack,
         onEvent = onEvent,
         onClickAddTag = onClickAddTag,
@@ -213,6 +215,21 @@ fun SendConfirmScreen(
 }
 
 @Composable
+private fun AutoPayOverlay(
+    isVisible: Boolean,
+    content: (@Composable () -> Unit)?,
+) {
+    if (!isVisible || content == null) return
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .gradientBackground()
+    ) {
+        content()
+    }
+}
+
+@Composable
 @Suppress("CyclomaticComplexMethod")
 internal fun SendConfirmContent(
     uiState: SendUiState,
@@ -224,6 +241,7 @@ internal fun SendConfirmContent(
     preparingContact: PubkyProfile? = null,
     canGoBack: Boolean = true,
     initialShowDetails: Boolean = false,
+    autoPayContent: (@Composable () -> Unit)? = null,
     onBack: () -> Unit = {},
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
@@ -288,6 +306,8 @@ internal fun SendConfirmContent(
                 )
             }
         }
+
+        AutoPayOverlay(isVisible = !isPreparing && isAutomaticPaymentLoading, content = autoPayContent)
 
         if (showBiometrics && !isPreparing) {
             BiometricsView(
