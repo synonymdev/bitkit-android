@@ -1,0 +1,40 @@
+<journey name="cached profile header while loading">
+  <description>
+    Verifies that opening Profile straight after a relaunch, while the signed-in profile is still
+    loading, shows the cached name read-only. The edit, copy, share, QR code and tag controls are
+    absent. The full profile then replaces the cached header in place.
+
+    Precondition: an onboarded dev wallet with Paykit enabled (the default), PIN off, and an active
+    Pubky profile with a name and an avatar, created in Bitkit or adopted from Pubky Ring. Profile
+    must have loaded fully once on this install, so the cache records which key the name and avatar
+    belong to; the first steps do that.
+
+    A warm network can finish the load before the first inspection, so an "already loaded" result
+    repeats the relaunch once instead of failing. To keep the load running on an emulator, run adb
+    emu network delay gprs and adb emu network speed edge before the first step, and adb emu network
+    delay none and adb emu network speed full after the last; a physical device needs another way to
+    slow its connection. If the load fails instead, the cached header gives way to the retry state
+    (testTag "ProfileRetry"), which is not what this journey covers: relax the throttle and repeat.
+
+    While the session is still restoring, Profile shows a spinner under the "Profile" title with no
+    name (testTag "ProfileLoading"), as iOS shows a bare initialization spinner, and the cached
+    header follows once the session is back. One step differs from iOS: Android also checks the
+    cached avatar from a screenshot, because it comes from the Pubky image disk cache, which shows
+    it without the network. See README.md.
+  </description>
+  <actions>
+    <action>Tap the header profile button (testTag "ProfileButton")</action>
+    <action>Wait for the full profile name (testTag "ProfileViewName") and note the name it shows</action>
+    <action>Run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`</action>
+    <action>If the PIN screen appears, unlock the wallet</action>
+    <action>As soon as the home screen shows, tap the header profile button (testTag "ProfileButton")</action>
+    <action>If a spinner under the "Profile" title with no name (testTag "ProfileLoading") shows first, wait for it to give way. That is the session restore, which has to finish before the cached header can show</action>
+    <action>Verify the cached profile header (testTag "ProfileCachedHeader") is visible and its name (testTag "ProfileCachedName") matches the name noted before the relaunch. If the full profile name (testTag "ProfileViewName") is already showing, the load finished first: report "already loaded" and repeat from the force-stop step once rather than failing</action>
+    <action>Verify the cached header is read-only: edit (testTag "ProfileEdit"), copy (testTag "ProfileCopy"), share (testTag "ProfileShare"), the QR code (testTag "ProfileQRCode") and add tag (testTag "ProfileAddTag") are all absent</action>
+    <action>Take a screenshot and verify the cached header shows the profile's avatar, not the placeholder icon</action>
+    <action>Wait for the full profile name (testTag "ProfileViewName")</action>
+    <action>Verify the cached profile header (testTag "ProfileCachedHeader") is gone and the full profile name (testTag "ProfileViewName") matches the cached name</action>
+    <action>Verify edit (testTag "ProfileEdit") and the QR code (testTag "ProfileQRCode") are visible</action>
+  </actions>
+</journey>

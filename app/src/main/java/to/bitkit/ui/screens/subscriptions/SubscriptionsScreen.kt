@@ -103,6 +103,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.SubscriptionClockOffset
 import to.bitkit.viewmodels.AppViewModel
 import java.math.BigDecimal
 import java.math.MathContext
@@ -667,7 +668,7 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
                 VerticalSpacer(16.dp)
             }
         } else {
-            val payOnAcceptance = subscription.paymentDueOnAcceptance(now) != null
+            val payOnAcceptance = subscription.paymentDueOnAcceptance(now, Clock.System.now()) != null
             when (route) {
                 is SubscriptionRoute.Review -> SubscriptionReview(
                     subscription = subscription,
@@ -765,7 +766,7 @@ private fun SubscriptionReview(
         MoneyDisplay(sats = subscription.displaySats, showSymbol = true)
         VerticalSpacer(24.dp)
         SubscriptionProviderCard(subscription, contact, onClick = onDetails)
-        subscription.paymentDueOnAcceptance(now)?.billingPeriod?.let { period ->
+        subscription.paymentDueOnAcceptance(now, Clock.System.now())?.billingPeriod?.let { period ->
             VerticalSpacer(16.dp)
             BodyS(
                 text = stringResource(
@@ -962,7 +963,7 @@ private fun SubscriptionCancel(
         SubscriptionProviderCard(
             subscription = subscription,
             contact = contact,
-            subtitle = subscription.rowSubtitle(Clock.System.now()),
+            subtitle = subscription.rowSubtitle(SubscriptionClockOffset.subscriptionNow()),
             onClick = onDetails,
         )
         FillHeight()
@@ -1141,11 +1142,12 @@ private fun PaykitSubscription.renewalText(now: Instant): String {
 
 @Composable
 private fun rememberSubscriptionNow(subscriptions: ImmutableList<PaykitSubscription>): Instant {
-    var now by remember(subscriptions) { mutableStateOf(Clock.System.now()) }
+    var now by remember(subscriptions) { mutableStateOf(SubscriptionClockOffset.subscriptionNow()) }
     LaunchedEffect(subscriptions, now) {
-        val nextTransition = nextSubscriptionTransition(subscriptions, now) ?: return@LaunchedEffect
+        val nextTransition = nextSubscriptionTransition(subscriptions, now, Clock.System.now())
+            ?: return@LaunchedEffect
         delay(nextTransition - now)
-        now = Clock.System.now()
+        now = SubscriptionClockOffset.subscriptionNow()
     }
     return now
 }
@@ -1153,13 +1155,14 @@ private fun rememberSubscriptionNow(subscriptions: ImmutableList<PaykitSubscript
 internal fun nextSubscriptionTransition(
     subscriptions: List<PaykitSubscription>,
     now: Instant,
+    acceptedAt: Instant = now,
 ): Instant? {
     val activeSubscriptions = subscriptions.filter { it.isActive(now) }
     val dates = subscriptions.flatMap {
         listOf(it.recurrence.startsAt, it.proposalExpiresAt, it.recurrence.endsAt)
     }.filterNotNull().toMutableList()
     dates += activeSubscriptions.mapNotNull { it.recurrence.nextPeriodAfter(now)?.startsAt }
-    dates += subscriptions.mapNotNull { it.paymentDueOnAcceptance(now)?.billingPeriod?.endsAt }
+    dates += subscriptions.mapNotNull { it.paymentDueOnAcceptance(now, acceptedAt)?.billingPeriod?.endsAt }
     dates += subscriptions.mapNotNull { it.canceledPaidThrough() }
     return dates.filter { it > now }.minOrNull()
 }
