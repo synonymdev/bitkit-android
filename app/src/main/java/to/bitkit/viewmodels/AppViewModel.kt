@@ -6534,7 +6534,7 @@ data class SendUiState(
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
     val shouldAutomaticallyPay: Boolean
-        get() = isInitialSubscriptionPayment && payMethod == SendMethod.LIGHTNING && hardwareWalletId == null
+        get() = isInitialSubscriptionPayment && hardwareWalletId == null
 }
 
 @Immutable
