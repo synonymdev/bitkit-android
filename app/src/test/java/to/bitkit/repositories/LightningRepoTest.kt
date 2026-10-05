@@ -43,6 +43,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -89,12 +90,20 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LargeClass")
 class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
+
+        /** Mirrors the interval at which `LightningRepo.waitForUsableChannels` re-reads the channels. */
+        private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
+
+        /** Mirrors how long `LightningRepo.waitForUsableChannels` polls before giving up. */
+        private val CHANNELS_USABLE_TIMEOUT = 15.seconds
+
         private const val BACKGROUND_STOP_DELAY_MS = 5_000L
 
         /** Mirrors the bounded start retry delay `LightningRepo.startNode` waits before its one retry. */
@@ -1276,6 +1285,85 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `waitForUsableChannels re-reads a channel that becomes usable without a node event`() = test {
+        val notUsable = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        startNodeForTesting()
+        assertFalse(sut.canSend(1000uL))
+        val usable = notUsable.copy(isUsable = true, nextOutboundHtlcLimitMsat = 2_000_000u)
+        whenever(lightningService.channels).thenReturn(listOf(usable))
+        clearInvocations(lightningService)
+
+        val wait = async { sut.waitForUsableChannels() }
+        runCurrent()
+
+        assertTrue(wait.isCompleted)
+        assertTrue(sut.canSend(1000uL))
+        verify(lightningService, never()).balances
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `waitForUsableChannels polls until a channel is usable and stops at the timeout otherwise`() = test {
+        val notUsable = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        startNodeForTesting()
+
+        val wait = async { sut.waitForUsableChannels() }
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY * 3)
+        assertFalse(wait.isCompleted)
+
+        whenever(lightningService.channels).thenReturn(
+            listOf(notUsable.copy(isUsable = true, nextOutboundHtlcLimitMsat = 2_000_000u)),
+        )
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY)
+        testScheduler.runCurrent()
+        assertTrue(wait.isCompleted)
+
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        sut.syncState()
+        val timedOut = async { sut.waitForUsableChannels() }
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_TIMEOUT - 1.milliseconds)
+        assertFalse(timedOut.isCompleted)
+        testScheduler.advanceTimeBy(1.milliseconds)
+        testScheduler.runCurrent()
+        assertTrue(timedOut.isCompleted)
+    }
+
+    @Test
+    fun `refreshChannelsAndPeers returns a failure and keeps the last channels when a read fails`() = test {
+        val channel = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenThrow(IllegalStateException("read failed"))
+
+        val result = sut.refreshChannelsAndPeers()
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf(channel), sut.lightningState.value.channels)
+    }
+
+    @Test
+    fun `refreshChannelsAndPeers runs the callback right after publishing the channels and fails with it`() = test {
+        val old = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(old))
+        startNodeForTesting()
+        val recovered = old.copy(isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(recovered))
+        var seen: List<ChannelDetails>? = null
+
+        val result = sut.refreshChannelsAndPeers { seen = sut.lightningState.value.channels }
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(recovered), seen)
+
+        val failed = sut.refreshChannelsAndPeers { error("callback failed") }
+
+        assertTrue(failed.isFailure)
+        assertEquals(listOf(recovered), sut.lightningState.value.channels)
+    }
+
+    @Test
     fun `wipeStorage should stop node and call service wipe`() = test {
         startNodeForTesting()
         whenever(lightningService.stop()).thenReturn(Unit)
@@ -1349,6 +1437,55 @@ class LightningRepoTest : BaseUnitTest() {
 
         val result = sut.disconnectPeer(testPeer)
         assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun `sync rethrows a cancellation without recording a sync error`() = test {
+        // Offline keeps a retry loop from running, in case the cancellation is recorded as an error
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
+        startNodeForTesting()
+        var holdSync = true
+        var syncCalls = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncCalls++
+            if (holdSync) awaitCancellation()
+        }
+
+        val job = launch { sut.sync() }
+        runCurrent()
+        job.cancelAndJoin()
+
+        assertTrue(job.isCancelled)
+        assertNull(sut.lightningState.value.lastSyncError)
+        assertTrue(sut.lightningState.value.isSyncHealthy)
+        assertFalse(sut.lightningState.value.isSyncingWallet)
+
+        holdSync = false
+        assertTrue(sut.sync().isSuccess)
+        assertEquals(2, syncCalls)
+    }
+
+    @Test
+    fun `sync requested while a cancelled sync runs still runs`() = test {
+        // Offline keeps the retry loop from running the requested sync instead
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
+        startNodeForTesting()
+        var holdSync = true
+        var syncCalls = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncCalls++
+            if (holdSync) awaitCancellation()
+        }
+        val job = launch { sut.sync() }
+        runCurrent()
+        assertTrue(sut.sync().isSuccess)
+
+        holdSync = false
+        job.cancelAndJoin()
+        runCurrent()
+
+        assertEquals(2, syncCalls)
+        assertNull(sut.lightningState.value.lastSyncError)
     }
 
     @Test

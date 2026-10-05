@@ -1,4 +1,5 @@
 @file:OptIn(ExperimentalTime::class)
+@file:Suppress("TooManyFunctions")
 
 package to.bitkit.ui.screens.subscriptions
 
@@ -71,6 +72,8 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionId
+import to.bitkit.repositories.canceledPaidThrough
+import to.bitkit.repositories.runsUntilPaidThrough
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -168,12 +171,10 @@ internal fun SubscriptionsContent(
     onCreateSubscription: () -> Unit,
     paymentsContent: @Composable (topPadding: Dp) -> Unit,
 ) {
-    val proposals = subscriptions.filter { it.isPayer && it.isProposalVisible(now) }
-    val active = subscriptions.filter { it.isPayer && it.isActive(now) }
-    val expired = subscriptions.filter { it.isPayer && it.isExpired(now) && acceptedAt(it.id) != null }
-    val created = subscriptions.filter { it.isCreatedVisible(now) }
-    val hasVisibleSubscriptions =
+    val sections = subscriptionSections(subscriptions, acceptedAt, now)
+    val hasVisibleSubscriptions = with(sections) {
         proposals.isNotEmpty() || active.isNotEmpty() || expired.isNotEmpty() || created.isNotEmpty()
+    }
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialTab.ordinal) }
     val selectedTab = SubscriptionTab.entries[selectedTabIndex]
 
@@ -215,34 +216,34 @@ internal fun SubscriptionsContent(
                     item {
                         SubscriptionMetrics(
                             monthlyCostSats = subscriptionMonthlyCostSats(subscriptions, now),
-                            activeCount = active.size,
-                            createdCount = created.size,
+                            activeCount = sections.active.size,
+                            createdCount = sections.created.size,
                         )
                     }
                     subscriptionSection(
                         titleRes = R.string.subscriptions__proposals,
-                        subscriptions = proposals,
+                        subscriptions = sections.proposals,
                         contacts = contacts,
                         now = now,
                         onSubscription = onSubscription,
                     )
                     subscriptionSection(
                         titleRes = R.string.subscriptions__active,
-                        subscriptions = active,
+                        subscriptions = sections.active,
                         contacts = contacts,
                         now = now,
                         onSubscription = onSubscription,
                     )
                     subscriptionSection(
                         titleRes = R.string.subscriptions__expired,
-                        subscriptions = expired,
+                        subscriptions = sections.expired,
                         contacts = contacts,
                         now = now,
                         onSubscription = onSubscription,
                     )
                     subscriptionSection(
                         titleRes = R.string.subscriptions__created,
-                        subscriptions = created,
+                        subscriptions = sections.created,
                         contacts = contacts,
                         now = now,
                         onSubscription = onSubscription,
@@ -291,6 +292,26 @@ internal fun SubscriptionsContent(
     }
 }
 
+internal data class SubscriptionSections(
+    val proposals: List<PaykitSubscription>,
+    val active: List<PaykitSubscription>,
+    val expired: List<PaykitSubscription>,
+    val created: List<PaykitSubscription>,
+)
+
+internal fun subscriptionSections(
+    subscriptions: List<PaykitSubscription>,
+    acceptedAt: (PaykitSubscriptionId) -> Instant?,
+    now: Instant,
+) = SubscriptionSections(
+    proposals = subscriptions.filter { it.isPayer && it.isProposalVisible(now) },
+    active = subscriptions.filter { it.isPayer && it.runsUntilPaidThrough(now) },
+    expired = subscriptions.filter {
+        (it.isPayer && it.hasEnded(now) && acceptedAt(it.id) != null) || it.isCreatedAndLapsed(now)
+    },
+    created = subscriptions.filter { it.isCreatedVisible(now) && !it.isCreatedAndLapsed(now) },
+)
+
 private fun LazyListScope.subscriptionSection(
     @StringRes titleRes: Int,
     subscriptions: List<PaykitSubscription>,
@@ -307,7 +328,7 @@ private fun LazyListScope.subscriptionSection(
                     subscription = subscription,
                     contact = contacts.contactFor(subscription),
                     subtitle = subscription.rowSubtitle(now),
-                    faded = subscription.isExpired(now),
+                    faded = subscription.hasEnded(now),
                     onClick = { onSubscription(subscription) },
                 )
             }
@@ -448,7 +469,7 @@ fun SubscriptionDetailScreen(
             verticalArrangement = Arrangement.spacedBy(32.dp),
             modifier = Modifier
                 .weight(1f)
-                .alpha(if (subscription.isExpired(now)) 0.5f else 1f),
+                .alpha(if (subscription.hasEnded(now)) 0.5f else 1f),
         ) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
@@ -514,13 +535,13 @@ private fun SubscriptionDetailsGrid(subscription: PaykitSubscription, now: Insta
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             SubscriptionDetailCell(
                 stringResource(R.string.subscriptions__status),
-                subscription.statusText(now),
+                stringResource(subscription.statusRes(now)),
                 R.drawable.ic_check,
                 Modifier.weight(1f),
             )
             if (subscription.shouldShowTiming(now)) {
                 SubscriptionDetailCell(
-                    subscription.timingTitle(now),
+                    stringResource(subscription.timingTitleRes(now)),
                     subscription.renewalText(now),
                     R.drawable.ic_calendar,
                     Modifier.weight(1f),
@@ -1040,27 +1061,19 @@ internal fun PaykitSubscription.subscriptionFrequencyText(): String {
 @Composable
 private fun PaykitSubscription.rowSubtitle(now: Instant): String {
     createdRowSubtitle(now)?.let { return it }
-    return when {
-        isProposalVisible(now) || !recurrence.unit.isSupported -> subscriptionFrequencyText()
-        isExpired(now) -> recurrence.endsAt?.let {
-            stringResource(R.string.subscriptions__expires_date, it.formatShortDate())
-        } ?: stringResource(R.string.subscriptions__expired)
-        recurrence.endsAt != null -> stringResource(
-            R.string.subscriptions__expires_date,
-            recurrence.endsAt.formatShortDate(),
-        )
-        else -> {
-            val renewal = recurrence.nextPeriodAfter(now)?.startsAt
-            if (renewal == null) {
-                subscriptionFrequencyText()
-            } else {
-                stringResource(
-                    R.string.subscriptions__renews_date,
-                    renewal.formatShortDate(),
-                )
-            }
-        }
+    val (res, date) = rowSubtitleSpec(now) ?: return subscriptionFrequencyText()
+    return if (date == null) stringResource(res) else stringResource(res, date.formatShortDate())
+}
+
+/** The string and date behind the row subtitle, or null when it shows the frequency. */
+internal fun PaykitSubscription.rowSubtitleSpec(now: Instant): Pair<Int, Instant?>? = when {
+    isProposalVisible(now) || !recurrence.unit.isSupported -> null
+    runsUntilPaidThrough(now) -> when {
+        recurrence.endsAt != null || !isActive(now) -> R.string.subscriptions__expires_date to expiryDate()
+        else -> recurrence.nextPeriodAfter(now)?.startsAt?.let { R.string.subscriptions__renews_date to it }
     }
+    else -> recurrence.endsAt?.let { R.string.subscriptions__expires_date to (canceledPaidThrough() ?: it) }
+        ?: (R.string.subscriptions__expired to null)
 }
 
 @Composable
@@ -1090,20 +1103,27 @@ internal fun PaykitSubscription.shouldShowTiming(now: Instant): Boolean =
     isActive(now) || expiryDate() != null
 
 internal fun PaykitSubscription.expiryDate(): Instant? =
-    recurrence.endsAt ?: paidPeriods.maxOfOrNull { it.endsAt }
+    canceledPaidThrough() ?: recurrence.endsAt ?: paidPeriods.maxOfOrNull { it.endsAt }
 
-@Composable
-private fun PaykitSubscription.statusText(now: Instant): String = when {
-    isProposalVisible(now) -> stringResource(R.string.subscriptions__pending)
-    isActive(now) -> stringResource(R.string.subscriptions__active)
-    else -> stringResource(R.string.subscriptions__expired)
+/** A canceled subscription the user created, past its last paid period: listed as expired, not as created. */
+private fun PaykitSubscription.isCreatedAndLapsed(now: Instant): Boolean =
+    isCreatedByUser && canceledPaidThrough()?.let { it <= now } == true
+
+/** Shown as expired: it no longer runs, whether canceled, rejected or lapsed. */
+internal fun PaykitSubscription.hasEnded(now: Instant): Boolean = isExpired(now) && !runsUntilPaidThrough(now)
+
+@StringRes
+internal fun PaykitSubscription.statusRes(now: Instant): Int = when {
+    isProposalVisible(now) -> R.string.subscriptions__pending
+    runsUntilPaidThrough(now) -> R.string.subscriptions__active
+    else -> R.string.subscriptions__expired
 }
 
-@Composable
-private fun PaykitSubscription.timingTitle(now: Instant): String = when {
-    !isActive(now) -> stringResource(R.string.subscriptions__expired)
-    recurrence.endsAt == null -> stringResource(R.string.subscriptions__renews)
-    else -> stringResource(R.string.subscriptions__expires)
+@StringRes
+internal fun PaykitSubscription.timingTitleRes(now: Instant): Int = when {
+    isActive(now) && recurrence.endsAt == null -> R.string.subscriptions__renews
+    runsUntilPaidThrough(now) -> R.string.subscriptions__expires
+    else -> R.string.subscriptions__expired
 }
 
 @Composable
@@ -1139,6 +1159,7 @@ internal fun nextSubscriptionTransition(
     }.filterNotNull().toMutableList()
     dates += activeSubscriptions.mapNotNull { it.recurrence.nextPeriodAfter(now)?.startsAt }
     dates += subscriptions.mapNotNull { it.paymentDueOnAcceptance(now, acceptedAt)?.billingPeriod?.endsAt }
+    dates += subscriptions.mapNotNull { it.canceledPaidThrough() }
     return dates.filter { it > now }.minOrNull()
 }
 
@@ -1152,7 +1173,8 @@ internal fun subscriptionMonthlyCostSats(
     subscriptions: List<PaykitSubscription>,
     now: Instant,
 ): Long {
-    val total = subscriptions.filter { it.isPayer && it.isActive(now) }.fold(BigDecimal.ZERO) { total, subscription ->
+    val running = subscriptions.filter { it.isPayer && it.runsUntilPaidThrough(now) }
+    val total = running.fold(BigDecimal.ZERO) { total, subscription ->
         val annualPeriods = when (subscription.recurrence.unit) {
             PaykitRecurrenceUnit.Minute -> 525_600L
             PaykitRecurrenceUnit.Hour -> 8_760L

@@ -843,7 +843,34 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `blocking a canceled subscription hides it while its paid period runs`() = test {
+        val proof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod(
+                startsAt = "2027-01-01T08:00:00Z",
+                endsAt = "2027-02-01T08:00:00Z",
+            )
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    state = PaymentRequestLifecycleState.CANCELED,
+                    paymentProofs = listOf(proof),
+                ),
+            ),
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.subscriptions.value.isEmpty())
+    }
+
+    @Test
     fun `blocking a paid payer subscription keeps payment history`() = test {
+        advanceTimeBy(20 * 24 * 60 * 60 * 1000L)
         val proof = mock<PaymentProofRecord> {
             on { billingPeriod } doReturn BillingPeriod(
                 startsAt = "2027-01-01T08:00:00Z",
@@ -876,6 +903,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
     @Test
     fun `blocking a paid creator subscription keeps received history accessible`() = test {
+        advanceTimeBy(20 * 24 * 60 * 60 * 1000L)
         val proof = mock<PaymentProofRecord> {
             on { billingPeriod } doReturn BillingPeriod(
                 startsAt = "2027-01-01T08:00:00Z",

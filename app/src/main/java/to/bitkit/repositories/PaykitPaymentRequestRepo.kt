@@ -1067,7 +1067,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             subscription.id in blockedSubscriptionIds && (
                 subscription.paidPeriods.isEmpty() ||
                     subscription.isProposalVisible(subscriptionNow) ||
-                    subscription.isActive(subscriptionNow)
+                    subscription.runsUntilPaidThrough(subscriptionNow)
                 )
         }
         val restoredAcceptances = allSubscriptions
