@@ -90,13 +90,14 @@ sealed class PubkyContactError(message: String) : AppError(message) {
 /**
  * One sign-in of a Pubky identity. Work the user starts in it, such as a contact edit that first waits for a profile
  * lookup, checks [PubkyRepo.isCurrent] before it writes, so it stops once that identity signs out or the next sign-in
- * starts. Every sign-in starts a new one, adopting a Ring identity included, even when it signs in the same identity
- * again; restoring or refreshing the session of the identity already signed in does not. It holds no secret.
+ * starts. Every sign-in starts a new one, even when it signs in the same identity again. Adopting a Ring identity ends
+ * the current one before it installs the adopted session, so an adoption that fails at sign-in ends it too. Restoring
+ * or refreshing the session of the identity already signed in keeps it. It holds no secret.
  */
 class PubkySignIn internal constructor(val publicKey: String, internal val generation: Long)
 
-private fun Throwable.containsActiveSubscriptionError(): Boolean =
-    generateSequence(this) { it.cause }.any { it is PubkyContactError.ActiveSubscription }
+private fun Throwable.hasCause(error: PubkyContactError): Boolean =
+    generateSequence(this) { it.cause }.any { it == error }
 
 private fun Throwable.isPaykitReadTimeout(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitReadTimeoutError }
@@ -525,7 +526,8 @@ class PubkyRepo @Inject constructor(
     /**
      * Adopts the Ring identity [pubky]. [knownProfile] is read once sign-in completes, and a profile it returns that
      * matches the signed-in key is used instead of resolving the profile again; it must return only a profile that was
-     * found, never the result of a failed or empty lookup.
+     * found, never the result of a failed or empty lookup. Like iOS, it ends the current [PubkySignIn] before it
+     * installs the adopted session, so an adoption that fails at sign-in ends it too.
      */
     suspend fun adoptRingIdentity(
         pubky: String,
@@ -545,6 +547,9 @@ class PubkyRepo @Inject constructor(
                             "Ring credential does not match '${redacted(pubky)}'"
                         }
                         keychain.upsertString(Keychain.Key.SHARED_PUBKY_SOURCE.name, reference)
+                        // Before the SDK installs the session, which can be of the same identity: a contact save of the
+                        // ending sign-in that the SDK runs after it then fails the sign-in check under the SDK lock.
+                        signInGeneration.incrementAndGet()
                         signInOrSignUpAdoptedIdentity(secretKeyHex, rawPublicKey)
                         sessionInstalled = true
 
@@ -1142,9 +1147,11 @@ class PubkyRepo @Inject constructor(
     /**
      * Saves a contact's label and keeps the rest of its profile as the contact's local override. The edit belongs to
      * [signIn]: once that identity signs out or the next sign-in starts, it fails with
-     * [PubkyContactError.SignInChanged] before the save, or once the save has run, before the override and the contact
-     * row are written. Sign-out clears the overrides, so a save that lands after it must not write one back, least of
-     * all for the next identity, which may have saved a contact with the same key.
+     * [PubkyContactError.SignInChanged]. The SDK checks [signIn] under the lock it saves under, so an edit whose
+     * sign-in ended before the SDK runs its save writes nothing. When the sign-in ends after the SDK save, the label
+     * stays saved for that identity, but no override or contact row is written. Sign-out clears the overrides, so a
+     * save that lands after it must not write one back, least of all for the next identity, which may have saved a
+     * contact with the same key.
      */
     @Suppress("LongParameterList")
     suspend fun updateContact(
@@ -1168,8 +1175,14 @@ class PubkyRepo @Inject constructor(
                 status = null,
             )
             requireCurrent(signIn)
-            // The SDK checks the identity under the same lock as the save, so no other identity can slip in between.
-            pubkyService.saveContact(prefixedKey, name, expectedIdentity = signIn.publicKey)
+            // The SDK checks the identity and the sign-in under the same lock as the save, so no session that another
+            // sign-in installs can slip in between, not even one of the same identity.
+            pubkyService.saveContact(
+                prefixedKey,
+                name,
+                expectedIdentity = signIn.publicKey,
+                isStillCurrent = { isCurrent(signIn) },
+            )
             upsertContactProfileOverride(updatedProfile, signIn)
             synchronized(contactsLock) {
                 requireCurrent(signIn)
@@ -1181,6 +1194,9 @@ class PubkyRepo @Inject constructor(
             markContactsLoaded()
             Logger.info("Updated contact '${redacted(prefixedKey)}'", context = TAG)
         }
+    }.recoverCatching {
+        if (it.hasCause(PubkyContactError.SignInChanged)) throw PubkyContactError.SignInChanged
+        throw it
     }
 
     suspend fun removeContact(publicKey: String): Result<Unit> = runSuspendCatching {
@@ -1193,7 +1209,7 @@ class PubkyRepo @Inject constructor(
             Logger.info("Removed contact '${redacted(prefixedKey)}'", context = TAG)
         }
     }.recoverCatching {
-        if (it.containsActiveSubscriptionError()) throw PubkyContactError.ActiveSubscription
+        if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
         throw it
     }
 

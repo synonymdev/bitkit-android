@@ -200,14 +200,23 @@ class PubkyService @Inject constructor(
         paykitSdkService.contactRecords()
     }
 
+    @Suppress("LongParameterList")
     suspend fun saveContact(
         publicKey: String,
         label: String?,
         receiverPaths: List<String>? = null,
         restorePrivateConnection: Boolean = false,
         expectedIdentity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
     ): ContactRecord = ServiceQueue.CORE.background {
-        paykitSdkService.saveContact(publicKey, label, receiverPaths, restorePrivateConnection, expectedIdentity)
+        paykitSdkService.saveContact(
+            publicKey,
+            label,
+            receiverPaths,
+            restorePrivateConnection,
+            expectedIdentity,
+            isStillCurrent,
+        )
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.CORE.background {

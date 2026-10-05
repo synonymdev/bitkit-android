@@ -54,6 +54,7 @@ import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.reset
@@ -3056,7 +3057,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
         val saveStarted = CompletableDeferred<Unit>()
         val finishSave = CompletableDeferred<Unit>()
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any()))
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any(), anyOrNull()))
             .doSuspendableAnswer {
                 saveStarted.complete(Unit)
                 finishSave.await()
@@ -3081,7 +3082,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
         val saveStarted = CompletableDeferred<Unit>()
         val finishSave = CompletableDeferred<Unit>()
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any()))
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any(), anyOrNull()))
             .doSuspendableAnswer {
                 saveStarted.complete(Unit)
                 finishSave.await()
@@ -3094,7 +3095,9 @@ class PubkyRepoTest : BaseUnitTest() {
         finishSave.complete(Unit)
 
         assertTrue(import.await().isFailure)
-        verifyBlocking(pubkyService, never()) { saveContact(eq(VALID_CONTACT_KEY_B), any(), anyOrNull(), any(), any()) }
+        verifyBlocking(pubkyService, never()) {
+            saveContact(eq(VALID_CONTACT_KEY_B), any(), anyOrNull(), any(), any(), anyOrNull())
+        }
         assertTrue(sut.contacts.value.isEmpty())
         assertFalse(sut.isImportingContacts.value)
         assertNull(sut.contactImportFailure.value)
@@ -3104,7 +3107,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `importContacts clears the pending import only once it succeeds`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any()))
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any(), anyOrNull()))
             .thenAnswer { throw TestAppError("Storage unavailable") }
             .thenReturn(createContactRecord(VALID_CONTACT_KEY_A))
         assertTrue(sut.prepareImport().isSuccess)
@@ -3129,7 +3132,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
         val saveStarted = CompletableDeferred<Unit>()
         val failSave = CompletableDeferred<Unit>()
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any()))
+        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), anyOrNull(), any(), any(), anyOrNull()))
             .doSuspendableAnswer {
                 saveStarted.complete(Unit)
                 failSave.await()
@@ -3324,7 +3327,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertFalse(sut.isCurrent(signIn))
         assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
-        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull())
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         assertEquals(emptyMap(), store.data.contactProfileOverrides)
         assertTrue(sut.isCurrent(checkNotNull(sut.currentSignIn())))
     }
@@ -3344,7 +3347,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
         assertFalse(sut.isCurrent(signIn))
-        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull())
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         assertEquals(emptyMap(), store.data.contactProfileOverrides)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
     }
@@ -3362,8 +3365,70 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
         assertFalse(sut.isCurrent(signIn))
-        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull())
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         assertEquals(emptyMap(), store.data.contactProfileOverrides)
+        assertTrue(sut.isCurrent(checkNotNull(sut.currentSignIn())))
+    }
+
+    /**
+     * The edit passes its first check before its identity is adopted again, but the SDK runs its save only once the
+     * adoption has installed the new session and before the adoption publishes the key: both run on the SDK's one
+     * queue. The identity check passes, as both sessions are of the same identity, so only the sign-in check stops it.
+     */
+    @Test
+    fun `a contact edit whose save runs after a re-adoption installs its session saves nothing`() = test {
+        val store = stubGatedPubkyStore()
+        val identity = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        val signIn = checkNotNull(sut.currentSignIn())
+        val sessionInstalled = CompletableDeferred<Unit>()
+        val queuedSaveRan = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("ring_secret")).doSuspendableAnswer {
+            sessionInstalled.complete(Unit)
+            queuedSaveRan.await()
+        }
+        var sdkSaves = 0
+        whenever(pubkyService.saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer {
+                sessionInstalled.await()
+                try {
+                    val isStillCurrent = it.getArgument<(() -> Boolean)?>(5)
+                    if (isStillCurrent?.invoke() == false) throw AppError(PubkyContactError.SignInChanged)
+                    sdkSaves++
+                    createContactRecord(VALID_CONTACT_KEY_A, "Alice")
+                } finally {
+                    queuedSaveRan.complete(Unit)
+                }
+            }
+
+        val edit = async {
+            sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
+        }
+        val adoption = async { sut.adoptRingIdentity(identity) }
+
+        assertTrue(adoption.await().isSuccess)
+        val result = edit.await()
+        assertEquals(0, sdkSaves)
+        assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
+        assertEquals(emptyMap(), store.data.contactProfileOverrides)
+        assertFalse(sut.isCurrent(signIn))
+        assertTrue(sut.isCurrent(checkNotNull(sut.currentSignIn())))
+    }
+
+    @Test
+    fun `a Ring adoption that fails to sign in still ends the current sign-in`() = test {
+        val identity = stubRingCredential()
+        whenever(pubkyService.signIn("ring_secret")).thenReturn(Unit)
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        val signIn = checkNotNull(sut.currentSignIn())
+        whenever(pubkyService.signIn("ring_secret")).thenAnswer { throw TestAppError("Relay unavailable") }
+        whenever(pubkyService.hasIdentityRecord(identity)).thenReturn(true)
+
+        assertTrue(sut.adoptRingIdentity(identity).isFailure)
+
+        assertFalse(sut.isCurrent(signIn))
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertTrue(sut.isCurrent(checkNotNull(sut.currentSignIn())))
     }
 
@@ -3381,7 +3446,14 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertTrue(sut.isCurrent(signIn))
-        verify(pubkyService).saveContact(VALID_CONTACT_KEY_A, "Alice", expectedIdentity = VALID_SELF_KEY)
+        verify(pubkyService).saveContact(
+            eq(VALID_CONTACT_KEY_A),
+            eq("Alice"),
+            isNull(),
+            eq(false),
+            eq(VALID_SELF_KEY),
+            any(),
+        )
         assertEquals(listOf("Friend"), store.data.contactProfileOverrides[VALID_CONTACT_KEY_A]?.tags)
     }
 
@@ -3402,7 +3474,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
 
         assertEquals(PubkyContactError.SignInChanged, result.exceptionOrNull())
-        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull())
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         assertEquals(emptyMap(), store.data.contactProfileOverrides)
     }
 
@@ -3419,7 +3491,14 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
 
         assertTrue(result.isSuccess)
-        verify(pubkyService).saveContact(VALID_CONTACT_KEY_A, "Alice", expectedIdentity = VALID_SELF_KEY)
+        verify(pubkyService).saveContact(
+            eq(VALID_CONTACT_KEY_A),
+            eq("Alice"),
+            isNull(),
+            eq(false),
+            eq(VALID_SELF_KEY),
+            any(),
+        )
         assertEquals(listOf("Friend"), store.data.contactProfileOverrides[VALID_CONTACT_KEY_A]?.tags)
         assertEquals(VALID_SELF_KEY, store.data.ownerPublicKey)
         assertEquals(listOf("Alice" to listOf("Friend")), sut.contacts.value.map { it.name to it.tags })

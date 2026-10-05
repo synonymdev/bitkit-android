@@ -37,6 +37,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTargetCheck
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PubkyService
@@ -107,8 +108,8 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
             sdkIdentity = null
             Unit
         }
-        whenever { pubkyService.saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull()) }
-            .doSuspendableAnswer { fakeSdkSave(it.getArgument(0), it.getArgument(4)) }
+        whenever { pubkyService.saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { fakeSdkSave(it.getArgument(0), it.getArgument(4), it.getArgument(5)) }
         whenever { pubkyService.resolveContactProfile(CONTACT, true, PaykitReadLane.Bulk, null) }
             .doSuspendableAnswer { awaitCancellation() }
         whenever(paykitPaymentRequestRepo.eligibleTargets).thenReturn(MutableStateFlow(emptyList()))
@@ -270,12 +271,17 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
         assertTrue(repo.signOut().isSuccess)
     }
 
-    private suspend fun fakeSdkSave(publicKey: String, expectedIdentity: String?): ContactRecord {
+    private suspend fun fakeSdkSave(
+        publicKey: String,
+        expectedIdentity: String?,
+        isStillCurrent: (() -> Boolean)?,
+    ): ContactRecord {
         sdkSaveAttempts += (sdkIdentity ?: SIGNED_OUT) to publicKey
         val identity = checkNotNull(sdkIdentity) { "No Pubky session" }
         check(expectedIdentity == null || expectedIdentity == identity) {
             "Paykit identity changed before saving the contact"
         }
+        if (isStillCurrent?.invoke() == false) throw PubkyContactError.SignInChanged
         val hasContact = publicKey in sdkContacts[identity].orEmpty()
         heldSave?.let {
             it.await()
