@@ -454,14 +454,10 @@ class PaykitSdkServiceTest {
             val bytes = ByteArray(32) { 1 }
             val sdk = mock<PaykitSdk>()
             whenever(sdk.contactRecords()).thenReturn(emptyList())
-            val access = mock<PubkySessionAccess>()
-            val secret = mock<PubkyLocalSecretKey>()
-            val noise = mock<PaykitIdentitySecretKey>()
-            whenever(secret.exportBytes()).thenReturn(bytes)
-            whenever(noise.exportBytes()).thenReturn(bytes)
-            whenever(access.exportSessionSecret()).thenReturn("new-session")
-            whenever(access.exportLocalSecretKey()).thenReturn(secret)
-            whenever(access.exportPaykitIdentitySecretKey()).thenReturn(noise)
+            whenever(sdk.initialize()).thenReturn(
+                IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
+            )
+            val access = localSessionAccess(bytes)
             val error = if (failure == "cancel") {
                 CancellationException("cancelled")
             } else {
@@ -478,7 +474,9 @@ class PaykitSdkServiceTest {
             var handlesCreated = 0
             val store = mock<PubkyStore>()
             whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
-            val service = PaykitSdkService(mock(), keychain, store, settingsStore = mock()) {
+            val settingsStore = mock<SettingsStore>()
+            whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = false)))
+            val service = PaykitSdkService(mock(), keychain, store, settingsStore = settingsStore) {
                 handlesCreated++
                 sdk
             }
@@ -491,7 +489,9 @@ class PaykitSdkServiceTest {
                     verify(keychain).upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, bytes.toHex())
                     verify(sdk).initialize()
                     verify(sdk).publishPaykitNoiseKeyAuthorization()
+                    verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
                 }
+                verify(sdk, never()).identityStatus()
                 verify(blocking, never()).delete(any())
             } else {
                 val thrown = assertFailsWith(error::class) { service.activateRegisteredIdentity(result) }
@@ -1237,7 +1237,7 @@ class PaykitSdkServiceTest {
             val sdk = mock<PaykitSdk>()
             val settingsStore = mock<SettingsStore>()
             whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = enabled)))
-            whenever(sdk.identityStatus()).thenReturn(
+            whenever(sdk.initialize()).thenReturn(
                 IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
             )
             val service = PaykitSdkService(
@@ -1252,7 +1252,41 @@ class PaykitSdkServiceTest {
             service.initialize()
 
             verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(enabled, true, false, true))
+            verify(sdk, never()).identityStatus()
         }
+    }
+
+    @Test
+    fun `initialization without private access does not publish the app`() = runTest {
+        for (capability in listOf(PubkyIdentityCapability.SIGNED_OUT, PubkyIdentityCapability.PUBLIC_ONLY)) {
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.initialize()).thenReturn(IdentityStatus(RING_PUBKY, capability))
+            val service = PaykitSdkService(
+                mock(),
+                mock(),
+                mock(),
+                ioDispatcher = StandardTestDispatcher(testScheduler),
+                platformInitializer = {},
+                settingsStore = mock(),
+            ) { sdk }
+
+            service.initialize()
+
+            verify(sdk, never()).publishPaykitApp(any(), any())
+            verify(sdk, never()).identityStatus()
+        }
+    }
+
+    private fun localSessionAccess(bytes: ByteArray): PubkySessionAccess {
+        val access = mock<PubkySessionAccess>()
+        val secret = mock<PubkyLocalSecretKey>()
+        val noise = mock<PaykitIdentitySecretKey>()
+        whenever(secret.exportBytes()).thenReturn(bytes)
+        whenever(noise.exportBytes()).thenReturn(bytes)
+        whenever(access.exportSessionSecret()).thenReturn("new-session")
+        whenever(access.exportLocalSecretKey()).thenReturn(secret)
+        whenever(access.exportPaykitIdentitySecretKey()).thenReturn(noise)
+        return access
     }
 
     private suspend fun gatedReadService(

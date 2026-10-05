@@ -306,7 +306,7 @@ class PaykitSdkService @Inject constructor(
                 operationLock.withLock {
                     refreshPaykitKey(force = true)
                     var handle = handle()
-                    try {
+                    val identityStatus = try {
                         handle.initialize()
                     } catch (e: PaykitException.Identity) {
                         invalidatePaykitKeyIfNeeded(e)
@@ -326,7 +326,7 @@ class PaykitSdkService @Inject constructor(
                             sessionProvider.resumeStoredSessionAccess()
                         }
                     }
-                    publishAppIfLiveSessionAvailable(handle)
+                    publishAppIfLiveSessionAvailable(handle, identityStatus)
                 }
                 isSetup.complete(Unit)
             } catch (t: Throwable) {
@@ -683,7 +683,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withStateRevisionTracking { handle ->
-                val capabilities = appCapabilities(handle)
+                val capabilities = appCapabilities(handle.identityStatus())
                 handle.publishPaykitApp(
                     displayName = "Bitkit",
                     capabilities = capabilities.copy(
@@ -1155,11 +1155,11 @@ class PaykitSdkService @Inject constructor(
         resetRuntime()
         refreshPaykitKey()
         val handle = handle()
-        handle.initialize()
+        val identityStatus = handle.initialize()
         if (result.sessionAccess.exportLocalSecretKey() != null) {
             handle.publishPaykitNoiseKeyAuthorization()
         }
-        publishAppIfLiveSessionAvailable(handle)
+        publishAppIfLiveSessionAvailable(handle, identityStatus)
         launchIdentityRepublish(publicKey = result.publicKey)
     }
 
@@ -1170,9 +1170,9 @@ class PaykitSdkService @Inject constructor(
         notifyBackupStateChanged()
     }
 
-    private suspend fun publishAppIfLiveSessionAvailable(handle: PaykitSdk) {
+    private suspend fun publishAppIfLiveSessionAvailable(handle: PaykitSdk, identityStatus: IdentityStatus?) {
         runSuspendCatching {
-            val capabilities = appCapabilities(handle)
+            val capabilities = appCapabilities(identityStatus)
             if (capabilities.privatePayments) {
                 handle.publishPaykitApp(
                     "Bitkit",
@@ -1185,9 +1185,9 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    private suspend fun appCapabilities(handle: PaykitSdk): PaykitAppCapabilities {
+    private fun appCapabilities(identityStatus: IdentityStatus?): PaykitAppCapabilities {
         val hasPrivatePaymentAccess =
-            handle.identityStatus()?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
+            identityStatus?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
         return PaykitAppCapabilities(
             privatePayments = hasPrivatePaymentAccess,
             paymentRequests = hasPrivatePaymentAccess,
@@ -1391,16 +1391,21 @@ internal suspend fun <T> withPaykitBackupStateTracking(
         operation().also { succeeded = true }
     } finally {
         withContext(NonCancellable) {
+            if (!succeeded) {
+                onSnapshot(null)
+                onChange()
+                return@withContext
+            }
             val nextStateRevision = runSuspendCatching { readStateRevision() }.getOrNull()
             val unchangedRevision = previousStateRevision?.takeIf { it == nextStateRevision }
-            if (succeeded && unchangedRevision != null && previousRevision != null) {
+            if (unchangedRevision != null && previousRevision != null) {
                 onSnapshot(PaykitBackupStateSnapshot(unchangedRevision, previousRevision))
                 return@withContext
             }
             val nextRevision = runSuspendCatching { readRevision() }.getOrNull()
             val stateRevision = runSuspendCatching { readStateRevision() }.getOrNull()
             onSnapshot(
-                if (succeeded && stateRevision != null && nextRevision != null) {
+                if (stateRevision != null && nextRevision != null) {
                     PaykitBackupStateSnapshot(stateRevision, nextRevision)
                 } else {
                     null

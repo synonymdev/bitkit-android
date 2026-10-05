@@ -8,6 +8,7 @@ import kotlinx.coroutines.yield
 import org.junit.Test
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
@@ -40,11 +41,15 @@ class PaykitBackupStateTrackingTest : BaseUnitTest() {
     @Test
     fun `partial failure marks changed state and preserves operation error`() = test {
         var revision = "before"
+        var reads = 0
         var changes = 0
         val failure = AppError("Operation failed")
         val thrown = assertFailsWith<AppError> {
             withPaykitBackupStateTracking(
-                readRevision = { revision },
+                readRevision = {
+                    reads++
+                    revision
+                },
                 onChange = { changes++ },
             ) {
                 revision = "after"
@@ -54,19 +59,26 @@ class PaykitBackupStateTrackingTest : BaseUnitTest() {
 
         assertSame(failure, thrown)
         assertEquals(1, changes)
+        assertEquals(1, reads)
     }
 
     @Test
     fun `cancellation after mutation completes backup tracking`() = test {
         var revision = "before"
         var changes = 0
+        var reads = 0
+        var snapshot: PaykitBackupStateSnapshot? = PaykitBackupStateSnapshot("state", "before")
         val mutated = CompletableDeferred<Unit>()
         val job = launch {
             withPaykitBackupStateTracking(
                 readRevision = {
+                    reads++
                     yield()
                     revision
                 },
+                readStateRevision = { "state" },
+                cachedSnapshot = snapshot,
+                onSnapshot = { snapshot = it },
                 onChange = { changes++ },
             ) {
                 revision = "after"
@@ -80,6 +92,8 @@ class PaykitBackupStateTrackingTest : BaseUnitTest() {
         assertTrue(job.isCancelled)
         assertEquals("after", revision)
         assertEquals(1, changes)
+        assertEquals(0, reads)
+        assertNull(snapshot)
     }
 
     @Test
@@ -136,26 +150,27 @@ class PaykitBackupStateTrackingTest : BaseUnitTest() {
     }
 
     @Test
-    fun `failed writes recheck backup content even when the local revision is unchanged`() = test {
-        var snapshot: PaykitBackupStateSnapshot? = PaykitBackupStateSnapshot("state", "before")
-        var reads = 0
-        var changes = 0
-        val failure = AppError("Write outcome unknown")
-        val thrown = assertFailsWith<AppError> {
-            withPaykitBackupStateTracking(
-                readRevision = {
-                    reads++
-                    "after"
-                },
-                readStateRevision = { "state" },
-                cachedSnapshot = snapshot,
-                onSnapshot = { snapshot = it },
-                onChange = { changes++ },
-            ) { throw failure }
+    fun `failed operations invalidate unchanged snapshots without reading remote state`() = test {
+        for (failure in listOf(AppError("Write outcome unknown"), CancellationException("Cancelled"))) {
+            var snapshot: PaykitBackupStateSnapshot? = PaykitBackupStateSnapshot("state", "before")
+            var reads = 0
+            var changes = 0
+            val thrown = assertFailsWith(failure::class) {
+                withPaykitBackupStateTracking(
+                    readRevision = {
+                        reads++
+                        "before"
+                    },
+                    readStateRevision = { "state" },
+                    cachedSnapshot = snapshot,
+                    onSnapshot = { snapshot = it },
+                    onChange = { changes++ },
+                ) { throw failure }
+            }
+            assertSame(failure, thrown)
+            assertEquals(0, reads)
+            assertEquals(1, changes)
+            assertNull(snapshot)
         }
-        assertSame(failure, thrown)
-        assertEquals(1, reads)
-        assertEquals(1, changes)
-        assertNull(snapshot)
     }
 }

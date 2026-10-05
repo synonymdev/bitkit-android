@@ -234,6 +234,7 @@ class PublicPaykitRepo @Inject constructor(
         requireEndpoint: Boolean = false,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
+            pubkyRepo.isRestoringSession.first { !it }
             val desired = buildWalletEndpoints(
                 refresh = false,
                 forceRefreshLightning = forceRefreshLightning,

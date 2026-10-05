@@ -6,6 +6,8 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PublicationStatus
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
@@ -16,6 +18,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -25,6 +28,7 @@ import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
@@ -48,6 +52,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     private val clock = mock<Clock>()
 
     private val publicKey = MutableStateFlow<String?>("pubkyself")
+    private val isRestoringSession = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
     private val settingsFlow = MutableStateFlow(SettingsData())
 
@@ -58,9 +63,11 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         sut = createRepo()
         settingsFlow.value = SettingsData()
         publicKey.value = "pubkyself"
+        isRestoringSession.value = false
         walletState.value = WalletState()
 
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
+        whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MILLIS))
@@ -106,6 +113,33 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             listOf(MethodId.Bolt11, MethodId.P2tr),
             captor.firstValue.map { it.methodId },
         )
+    }
+
+    @Test
+    fun `syncCurrentPublishedEndpoints waits only for session restoration and remains cancellable`() = test {
+        isRestoringSession.value = true
+        publicKey.value = null
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        settingsFlow.value = SettingsData(publicPaykitLightningEnabled = false, publicPaykitOnchainEnabled = true)
+
+        val cancelledPublication = async { sut.syncCurrentPublishedEndpoints() }
+        assertFalse(cancelledPublication.isCompleted)
+        cancelledPublication.cancelAndJoin()
+        assertTrue(cancelledPublication.isCancelled)
+        verifyNoInteractions(paykitSdkService)
+
+        val publication = async { sut.syncCurrentPublishedEndpoints() }
+        assertFalse(publication.isCompleted)
+        verifyNoInteractions(paykitSdkService)
+        publicKey.value = "pubkyself"
+        isRestoringSession.value = false
+
+        publication.await().getOrThrow()
+        verifyBlocking(paykitSdkService) { syncPaykitApp(privatePaymentsEnabled = false) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+        verifyBlocking(pubkyRepo, never()) { currentPublicKey() }
+        verifyBlocking(pubkyRepo, never()) { awaitInitialization() }
+        verifyBlocking(pubkyRepo, never()) { initialize() }
     }
 
     @Test
