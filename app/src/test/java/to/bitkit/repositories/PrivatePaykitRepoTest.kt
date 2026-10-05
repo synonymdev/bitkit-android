@@ -380,6 +380,69 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `private message drain and retries do not wait for linked peer advancement`() = test {
+        val keys = listOf(CONTACT_KEY, OTHER_CONTACT_KEY)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            keys.map { linkedPeer(it.removePrefix("pubky"), LinkedPeerState.LINKED) },
+        )
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(keys)
+        whenever(paykitSdkService.ensureLinkWithPeer(any(), any())).doSuspendableAnswer { awaitCancellation() }
+
+        val preparation = async { sut.prepareSavedContacts(keys) }
+        try {
+            runCurrent()
+            assertTrue(preparation.isCompleted)
+            preparation.await().getOrThrow()
+            advanceTimeBy(1_000)
+            runCurrent()
+
+            verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any())
+            keys.forEach {
+                verify(paykitSdkService, times(2)).processOutboundPrivateMessages(it)
+                verify(paykitSdkService, times(2)).receivePrivateMessages(it)
+            }
+        } finally {
+            preparation.cancel()
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `private message drain advances recovery detected during send on next retry`() = test {
+        var state = LinkedPeerState.LINKED
+        var sends = 0
+        whenever(paykitSdkService.linkedPeers()).thenAnswer { listOf(linkedPeer(CONTACT_KEY, state)) }
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(listOf(CONTACT_KEY))
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).thenAnswer {
+            assertEquals(LinkedPeerState.RECOVERY_REQUIRED, state)
+            state = LinkedPeerState.LINKED
+            LinkedPeerHandshakeReport(CONTACT_KEY, state, 1uL, null)
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(CONTACT_KEY)).thenAnswer {
+            sends += 1
+            if (sends == 1) {
+                state = LinkedPeerState.RECOVERY_REQUIRED
+                throw PaykitException.Transport("recovery", "Peer requires recovery")
+            }
+            mock()
+        }
+
+        try {
+            sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+            verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any())
+            verify(paykitSdkService, never()).receivePrivateMessages(any())
+            advanceTimeBy(1_000)
+            runCurrent()
+
+            verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+            verify(paykitSdkService, times(2)).processOutboundPrivateMessages(CONTACT_KEY)
+            verify(paykitSdkService).receivePrivateMessages(CONTACT_KEY)
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
     fun `private message drain isolates send and receive failures per peer`() = test {
         val keys = listOf(CONTACT_KEY, OTHER_CONTACT_KEY)
         whenever(paykitSdkService.linkedPeers()).thenReturn(keys.map { linkedPeer(it, LinkedPeerState.LINKED) })
@@ -885,8 +948,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         verifyBlocking(paykitSdkService) { clearPrivatePaymentLists(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)) }
-        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
-        verify(paykitSdkService, never()).ensureLinkWithPeer(eq(OTHER_CONTACT_KEY), any())
+        verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any())
         verifyBlocking(paykitSdkService, atLeast(1)) { linkedPeers() }
         verifyBlocking(paykitSdkService, times(3)) { pendingOutboundPrivateCounterparties() }
         verify(paykitSdkService).processOutboundPrivateMessages(CONTACT_KEY)

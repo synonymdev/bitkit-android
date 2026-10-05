@@ -1045,9 +1045,12 @@ class PrivatePaykitRepo @Inject constructor(
         if (retryKeys.isEmpty()) return
         runSuspendCatching {
             val generation = preparationGeneration
+            val alreadyLinkedKeys = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.LINKED }
+                .mapNotNull { normalizedPublicKey(it.counterparty) }.toSet()
             retryKeys.forEach { retryKey ->
                 currentCoroutineContext().ensureActive()
                 if (generation != preparationGeneration) return@runSuspendCatching
+                if (retryKey in alreadyLinkedKeys) return@forEach
                 if (retryKey !in knownSavedContactKeys) return@forEach
                 if (unavailableLinkRetryAt[retryKey]?.let { it > clock.now() } == true) return@forEach
                 runSuspendCatching {
