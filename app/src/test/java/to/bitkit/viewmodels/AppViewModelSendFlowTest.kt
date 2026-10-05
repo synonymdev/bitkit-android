@@ -128,6 +128,7 @@ import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendAttemptUnreadableError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
@@ -6634,7 +6635,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setActiveContactPaymentContext(testPublicKey, privateContext, request, isInitialSubscriptionPayment = true)
         setSendState(
             SendUiState(
                 address = bolt11,
@@ -6644,8 +6645,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             ),
         )
 
-        sut.setSendEvent(SendEvent.PayConfirmed)
-        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
 
         verify(paykitPaymentProofRepo).prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
         verify(paykitPaymentProofRepo).associateLightningPayment(request, paymentHash, MethodId.Bolt11.rawValue)
@@ -8218,6 +8224,52 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
+    }
+
+    @Test
+    fun `blocked admission releases consumed private context before dispatch only`() = test {
+        val cases = listOf(
+            false to OnchainSendBlockedError(),
+            true to OnchainSendBlockedError(),
+            false to OnchainSendAttemptUnreadableError(IllegalStateException("guard unreadable")),
+            true to OnchainSendAttemptUnreadableError(IllegalStateException("guard unreadable")),
+        )
+        for ((index, case) in cases.withIndex()) {
+            val (sendAttempted, error) = case
+            val request = paymentRequest()
+            val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL + index.toULong())
+            balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+            whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+            whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+                .thenReturn(Result.success(Unit))
+            stubOnchainSend(
+                "bcrt1qblocked",
+                request.amountSats,
+                Result.failure(error),
+                invokeBeforeSendAttempt = sendAttempted,
+            )
+            setActiveContactPaymentContext(testPublicKey, privateContext, request)
+            setSendState(
+                SendUiState(
+                    address = "bcrt1qblocked",
+                    amount = request.amountSats,
+                    payMethod = SendMethod.ONCHAIN,
+                    isPaymentRequest = true,
+                ),
+            )
+
+            sut.sendEffect.test {
+                confirmCurrentPayment()
+                assertTrue(awaitItem() is SendEffect.NavigateToPending)
+            }
+            verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+            if (sendAttempted) {
+                verify(privatePaykitRepo, never()).releasePrivatePaymentList(testPublicKey, privateContext)
+            } else {
+                verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+            }
+            verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
+        }
     }
 
     @Test

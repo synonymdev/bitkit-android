@@ -4256,6 +4256,7 @@ class AppViewModel @Inject constructor(
             (sendAttempted && error !is OnchainSendNotDispatchedError)
         if (unresolved) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
+            if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
             if (!paymentProofStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
             val previous = (error as? OnchainSendBlockedError)?.attempt
             val priorAccepted = previous?.takeIf {
@@ -4353,8 +4354,9 @@ class AppViewModel @Inject constructor(
         var createdMetadataPaymentId: String? = null
         val paymentHash = decodedInvoice.paymentHash.toHex()
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
-            handlePaymentPreparationFailure(it, null)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
             return
         }
 
