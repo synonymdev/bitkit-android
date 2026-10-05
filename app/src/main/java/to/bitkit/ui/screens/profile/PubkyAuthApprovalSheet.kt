@@ -4,11 +4,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -393,46 +395,53 @@ private fun ColumnScope.AuthorizingContent(
 private fun ColumnScope.ApprovalDetails(
     uiState: PubkyAuthApprovalUiState,
 ) {
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .verticalScroll(rememberScrollState())
-    ) {
-        VerticalSpacer(8.dp)
-
-        if (uiState.createsIdentity) {
-            BodyM(text = stringResource(R.string.pubky_auth__signup_description), color = Colors.White64)
-            VerticalSpacer(16.dp)
-        }
-        if (uiState.permissions.isNotEmpty()) {
-            DescriptionText(clientId = uiState.clientId, serviceName = uiState.serviceName)
-            VerticalSpacer(32.dp)
-            PermissionsSection(permissions = uiState.permissions)
-        }
-        if (uiState.bitkitClaim?.includesPaykitAccess == true) {
-            VerticalSpacer(32.dp)
-            PaykitAccessSection()
-        }
-        VerticalSpacer(16.dp)
-    }
-
-    TrustWarning()
-    VerticalSpacer(16.dp)
-
-    uiState.homeserverPublicKey?.takeIf { uiState.createsIdentity }?.let { homeserver ->
+    BoxWithConstraints(modifier = Modifier.weight(1f)) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Colors.Gray6, RoundedCornerShape(16.dp))
-                .padding(24.dp)
-                .testTag("PubkySignupHomeserver")
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
         ) {
-            Text13Up(text = stringResource(R.string.pubky_auth__homeserver), color = Colors.White64)
-            BodyMSB(text = homeserver)
+            Column {
+                VerticalSpacer(8.dp)
+
+                if (uiState.createsIdentity) {
+                    BodyM(text = stringResource(R.string.pubky_auth__signup_description), color = Colors.White64)
+                    VerticalSpacer(16.dp)
+                }
+                if (uiState.permissions.isNotEmpty()) {
+                    DescriptionText(clientId = uiState.clientId, serviceName = uiState.serviceName)
+                    VerticalSpacer(32.dp)
+                    PermissionsSection(permissions = uiState.permissions)
+                }
+                if (uiState.bitkitClaim?.includesPaykitAccess == true) {
+                    VerticalSpacer(32.dp)
+                    PaykitAccessSection()
+                }
+                VerticalSpacer(32.dp)
+            }
+
+            Column {
+                TrustWarning()
+                VerticalSpacer(16.dp)
+
+                uiState.homeserverPublicKey?.takeIf { uiState.createsIdentity }?.let { homeserver ->
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Colors.Gray6, RoundedCornerShape(16.dp))
+                            .padding(24.dp)
+                            .testTag("PubkySignupHomeserver")
+                    ) {
+                        Text13Up(text = stringResource(R.string.pubky_auth__homeserver), color = Colors.White64)
+                        BodyMSB(text = homeserver)
+                    }
+                } ?: uiState.profile?.let { ProfileCard(it) }
+                VerticalSpacer(24.dp)
+            }
         }
-    } ?: uiState.profile?.let { ProfileCard(it) }
-    VerticalSpacer(24.dp)
+    }
 }
 
 @Composable
