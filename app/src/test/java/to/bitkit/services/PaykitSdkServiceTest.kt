@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
@@ -7,6 +8,8 @@ import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaykitReceiverCapabilities
+import com.synonym.paykit.PaykitReceiverMarker
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
@@ -24,18 +27,27 @@ import com.synonym.paykit.ReceiverNoiseSecretKey
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.description
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.PubkyStore
@@ -48,18 +60,27 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.repositories.PubkyContactError
+import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
+@OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass")
 class PaykitSdkServiceTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val FILE_URI = "pubky://$RING_PUBKY/pub/pubky.app/files/avatar"
+        private val READ_TIMEOUT = 10.seconds
     }
 
     @Test
@@ -355,6 +376,386 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `public reads and locked operations do not wait for each other`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        service.contactRecords()
+        val readGate = CompletableDeferred<ContactProfileResolution?>()
+        whenever(sdk.resolveContactProfile(RING_PUBKY, PaykitReceiverPaths.WALLET, true))
+            .doSuspendableAnswer { readGate.await() }
+
+        val read = async { service.resolveContactProfile(RING_PUBKY, allowPubkyProfileFallback = true) }
+        runCurrent()
+        assertEquals(emptyList<ContactRecord>(), service.contactRecords())
+        assertFalse(read.isCompleted)
+        readGate.complete(null)
+        assertNull(read.await())
+
+        val lockedGate = CompletableDeferred<List<ContactRecord>>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer { lockedGate.await() }
+        whenever(sdk.fetchPubkyFollows(RING_PUBKY)).thenReturn(listOf("follow"))
+        val locked = async { service.contactRecords() }
+        runCurrent()
+        assertEquals(listOf("follow"), service.fetchPubkyFollows(RING_PUBKY))
+        assertFalse(locked.isCompleted)
+        lockedGate.complete(emptyList())
+        assertEquals(emptyList<ContactRecord>(), locked.await())
+    }
+
+    @Test
+    fun `public reads run at most six at a time`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        service.contactRecords()
+        val gate = CompletableDeferred<Unit>()
+        var active = 0
+        var maxActive = 0
+        whenever(sdk.fetchPubkyFileBounded(FILE_URI, 1uL)).doSuspendableAnswer {
+            maxActive = maxOf(maxActive, ++active)
+            gate.await()
+            active--
+            byteArrayOf(1)
+        }
+
+        val reads = List(10) { async { service.fetchFile(FILE_URI, 1uL) } }
+        runCurrent()
+        assertEquals(6, active)
+        gate.complete(Unit)
+
+        reads.awaitAll().forEach { assertContentEquals(byteArrayOf(1), it) }
+        assertEquals(6, maxActive)
+        verify(sdk, times(10)).fetchPubkyFileBounded(FILE_URI, 1uL)
+    }
+
+    @Test
+    fun `public reads started without an sdk instance wait for the operation lock then run concurrently`() = runTest {
+        val keychain = mock<Keychain>()
+        val lockedGate = CompletableDeferred<Unit>()
+        whenever(keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)).doSuspendableAnswer { lockedGate.await() }
+        val sdk = mock<PaykitSdk>()
+        val readGate = CompletableDeferred<Unit>()
+        var active = 0
+        whenever(sdk.fetchPubkyFollows(RING_PUBKY)).doSuspendableAnswer {
+            active++
+            readGate.await()
+            listOf("follow")
+        }
+        var handlesCreated = 0
+        val service = PaykitSdkService(mock(), keychain, mock()) {
+            handlesCreated++
+            sdk
+        }
+
+        val locked = async { service.clearState() }
+        runCurrent()
+        val reads = List(3) { async { service.fetchPubkyFollows(RING_PUBKY) } }
+        runCurrent()
+        assertEquals(0, active)
+        assertTrue(reads.none { it.isCompleted })
+        assertEquals(0, handlesCreated)
+
+        lockedGate.complete(Unit)
+        runCurrent()
+        assertEquals(3, active)
+        assertEquals(1, handlesCreated)
+        readGate.complete(Unit)
+        reads.awaitAll().forEach { assertEquals(listOf("follow"), it) }
+        locked.await()
+    }
+
+    @Test
+    fun `receiver reads run outside the operation lock with their filtering intact`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        service.contactRecords()
+        whenever(sdk.paykitReceiverPaths(RING_PUBKY))
+            .thenReturn(listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER, "other/path"))
+        whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.WALLET))
+            .thenReturn(receiverMarker(PaykitReceiverPaths.WALLET, paymentRequests = true, outgoingPayments = true))
+        whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.SERVER))
+            .thenReturn(receiverMarker(PaykitReceiverPaths.SERVER, paymentRequests = false, outgoingPayments = false))
+        val lockedGate = CompletableDeferred<List<ContactRecord>>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer { lockedGate.await() }
+        val locked = async { service.contactRecords() }
+        runCurrent()
+
+        assertEquals(
+            listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER),
+            service.discoverRelevantReceiverPaths(RING_PUBKY, PaykitReadLane.Bulk),
+        )
+        assertEquals(
+            listOf(PaykitReceiverPaths.WALLET),
+            service.paymentRequestReceiverPaths(RING_PUBKY, PaykitReadLane.Bulk),
+        )
+        val selection =
+            service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER), PaykitReadLane.Bulk)
+        assertEquals(listOf(PaykitReceiverPaths.WALLET, PaykitReceiverPaths.SERVER), selection.linkableReceiverPaths)
+        assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.publishableReceiverPaths)
+        assertEquals(emptyList(), selection.cleanupProtectedReceiverPaths)
+        assertNull(selection.error)
+        assertFalse(locked.isCompleted)
+
+        lockedGate.complete(emptyList())
+        assertEquals(emptyList(), locked.await())
+    }
+
+    @Test
+    fun `private receiver selection protects a path whose marker read fails`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        val failure = AppError("Marker unavailable")
+        whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.WALLET))
+            .thenReturn(receiverMarker(PaykitReceiverPaths.WALLET, paymentRequests = true, outgoingPayments = true))
+        whenever(sdk.paykitReceiverMarker(RING_PUBKY, PaykitReceiverPaths.SERVER)).thenAnswer { throw failure }
+
+        val selection =
+            service.privateReceiverPathSelection(RING_PUBKY, listOf(PaykitReceiverPaths.SERVER), PaykitReadLane.Bulk)
+
+        assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.linkableReceiverPaths)
+        assertEquals(listOf(PaykitReceiverPaths.WALLET), selection.publishableReceiverPaths)
+        assertEquals(listOf(PaykitReceiverPaths.SERVER), selection.cleanupProtectedReceiverPaths)
+        assertSame(failure, selection.error)
+    }
+
+    @Test
+    fun `bulk reads leave two read permits to interactive reads`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        service.contactRecords()
+        val gate = CompletableDeferred<Unit>()
+        var bulkActive = 0
+        var interactiveActive = 0
+        whenever(sdk.resolveContactProfile(any(), any(), any())).doSuspendableAnswer {
+            bulkActive++
+            gate.await()
+            bulkActive--
+            null
+        }
+        whenever(sdk.fetchPubkyFileBounded(FILE_URI, 1uL)).doSuspendableAnswer {
+            interactiveActive++
+            gate.await()
+            interactiveActive--
+            byteArrayOf(1)
+        }
+
+        val bulkReads = List(10) {
+            async { service.resolveContactProfile("$RING_PUBKY$it", true, PaykitReadLane.Bulk) }
+        }
+        runCurrent()
+        assertEquals(4, bulkActive)
+
+        val interactiveReads = List(3) { async { service.fetchFile(FILE_URI, 1uL) } }
+        runCurrent()
+        assertEquals(4, bulkActive)
+        assertEquals(2, interactiveActive)
+
+        gate.complete(Unit)
+        bulkReads.awaitAll()
+        interactiveReads.awaitAll()
+        verify(sdk, times(10)).resolveContactProfile(any(), any(), any())
+        verify(sdk, times(3)).fetchPubkyFileBounded(FILE_URI, 1uL)
+    }
+
+    @Test
+    fun `bulk reads start in request order and a cancelled one frees both permits`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        service.contactRecords()
+        val started = mutableListOf<String>()
+        val gates = List(6) { CompletableDeferred<Unit>() }
+        whenever(sdk.paykitReceiverPaths(any())).doSuspendableAnswer {
+            val key = it.getArgument<String>(0)
+            started += key
+            gates[key.removePrefix(RING_PUBKY).toInt()].await()
+            emptyList<String>()
+        }
+        val reads = List(6) {
+            async { service.discoverRelevantReceiverPaths("$RING_PUBKY$it", PaykitReadLane.Bulk) }
+        }
+        runCurrent()
+        assertEquals(List(4) { "$RING_PUBKY$it" }, started)
+
+        reads[1].cancel()
+        runCurrent()
+        assertEquals(List(5) { "$RING_PUBKY$it" }, started)
+
+        val interactiveGate = CompletableDeferred<ByteArray?>()
+        var interactiveActive = 0
+        whenever(sdk.fetchPubkyFileBounded(FILE_URI, 1uL)).doSuspendableAnswer {
+            interactiveActive++
+            interactiveGate.await()
+        }
+        val interactiveReads = List(2) { async { service.fetchFile(FILE_URI, 1uL) } }
+        runCurrent()
+        assertEquals(2, interactiveActive)
+
+        gates[0].complete(Unit)
+        runCurrent()
+        assertEquals(List(6) { "$RING_PUBKY$it" }, started)
+
+        gates.forEach { it.complete(Unit) }
+        interactiveGate.complete(byteArrayOf(1))
+        reads.filterIndexed { index, _ -> index != 1 }.awaitAll()
+        interactiveReads.awaitAll()
+    }
+
+    @Test
+    fun `a freed read slot goes to a waiting interactive read before bulk reads queued for a slot`() = runTest {
+        val interactive = List(7) { "$FILE_URI$it" }
+        val bulk = List(4) { "$RING_PUBKY$it" }
+        val gates = (interactive + bulk).associateWith { CompletableDeferred<Unit>() }
+        val started = mutableListOf<String>()
+        val service = gatedReadService(gates, started)
+
+        val reads = interactive.take(6).map { async { service.fetchFile(it, 1uL) } } +
+            bulk.map { async { service.resolveContactProfile(it, true, PaykitReadLane.Bulk) } }
+        runCurrent()
+        val lateRead = async { service.fetchFile(interactive[6], 1uL) }
+        runCurrent()
+        assertEquals(interactive.take(6), started)
+
+        gates.getValue(interactive[0]).complete(Unit)
+        runCurrent()
+        assertEquals(interactive, started)
+
+        gates.getValue(interactive[1]).complete(Unit)
+        runCurrent()
+        assertEquals(interactive + bulk.first(), started)
+
+        gates.values.forEach { it.complete(Unit) }
+        (reads + lateRead).awaitAll()
+        assertEquals(interactive + bulk, started)
+    }
+
+    @Test
+    fun `a cancelled read slot waiter takes no slot and passes on one it was handed`() = runTest {
+        listOf("cancelled while queued" to false, "cancelled once handed a slot" to true)
+            .forEachCase({ it.first }) { (case, handed) ->
+                val interactive = List(7) { "$FILE_URI$it" }
+                val bulk = RING_PUBKY
+                val gates = (interactive + bulk).associateWith { CompletableDeferred<Unit>() }
+                val started = mutableListOf<String>()
+                val service = gatedReadService(gates, started)
+                val reads = interactive.take(6).map { async { service.fetchFile(it, 1uL) } } +
+                    async { service.resolveContactProfile(bulk, true, PaykitReadLane.Bulk) }
+                runCurrent()
+                val lateRead = async { service.fetchFile(interactive[6], 1uL) }
+                runCurrent()
+
+                if (handed) {
+                    reads.first().invokeOnCompletion { lateRead.cancel() }
+                } else {
+                    lateRead.cancel()
+                    runCurrent()
+                    assertEquals(interactive.take(6), started, case)
+                }
+                gates.getValue(interactive[0]).complete(Unit)
+                runCurrent()
+
+                assertTrue(lateRead.isCancelled, case)
+                assertEquals(interactive.take(6) + bulk, started, case)
+                gates.values.forEach { it.complete(Unit) }
+                reads.awaitAll()
+            }
+    }
+
+    @Test
+    fun `a read timeout counts only the time the read holds its slot and fails with its own error`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock()) { sdk }
+        val busy = List(6) { "$RING_PUBKY-busy-$it" }
+        val freeSlots = CompletableDeferred<Unit>()
+        whenever(sdk.resolveContactProfile(any(), any(), any())).doSuspendableAnswer {
+            when (it.getArgument<String>(0)) {
+                in busy -> freeSlots.await()
+                "$RING_PUBKY-stuck" -> awaitCancellation()
+            }
+            null
+        }
+        val busyReads = busy.map { async { service.resolveContactProfile(it, true) } }
+        runCurrent()
+        val start = currentTime
+
+        val timedOut = async {
+            runCatching { service.resolveContactProfile("$RING_PUBKY-stuck", true, timeout = READ_TIMEOUT) }
+        }
+        advanceTimeBy(READ_TIMEOUT * 2)
+        freeSlots.complete(Unit)
+        busyReads.awaitAll()
+        advanceTimeBy(READ_TIMEOUT - 1.milliseconds)
+        runCurrent()
+        assertFalse(timedOut.isCompleted)
+        advanceTimeBy(1.milliseconds)
+        runCurrent()
+
+        assertIs<PaykitReadTimeoutError>(timedOut.await().exceptionOrNull())
+        assertEquals((READ_TIMEOUT * 3).inWholeMilliseconds, currentTime - start)
+        assertNull(service.resolveContactProfile("$RING_PUBKY-null", true, timeout = READ_TIMEOUT))
+    }
+
+    @Test
+    fun `activation returns while identity publication runs and approval republish joins it until the cap`() = runTest {
+        listOf("publication finishes" to true, "cap" to false).forEachCase({ it.first }) { (case, gateOpens) ->
+            val keychain = mock<Keychain>()
+            stubReceiverNoiseSecret(keychain)
+            val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+            val publicationGate = CompletableDeferred<Boolean>()
+            var published = false
+            val bootstrap = mock<PubkySessionBootstrap>()
+            whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer {
+                publicationGate.await().also { published = true }
+            }
+            val access = mock<PubkySessionAccess>()
+            val noise = mock<ReceiverNoiseSecretKey>()
+            whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+            whenever(access.exportSessionSecret()).thenReturn("new-session")
+            whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+            val sdk = mock<PaykitSdk>()
+            val service = PaykitSdkService(
+                context = mock(),
+                keychain = keychain,
+                pubkyStore = store,
+                bootstrapFactory = { bootstrap },
+                ioDispatcher = StandardTestDispatcher(testScheduler),
+                sdkFactory = { sdk },
+            )
+            val activationStart = currentTime
+
+            val activation = async {
+                service.activateRegisteredIdentity(PubkySessionBootstrapResult(access, "pubky$RING_PUBKY"))
+            }
+            runCurrent()
+
+            assertTrue(activation.isCompleted, case)
+            assertEquals(activationStart, currentTime, case)
+            verify(sdk, description(case)).initialize()
+            verify(bootstrap, description(case)).republishIdentity("pubky$RING_PUBKY")
+            assertFalse(published, case)
+            val start = currentTime
+
+            val approval = async { service.republishIdentityIfNeeded(RING_PUBKY) }
+            advanceTimeBy(4_999)
+            runCurrent()
+            assertFalse(approval.isCompleted, case)
+            if (gateOpens) publicationGate.complete(true) else advanceTimeBy(1)
+            runCurrent()
+
+            assertTrue(approval.isCompleted, case)
+            assertEquals(start + if (gateOpens) 4_999 else 5_000, currentTime, case)
+            verify(bootstrap, description(case)).republishIdentity("pubky$RING_PUBKY")
+            publicationGate.complete(true)
+            runCurrent()
+            assertTrue(published, case)
+        }
+    }
+
+    @Test
     fun `only explicit readd unblocks every saved private receiver`() = runTest {
         for (restoreConnection in listOf(false, true)) {
             val sdk = mock<PaykitSdk>()
@@ -442,6 +843,65 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `a contact save queued behind an identity change is not saved to the new identity`() = runTest {
+        val originalIdentity = "pubky$RING_PUBKY"
+        val newIdentity = "pubky5${RING_PUBKY.drop(1)}"
+        val contactKey = "pubky8${RING_PUBKY.drop(1)}"
+        val keychain = mock<Keychain>()
+        stubReceiverNoiseSecret(keychain)
+        val identityChangeGate = CompletableDeferred<Unit>()
+        whenever(keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)).doSuspendableAnswer { identityChangeGate.await() }
+        val store = mock<PubkyStore>()
+        whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+        val bootstrap = mock<PubkySessionBootstrap>()
+        whenever(bootstrap.republishIdentity(any())).thenReturn(true)
+        val access = mock<PubkySessionAccess>()
+        val noise = mock<ReceiverNoiseSecretKey>()
+        whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+        whenever(access.exportSessionSecret()).thenReturn("new-session")
+        whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+        val originalSdk = mock<PaykitSdk>()
+        whenever(originalSdk.identityStatus()).thenReturn(IdentityStatus(originalIdentity, true))
+        val newSdk = mock<PaykitSdk>()
+        whenever(newSdk.identityStatus()).thenReturn(IdentityStatus(newIdentity, true))
+        whenever(newSdk.linkedPeers()).thenReturn(emptyList())
+        whenever(newSdk.saveContact(any())).thenReturn(mock())
+        val handles = ArrayDeque(listOf(originalSdk, newSdk))
+        val service = PaykitSdkService(
+            context = mock(),
+            keychain = keychain,
+            pubkyStore = store,
+            bootstrapFactory = { bootstrap },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            sdkFactory = { handles.removeFirst() },
+        )
+
+        val identityChange = async {
+            service.activateRegisteredIdentity(PubkySessionBootstrapResult(access, newIdentity))
+        }
+        runCurrent()
+        val save = async {
+            assertFailsWith<IllegalStateException> {
+                service.saveContact(
+                    contactKey,
+                    "Contact",
+                    restorePrivateConnection = true,
+                    expectedIdentity = originalIdentity,
+                )
+            }
+        }
+        runCurrent()
+        assertFalse(save.isCompleted)
+        identityChangeGate.complete(Unit)
+        identityChange.await()
+        save.await()
+
+        verify(newSdk, never()).saveContact(any())
+        service.saveContact(contactKey, "Contact", restorePrivateConnection = true, expectedIdentity = newIdentity)
+        verify(newSdk).saveContact(any())
+    }
+
+    @Test
     fun `blocked peer cleanup does not attempt network delivery`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(PaykitReceiverPaths.SERVER, LinkedPeerState.BLOCKED)))
@@ -449,6 +909,41 @@ class PaykitSdkServiceTest {
         assertNull(service.clearPrivatePaymentList(RING_PUBKY, PaykitReceiverPaths.SERVER))
         verify(sdk, never()).clearPrivatePaymentListAndProcessOutbound(any(), any())
     }
+
+    private suspend fun gatedReadService(
+        gates: Map<String, CompletableDeferred<Unit>>,
+        started: MutableList<String>,
+    ): PaykitSdkService {
+        val sdk = mock<PaykitSdk>()
+        val read: suspend (String) -> Unit = { key ->
+            started += key
+            gates.getValue(key).await()
+        }
+        whenever { sdk.contactRecords() }.thenReturn(emptyList())
+        gates.keys.forEach { key ->
+            whenever { sdk.fetchPubkyFileBounded(key, 1uL) }.doSuspendableAnswer {
+                read(key)
+                byteArrayOf(1)
+            }
+        }
+        whenever { sdk.resolveContactProfile(any(), any(), any()) }.doSuspendableAnswer {
+            read(it.getArgument(0))
+            null
+        }
+        return PaykitSdkService(mock(), mock(), mock()) { sdk }.also { it.contactRecords() }
+    }
+
+    private fun receiverMarker(path: String, paymentRequests: Boolean, outgoingPayments: Boolean) =
+        PaykitReceiverMarker(
+            receiverPath = path,
+            capabilities = PaykitReceiverCapabilities(
+                privatePayments = true,
+                paymentRequests = paymentRequests,
+                receipts = false,
+                outgoingPayments = outgoingPayments,
+            ),
+            noisePublicKey = "noise",
+        )
 
     private fun contactPeer(path: String, state: LinkedPeerState) = LinkedPeerRecord(
         counterparty = RING_PUBKY,

@@ -560,6 +560,18 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            pubkyRepo.contactImportFailure.collect { error ->
+                if (error != null) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = error.message,
+                    )
+                    pubkyRepo.clearContactImportFailure()
+                }
+            }
+        }
         observeReceiveSheetInvoice()
         observeLdkNodeEvents()
         observeLightningUsableChannels()
@@ -2447,6 +2459,7 @@ class AppViewModel @Inject constructor(
         if (!PubkyAuthRequest.isSignupUrl(data)) {
             val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
                 pubkyRepo.awaitInitialization()
+                if (!isContactLink) pubkyRepo.awaitIdentityReady()
                 awaitContactDataForDeeplink(isContactLink)
             } ?: false
             if (!isInitializationReady) {
@@ -5772,9 +5785,9 @@ class AppViewModel @Inject constructor(
         sheet is Sheet.Pin ||
         sheet is Sheet.PubkyAuth
 
-    fun clearPendingPubkyImport() {
+    fun discardPendingPubkyImport() {
         viewModelScope.launch {
-            pubkyRepo.clearPendingImport()
+            pubkyRepo.discardPendingImport()
         }
     }
 
@@ -5847,11 +5860,7 @@ class AppViewModel @Inject constructor(
         if (isSignup && rejectPubkySignupForExistingIdentity()) return
 
         if (!isSignup && pubkyRepo.publicKey.value == null) {
-            ToastEventBus.send(
-                type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.pubky_auth__no_identity),
-                description = context.getString(R.string.pubky_auth__no_identity_desc),
-            )
+            showPubkyIdentityUnavailableToast()
             return
         }
 
@@ -5864,6 +5873,23 @@ class AppViewModel @Inject constructor(
             return
         }
         showSheet(Sheet.PubkyAuth(authUrl))
+    }
+
+    private suspend fun showPubkyIdentityUnavailableToast() {
+        val hasIdentity = runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(true)
+        if (hasIdentity) {
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.pubky_auth__identity_unavailable),
+                description = context.getString(R.string.pubky_auth__identity_unavailable_desc),
+            )
+            return
+        }
+        ToastEventBus.send(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.pubky_auth__no_identity),
+            description = context.getString(R.string.pubky_auth__no_identity_desc),
+        )
     }
 
     private suspend fun rejectPubkySignupForExistingIdentity(): Boolean {
