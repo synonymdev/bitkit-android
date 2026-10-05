@@ -931,6 +931,10 @@ class AppViewModel @Inject constructor(
                     nextMaintenance = timeSource.markNow() + PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
                     if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
                     pubkyRepo.republishIdentityIfNeeded()
+                    retryPendingPaykitEndpointRemoval(
+                        contactKeys = pubkyRepo.contacts.value.map { it.publicKey },
+                        reason = "payment request polling",
+                    )
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
                 }
                 refreshIncomingPaykitPaymentRequests(

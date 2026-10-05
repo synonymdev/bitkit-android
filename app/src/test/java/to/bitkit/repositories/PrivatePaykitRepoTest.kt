@@ -45,6 +45,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.App
 import to.bitkit.CurrentActivity
@@ -762,6 +763,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 assertFalse(cacheData.value.cleanupPending)
                 assertTrue(cacheData.value.contacts.isEmpty())
                 verify(publicPaykitRepo).syncPaykitApp()
+
+                clearInvocations(paykitSdkService, publicPaykitRepo)
+                sut.retryPendingEndpointRemoval(emptyList()).getOrThrow()
+                verifyNoInteractions(paykitSdkService, publicPaykitRepo)
             }
         }
     }

@@ -858,6 +858,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `foreground maintenance retries pending cleanup until it succeeds`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        settingsData.value = SettingsData(publicPaykitCleanupPending = true)
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).thenReturn(
+            Result.failure(AppError("Registry unavailable")),
+            Result.success(Unit),
+        )
+
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+            verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
+            assertTrue(settingsData.value.publicPaykitCleanupPending)
+
+            advanceTimeBy(60.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(publicPaykitRepo, times(2)).syncPublishedEndpoints(publish = false)
+            verify(privatePaykitRepo, times(2)).retryPendingEndpointRemoval(emptyList())
+            assertFalse(settingsData.value.publicPaykitCleanupPending)
+
+            advanceTimeBy(60.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(publicPaykitRepo, times(2)).syncPublishedEndpoints(publish = false)
+            verify(privatePaykitRepo, times(3)).retryPendingEndpointRemoval(emptyList())
+            assertFalse(settingsData.value.sharesPublicPaykitEndpoints)
+            assertFalse(settingsData.value.sharesPrivatePaykitEndpoints)
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
     fun `offline periodic polling skips inbox and maintenance`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
