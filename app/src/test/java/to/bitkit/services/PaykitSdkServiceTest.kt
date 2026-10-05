@@ -202,35 +202,169 @@ class PaykitSdkServiceTest {
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
     fun `scoped private receive holds mutation lock and tracks backup changes`() = runTest {
-        val sdk = mock<PaykitSdk>()
-        val report = mock<PrivateStreamIntakeReport>()
-        val releaseReceive = CompletableDeferred<Unit>()
-        var revision = "before"
-        whenever(sdk.stateRevision()).thenAnswer { revision }
-        whenever(sdk.backupStateRevision()).thenAnswer { revision }
-        whenever(sdk.receivePrivateMessages(RING_PUBKY)).doSuspendableAnswer {
-            releaseReceive.await()
-            revision = "received"
-            report
+        for (cancelActive in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val report = mock<PrivateStreamIntakeReport>()
+            val releaseReceive = CompletableDeferred<Unit>()
+            var revision = "before"
+            whenever(sdk.stateRevision()).thenAnswer { revision }
+            whenever { sdk.backupStateRevision() }.thenAnswer { revision }
+            whenever { sdk.receivePrivateMessages(RING_PUBKY) }.doSuspendableAnswer {
+                releaseReceive.await()
+                revision = "received"
+                report
+            }
+            whenever { sdk.contactRecords() }.thenReturn(emptyList())
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val receive = async { service.receivePrivateMessages(RING_PUBKY) }
+            runCurrent()
+            val contacts = async { service.contactRecords() }
+            runCurrent()
+            val cancelledQueued = async { service.processPendingPrivateMessages() }
+            runCurrent()
+            cancelledQueued.cancel()
+            if (cancelActive) receive.cancel()
+            runCurrent()
+            try {
+                assertFalse(receive.isCompleted)
+                assertFalse(contacts.isCompleted)
+                verify(sdk, never()).contactRecords()
+            } finally {
+                releaseReceive.complete(Unit)
+            }
+
+            if (cancelActive) {
+                assertFailsWith<CancellationException> { receive.await() }
+            } else {
+                assertSame(report, receive.await())
+            }
+            assertEquals(emptyList(), contacts.await())
+            assertFailsWith<CancellationException> { cancelledQueued.await() }
+            assertEquals("received", revision)
+            assertEquals(1L, service.backupStateVersion.value)
+            verify(sdk).receivePrivateMessages(RING_PUBKY)
+            verify(sdk, never()).receivePrivateMessagesFromLinkedPeers()
+            verify(sdk, never()).processPendingPrivateMessages()
         }
-        whenever(sdk.contactRecords()).thenReturn(emptyList())
+    }
+
+    @Test
+    fun `cancelled private preparation finishes the active SDK call before releasing the queue`() = runTest {
+        for (isRequest in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val release = CompletableDeferred<Unit>()
+            var finished = false
+            whenever { sdk.prepareAndResolvePrivateContactPayment(RING_PUBKY, null, null, 1u) }
+                .doSuspendableAnswer {
+                    release.await()
+                    finished = true
+                    mock()
+                }
+            whenever { sdk.prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null, 1u) }
+                .doSuspendableAnswer {
+                    release.await()
+                    finished = true
+                    mock()
+                }
+            whenever { sdk.contactRecords() }.thenAnswer {
+                assertTrue(finished)
+                emptyList<ContactRecord>()
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val preparation = async {
+                if (isRequest) {
+                    service.prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null)
+                } else {
+                    service.prepareAndResolvePrivateContactPayment(RING_PUBKY, null)
+                }
+            }
+            runCurrent()
+            val next = async { service.contactRecords() }
+            preparation.cancel()
+            runCurrent()
+            assertFalse(preparation.isCompleted)
+            assertFalse(next.isCompleted)
+            assertFalse(finished)
+            release.complete(Unit)
+
+            assertFailsWith<CancellationException> { preparation.await() }
+            assertEquals(emptyList(), next.await())
+            assertTrue(finished)
+            assertEquals(1L, service.backupStateVersion.value)
+        }
+    }
+
+    @Test
+    fun `cancelling an active execution claim does not continue to accept`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val releaseClaim = CompletableDeferred<Unit>()
+        var claimFinished = false
+        whenever { sdk.claimPaymentRequestForExecution(RING_PUBKY, "request") }.doSuspendableAnswer {
+            releaseClaim.await()
+            claimFinished = true
+            mock()
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val acceptance = async { service.acceptPaymentRequest(RING_PUBKY, "request") }
+        runCurrent()
+        acceptance.cancel()
+        runCurrent()
+        assertFalse(acceptance.isCompleted)
+        releaseClaim.complete(Unit)
+
+        assertFailsWith<CancellationException> { acceptance.await() }
+        assertTrue(claimFinished)
+        verify(sdk, never()).acceptPaymentRequest(any(), any())
+        assertEquals(1L, service.backupStateVersion.value)
+    }
+
+    @Test
+    fun `cancelling the initial backup read completes it without starting the mutation`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val releaseRead = CompletableDeferred<Unit>()
+        var readFinished = false
+        whenever { sdk.backupStateRevision() }.doSuspendableAnswer {
+            releaseRead.await()
+            readFinished = true
+            "backup"
+        }
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
         val receive = async { service.receivePrivateMessages(RING_PUBKY) }
         runCurrent()
-        val contacts = async { service.contactRecords() }
+        receive.cancel()
         runCurrent()
-        try {
-            assertFalse(contacts.isCompleted)
-            verify(sdk, never()).contactRecords()
-        } finally {
-            releaseReceive.complete(Unit)
-        }
+        assertFalse(receive.isCompleted)
+        releaseRead.complete(Unit)
 
-        assertSame(report, receive.await())
-        assertEquals(emptyList(), contacts.await())
-        assertEquals(1L, service.backupStateVersion.value)
-        verify(sdk).receivePrivateMessages(RING_PUBKY)
-        verify(sdk, never()).receivePrivateMessagesFromLinkedPeers()
+        assertFailsWith<CancellationException> { receive.await() }
+        assertTrue(readFinished)
+        verify(sdk, never()).receivePrivateMessages(any())
+        assertEquals(0L, service.backupStateVersion.value)
+    }
+
+    @Test
+    fun `identity failure during cancellation invalidates the cached backup snapshot`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever { sdk.backupStateRevision() }.thenReturn("backup")
+        whenever { sdk.processPendingPrivateMessages() }.thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        service.processPendingPrivateMessages()
+
+        val releaseRead = CompletableDeferred<Unit>()
+        whenever { sdk.identityStatus() }.doSuspendableAnswer {
+            releaseRead.await()
+            throw PaykitException.Identity("identity_error", "Identity changed")
+        }
+        val read = async { service.identityStatus() }
+        runCurrent()
+        read.cancel()
+        releaseRead.complete(Unit)
+        assertFailsWith<CancellationException> { read.await() }
+
+        service.processPendingPrivateMessages()
+
+        verify(sdk, times(2)).backupStateRevision()
     }
 
     @Test
@@ -496,7 +630,7 @@ class PaykitSdkServiceTest {
                 verify(blocking, never()).delete(any())
             } else {
                 val thrown = assertFailsWith(error::class) { service.activateRegisteredIdentity(result) }
-                assertEquals(error, thrown)
+                if (failure == "cancel") assertEquals(error.message, thrown.message) else assertSame(error, thrown)
                 verify(blocking).delete(Keychain.Key.PAYKIT_SESSION.name)
                 verify(blocking).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
                 val handlesBeforeReload = handlesCreated
@@ -1073,10 +1207,11 @@ class PaykitSdkServiceTest {
                 "save" -> whenever(sdk.saveContact(any())).thenThrow(failure).thenReturn(mock())
             }
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-            val thrown = assertFailsWith<Throwable> {
+            val thrown = assertFailsWith(failure::class) {
                 service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
             }
-            assertSame(failure, thrown)
+            if (failure !is CancellationException) assertSame(failure, thrown)
+            assertEquals(failure.message, thrown.message)
             if (failurePoint == "lookup") {
                 verify(sdk, never()).blockPeer(any())
             } else {
@@ -1107,6 +1242,47 @@ class PaykitSdkServiceTest {
         assertSame(restorationFailure, thrown)
         assertEquals(listOf(rollbackFailure), thrown.suppressed.toList())
         verify(sdk).blockPeer(RING_PUBKY)
+    }
+
+    @Test
+    fun `cancelled contact restore completes unblocking and rollback before releasing the queue`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever { sdk.linkedPeers() }.thenReturn(listOf(contactPeer(LinkedPeerState.BLOCKED)))
+        val releaseUnblock = CompletableDeferred<Unit>()
+        val releaseRollback = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        whenever { sdk.unblockPeer(RING_PUBKY) }.doSuspendableAnswer {
+            releaseUnblock.await()
+            events += "unblocked"
+            contactPeer(LinkedPeerState.NOT_LINKED)
+        }
+        whenever { sdk.blockPeer(RING_PUBKY) }.doSuspendableAnswer {
+            events += "rollback"
+            releaseRollback.await()
+            events += "blocked"
+            contactPeer(LinkedPeerState.BLOCKED)
+        }
+        whenever { sdk.contactRecords() }.thenAnswer {
+            events += "next"
+            emptyList<ContactRecord>()
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val restore = async { service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true) }
+        runCurrent()
+        restore.cancel()
+        val next = async { service.contactRecords() }
+        runCurrent()
+        assertEquals(emptyList(), events)
+        releaseUnblock.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("unblocked", "rollback"), events)
+        assertFalse(next.isCompleted)
+        releaseRollback.complete(Unit)
+
+        assertFailsWith<CancellationException> { restore.await() }
+        next.await()
+        assertEquals(listOf("unblocked", "rollback", "blocked", "next"), events)
+        verify(sdk, never()).saveContact(any())
     }
 
     @Test

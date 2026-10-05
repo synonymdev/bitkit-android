@@ -307,7 +307,7 @@ class PaykitSdkService @Inject constructor(
                     refreshPaykitKey(force = true)
                     var handle = handle()
                     val identityStatus = try {
-                        handle.initialize()
+                        completeSdkCall { handle.initialize() }
                     } catch (e: PaykitException.Identity) {
                         invalidatePaykitKeyIfNeeded(e)
                         if (!sessionProvider.canDeferStaleSession(e.context)) throw e
@@ -321,7 +321,7 @@ class PaykitSdkService @Inject constructor(
                         resetRuntime()
                         try {
                             handle = handle()
-                            handle.initialize()
+                            completeSdkCall { handle.initialize() }
                         } finally {
                             sessionProvider.resumeStoredSessionAccess()
                         }
@@ -392,7 +392,8 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withPaykitKey { handle ->
-                handle.identityStatus()?.publicKey ?: handle.initialize().publicKey
+                completeSdkCall { handle.identityStatus() }?.publicKey
+                    ?: completeSdkCall { handle.initialize() }.publicKey
             }
         }
     }
@@ -400,7 +401,9 @@ class PaykitSdkService @Inject constructor(
     suspend fun hasPrivatePaymentAccess(): Boolean {
         isSetup.await()
         return operationLock.withLock {
-            withPaykitKey { it.identityStatus()?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE }
+            withPaykitKey {
+                completeSdkCall { it.identityStatus() }?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
+            }
         }
     }
 
@@ -552,10 +555,10 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withPaykitKey { handle ->
-                val publicKey = requireNotNull(handle.identityStatus()?.publicKey)
+                val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
                 val current = handle.fetchPaykitProfile(publicKey)
-                handle.publishPaykitProfile(profile, current?.revision).also {
-                    notifyBackupStateChanged()
+                completeSdkCall {
+                    handle.publishPaykitProfile(profile, current?.revision).also { notifyBackupStateChanged() }
                 }
             }
         }
@@ -565,14 +568,14 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             if (expectedIdentity != null) {
-                val identityStatus = handle().identityStatus()
+                val identityStatus = completeSdkCall { handle().identityStatus() }
                 check(
                     identityStatus?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE &&
                         PubkyPublicKeyFormat.matches(identityStatus.publicKey, expectedIdentity)
                 ) { "Paykit identity changed before uploading the subscription icon" }
             }
-            handle().uploadProfileAvatar(bytes, contentType).uri.also {
-                notifyBackupStateChanged()
+            completeSdkCall {
+                handle().uploadProfileAvatar(bytes, contentType).uri.also { notifyBackupStateChanged() }
             }
         }
     }
@@ -581,9 +584,12 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withPaykitKey { handle ->
-                val publicKey = requireNotNull(handle.identityStatus()?.publicKey)
-                handle.fetchPaykitProfile(publicKey)?.let { handle.deletePaykitProfile(it.revision) }
-                notifyBackupStateChanged()
+                val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
+                val current = handle.fetchPaykitProfile(publicKey)
+                completeSdkCall {
+                    current?.let { handle.deletePaykitProfile(it.revision) }
+                    notifyBackupStateChanged()
+                }
             }
         }
     }
@@ -597,14 +603,14 @@ class PaykitSdkService @Inject constructor(
     suspend fun contactRecords(): List<ContactRecord> {
         isSetup.await()
         return operationLock.withLock {
-            withPaykitKey { it.contactRecords() }
+            withPaykitKey { completeSdkCall { it.contactRecords() } }
         }
     }
 
     suspend fun contactRecord(publicKey: String): ContactRecord? {
         isSetup.await()
         return operationLock.withLock {
-            withPaykitKey { it.contactRecord(publicKey) }
+            withPaykitKey { completeSdkCall { it.contactRecord(publicKey) } }
         }
     }
 
@@ -618,15 +624,18 @@ class PaykitSdkService @Inject constructor(
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
                 if (expectedIdentity != null) {
-                    check(PubkyPublicKeyFormat.matches(handle.identityStatus()?.publicKey, expectedIdentity)) {
+                    val identity = completeSdkCall { handle.identityStatus() }?.publicKey
+                    check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) {
                         "Paykit identity changed before saving the contact"
                     }
                 }
-                val existing = handle.contactRecord(publicKey)
+                val existing = completeSdkCall { handle.contactRecord(publicKey) }
                 check(restorePrivateConnection || existing != null) { "Contact no longer exists" }
                 val update = ContactUpdate(publicKey, label)
-                if (!restorePrivateConnection) return@withStateRevisionTracking handle.saveContact(update)
-                val blockedPeers = handle.linkedPeers().filter {
+                if (!restorePrivateConnection) {
+                    return@withStateRevisionTracking completeSdkCall { handle.saveContact(update) }
+                }
+                val blockedPeers = completeSdkCall { handle.linkedPeers() }.filter {
                     it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
                 }
                 restorePrivateContact(handle, blockedPeers, update)
@@ -638,11 +647,11 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                val peers = handle.linkedPeers().filter {
+                val peers = completeSdkCall { handle.linkedPeers() }.filter {
                     PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
                 }
                 val now = nowMillis()
-                val hasActiveSubscription = handle.paymentRequests().any {
+                val hasActiveSubscription = completeSdkCall { handle.paymentRequests() }.any {
                     val endsAt = it.terms?.recurrence?.endsAt?.let { timestamp ->
                         runSuspendCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
                     }
@@ -653,9 +662,7 @@ class PaykitSdkService @Inject constructor(
                 if (hasActiveSubscription) throw PubkyContactError.ActiveSubscription
                 peers.filter { it.state == LinkedPeerState.LINKED }.forEach {
                     runSuspendCatching {
-                        val report = handle.clearPrivatePaymentListAndProcessOutbound(
-                            publicKey,
-                        )
+                        val report = completeSdkCall { handle.clearPrivatePaymentListAndProcessOutbound(publicKey) }
                         if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) {
                             Logger.warn("Failed to withdraw private endpoints before contact deletion", context = TAG)
                         }
@@ -664,8 +671,8 @@ class PaykitSdkService @Inject constructor(
                         Logger.warn("Failed to withdraw private endpoints before contact deletion", it, context = TAG)
                     }
                 }
-                handle.blockPeer(publicKey)
-                handle.removeContact(publicKey)
+                completeSdkCall { handle.blockPeer(publicKey) }
+                completeSdkCall { handle.removeContact(publicKey) }
             }
         }
     }
@@ -683,13 +690,15 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withStateRevisionTracking { handle ->
-                val capabilities = appCapabilities(handle.identityStatus())
-                handle.publishPaykitApp(
-                    displayName = "Bitkit",
-                    capabilities = capabilities.copy(
-                        privatePayments = capabilities.privatePayments && privatePaymentsEnabled
-                    ),
-                )
+                val capabilities = appCapabilities(completeSdkCall { handle.identityStatus() })
+                completeSdkCall {
+                    handle.publishPaykitApp(
+                        displayName = "Bitkit",
+                        capabilities = capabilities.copy(
+                            privatePayments = capabilities.privatePayments && privatePaymentsEnabled
+                        ),
+                    )
+                }
             }
         }
     }
@@ -703,7 +712,9 @@ class PaykitSdkService @Inject constructor(
         }
         return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
-                handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
+                completeSdkCall {
+                    handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
+                }
             }
         }
     }
@@ -722,10 +733,12 @@ class PaykitSdkService @Inject constructor(
         }
         return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
-                handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
-                    updates = updates,
-                    clearUnlistedLinkedPeers = clearUnlistedLinkedPeers,
-                )
+                completeSdkCall {
+                    handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
+                        updates = updates,
+                        clearUnlistedLinkedPeers = clearUnlistedLinkedPeers,
+                    )
+                }
             }
         }
     }
@@ -737,7 +750,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.ensureLinkWithPeer(counterparty, maxAdvanceSteps)
+                completeSdkCall { handle.ensureLinkWithPeer(counterparty, maxAdvanceSteps) }
             }
         }
     }
@@ -749,7 +762,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                val peers = handle.linkedPeers()
+                val peers = completeSdkCall { handle.linkedPeers() }
                 val blockedPeers = peers.filter { it.state == LinkedPeerState.BLOCKED }
                 val updates = counterparties.filterNot { counterparty ->
                     blockedPeers.any {
@@ -757,7 +770,7 @@ class PaykitSdkService @Inject constructor(
                     }
                 }.map { PrivatePaymentListReservationUpdateInput(it, emptyList()) }
                 if (updates.isEmpty()) return@withStateRevisionTracking null
-                val publicKey = handle.identityStatus()?.publicKey
+                val publicKey = completeSdkCall { handle.identityStatus() }?.publicKey
                 if (publicKey != null) {
                     val app = handle.paykitAppRegistry(publicKey)?.apps?.find { it.appId == "bitkit" }
                     if (app?.capabilities?.privatePayments == false) return@withStateRevisionTracking null
@@ -769,16 +782,18 @@ class PaykitSdkService @Inject constructor(
                         }
                     ) {
                         runSuspendCatching {
-                            handle.ensureLinkWithPeer(update.counterparty, 1u)
+                            completeSdkCall { handle.ensureLinkWithPeer(update.counterparty, 1u) }
                         }.onFailure {
                             Logger.warn("Failed to recover private Paykit link before withdrawal", it, context = TAG)
                         }
                     }
                 }
-                handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
-                    updates = updates,
-                    clearUnlistedLinkedPeers = false,
-                )
+                completeSdkCall {
+                    handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
+                        updates = updates,
+                        clearUnlistedLinkedPeers = false,
+                    )
+                }
             }
         }
     }
@@ -787,7 +802,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.receivePrivateMessagesFromLinkedPeers()
+                completeSdkCall { handle.receivePrivateMessagesFromLinkedPeers() }
             }
         }
     }
@@ -796,7 +811,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.receivePrivateMessages(counterparty)
+                completeSdkCall { handle.receivePrivateMessages(counterparty) }
             }
         }
     }
@@ -805,7 +820,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.processOutboundPrivateMessages(counterparty)
+                completeSdkCall { handle.processOutboundPrivateMessages(counterparty) }
             }
         }
     }
@@ -814,7 +829,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.processPendingPrivateMessages()
+                completeSdkCall { handle.processPendingPrivateMessages() }
             }
         }
     }
@@ -826,19 +841,22 @@ class PaykitSdkService @Inject constructor(
         return operationLock.withLock {
             withPaykitKey { handle ->
                 if (expectedIdentity != null) {
-                    check(PubkyPublicKeyFormat.matches(handle.identityStatus()?.publicKey, expectedIdentity)) {
+                    val identity = completeSdkCall { handle.identityStatus() }?.publicKey
+                    check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) {
                         "Payment Request identity changed"
                     }
                 }
-                handle.listPaymentRequests(
-                    PaymentRequestFilter(
-                        counterparty = null,
-                        localRole = null,
-                        states = emptyList(),
-                        recurring = null,
-                        receivedOnly = false,
-                    ),
-                )
+                completeSdkCall {
+                    handle.listPaymentRequests(
+                        PaymentRequestFilter(
+                            counterparty = null,
+                            localRole = null,
+                            states = emptyList(),
+                            recurring = null,
+                            receivedOnly = false,
+                        ),
+                    )
+                }
             }
         }
     }
@@ -846,7 +864,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun identityStatus(): IdentityStatus? {
         isSetup.await()
         return operationLock.withLock {
-            withPaykitKey { it.identityStatus() }
+            withPaykitKey { completeSdkCall { it.identityStatus() } }
         }
     }
 
@@ -871,7 +889,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
             withStateRevisionTracking { handle ->
-                val identityStatus = handle.identityStatus()
+                val identityStatus = completeSdkCall { handle.identityStatus() }
                 check(
                     identityStatus?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE &&
                         PubkyPublicKeyFormat.matches(identityStatus.publicKey, expectedIdentity)
@@ -896,7 +914,7 @@ class PaykitSdkService @Inject constructor(
                     paymentDeadline = null,
                     metadata = PrivateJsonObject(proposal.metadataJson),
                 )
-                handle.proposePaymentRequest(counterparty, terms)
+                completeSdkCall { handle.proposePaymentRequest(counterparty, terms) }
             }
         }
     }
@@ -908,8 +926,8 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.claimPaymentRequestForExecution(counterparty, paymentRequestId)
-                handle.acceptPaymentRequest(counterparty, paymentRequestId)
+                completeSdkCall { handle.claimPaymentRequestForExecution(counterparty, paymentRequestId) }
+                completeSdkCall { handle.acceptPaymentRequest(counterparty, paymentRequestId) }
             }
         }
     }
@@ -917,7 +935,9 @@ class PaykitSdkService @Inject constructor(
     suspend fun claimPaymentRequestForExecution(counterparty: String, paymentRequestId: String): PaymentRequestRecord {
         isSetup.await()
         return operationLock.withLock {
-            withStateRevisionTracking { it.claimPaymentRequestForExecution(counterparty, paymentRequestId) }
+            withStateRevisionTracking {
+                completeSdkCall { it.claimPaymentRequestForExecution(counterparty, paymentRequestId) }
+            }
         }
     }
 
@@ -933,18 +953,20 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.submitPaymentProof(
-                    counterparty,
-                    paymentRequestId,
-                    PaymentProofSubmission(
-                        billingPeriod = billingPeriod?.sdkValue,
-                        paymentAppId = paymentAppId,
-                        paymentEndpointIdentifier = paymentEndpointIdentifier,
-                        allowanceId = null,
-                        conversionQuoteId = null,
-                        proof = PrivateJsonObject(proofJson),
-                    ),
-                )
+                completeSdkCall {
+                    handle.submitPaymentProof(
+                        counterparty,
+                        paymentRequestId,
+                        PaymentProofSubmission(
+                            billingPeriod = billingPeriod?.sdkValue,
+                            paymentAppId = paymentAppId,
+                            paymentEndpointIdentifier = paymentEndpointIdentifier,
+                            allowanceId = null,
+                            conversionQuoteId = null,
+                            proof = PrivateJsonObject(proofJson),
+                        ),
+                    )
+                }
             }
         }
     }
@@ -957,7 +979,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.rejectPaymentRequest(counterparty, paymentRequestId, reason)
+                completeSdkCall { handle.rejectPaymentRequest(counterparty, paymentRequestId, reason) }
             }
         }
     }
@@ -970,7 +992,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
-                handle.cancelPaymentRequest(counterparty, paymentRequestId, reason)
+                completeSdkCall { handle.cancelPaymentRequest(counterparty, paymentRequestId, reason) }
             }
         }
     }
@@ -978,14 +1000,14 @@ class PaykitSdkService @Inject constructor(
     suspend fun linkedPeers(): List<LinkedPeerRecord> {
         isSetup.await()
         return operationLock.withLock {
-            withPaykitKey { it.linkedPeers() }
+            withPaykitKey { completeSdkCall { it.linkedPeers() } }
         }
     }
 
     suspend fun pendingOutboundPrivateCounterparties(): List<String> {
         isSetup.await()
         return operationLock.withLock {
-            withPaykitKey { it.pendingOutboundPrivateCounterparties() }
+            withPaykitKey { completeSdkCall { it.pendingOutboundPrivateCounterparties() } }
         }
     }
 
@@ -997,12 +1019,14 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         val prepared = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
             withStateRevisionTracking { handle ->
-                handle.prepareAndResolvePrivateContactPayment(
-                    counterparty = counterparty,
-                    amount = amount,
-                    afterPrivatePaymentListVersion = afterPrivatePaymentListVersion,
-                    maxAdvanceSteps = 1u,
-                )
+                completeSdkCall {
+                    handle.prepareAndResolvePrivateContactPayment(
+                        counterparty = counterparty,
+                        amount = amount,
+                        afterPrivatePaymentListVersion = afterPrivatePaymentListVersion,
+                        maxAdvanceSteps = 1u,
+                    )
+                }
             }
         }
         return PaykitPreparedPrivateContactPayment(
@@ -1019,12 +1043,14 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         val prepared = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
             withStateRevisionTracking {
-                it.prepareAndResolvePrivatePaymentRequest(
-                    counterparty,
-                    paymentRequestId,
-                    afterPrivatePaymentListVersion,
-                    1u,
-                )
+                completeSdkCall {
+                    it.prepareAndResolvePrivatePaymentRequest(
+                        counterparty,
+                        paymentRequestId,
+                        afterPrivatePaymentListVersion,
+                        1u,
+                    )
+                }
             }
         }
         return PaykitPreparedPrivateContactPayment(
@@ -1071,7 +1097,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun exportBackupState(): String {
         isSetup.await()
         return operationLock.withLock {
-            withPaykitKey { it.exportBackupString() }
+            withPaykitKey { completeSdkCall { it.exportBackupString() } }
         }
     }
 
@@ -1082,10 +1108,13 @@ class PaykitSdkService @Inject constructor(
     suspend fun signOut() {
         isSetup.await()
         operationLock.withLock {
-            withStateRevisionTracking { handle ->
-                handle.signOut()
+            try {
+                withStateRevisionTracking { handle ->
+                    completeSdkCall { handle.signOut() }
+                }
+            } finally {
+                resetRuntime()
             }
-            resetRuntime()
         }
     }
 
@@ -1095,8 +1124,10 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             try {
-                handle().forgetSessionAccess()
-                notifyBackupStateChanged()
+                completeSdkCall {
+                    handle().forgetSessionAccess()
+                    notifyBackupStateChanged()
+                }
             } finally {
                 resetRuntime()
             }
@@ -1179,9 +1210,9 @@ class PaykitSdkService @Inject constructor(
         resetRuntime()
         refreshPaykitKey()
         val handle = handle()
-        val identityStatus = handle.initialize()
+        val identityStatus = completeSdkCall { handle.initialize() }
         if (result.sessionAccess.exportLocalSecretKey() != null) {
-            handle.publishPaykitNoiseKeyAuthorization()
+            completeSdkCall { handle.publishPaykitNoiseKeyAuthorization() }
         }
         publishAppIfLiveSessionAvailable(handle, identityStatus)
         launchIdentityRepublish(publicKey = result.publicKey)
@@ -1198,10 +1229,10 @@ class PaykitSdkService @Inject constructor(
         runSuspendCatching {
             val capabilities = appCapabilities(identityStatus)
             if (capabilities.privatePayments) {
-                handle.publishPaykitApp(
-                    "Bitkit",
-                    capabilities.copy(privatePayments = settingsStore.data.first().sharesPrivatePaykitEndpoints),
-                )
+                val privatePayments = settingsStore.data.first().sharesPrivatePaykitEndpoints
+                completeSdkCall {
+                    handle.publishPaykitApp("Bitkit", capabilities.copy(privatePayments = privatePayments))
+                }
             }
         }.onFailure {
             invalidatePaykitKeyIfNeeded(it)
@@ -1232,8 +1263,8 @@ class PaykitSdkService @Inject constructor(
         var failure: Throwable? = null
         return try {
             runSuspendCatching {
-                blockedPeers.forEach { handle.unblockPeer(it.counterparty) }
-                handle.saveContact(update)
+                blockedPeers.forEach { completeSdkCall { handle.unblockPeer(it.counterparty) } }
+                completeSdkCall { handle.saveContact(update) }
             }.onFailure { failure = it }.getOrThrow()
         } catch (error: CancellationException) {
             failure = error
@@ -1270,7 +1301,7 @@ class PaykitSdkService @Inject constructor(
     private suspend fun <T> withStateRevisionTracking(block: suspend (PaykitSdk) -> T): T = withPaykitKey { handle ->
         withPaykitBackupStateTracking(
             readRevision = {
-                runSuspendCatching { handle.backupStateRevision() }
+                runSuspendCatching { completeSdkCall { handle.backupStateRevision() } }
                     .onFailure(::invalidatePaykitKeyIfNeeded)
                     .getOrThrow()
             },
@@ -1286,6 +1317,14 @@ class PaykitSdkService @Inject constructor(
     private suspend fun handle(): PaykitSdk = handleMutex.withLock {
         sdk?.let { return@withLock it }
         sdkFactory().also { sdk = it }
+    }
+
+    private suspend fun <T> completeSdkCall(operation: suspend () -> T): T {
+        currentCoroutineContext().ensureActive()
+        val result = withContext(NonCancellable) { runSuspendCatching { operation() } }
+            .onFailure(::invalidatePaykitKeyIfNeeded)
+        currentCoroutineContext().ensureActive()
+        return result.getOrThrow()
     }
 
     /**

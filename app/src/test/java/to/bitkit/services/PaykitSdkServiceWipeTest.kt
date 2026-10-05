@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PubkyIdentityCapability
@@ -9,9 +10,11 @@ import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.paykitAuthorizerSessionCapabilities
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.Mockito.mockStatic
@@ -30,6 +33,7 @@ import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.KeychainError
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -39,6 +43,80 @@ import kotlin.test.assertSame
 class PaykitSdkServiceWipeTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `wipe drains a cancelled active identity read and rejects queued work`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val releaseRead = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        whenever { sdk.identityStatus() }.doSuspendableAnswer {
+            releaseRead.await()
+            events += "read finished"
+            IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        whenever { sdk.contactRecords() }.thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val read = async { service.identityStatus() }
+        runCurrent()
+        val queued = async { assertFailsWith<PaykitException.Storage> { service.contactRecords() } }
+        runCurrent()
+        read.cancel()
+        val wipe = async { service.withWalletWipe { events += "wipe" } }
+        runCurrent()
+        assertFalse(read.isCompleted)
+        assertFalse(wipe.isCompleted)
+        assertEquals(emptyList(), events)
+        releaseRead.complete(Unit)
+
+        assertFailsWith<CancellationException> { read.await() }
+        assertEquals("wallet_wipe_in_progress", queued.await().code)
+        wipe.await()
+        assertEquals(listOf("read finished", "wipe"), events)
+        verify(sdk, never()).contactRecords()
+        assertEquals(emptyList(), service.contactRecords())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `cancelled active session teardown finishes and discards its runtime before fresh work`() = runTest {
+        for (forget in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val freshSdk = mock<PaykitSdk>()
+            val release = CompletableDeferred<Unit>()
+            val signedOut = IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT)
+            whenever { sdk.signOut() }.doSuspendableAnswer {
+                release.await()
+                signedOut
+            }
+            whenever { sdk.forgetSessionAccess() }.doSuspendableAnswer {
+                release.await()
+                signedOut
+            }
+            whenever { freshSdk.contactRecords() }.thenReturn(emptyList())
+            var handlesCreated = 0
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) {
+                if (handlesCreated++ == 0) sdk else freshSdk
+            }
+            val teardown = async {
+                if (forget) service.forgetSessionAccess() else service.signOut()
+            }
+            runCurrent()
+            val next = async { service.contactRecords() }
+            teardown.cancel()
+            runCurrent()
+            assertFalse(teardown.isCompleted)
+            assertFalse(next.isCompleted)
+            release.complete(Unit)
+
+            assertFailsWith<CancellationException> { teardown.await() }
+            assertEquals(emptyList(), next.await())
+            assertEquals(2, handlesCreated)
+            assertEquals(1L, service.backupStateVersion.value)
+            verify(sdk, never()).contactRecords()
+            verify(freshSdk).contactRecords()
+        }
     }
 
     @Test
