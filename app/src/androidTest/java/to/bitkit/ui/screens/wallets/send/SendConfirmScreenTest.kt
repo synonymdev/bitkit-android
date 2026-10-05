@@ -155,7 +155,7 @@ class SendConfirmScreenTest {
     }
 
     @Test
-    fun initialOnchainSubscriptionShowsFeeBeforeConfirmation() {
+    fun initialOnchainSubscriptionPaysWithoutSecondSwipe() {
         val state = SendUiState(
             amount = 3_000u,
             payMethod = SendMethod.ONCHAIN,
@@ -172,16 +172,13 @@ class SendConfirmScreenTest {
                         isNodeRunning = true,
                         isLoading = false,
                         showBiometrics = false,
-                        initialShowDetails = true,
                     )
                 }
             }
         }
 
-        composeTestRule.onNodeWithTag("SendConfirmAssetButton").assertIsDisplayed()
-        composeTestRule.onNodeWithText("422", substring = true).assertIsDisplayed()
-        composeTestRule.onNodeWithTag("SendConfirmToggleDetails").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Swipe To Subscribe & Pay").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("GRAB").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Swipe To Subscribe & Pay").assertDoesNotExist()
     }
 
     @Test
