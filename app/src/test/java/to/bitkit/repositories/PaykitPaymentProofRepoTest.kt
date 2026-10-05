@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
@@ -11,6 +12,7 @@ import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PubkyIdentityCapability
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -46,6 +48,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -531,6 +534,24 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.cancelPreparation(request)
 
         assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `cancel preparation retains proofs when identity lookup fails`() = test {
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        val preparedProofs = storedProofs
+        doSuspendableAnswer {
+            throw PaykitException.ConcurrentUpdate("concurrent_update", "Identity read locked")
+        }.whenever(paykitSdkService).identityStatus()
+
+        repo.cancelPreparation(request)
+
+        assertEquals(preparedProofs, storedProofs)
+        doSuspendableAnswer { throw CancellationException("Cancelled") }.whenever(paykitSdkService).identityStatus()
+        assertFailsWith<CancellationException> { repo.cancelPreparation(request) }
+        assertEquals(preparedProofs, storedProofs)
     }
 
     @Test

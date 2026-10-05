@@ -608,9 +608,9 @@ class PaykitPaymentProofRepo @Inject constructor(
         request: PaykitPaymentRequest,
         predicate: (PendingPaykitPaymentProof) -> Boolean,
     ) = withContext(ioDispatcher) {
-        val identity = currentIdentity()
-        operationMutex.withLock {
-            runSuspendCatching {
+        runSuspendCatching {
+            val identity = currentIdentity()
+            operationMutex.withLock {
                 val proofs = loadProofs()
                 val candidateIdentities = proofs
                     .filter { it.requestId == request.id && predicate(it) }
@@ -623,8 +623,8 @@ class PaykitPaymentProofRepo @Inject constructor(
                         predicate(it)
                 }
                 if (remaining != proofs) persist(remaining)
-            }.onFailure { Logger.warn("Failed to clear a pending Paykit payment proof", it, context = TAG) }
-        }
+            }
+        }.onFailure { Logger.warn("Failed to clear a pending Paykit payment proof", it, context = TAG) }
     }
 
     private suspend fun removeProofsLocked(predicate: (PendingPaykitPaymentProof) -> Boolean) {
