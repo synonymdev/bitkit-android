@@ -1,12 +1,14 @@
 <journey name="contacts list loading">
   <description>
     Contacts shows the saved contacts as soon as it opens after a relaunch, under the names they were
-    saved with, and fills in each contact's profile name and avatar as its lookup finishes. It no
-    longer shows a spinner over an empty list until every lookup has finished, and a lookup that
-    fails leaves the row as it is. Within the session, reopening Contacts shows the profiles already
-    found straight away. Opening a contact whose profile has not loaded yet looks it up at once, and
-    its edit form shows the contact's published bio rather than an empty one, so saving an edit keeps
-    it.
+    saved with, and fills in each contact's profile name and avatar as its lookup finishes, a few rows
+    at a time at most every 300 ms rather than re-sorting the list once per contact. It no longer
+    shows a spinner over an empty list until every lookup has finished, and a lookup that fails
+    leaves the row as it is. Within the session, reopening Contacts shows the profiles already
+    found straight away, and a profile found less than ten minutes ago is not looked up again, so only
+    contacts still without a profile get a new lookup. Opening a contact whose profile has not loaded
+    yet looks it up at once, and its edit form shows the contact's published bio rather than an empty
+    one, so saving an edit keeps it.
 
     Precondition: an onboarded dev wallet with Paykit enabled (the default) and a Pubky identity with
     at least five saved contacts, at least one of them with a published profile name and bio and one

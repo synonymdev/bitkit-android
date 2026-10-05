@@ -901,6 +901,69 @@ class PaykitSdkServiceTest {
         verify(newSdk).saveContact(any())
     }
 
+    /**
+     * A new session of the same identity passes the identity check, so only the sign-in check stops the save. The check
+     * runs once the save holds the lock, after the session is installed, so it sees the sign-in that ended meanwhile.
+     */
+    @Test
+    fun `a contact save queued behind a new session of its identity is not saved once its sign-in ended`() = runTest {
+        val identity = "pubky$RING_PUBKY"
+        val contactKey = "pubky8${RING_PUBKY.drop(1)}"
+        val keychain = mock<Keychain>()
+        stubReceiverNoiseSecret(keychain)
+        val sessionChangeGate = CompletableDeferred<Unit>()
+        whenever(keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session"))
+            .doSuspendableAnswer { sessionChangeGate.await() }
+        val store = mock<PubkyStore>()
+        whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+        val bootstrap = mock<PubkySessionBootstrap>()
+        whenever(bootstrap.republishIdentity(any())).thenReturn(true)
+        val access = mock<PubkySessionAccess>()
+        val noise = mock<ReceiverNoiseSecretKey>()
+        whenever(noise.exportBytes()).thenReturn(ByteArray(32) { 1 })
+        whenever(access.exportSessionSecret()).thenReturn("new-session")
+        whenever(access.exportReceiverNoiseSecretKey()).thenReturn(noise)
+        val originalSdk = mock<PaykitSdk>()
+        whenever(originalSdk.identityStatus()).thenReturn(IdentityStatus(identity, true))
+        val newSdk = mock<PaykitSdk>()
+        whenever(newSdk.identityStatus()).thenReturn(IdentityStatus(identity, true))
+        whenever(newSdk.linkedPeers()).thenReturn(emptyList())
+        whenever(newSdk.saveContact(any())).thenReturn(mock())
+        val handles = ArrayDeque(listOf(originalSdk, newSdk))
+        val service = PaykitSdkService(
+            context = mock(),
+            keychain = keychain,
+            pubkyStore = store,
+            bootstrapFactory = { bootstrap },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            sdkFactory = { handles.removeFirst() },
+        )
+        suspend fun save(isStillCurrent: () -> Boolean) = service.saveContact(
+            contactKey,
+            "Contact",
+            restorePrivateConnection = true,
+            expectedIdentity = identity,
+            isStillCurrent = isStillCurrent,
+        )
+        var isSignInCurrent = true
+
+        val sessionChange = async {
+            service.activateRegisteredIdentity(PubkySessionBootstrapResult(access, identity))
+        }
+        runCurrent()
+        val queuedSave = async { assertFailsWith<PubkyContactError.SignInChanged> { save { isSignInCurrent } } }
+        runCurrent()
+        assertFalse(queuedSave.isCompleted)
+        isSignInCurrent = false
+        sessionChangeGate.complete(Unit)
+        sessionChange.await()
+        queuedSave.await()
+
+        verify(newSdk, never()).saveContact(any())
+        save { true }
+        verify(newSdk).saveContact(any())
+    }
+
     @Test
     fun `blocked peer cleanup does not attempt network delivery`() = runTest {
         val sdk = mock<PaykitSdk>()
