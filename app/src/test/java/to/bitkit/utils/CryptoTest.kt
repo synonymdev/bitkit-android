@@ -8,8 +8,12 @@ import to.bitkit.ext.fromHex
 import to.bitkit.ext.toBase64
 import to.bitkit.ext.toHex
 import to.bitkit.fcm.EncryptedNotification
+import java.security.Provider
+import java.security.Security
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 
 class CryptoTest {
     private lateinit var sut: Crypto
@@ -17,6 +21,36 @@ class CryptoTest {
     @Before
     fun setUp() {
         sut = Crypto()
+    }
+
+    @Test
+    fun `it should preserve registered providers while using its own provider`() {
+        val originalProviders = Security.getProviders()
+        val originalProvider = Security.getProvider("BC")
+        val originalPosition = originalProviders.indexOf(originalProvider) + 1
+        val platformProvider = object : Provider("BC", 1.0, "Test platform provider") {}
+
+        try {
+            Security.removeProvider("BC")
+            Security.insertProviderAt(platformProvider, 1)
+            val providersBefore = Security.getProviders()
+
+            val crypto = Crypto()
+            val keys = crypto.generateKeyPair()
+            assertContentEquals(keys.publicKey, crypto.getPublicKey(keys.privateKey))
+            val secret = crypto.generateSharedSecret(keys.privateKey, keys.publicKey.toHex(), derivationName)
+            val plaintext = "Provider preservation".toByteArray()
+            val encrypted = crypto.encrypt(plaintext, secret)
+            assertContentEquals(plaintext, crypto.decrypt(encrypted, secret))
+
+            assertSame(platformProvider, Security.getProvider("BC"))
+            val providersAfter = Security.getProviders()
+            assertEquals(providersBefore.size, providersAfter.size)
+            providersBefore.forEachIndexed { index, provider -> assertSame(provider, providersAfter[index]) }
+        } finally {
+            Security.removeProvider("BC")
+            if (originalProvider != null) Security.insertProviderAt(originalProvider, originalPosition)
+        }
     }
 
     @Test
@@ -52,6 +86,8 @@ class CryptoTest {
         // Step 4: Server encrypts data using the shared secret
         val dataToEncrypt = "Hello from the server!"
         val encrypted = sut.encrypt(dataToEncrypt.toByteArray(), serverSecret)
+        assertEquals(12, encrypted.iv.size)
+        assertEquals(16, encrypted.tag.size)
         val response = EncryptedNotification(
             cipher = encrypted.cipher.toBase64(),
             iv = encrypted.iv.toHex(),
@@ -106,5 +142,13 @@ class CryptoTest {
         val value = sut.decrypt(encryptedPayload, sharedHash)
 
         assertEquals(decryptedPayload, value.decodeToString())
+
+        val invalidTag = encryptedPayload.tag.copyOf().apply { this[0] = (this[0].toInt() xor 1).toByte() }
+        assertFailsWith<CryptoError.DecryptionFailed> {
+            sut.decrypt(encryptedPayload.copy(tag = invalidTag), sharedHash)
+        }
+        assertFailsWith<CryptoError.DecryptionFailed> {
+            sut.decrypt(encryptedPayload.copy(tag = encryptedPayload.tag.copyOf(15)), sharedHash)
+        }
     }
 }
