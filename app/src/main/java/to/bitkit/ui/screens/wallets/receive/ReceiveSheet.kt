@@ -36,6 +36,7 @@ import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
+import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestAmountScreen
@@ -167,13 +168,15 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
-                            editInvoiceSourceTab = ReceiveTab.TREZOR
+                            editInvoiceSourceTab = ReceiveTab.HARDWARE
                             invoiceEditState.beginHardwareEdit()
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         initialTab = invoiceEditState.initialTab(hardwareWalletId),
                         hardwareWalletId = selectedHardwareWalletId,
+                        hardwareTabLabel = hardwareWallets.firstOrNull { it.id == selectedHardwareWalletId }
+                            ?.let { stringResource(it.vendor.modelNameRes()) },
                         hardwareReceiveState = hwReceiveState,
                         onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
                         onRetryHardwareAddress = hwReceiveViewModel::retryAddress,
@@ -483,11 +486,11 @@ internal class ReceiveInvoiceEditState {
 
     fun beginHardwareEdit() {
         isHardwareInvoice = true
-        returnTab = ReceiveTab.TREZOR
+        returnTab = ReceiveTab.HARDWARE
     }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
-        returnTab ?: ReceiveTab.TREZOR.takeIf { hardwareWalletId != null }
+        returnTab ?: ReceiveTab.HARDWARE.takeIf { hardwareWalletId != null || isHardwareInvoice }
 }
 
 @Composable

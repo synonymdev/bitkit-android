@@ -1352,6 +1352,55 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `sync rethrows a cancellation without recording a sync error`() = test {
+        // Offline keeps a retry loop from running, in case the cancellation is recorded as an error
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
+        startNodeForTesting()
+        var holdSync = true
+        var syncCalls = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncCalls++
+            if (holdSync) awaitCancellation()
+        }
+
+        val job = launch { sut.sync() }
+        runCurrent()
+        job.cancelAndJoin()
+
+        assertTrue(job.isCancelled)
+        assertNull(sut.lightningState.value.lastSyncError)
+        assertTrue(sut.lightningState.value.isSyncHealthy)
+        assertFalse(sut.lightningState.value.isSyncingWallet)
+
+        holdSync = false
+        assertTrue(sut.sync().isSuccess)
+        assertEquals(2, syncCalls)
+    }
+
+    @Test
+    fun `sync requested while a cancelled sync runs still runs`() = test {
+        // Offline keeps the retry loop from running the requested sync instead
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
+        startNodeForTesting()
+        var holdSync = true
+        var syncCalls = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncCalls++
+            if (holdSync) awaitCancellation()
+        }
+        val job = launch { sut.sync() }
+        runCurrent()
+        assertTrue(sut.sync().isSuccess)
+
+        holdSync = false
+        job.cancelAndJoin()
+        runCurrent()
+
+        assertEquals(2, syncCalls)
+        assertNull(sut.lightningState.value.lastSyncError)
+    }
+
+    @Test
     fun `sendOnChain should fail when node is not running`() = test {
         val result = sut.sendOnChain("address", 1000uL)
         assertTrue(result.isFailure)

@@ -97,7 +97,7 @@ import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
-import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.isHwUserCancellation
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -115,6 +115,7 @@ import to.bitkit.ext.walletId
 import to.bitkit.ext.watchUntil
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.FeeRate
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -2286,9 +2287,17 @@ class AppViewModel @Inject constructor(
     private fun showHardwareOnchainOnlyValidationError() {
         showAddressValidationError(
             titleRes = R.string.hardware__send_onchain_only_title,
-            descriptionRes = R.string.hardware__send_onchain_only_text,
+            descriptionRes = hardwareOnchainOnlyTextRes(),
             testTag = "HardwareOnchainOnlyToast",
         )
+    }
+
+    private fun hardwareOnchainOnlyTextRes(): Int {
+        val vendor = hwWalletRepo.wallets.value.find { it.id == activeHardwareWalletId }?.vendor
+        return when (vendor) {
+            HwWalletVendor.BLOCKSTREAM -> R.string.hardware__send_onchain_only_text_jade
+            else -> R.string.hardware__send_onchain_only_text
+        }
     }
 
     private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
@@ -3120,7 +3129,7 @@ class AppViewModel @Inject constructor(
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.hardware__send_onchain_only_title),
-                description = context.getString(R.string.hardware__send_onchain_only_text),
+                description = context.getString(hardwareOnchainOnlyTextRes()),
             )
             clearActiveContactPaymentContext(
                 failureReason = IncomingPaykitPaymentRequestFailureReason.PaymentTargetNotRoutable,
@@ -5092,7 +5101,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun toast(error: Throwable) {
-        if (error.isTrezorUserCancellation()) return
+        if (error.isHwUserCancellation()) return
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
@@ -5707,12 +5716,13 @@ class AppViewModel @Inject constructor(
     fun onUsbDeviceAttached(
         deviceId: String? = null,
         deviceModel: String = "",
+        vendor: HwWalletVendor? = null,
     ) {
-        hwWalletRepo.onTransportRestored(TransportType.USB)
+        hwWalletRepo.onTransportRestored(TransportType.USB, vendor)
         deviceId ?: return
 
         viewModelScope.launch {
-            if (hwWalletRepo.hasKnownDevice(deviceId)) return@launch
+            if (hwWalletRepo.hasKnownDevice(deviceId, vendor)) return@launch
             if (isHighPrioritySheet(_currentSheet.value)) return@launch
             if (_currentSheet.value is Sheet.Hardware) return@launch
 
@@ -5721,6 +5731,7 @@ class AppViewModel @Inject constructor(
                     route = HardwareRoute.Found(
                         deviceId = deviceId,
                         deviceModel = deviceModel,
+                        vendor = vendor ?: HwWalletVendor.TREZOR,
                     ),
                 )
             )
