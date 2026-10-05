@@ -304,8 +304,10 @@ internal fun subscriptionSections(
 ) = SubscriptionSections(
     proposals = subscriptions.filter { it.isPayer && it.isProposalVisible(now) },
     active = subscriptions.filter { it.isPayer && it.runsUntilPaidThrough(now) },
-    expired = subscriptions.filter { it.isPayer && it.hasEnded(now) && acceptedAt(it.id) != null },
-    created = subscriptions.filter { it.isCreatedVisible(now) },
+    expired = subscriptions.filter {
+        (it.isPayer && it.hasEnded(now) && acceptedAt(it.id) != null) || it.isCreatedAndLapsed(now)
+    },
+    created = subscriptions.filter { it.isCreatedVisible(now) && !it.isCreatedAndLapsed(now) },
 )
 
 private fun LazyListScope.subscriptionSection(
@@ -1101,13 +1103,13 @@ internal fun PaykitSubscription.shouldShowTiming(now: Instant): Boolean =
 internal fun PaykitSubscription.expiryDate(): Instant? =
     canceledPaidThrough() ?: recurrence.endsAt ?: paidPeriods.maxOfOrNull { it.endsAt }
 
-/** A canceled subscription we pay is paid for up to its last paid period, whatever its fixed end date. */
+/** A canceled subscription is paid for up to its last paid period, whatever its fixed end date. */
 private fun PaykitSubscription.canceledPaidThrough(): Instant? =
-    if (isPayer && lifecycleState == PaymentRequestLifecycleState.CANCELED) {
-        paidPeriods.maxOfOrNull { it.endsAt }
-    } else {
-        null
-    }
+    if (lifecycleState == PaymentRequestLifecycleState.CANCELED) paidPeriods.maxOfOrNull { it.endsAt } else null
+
+/** A canceled subscription the user created, past its last paid period: listed as expired, not as created. */
+private fun PaykitSubscription.isCreatedAndLapsed(now: Instant): Boolean =
+    isCreatedByUser && canceledPaidThrough()?.let { it <= now } == true
 
 /** Active, or canceled with its last paid period still ahead: it keeps running until it is paid through. */
 internal fun PaykitSubscription.runsUntilPaidThrough(now: Instant): Boolean =

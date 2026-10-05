@@ -216,17 +216,48 @@ class SubscriptionsScreenTest {
     }
 
     @Test
-    fun `canceled subscription the user created keeps its expired treatment and stays under created`() {
+    fun `canceled subscription the user created stays under created until its paid period ends`() {
         val created = canceledWithPaidThrough().copy(role = PaykitSubscriptionRole.Payee)
         val sections = subscriptionSections(listOf(created), { now }, now)
 
-        assertFalse(created.runsUntilPaidThrough(now))
-        assertTrue(created.hasEnded(now))
-        assertEquals(R.string.subscriptions__expired, created.statusRes(now))
-        assertEquals(R.string.subscriptions__expired, created.timingTitleRes(now))
+        assertTrue(created.runsUntilPaidThrough(now))
+        assertFalse(created.hasEnded(now))
+        assertEquals(R.string.subscriptions__active, created.statusRes(now))
+        assertEquals(R.string.subscriptions__expires, created.timingTitleRes(now))
+        assertEquals(R.string.subscriptions__expires_date to paidThrough, created.rowSubtitleSpec(now))
         assertEquals(listOf(created), sections.created)
         assertEquals(emptyList(), sections.active)
         assertEquals(emptyList(), sections.expired)
+        assertEquals(paidThrough, nextSubscriptionTransition(listOf(created), now))
+        assertEquals(0L, subscriptionMonthlyCostSats(listOf(created), now))
+    }
+
+    @Test
+    fun `canceled subscription the user created moves to expired when its paid period ends`() {
+        val created = canceledWithPaidThrough().copy(role = PaykitSubscriptionRole.Payee)
+        val sections = subscriptionSections(listOf(created), { null }, paidThrough)
+
+        assertFalse(created.runsUntilPaidThrough(paidThrough))
+        assertTrue(created.hasEnded(paidThrough))
+        assertEquals(R.string.subscriptions__expired, created.statusRes(paidThrough))
+        assertEquals(R.string.subscriptions__expired, created.timingTitleRes(paidThrough))
+        assertEquals(R.string.subscriptions__expired to null, created.rowSubtitleSpec(paidThrough))
+        assertEquals(listOf(created), sections.expired)
+        assertEquals(emptyList(), sections.created)
+        assertEquals(emptyList(), sections.active)
+    }
+
+    @Test
+    fun `created subscription that was never canceled stays under created after its end date`() {
+        val ended = canceledWithPaidThrough().copy(
+            role = PaykitSubscriptionRole.Payee,
+            lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+        ).let { it.copy(recurrence = it.recurrence.copy(endsAt = paidThrough)) }
+        val sections = subscriptionSections(listOf(ended), { null }, paidThrough)
+
+        assertEquals(listOf(ended), sections.created)
+        assertEquals(emptyList(), sections.expired)
+        assertTrue(ended.hasEnded(paidThrough))
     }
 
     @Test
