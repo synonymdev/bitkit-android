@@ -1,14 +1,17 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -74,6 +77,7 @@ class SettingsViewModelTest : BaseUnitTest() {
             Unit
         }
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.identityExists).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
@@ -220,6 +224,29 @@ class SettingsViewModelTest : BaseUnitTest() {
 
         verify(contactPaymentSettingsRepo).setEnabled(true)
         assertFalse(sut.isUpdatingContactPayments.value)
+    }
+
+    @Test
+    fun `setting dev mode completes only after the settings write finishes`() = test {
+        settingsData.value = SettingsData(isDevModeEnabled = false)
+        val writeGate = CompletableDeferred<Unit>()
+        whenever { settingsStore.update(any()) }.doSuspendableAnswer {
+            writeGate.await()
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsData.value = transform(settingsData.value)
+        }
+
+        val job = launch { sut.setIsDevModeEnabled(true) }
+        advanceUntilIdle()
+
+        assertTrue(job.isActive)
+        assertFalse(settingsData.value.isDevModeEnabled)
+
+        writeGate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(job.isActive)
+        assertTrue(settingsData.value.isDevModeEnabled)
     }
 
     private fun createViewModel() = SettingsViewModel(

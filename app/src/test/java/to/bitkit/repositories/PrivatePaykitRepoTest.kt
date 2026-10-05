@@ -57,6 +57,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
 import to.bitkit.services.PaykitPrivateReceiverPathSelection
+import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
@@ -78,6 +79,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     companion object {
         private const val CONTACT_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val OTHER_CONTACT_KEY = "pubky5rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val NEW_CONTACT_KEY = "pubky4rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val OWN_KEY = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val PRIVATE_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
         private const val OTHER_PRIVATE_ADDRESS = "bcrt1q9x0pz2tqf8clz0lq6m9wj8t47zffnrdz2tkt6v"
@@ -126,7 +128,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(NOW_SECONDS))
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
-        whenever { pubkyService.discoverRelevantReceiverPaths(any()) }
+        whenever { pubkyService.discoverRelevantReceiverPaths(any(), any()) }
             .thenReturn(listOf(WALLET_RECEIVER_PATH))
         whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(true)
         whenever(walletRepo.walletExists()).thenReturn(true)
@@ -134,7 +136,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever { addressReservationRepo.reconcileReservedIndexesWithLdk() }.thenReturn(Result.success(Unit))
         whenever { addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY, WALLET_RECEIVER_PATH) }
             .thenReturn(Result.success(PRIVATE_ADDRESS))
-        whenever { paykitSdkService.privateReceiverPathSelection(any(), any()) }.thenAnswer {
+        whenever { paykitSdkService.privateReceiverPathSelection(any(), any(), any()) }.thenAnswer {
             privateReceiverPathSelection(it.getArgument(1))
         }
         whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }
@@ -242,7 +244,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
         whenever { paykitSdkService.contactRecord(CONTACT_KEY) }
             .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH)))
-        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any()) }
+        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any(), any()) }
             .thenReturn(privateReceiverPathSelection(emptyList()))
 
         val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
@@ -264,7 +266,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         whenever { paykitSdkService.contactRecord(CONTACT_KEY) }
             .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH)))
-        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any()) }
+        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any(), any()) }
             .thenReturn(
                 privateReceiverPathSelection(
                     linkableReceiverPaths = listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH),
@@ -289,7 +291,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
         whenever { paykitSdkService.contactRecord(CONTACT_KEY) }
             .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH)))
-        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any()) }
+        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any(), any()) }
             .thenReturn(
                 privateReceiverPathSelection(
                     linkableReceiverPaths = listOf(SERVER_RECEIVER_PATH),
@@ -306,11 +308,41 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `refreshKnownSavedContactEndpoints succeeds when a contact is saved during receiver discovery`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        assertTrue(sut.prepareSavedContacts(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).isSuccess)
+        clearInvocations(pubkyService)
+        val discoveryStarted = CompletableDeferred<Unit>()
+        val resumeDiscovery = CompletableDeferred<Unit>()
+        whenever { pubkyService.discoverRelevantReceiverPaths(CONTACT_KEY, PaykitReadLane.Bulk) }
+            .doSuspendableAnswer {
+                discoveryStarted.complete(Unit)
+                resumeDiscovery.await()
+                listOf(WALLET_RECEIVER_PATH)
+            }
+
+        val refresh = async { sut.refreshKnownSavedContactEndpoints("test") }
+        discoveryStarted.await()
+        val saveResult = sut.refreshSavedContactEndpoints(
+            NEW_CONTACT_KEY,
+            listOf(CONTACT_KEY, OTHER_CONTACT_KEY, NEW_CONTACT_KEY),
+        )
+        resumeDiscovery.complete(Unit)
+        val result = refresh.await()
+
+        assertTrue(saveResult.isSuccess, saveResult.exceptionOrNull().toString())
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        verifyBlocking(pubkyService) { discoverRelevantReceiverPaths(NEW_CONTACT_KEY, PaykitReadLane.Bulk) }
+        verifyBlocking(pubkyService) { discoverRelevantReceiverPaths(OTHER_CONTACT_KEY, PaykitReadLane.Bulk) }
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `initial link burst discovers a server receiver published after the contact was saved`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
         whenever { paykitSdkService.contactRecord(CONTACT_KEY) }
             .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH)))
-        whenever { pubkyService.discoverRelevantReceiverPaths(CONTACT_KEY) }
+        whenever { pubkyService.discoverRelevantReceiverPaths(CONTACT_KEY, PaykitReadLane.Bulk) }
             .thenReturn(listOf(WALLET_RECEIVER_PATH))
             .thenReturn(listOf(WALLET_RECEIVER_PATH))
             .thenReturn(listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH))
@@ -347,7 +379,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
         whenever(paykitSdkService.contactRecord(CONTACT_KEY))
             .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH)), null)
-        whenever { pubkyService.discoverRelevantReceiverPaths(CONTACT_KEY) }
+        whenever { pubkyService.discoverRelevantReceiverPaths(CONTACT_KEY, PaykitReadLane.Bulk) }
             .thenReturn(listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH))
 
         sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
@@ -378,8 +410,24 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         advanceTimeBy(2_000)
         runCurrent()
 
-        verifyBlocking(pubkyService) { discoverRelevantReceiverPaths(OTHER_CONTACT_KEY) }
-        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(CONTACT_KEY) }
+        verifyBlocking(pubkyService) { discoverRelevantReceiverPaths(OTHER_CONTACT_KEY, PaykitReadLane.Bulk) }
+        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(CONTACT_KEY, PaykitReadLane.Bulk) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `endpoint cleanup cancels scheduled link publication before local state is cleared`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+
+        assertTrue(sut.removePublishedEndpointsForCleanup("test").isSuccess)
+        clearInvocations(pubkyService, paykitSdkService)
+        advanceTimeBy(30_000)
+        runCurrent()
+
+        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(any(), any()) }
+        verifyBlocking(paykitSdkService, never()) { syncPrivatePaymentListsWithReservations(any(), any()) }
         sut.closeAndClear()
     }
 
@@ -395,7 +443,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         advanceTimeBy(30_000)
         runCurrent()
 
-        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(any()) }
+        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(any(), any()) }
         sut.closeAndClear()
     }
 
@@ -410,7 +458,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH)))
         whenever { addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY, SERVER_RECEIVER_PATH) }
             .thenReturn(Result.success(OTHER_PRIVATE_ADDRESS))
-        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any()) }
+        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any(), any()) }
             .thenReturn(privateReceiverPathSelection(listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH)))
             .thenReturn(privateReceiverPathSelection(listOf(WALLET_RECEIVER_PATH)))
         whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }.thenAnswer {
@@ -444,7 +492,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH)))
         whenever { addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY, SERVER_RECEIVER_PATH) }
             .thenReturn(Result.success(OTHER_PRIVATE_ADDRESS))
-        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any()) }
+        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any(), any()) }
             .thenReturn(privateReceiverPathSelection(listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH)))
             .thenReturn(
                 privateReceiverPathSelection(
@@ -478,7 +526,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
-        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any()) }
+        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any(), any()) }
             .thenReturn(
                 privateReceiverPathSelection(
                     publishableReceiverPaths = emptyList(),
@@ -502,7 +550,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         whenever { addressReservationRepo.currentOrRotatedAddress(OTHER_CONTACT_KEY, WALLET_RECEIVER_PATH) }
             .thenReturn(Result.success(OTHER_PRIVATE_ADDRESS))
-        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any()) }
+        whenever { paykitSdkService.privateReceiverPathSelection(eq(CONTACT_KEY), any(), any()) }
             .thenReturn(
                 privateReceiverPathSelection(
                     publishableReceiverPaths = emptyList(),
@@ -553,7 +601,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
-        whenever { paykitSdkService.privateReceiverPathSelection(any(), any()) }.thenReturn(
+        whenever { paykitSdkService.privateReceiverPathSelection(any(), any(), any()) }.thenReturn(
             privateReceiverPathSelection(
                 publishableReceiverPaths = emptyList(),
                 linkableReceiverPaths = emptyList(),
@@ -1221,6 +1269,30 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertIs<PublicPaykitPaymentResult.Opened>(result)
         publishStarted.await()
         stalledPublish.complete(Unit)
+    }
+
+    @Test
+    fun `beginSavedContactPayment reads the paid contact's receivers on the interactive lane`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        clearInvocations(paykitSdkService, pubkyService)
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
+
+        sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+        advanceUntilIdle()
+
+        verifyBlocking(pubkyService) { discoverRelevantReceiverPaths(CONTACT_KEY, PaykitReadLane.Interactive) }
+        verifyBlocking(paykitSdkService) {
+            privateReceiverPathSelection(eq(CONTACT_KEY), any(), eq(PaykitReadLane.Interactive))
+        }
     }
 
     @Test

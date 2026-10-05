@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,12 +15,16 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.data.PubkyCachedProfile
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
@@ -47,6 +52,13 @@ class ProfileViewModel @Inject constructor(
     private val _copiedPublicKey = MutableStateFlow<String?>(null)
     private val tagUpdateMutex = Mutex()
     private var hideCopiedPopupJob: Job? = null
+    private var profileLoadJob: Job? = null
+    private val _isRefreshing = MutableStateFlow(true)
+    private val isLoading = combine(
+        pubkyRepo.isLoadingProfile,
+        pubkyRepo.isRestoringSession,
+        _isRefreshing,
+    ) { loading, restoring, refreshing -> loading || restoring || refreshing }
     private val controls = combine(
         _showSignOutDialog,
         _isSigningOut,
@@ -56,32 +68,54 @@ class ProfileViewModel @Inject constructor(
         ProfileControls(showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey)
     }
 
+    init {
+        if (pubkyRepo.isLoadingProfile.value) loadProfileAfterInFlightLoad() else loadProfile()
+    }
+
     val uiState: StateFlow<ProfileUiState> = combine(
         pubkyRepo.profile,
         pubkyRepo.publicKey,
-        pubkyRepo.isLoadingProfile,
+        isLoading,
+        pubkyRepo.cachedProfile,
         controls,
-    ) { profile, publicKey, isLoading, controls ->
-        ProfileUiState(
-            profile = profile,
-            publicKey = publicKey,
-            isLoading = isLoading,
-            showSignOutDialog = controls.showSignOutDialog,
-            isSigningOut = controls.isSigningOut,
-            showAddTagSheet = controls.showAddTagSheet,
-            copiedPublicKey = controls.copiedPublicKey,
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState())
+    ) { profile, publicKey, isLoading, cachedProfile, controls ->
+        profileUiState(profile, publicKey, isLoading, cachedProfile, controls)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        profileUiState(
+            profile = pubkyRepo.profile.value,
+            publicKey = pubkyRepo.publicKey.value,
+            isLoading = pubkyRepo.isLoadingProfile.value || pubkyRepo.isRestoringSession.value || _isRefreshing.value,
+            cachedProfile = pubkyRepo.cachedProfile.value,
+            controls = ProfileControls(),
+        ),
+    )
 
     private val _effects = MutableSharedFlow<ProfileEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
-    init {
-        loadProfile()
+    fun loadProfile() = launchProfileLoad {
+        val restored = pubkyRepo.restoreSessionIfNeeded()
+        if (!restored) pubkyRepo.loadProfile()
     }
 
-    fun loadProfile() {
-        viewModelScope.launch { pubkyRepo.loadProfile() }
+    private fun loadProfileAfterInFlightLoad() = launchProfileLoad {
+        pubkyRepo.isLoadingProfile.first { !it }
+        val publicKey = pubkyRepo.publicKey.value ?: return@launchProfileLoad
+        if (pubkyRepo.profile.value?.publicKey != publicKey) pubkyRepo.loadProfile()
+    }
+
+    private fun launchProfileLoad(load: suspend () -> Unit) {
+        if (profileLoadJob?.isActive == true) return
+        profileLoadJob = viewModelScope.launch {
+            _isRefreshing.update { true }
+            try {
+                load()
+            } finally {
+                _isRefreshing.update { false }
+            }
+        }
     }
 
     fun showSignOutConfirmation() {
@@ -113,35 +147,31 @@ class ProfileViewModel @Inject constructor(
 
     fun signOut() {
         viewModelScope.launch {
+            if (_isSigningOut.value) return@launch
             _isSigningOut.update { true }
             _showSignOutDialog.update { false }
-            val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-            if (cleanupResult.isFailure) {
-                val error = requireNotNull(cleanupResult.exceptionOrNull()) {
-                    "Private Paykit cleanup failed without an error"
+            try {
+                val result = runSuspendCatching {
+                    withContext(NonCancellable) {
+                        if (!pubkyRepo.forgetUnrestoredIdentity().getOrThrow()) {
+                            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
+                            pubkyRepo.signOut().getOrThrow()
+                        }
+                        privatePaykitRepo.closeAndClear()
+                    }
                 }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__sign_out_title),
-                    description = error.message,
-                )
+                if (result.isSuccess) {
+                    _effects.emit(ProfileEffect.SignedOut)
+                } else {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__sign_out_title),
+                        description = result.exceptionOrNull()?.message,
+                    )
+                }
+            } finally {
                 _isSigningOut.update { false }
-                return@launch
             }
-
-            val result = pubkyRepo.signOut()
-            if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear()
-                _effects.emit(ProfileEffect.SignedOut)
-            } else {
-                val error = requireNotNull(result.exceptionOrNull()) { "Sign out failed without an error" }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__sign_out_title),
-                    description = error.message,
-                )
-            }
-            _isSigningOut.update { false }
         }
     }
 
@@ -160,6 +190,23 @@ class ProfileViewModel @Inject constructor(
         hideCopiedPopupJob?.cancel()
         _copiedPublicKey.update { null }
     }
+
+    private fun profileUiState(
+        profile: PubkyProfile?,
+        publicKey: String?,
+        isLoading: Boolean,
+        cachedProfile: PubkyCachedProfile?,
+        controls: ProfileControls,
+    ) = ProfileUiState(
+        profile = profile,
+        cachedProfile = cachedProfile?.takeIf { isLoading && it.publicKey == publicKey },
+        publicKey = publicKey,
+        isLoading = isLoading,
+        showSignOutDialog = controls.showSignOutDialog,
+        isSigningOut = controls.isSigningOut,
+        showAddTagSheet = controls.showAddTagSheet,
+        copiedPublicKey = controls.copiedPublicKey,
+    )
 
     private fun updateTags(
         transform: (List<String>) -> List<String>,
@@ -198,8 +245,9 @@ class ProfileViewModel @Inject constructor(
 @Stable
 data class ProfileUiState(
     val profile: PubkyProfile? = null,
+    val cachedProfile: PubkyCachedProfile? = null,
     val publicKey: String? = null,
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = true,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
     val showAddTagSheet: Boolean = false,
@@ -207,10 +255,10 @@ data class ProfileUiState(
 )
 
 private data class ProfileControls(
-    val showSignOutDialog: Boolean,
-    val isSigningOut: Boolean,
-    val showAddTagSheet: Boolean,
-    val copiedPublicKey: String?,
+    val showSignOutDialog: Boolean = false,
+    val isSigningOut: Boolean = false,
+    val showAddTagSheet: Boolean = false,
+    val copiedPublicKey: String? = null,
 )
 
 sealed interface ProfileEffect {
