@@ -270,6 +270,63 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `state change refresh rereads a peer blocked after the first snapshot`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(settingsStore.data).thenReturn(
+            flow {
+                reading.complete(Unit)
+                resume.await()
+                emit(SettingsData(sharesPrivatePaykitEndpoints = true))
+            },
+        )
+        val first = async { sut.refresh() }
+        reading.await()
+        assertEquals(record.paymentRequestId, sut.pendingRequests.value.single().paymentRequestId)
+
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
+        )
+        val afterBlock = async { sut.refreshAfterStateChange() }
+        runCurrent()
+        resume.complete(Unit)
+        first.await().getOrThrow()
+        afterBlock.await().getOrThrow()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        verify(paykitSdkService, times(2)).linkedPeers()
+    }
+
+    @Test
+    fun `state change refresh rereads a request drained after the first snapshot`() = test {
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(settingsStore.data).thenReturn(
+            flow {
+                reading.complete(Unit)
+                resume.await()
+                emit(SettingsData(sharesPrivatePaykitEndpoints = true))
+            },
+        )
+        val first = async { sut.refresh() }
+        reading.await()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        val afterDrain = async { sut.refreshAfterStateChange() }
+        runCurrent()
+        resume.complete(Unit)
+        first.await().getOrThrow()
+        afterDrain.await().getOrThrow()
+
+        assertEquals(record.paymentRequestId, sut.pendingRequests.value.single().paymentRequestId)
+        verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
+    }
+
+    @Test
     fun `shared app destinations stay out of request UI and clear on identity switch`() = test {
         val address = PaykitReceivedPaymentContactsTest.ADDRESS
         val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).let {

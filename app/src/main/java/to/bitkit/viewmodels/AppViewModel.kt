@@ -776,7 +776,7 @@ class AppViewModel @Inject constructor(
             privatePaykitRepo.pruneUnsavedContactState(state.contactKeys)
                 .onFailure { Logger.warn("Failed to prune private Paykit contact state", it, context = TAG) }
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
-            refreshIncomingPaykitPaymentRequests()
+            refreshIncomingPaykitPaymentRequests(forceFresh = true)
             refreshPaymentRequestTargets(force = true)
             lastPrivatePaykitContactKeys = state.contactKeys
         } finally {
@@ -802,7 +802,7 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
             }
         privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
-        refreshIncomingPaykitPaymentRequests()
+        refreshIncomingPaykitPaymentRequests(forceFresh = true)
         refreshPaymentRequestTargets(force = true)
     }
 
@@ -881,10 +881,16 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshIncomingPaykitPaymentRequests(
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
+        forceFresh: Boolean = false,
     ) {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (mode == PaykitPaymentRequestRefreshMode.FULL) paykitPaymentProofRepo.reconcile()
-        paykitPaymentRequestRepo.refresh(mode).onSuccess {
+        val result = if (forceFresh) {
+            paykitPaymentRequestRepo.refreshAfterStateChange()
+        } else {
+            paykitPaymentRequestRepo.refresh(mode)
+        }
+        result.onSuccess {
             activityRepo.backfillPaykitContacts()
             presentNextIncomingPaykitPaymentRequest()
         }
@@ -5606,7 +5612,7 @@ class AppViewModel @Inject constructor(
         }
         clearActiveContactPaymentContext()
         viewModelScope.launch {
-            refreshIncomingPaykitPaymentRequests()
+            refreshIncomingPaykitPaymentRequests(forceFresh = true)
             openIncomingPaymentRequestWithTags(id, _sendUiState.value.selectedTags)
         }
     }
@@ -5622,7 +5628,7 @@ class AppViewModel @Inject constructor(
         clearActiveContactPaymentContext()
         viewModelScope.launch {
             try {
-                refreshIncomingPaykitPaymentRequests()
+                refreshIncomingPaykitPaymentRequests(forceFresh = true)
                 val request = paykitPaymentRequestRepo.pendingRequest(id) ?: run {
                     toast(PaykitPaymentRequestError.RequestUnavailable)
                     return@launch

@@ -8,7 +8,7 @@
     <action>On the payer, open Contacts, open the requester's contact, choose Delete Contact, and confirm deletion</action>
     <action>Verify the requester is absent from Contacts when the deletion confirmation appears</action>
     <action>Leave Contacts and immediately reopen it, wait for the list refresh to finish, and verify the deleted contact does not reappear</action>
-    <action>Open Payment Requests and wait for the request list to refresh, and verify "Before deletion" is no longer listed</action>
+    <action>Open Payment Requests immediately after deletion, wait for the request list to refresh, and verify "Before deletion" is no longer listed without waiting for another foreground polling interval</action>
     <action>On the requester, send another Payment Request to the payer with the note "After deletion"</action>
     <action>On the payer, return Home and wait for two foreground request polling intervals</action>
     <action>Verify no Payment Request confirmation appears for "After deletion" and no payable request from the deleted contact appears in Payment Requests</action>

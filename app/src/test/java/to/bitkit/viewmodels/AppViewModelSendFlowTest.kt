@@ -428,6 +428,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.eligibleTargets).thenReturn(MutableStateFlow(emptyList()))
         whenever(paykitPaymentRequestRepo.isCreatingRequest).thenReturn(MutableStateFlow(false))
         whenever { paykitPaymentRequestRepo.refreshEligibleTargets(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { paykitPaymentRequestRepo.refreshAfterStateChange() }.thenReturn(Result.success(Unit))
         whenever(paykitPaymentRequestRepo.automaticPendingRequests()).thenAnswer {
             pendingPaykitPaymentRequests.value.filterNot { it.id in surfacedPaykitPaymentRequestIds }
         }
@@ -7023,7 +7024,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = emptyList()
         stubOpenedPaymentRequest(request, lnurl.uri)
         whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
-        whenever(paykitPaymentRequestRepo.refresh(any())).doSuspendableAnswer {
+        whenever(paykitPaymentRequestRepo.refreshAfterStateChange()).doSuspendableAnswer {
             pendingPaykitPaymentRequests.value = listOf(request)
             Result.success(Unit)
         }
@@ -7031,7 +7032,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.retryIncomingPaymentRequest(request.id)
         advanceUntilIdle()
 
-        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange()
         verify(privatePaykitRepo, atLeast(1)).beginPaymentRequest(request)
         assertEquals(request.id, sut.sendUiState.value.incomingPaymentRequestId)
         assertTrue(sut.currentSheet.value is Sheet.Send)
@@ -7592,8 +7593,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `initial subscription retry keeps the send sheet presented`() = test {
         val request = paymentRequest()
-        pendingPaykitPaymentRequests.value = listOf(request)
-        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        val refreshed = CompletableDeferred<Unit>()
+        whenever(paykitPaymentRequestRepo.refreshAfterStateChange()).doSuspendableAnswer {
+            refreshed.await()
+            pendingPaykitPaymentRequests.value = listOf(request)
+            Result.success(Unit)
+        }
         whenever(privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(request)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
@@ -7617,7 +7625,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         assertTrue(sut.currentSheet.value is Sheet.Send)
+        verify(privatePaykitRepo, never()).beginPaymentRequestWaitingForUpdatedList(any())
+        assertTrue(sut.isRetryingInitialSubscriptionPayment.value)
+        refreshed.complete(Unit)
         advanceUntilIdle()
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange()
+        verify(privatePaykitRepo).beginPaymentRequestWaitingForUpdatedList(request)
         assertTrue(sut.currentSheet.value is Sheet.Send)
         assertFalse(sut.isRetryingInitialSubscriptionPayment.value)
     }
@@ -8651,7 +8664,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyContacts.value = listOf(contact)
         pubkyContactsLoadVersion.value = 1L
         advanceUntilIdle()
-        clearInvocations(privatePaykitRepo)
+        clearInvocations(privatePaykitRepo, paykitPaymentRequestRepo)
 
         pubkyContacts.value = emptyList()
         pubkyContactsLoadVersion.value = 2L
@@ -8660,6 +8673,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
         verify(privatePaykitRepo).scheduleSavedContactPreparation(emptySet<String>())
         verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
+        inOrder(privatePaykitRepo, paykitPaymentRequestRepo).apply {
+            verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
+            verify(paykitPaymentRequestRepo).refreshAfterStateChange()
+        }
+        verify(paykitPaymentRequestRepo, never()).refresh(any())
+    }
+
+    @Test
+    fun `private Paykit endpoint cleanup refreshes requests after state changes`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+        clearInvocations(privatePaykitRepo, paykitPaymentRequestRepo)
+
+        sut.refreshPrivatePaykitEndpoints()
+        advanceUntilIdle()
+
+        inOrder(privatePaykitRepo, paykitPaymentRequestRepo).apply {
+            verify(privatePaykitRepo).retryPendingEndpointRemoval(any())
+            verify(paykitPaymentRequestRepo).refreshAfterStateChange()
+        }
+        verify(paykitPaymentRequestRepo, never()).refresh(any())
     }
 
     @Test
