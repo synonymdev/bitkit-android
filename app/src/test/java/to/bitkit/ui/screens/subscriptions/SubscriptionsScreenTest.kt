@@ -13,6 +13,7 @@ import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.PaykitSubscriptionMetadata
 import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import to.bitkit.repositories.PaykitSubscriptionRole
+import to.bitkit.repositories.runsUntilPaidThrough
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue

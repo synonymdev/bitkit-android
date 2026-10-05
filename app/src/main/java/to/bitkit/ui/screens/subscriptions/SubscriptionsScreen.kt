@@ -72,6 +72,8 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionId
+import to.bitkit.repositories.canceledPaidThrough
+import to.bitkit.repositories.runsUntilPaidThrough
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -1103,17 +1105,9 @@ internal fun PaykitSubscription.shouldShowTiming(now: Instant): Boolean =
 internal fun PaykitSubscription.expiryDate(): Instant? =
     canceledPaidThrough() ?: recurrence.endsAt ?: paidPeriods.maxOfOrNull { it.endsAt }
 
-/** A canceled subscription is paid for up to its last paid period, whatever its fixed end date. */
-private fun PaykitSubscription.canceledPaidThrough(): Instant? =
-    if (lifecycleState == PaymentRequestLifecycleState.CANCELED) paidPeriods.maxOfOrNull { it.endsAt } else null
-
 /** A canceled subscription the user created, past its last paid period: listed as expired, not as created. */
 private fun PaykitSubscription.isCreatedAndLapsed(now: Instant): Boolean =
     isCreatedByUser && canceledPaidThrough()?.let { it <= now } == true
-
-/** Active, or canceled with its last paid period still ahead: it keeps running until it is paid through. */
-internal fun PaykitSubscription.runsUntilPaidThrough(now: Instant): Boolean =
-    isActive(now) || canceledPaidThrough()?.let { it > now } == true
 
 /** Shown as expired: it no longer runs, whether canceled, rejected or lapsed. */
 internal fun PaykitSubscription.hasEnded(now: Instant): Boolean = isExpired(now) && !runsUntilPaidThrough(now)

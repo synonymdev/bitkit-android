@@ -288,6 +288,14 @@ data class PaykitSubscription(
     }
 }
 
+/** A canceled subscription is paid for up to its last paid period, whatever its fixed end date. */
+fun PaykitSubscription.canceledPaidThrough(): Instant? =
+    if (lifecycleState == PaymentRequestLifecycleState.CANCELED) paidPeriods.maxOfOrNull { it.endsAt } else null
+
+/** Active, or canceled with its last paid period still ahead: it keeps running until it is paid through. */
+fun PaykitSubscription.runsUntilPaidThrough(now: Instant): Boolean =
+    isActive(now) || canceledPaidThrough()?.let { it > now } == true
+
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
 internal fun PaymentRequestRecord.toPaykitSubscription(
     deliveryStatusOverride: PaykitPaymentRequestDeliveryStatus? = null,
