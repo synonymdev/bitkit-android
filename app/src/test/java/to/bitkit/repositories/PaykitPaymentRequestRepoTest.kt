@@ -42,6 +42,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
+import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
@@ -112,6 +113,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paymentProofStore,
             paymentProofRepo,
             subscriptionNotificationScheduler,
+            clock,
             clock,
         )
         sut.activate(LOCAL_IDENTITY)
@@ -598,7 +600,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
         whenever(
@@ -655,10 +657,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 linkedPeer(SECOND_IDENTITY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER),
             ),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(SECOND_IDENTITY)).doSuspendableAnswer {
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(SECOND_IDENTITY), any())).doSuspendableAnswer {
             stalledDiscovery.await()
             listOf(PaykitReceiverPaths.SERVER)
         }
@@ -681,7 +683,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(proposal.isCompleted)
         proposal.await().getOrThrow()
-        verifyBlocking(paykitSdkService, never()) { paymentRequestReceiverPaths(SECOND_IDENTITY) }
+        verifyBlocking(paykitSdkService, never()) { paymentRequestReceiverPaths(eq(SECOND_IDENTITY), any()) }
     }
 
     @Test
@@ -693,7 +695,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
         whenever(paykitSdkService.proposePaymentRequest(any(), any(), any(), eq(LOCAL_IDENTITY))).doSuspendableAnswer {
@@ -734,7 +736,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh().getOrThrow()
 
         assertEquals(1, sut.pendingRequests.value.size)
-        verifyBlocking(paykitSdkService, never()) { paymentRequestReceiverPaths(any()) }
+        verifyBlocking(paykitSdkService, never()) { paymentRequestReceiverPaths(any(), any()) }
     }
 
     @Test
@@ -743,7 +745,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
 
@@ -754,7 +756,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)),
             sut.eligibleTargets.value,
         )
-        verifyBlocking(paykitSdkService, times(1)) { paymentRequestReceiverPaths(COUNTERPARTY) }
+        verifyBlocking(paykitSdkService, times(1)) { paymentRequestReceiverPaths(eq(COUNTERPARTY), any()) }
     }
 
     @Test
@@ -763,7 +765,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
 
@@ -775,13 +777,30 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `single recipient refresh reads on the interactive lane and a full refresh in bulk`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
+            listOf(PaykitReceiverPaths.SERVER),
+        )
+
+        sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow()
+        verifyBlocking(paykitSdkService) { paymentRequestReceiverPaths(COUNTERPARTY, PaykitReadLane.Interactive) }
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+
+        verifyBlocking(paykitSdkService) { paymentRequestReceiverPaths(COUNTERPARTY, PaykitReadLane.Bulk) }
+    }
+
+    @Test
     fun `single recipient refresh removes a contact that is no longer linked`() = test {
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
             emptyList(),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
@@ -798,7 +817,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any()))
             .thenReturn(listOf(PaykitReceiverPaths.SERVER), emptyList())
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
 
@@ -814,7 +833,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any()))
             .thenReturn(listOf(PaykitReceiverPaths.SERVER))
             .thenThrow(IllegalStateException("marker unavailable"))
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
@@ -836,7 +855,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).doSuspendableAnswer {
             lookups += 1
             when (lookups) {
                 1 -> listOf(PaykitReceiverPaths.SERVER)
@@ -877,7 +896,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             releaseFullLinkLookup.await()
             error("linked peers unavailable")
         }
-        whenever(paykitSdkService.paymentRequestReceiverPaths(SECOND_IDENTITY))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(SECOND_IDENTITY), any()))
             .thenReturn(listOf(PaykitReceiverPaths.SERVER))
 
         val fullRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
@@ -901,7 +920,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).doSuspendableAnswer {
             lookups += 1
             if (lookups > 1) return@doSuspendableAnswer emptyList()
             fullLookupStarted.complete(Unit)
@@ -928,7 +947,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).doSuspendableAnswer {
             lookups += 1
             if (lookups > 1) return@doSuspendableAnswer listOf(PaykitReceiverPaths.SERVER)
             singleLookupStarted.complete(Unit)
@@ -959,14 +978,14 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 linkedPeer(SECOND_IDENTITY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER),
             ),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).doSuspendableAnswer {
             counterpartyLookups += 1
             if (counterpartyLookups > 1) return@doSuspendableAnswer emptyList()
             fullLookupStarted.complete(Unit)
             releaseFullLookup.await()
             listOf(PaykitReceiverPaths.SERVER)
         }
-        whenever(paykitSdkService.paymentRequestReceiverPaths(SECOND_IDENTITY))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(SECOND_IDENTITY), any()))
             .thenReturn(listOf(PaykitReceiverPaths.SERVER))
 
         val fullRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY, SECOND_IDENTITY)) }
@@ -987,7 +1006,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers())
             .thenReturn(listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)))
             .thenThrow(IllegalStateException("linked peers unavailable"))
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
@@ -1004,7 +1023,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any()))
             .thenReturn(emptyList(), listOf(PaykitReceiverPaths.SERVER))
 
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
@@ -1014,7 +1033,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)),
             sut.eligibleTargets.value,
         )
-        verifyBlocking(paykitSdkService, times(2)) { paymentRequestReceiverPaths(COUNTERPARTY) }
+        verifyBlocking(paykitSdkService, times(2)) { paymentRequestReceiverPaths(eq(COUNTERPARTY), any()) }
     }
 
     @Test
@@ -1023,7 +1042,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any()))
             .thenReturn(listOf(PaykitReceiverPaths.SERVER))
             .thenThrow(IllegalStateException("marker unavailable"))
 
@@ -1034,7 +1053,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)),
             sut.eligibleTargets.value,
         )
-        verifyBlocking(paykitSdkService, times(2)) { paymentRequestReceiverPaths(COUNTERPARTY) }
+        verifyBlocking(paykitSdkService, times(2)) { paymentRequestReceiverPaths(eq(COUNTERPARTY), any()) }
     }
 
     @Test
@@ -1045,7 +1064,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).doSuspendableAnswer {
             discoveryStarted.complete(Unit)
             stalledDiscovery.await()
             listOf(PaykitReceiverPaths.SERVER)
@@ -1068,7 +1087,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
 
@@ -1084,7 +1103,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
         )
-        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+        whenever(paykitSdkService.paymentRequestReceiverPaths(eq(COUNTERPARTY), any())).thenReturn(
             listOf(PaykitReceiverPaths.SERVER),
         )
 

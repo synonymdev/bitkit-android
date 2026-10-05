@@ -43,6 +43,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.ui.components.ActionButton
@@ -127,6 +128,7 @@ private fun Content(
     onDismissCopiedPopup: () -> Unit,
 ) {
     val currentProfile = uiState.profile
+    val cachedProfile = uiState.cachedProfile
     val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__nav_title),
@@ -136,17 +138,8 @@ private fun Content(
         )
     }
 
-    if (currentProfile == null) {
-        ScreenColumn {
-            topBar(Modifier)
-            if (uiState.isLoading) {
-                LoadingState()
-            } else {
-                EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
-            }
-        }
-    } else {
-        Box(modifier = Modifier.screen()) {
+    when {
+        currentProfile != null -> Box(modifier = Modifier.screen()) {
             ProfileBody(
                 profile = currentProfile,
                 onClickEdit = onClickEdit,
@@ -161,6 +154,20 @@ private fun Content(
                 onClick = onDismissCopiedPopup,
                 modifier = Modifier.align(Alignment.Center)
             )
+        }
+
+        cachedProfile != null -> Box(modifier = Modifier.screen()) {
+            CachedProfileBody(profile = cachedProfile)
+            topBar(Modifier.background(TopBarGradient))
+        }
+
+        else -> ScreenColumn {
+            topBar(Modifier)
+            if (uiState.isLoading) {
+                LoadingState()
+            } else {
+                EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
+            }
         }
     }
 
@@ -318,6 +325,32 @@ private fun ProfileBody(
 }
 
 @Composable
+private fun CachedProfileBody(profile: PubkyCachedProfile) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp)
+            .testTag("ProfileCachedHeader")
+    ) {
+        TopBarSpacer()
+        VerticalSpacer(24.dp)
+
+        CenteredProfileHeader(
+            publicKey = profile.publicKey,
+            name = profile.name,
+            bio = "",
+            imageUrl = profile.imageUri,
+            nameTestTag = "ProfileCachedName",
+        )
+
+        VerticalSpacer(32.dp)
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
 private fun CopiedPopup(
     publicKey: String?,
     onClick: () -> Unit,
@@ -366,7 +399,7 @@ private fun LoadingState() {
         contentAlignment = Alignment.Center,
         modifier = Modifier.fillMaxSize()
     ) {
-        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp).testTag("ProfileLoading"))
     }
 }
 
@@ -396,6 +429,36 @@ private fun EmptyState(
         ) {
             BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
         }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewCached() {
+    AppThemeSurface {
+        Content(
+            uiState = ProfileUiState(
+                cachedProfile = PubkyCachedProfile(
+                    publicKey = "pk8e3qm5...gxag",
+                    name = "Satoshi",
+                    imageUri = null,
+                ),
+                isLoading = true,
+            ),
+            onBackClick = {},
+            onClickEdit = {},
+            onClickCopy = {},
+            onClickShare = {},
+            onClickSignOut = {},
+            onDismissSignOutDialog = {},
+            onConfirmSignOut = {},
+            onClickRetry = {},
+            onClickAddTag = {},
+            onRemoveTag = {},
+            onDismissAddTagSheet = {},
+            onSaveTag = {},
+            onDismissCopiedPopup = {},
+        )
     }
 }
 

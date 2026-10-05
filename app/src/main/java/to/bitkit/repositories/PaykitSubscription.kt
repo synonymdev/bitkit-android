@@ -262,8 +262,9 @@ data class PaykitSubscription(
         }
     }
 
-    fun paymentDueOnAcceptance(now: Instant): PaykitPaymentRequest? =
-        if (hasPaymentDeadline) null else requestsThrough(now, now).firstOrNull()
+    /** [now] is the subscription clock; [acceptedAt] is when accepting will store the acceptance, in real time. */
+    fun paymentDueOnAcceptance(now: Instant, acceptedAt: Instant = now): PaykitPaymentRequest? =
+        if (hasPaymentDeadline) null else requestsThrough(now, acceptedAt).firstOrNull()
 
     fun receivedPaymentRequests(): List<PaykitPaymentRequest> {
         if (!isCreatedByUser) return emptyList()

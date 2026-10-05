@@ -51,6 +51,8 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -755,13 +757,14 @@ fun ContentView(
                 hasSeenShopIntro = hasSeenShopIntro,
                 onBeforeNavigate = { destination ->
                     if (shouldDiscardPendingImport(navController.currentDestination, destination)) {
-                        appViewModel.clearPendingPubkyImport()
+                        appViewModel.discardPendingPubkyImport()
                     }
                 },
                 hasSeenProfileIntro = hasSeenProfileIntro,
                 hasSeenContactsIntro = hasSeenContactsIntro,
                 hasContacts = hasPubkyContacts,
                 isProfileAuthenticated = isProfileAuthenticated,
+                profileIdentityExists = settingsViewModel.pubkyIdentityExists,
                 isPaykitEnabled = isPaykitEnabled,
                 showWidgets = showWidgets,
                 onOpenWalletHome = navigateToHomeWallet,
@@ -1392,6 +1395,7 @@ private fun NavGraphBuilder.contacts(
         PaykitRouteGuard(settingsViewModel, navController) {
             val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
             val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+            val scope = rememberCoroutineScope()
             ContactsIntroScreen(
                 onContinue = {
                     settingsViewModel.setHasSeenContactsIntro(true)
@@ -1400,8 +1404,12 @@ private fun NavGraphBuilder.contacts(
                             Routes.Contacts(showAddContactSheet = true)
                         ) { popUpTo(Routes.Home) }
 
-                        hasSeenProfileIntro -> navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
-                        else -> navController.navigateTo(Routes.ProfileIntro) { popUpTo(Routes.Home) }
+                        else -> scope.launch {
+                            navController.navigateToProfile(
+                                settingsViewModel.pubkyIdentityExists,
+                                hasSeenProfileIntro,
+                            ) { popUpTo(Routes.Home) }
+                        }
                     }
                 },
                 onBackClick = { navController.popBackStack() },
@@ -2043,13 +2051,23 @@ inline fun <reified T : Any> NavController.navigateTo(
     }
 }
 
-fun NavController.navigateToProfile(
-    isAuthenticated: Boolean,
+fun profileDestination(identityExists: Boolean?, hasSeenIntro: Boolean): Routes.DeepLinkable? = when (identityExists) {
+    true -> Routes.Profile
+    false -> if (hasSeenIntro) Routes.PubkyChoice else Routes.ProfileIntro
+    null -> null
+}
+
+suspend fun NavController.navigateToProfile(
+    identityExists: Flow<Boolean?>,
     hasSeenIntro: Boolean,
-) = when {
-    isAuthenticated -> navigateTo(Routes.Profile)
-    hasSeenIntro -> navigateTo(Routes.PubkyChoice)
-    else -> navigateTo(Routes.ProfileIntro)
+    onBeforeNavigate: (Routes.DeepLinkable) -> Unit = {},
+    builder: NavOptionsBuilder.() -> Unit = {},
+) {
+    val origin = currentBackStackEntry
+    val destination = requireNotNull(profileDestination(identityExists.filterNotNull().first(), hasSeenIntro))
+    if (currentBackStackEntry != origin) return
+    onBeforeNavigate(destination)
+    navigateTo(destination, builder)
 }
 
 fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)
