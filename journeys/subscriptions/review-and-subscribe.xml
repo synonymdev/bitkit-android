@@ -2,8 +2,11 @@
   <description>
     Payer side of create-and-propose.xml. The proposed subscription arrives, surfaces under PROPOSALS,
     and opens the Review and Subscribe sheet where the payer swipes to accept. Accepting does not
-    return to the list on its own: when the first period is due on acceptance the send flow starts and
-    must be completed, otherwise the Subscribed confirmation opens directly. Both paths end on Close.
+    return to the list on its own: when the first period is due on acceptance the first payment starts
+    by itself, from Lightning or on-chain savings, with no second swipe; otherwise the Subscribed
+    confirmation opens directly. Both paths end on Close. A hardware wallet still shows the send
+    confirmation for the first payment. Android differs from iOS here on purpose for now: iOS still
+    asks for a second swipe on the send confirmation when the first payment is on-chain.
     Run this on the payer instance immediately after the creator sends the proposal.
   </description>
   <actions>
@@ -15,7 +18,7 @@
     <action>Verify the Review and Subscribe sheet appears with 5,000 sats and the creator contact card</action>
     <action>Verify the swipe control reads "Swipe To Subscribe &amp; Pay" when the first period is due on acceptance, otherwise "Swipe To Subscribe"</action>
     <action>Swipe the confirm control to the end</action>
-    <action>If the first period was due on acceptance: complete the send flow that opens, then verify the Subscribed confirmation appears</action>
+    <action>If the first period was due on acceptance: verify a progress indicator replaces the review content with no swipe control, wait for the payment to send, then verify the Subscribed confirmation appears</action>
     <action>If no payment was due: verify the Subscribed confirmation appears directly, with no send flow</action>
     <action>Tap Close on the Subscribed confirmation</action>
     <action>If a payment was made: verify its billing period is no longer offered with Pay or Dismiss, no Payment Requests sheet opens for it, and the home payment-request bell is absent when no other requests are pending</action>
