@@ -18,7 +18,7 @@
     <action>Verify the Review and Subscribe sheet appears with 5,000 sats and the creator contact card</action>
     <action>Verify the swipe control reads "Swipe To Subscribe &amp; Pay" when the first period is due on acceptance, otherwise "Swipe To Subscribe"</action>
     <action>Swipe the confirm control to the end</action>
-    <action>If the first period was due on acceptance: verify a progress indicator replaces the review content with no swipe control, wait for the payment to send, then verify the Subscribed confirmation appears</action>
+    <action>If the first period was due on acceptance: verify the Review and Subscribe layout stays on screen with the swipe control in its loading state and no second swipe is asked for, wait for the payment to send, then verify the Subscribed confirmation appears</action>
     <action>If no payment was due: verify the Subscribed confirmation appears directly, with no send flow</action>
     <action>Tap Close on the Subscribed confirmation</action>
     <action>If a payment was made: verify its billing period is no longer offered with Pay or Dismiss, no Payment Requests sheet opens for it, and the home payment-request bell is absent when no other requests are pending</action>
