@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import android.content.Context
 import com.synonym.bitkitcore.BroadcastException
-import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaymentProofRecord
@@ -35,6 +34,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.HwFundingSignedTx
+import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitReceiverPaths
@@ -50,6 +50,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
@@ -746,6 +747,54 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `accepted Shop activity failure retains original proof for reconciliation before delivery`() = test {
+        val txid = "ab".repeat(32)
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedAttempt(request, txid))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(lightningRepo.finishAcceptedShopActivity(request.id, txid))
+            .thenThrow(IllegalStateException("local activity unavailable"))
+
+        assertFalse(
+            repo.completeOnchainPayment(
+                request,
+                txid,
+                MethodId.P2wpkh.rawValue,
+                OnchainSendOutcome.Accepted(txid),
+            ),
+        )
+        assertTrue(storedProofs.single().paymentStarted)
+        assertNull(storedProofs.single().proofData)
+        verify(lightningRepo, never()).completeAcceptedShopFollowup(any(), any())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any())
+
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(COUNTERPARTY, true))
+        repo.reconcile()
+        assertTrue(storedProofs.single().paymentStarted)
+        assertNull(storedProofs.single().proofData)
+        verify(lightningRepo, never()).completeAcceptedShopFollowup(any(), any())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any())
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+
+        doReturn(Unit).whenever(lightningRepo).finishAcceptedShopActivity(request.id, txid)
+        repo.reconcile()
+
+        assertTrue(storedProofs.isEmpty())
+        verify(lightningRepo).completeAcceptedShopFollowup(request.id, txid)
+        verify(paykitSdkService).submitPaymentProof(
+            eq(request.counterparty),
+            eq(request.counterpartyReceiverPath),
+            eq(request.paymentRequestId),
+            eq(MethodId.P2wpkh.rawValue),
+            any(),
+            isNull(),
+        )
+    }
+
+    @Test
     fun `completed onchain proof retries after a newer send replaces the bounded guard`() = test {
         val txid = "ab".repeat(32)
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
@@ -1026,11 +1075,12 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
         val context = mock<Context>()
         whenever(context.getString(any())).thenReturn("message")
-        val features = mock<TrezorFeatures>()
+        val connected = mock<HwConnectedDevice>()
         val funding = HwFundingTransaction("psbt", 1000uL, 2.0f, 2000uL, 2uL)
         val signed = HwFundingSignedTx("signed-fixture-tx", 1000uL, 2uL, 2000uL)
         whenever(hwWalletRepo.needsPassphrase(walletId)).thenReturn(false)
-        whenever(hwWalletRepo.ensureConnected(walletId)).thenReturn(Result.success(features))
+        whenever(hwWalletRepo.reconnectTimeout(walletId)).thenReturn(30.seconds)
+        whenever(hwWalletRepo.ensureConnected(walletId)).thenReturn(Result.success(connected))
         whenever(hwWalletRepo.composeFundingTransaction(walletId, ONCHAIN_ADDRESS, request.amountSats, 2uL))
             .thenReturn(Result.success(funding))
         whenever(hwWalletRepo.signFunding(walletId, funding)).thenReturn(Result.success(signed))

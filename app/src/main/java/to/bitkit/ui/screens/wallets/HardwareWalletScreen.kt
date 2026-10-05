@@ -49,6 +49,7 @@ import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.illustrationRes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.activityListGroupedItems
@@ -129,7 +130,7 @@ private fun HardwareWalletContent(
                 .hazeSource(hazeState)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.trezor),
+                painter = painterResource(id = wallet.vendor.illustrationRes()),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier

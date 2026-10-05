@@ -24,10 +24,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
@@ -81,8 +86,12 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.time.Duration.Companion.seconds
 
 private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
+
+/** A peer reconnecting makes a channel usable again without any node event, so the overlay polls. */
+private val CHANNELS_REFRESH_INTERVAL = 1.seconds
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -105,6 +114,18 @@ fun SendSheet(
         if (!lightningState.nodeLifecycleState.isRunning()) return@run true
         val hasAnyChannels = lightningState.channels.isNotEmpty()
         hasAnyChannels && lightningState.channels.none { it.isUsable }
+    }
+
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val isWaitingForUsableChannel = shouldShowSyncOverlay && lightningState.nodeLifecycleState.isRunning()
+    LaunchedEffect(isWaitingForUsableChannel) {
+        if (!isWaitingForUsableChannel) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                walletViewModel.refreshChannelsAndPeers()
+                delay(CHANNELS_REFRESH_INTERVAL)
+            }
+        }
     }
 
     LaunchedEffect(startDestination) {

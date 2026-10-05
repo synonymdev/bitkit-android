@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -68,6 +69,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = false,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(false),
                     onBeforeNavigate = {},
                     showWidgets = true,
                 )
@@ -100,6 +102,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = true,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(false),
                     onBeforeNavigate = {},
                     showWidgets = true,
                     onOpenWidgetsHome = { openWidgetsHome.value = true },
@@ -136,6 +139,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = true,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(false),
                     onBeforeNavigate = {},
                     showWidgets = false,
                     onOpenWidgetsHome = { error("Should not request home widgets page") },
@@ -175,6 +179,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = true,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(false),
                     onBeforeNavigate = {},
                     showWidgets = true,
                     isPaykitEnabled = true,
@@ -199,6 +204,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = true,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(false),
                     onBeforeNavigate = {},
                     showWidgets = true,
                     isPaykitEnabled = false,

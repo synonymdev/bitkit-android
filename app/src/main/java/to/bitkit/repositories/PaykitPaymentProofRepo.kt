@@ -291,6 +291,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     )
                 }
                 if (!hasPositiveEvidence(proof)) return@runSuspendCatching false
+                lightningRepo.finishAcceptedShopActivity(request.id, txid)
                 if (index >= 0) proofs[index] = proof else proofs += proof
                 val retained = persistAndSubmit(listOf(proof), proofs)
                 if (retained) publishOnchainResolution(proof, txid)
@@ -310,7 +311,10 @@ class PaykitPaymentProofRepo @Inject constructor(
                     proofData = txid.lowercase(),
                     onchainAcceptanceVerified = true,
                 )
-                val delivered = runSuspendCatching { submitReady(proof) }
+                val delivered = runSuspendCatching {
+                    lightningRepo.finishAcceptedShopActivity(request.id, txid)
+                    submitReady(proof)
+                }
                     .onFailure { Logger.warn("Failed to complete a Paykit on-chain payment proof", it, context = TAG) }
                     .getOrDefault(false)
                 if (delivered) publishOnchainResolution(proof, txid)
@@ -492,10 +496,12 @@ class PaykitPaymentProofRepo @Inject constructor(
                     val proofs = loadProofs().toMutableList()
                     val index = proofs.indexOf(proof)
                     if (index < 0) return false
+                    lightningRepo.finishAcceptedShopActivity(proof.requestId, proof.proofData)
                     val verified = proof.copy(onchainAcceptanceVerified = true)
                     proofs[index] = verified
                     return persistAndSubmit(listOf(verified), proofs)
                 }
+                lightningRepo.finishAcceptedShopActivity(proof.requestId, proof.proofData)
                 submitReady(proof)
                 attempt.matchesPositiveShopProof(proof)
             }
@@ -550,6 +556,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (proof.onchainWalletId != WalletScope.default) return reconcileHardwareOnchainProof(proof)
         if (!attempt.matchesPositiveShopProof(proof)) return false
         val txid = attempt?.txid ?: return false
+        lightningRepo.finishAcceptedShopActivity(proof.requestId, txid)
 
         val proofs = loadProofs().toMutableList()
         val index = proofs.indexOf(proof)

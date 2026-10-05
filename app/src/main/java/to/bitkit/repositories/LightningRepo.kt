@@ -173,6 +173,7 @@ class LightningRepo @Inject constructor(
      */
     private val configChangeMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
+    private val refreshFailureLogged = AtomicBoolean(false)
 
     init {
         observeConnectivityForSyncRetry()
@@ -789,6 +790,11 @@ class LightningRepo @Inject constructor(
             _lightningState.update { state -> state.copy(isSyncingWallet = false) }
             syncMutex.unlock()
         }.onFailure {
+            if (it is CancellationException) {
+                // A cancellation is not a sync failure, but a sync requested meanwhile must still run
+                if (syncPending.getAndSet(false)) syncAsync()
+                throw it
+            }
             _lightningState.update { state -> state.copy(lastSyncError = it) }
             startSyncRetryLoopIfNeeded()
         }
@@ -1429,9 +1435,7 @@ class LightningRepo @Inject constructor(
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
 
-        val finalState = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
-            _lightningState.first { it.shouldStopWaitingForUsableChannels() }
-        } ?: run {
+        val finalState = awaitUsableChannels() ?: run {
             Logger.warn("Timed out waiting for usable channels", context = TAG)
             return@withContext
         }
@@ -1439,6 +1443,15 @@ class LightningRepo @Inject constructor(
         if (!finalState.nodeLifecycleState.canRun() || finalState.channels.isEmpty()) {
             delayNoUsableChannelsFeedback()
         }
+    }
+
+    private suspend fun awaitUsableChannels(): LightningState? = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
+        refreshChannelsAndPeers()
+        while (!_lightningState.value.shouldStopWaitingForUsableChannels()) {
+            delay(CHANNELS_USABLE_POLL_DELAY)
+            refreshChannelsAndPeers()
+        }
+        _lightningState.value
     }
 
     private suspend fun waitForChannelsToLoadIfNeeded(state: LightningState): LightningState? {
@@ -1616,11 +1629,21 @@ class LightningRepo @Inject constructor(
 
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
 
+    suspend fun finishAcceptedShopActivity(requestId: PaykitPaymentRequestId, txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt?.requestId == requestId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            finishOnchainSendLocally(attempt)
+        }
+    }
+
     suspend fun completeAcceptedShopFollowup(requestId: PaykitPaymentRequestId, txid: String) {
         val attempt = onchainSendAttemptStore.current()
         if (attempt?.requestId == requestId && attempt.txid.equals(txid, ignoreCase = true) &&
             attempt.hasPositiveEvidence
         ) {
+            finishOnchainSendLocally(attempt)
             onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
         }
     }
@@ -1773,6 +1796,31 @@ class LightningRepo @Inject constructor(
     ): Result<Unit> = executeWhenNodeRunning("closeChannel") {
         runCatching { lightningService.closeChannel(channel, force, forceCloseReason) }.also {
             syncState()
+        }
+    }
+
+    /**
+     * Re-reads channels and peers from the running node, leaving balances as they are (see [syncState]).
+     * A peer reconnecting makes a channel usable again without any node event, so callers poll this.
+     * [onRefreshed] runs right after the new channels are published, in the same uninterruptible block,
+     * so state derived from them cannot fall behind them.
+     */
+    suspend fun refreshChannelsAndPeers(onRefreshed: () -> Unit = {}): Result<Unit> = withContext(bgDispatcher) {
+        if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
+        runCatching {
+            _lightningState.update {
+                it.copy(
+                    peers = getPeers().orEmpty().toImmutableList(),
+                    channels = getChannels().orEmpty().toImmutableList(),
+                )
+            }
+            onRefreshed()
+        }.onSuccess {
+            refreshFailureLogged.set(false)
+        }.onFailure {
+            if (refreshFailureLogged.compareAndSet(false, true)) {
+                Logger.warn("Failed to re-read channels and peers", it, context = TAG)
+            }
         }
     }
 
@@ -2295,6 +2343,7 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
+        private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
 
         /** Max time to wait for a starting node before its id is treated as unavailable. */
