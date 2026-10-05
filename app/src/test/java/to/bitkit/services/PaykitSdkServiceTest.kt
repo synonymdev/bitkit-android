@@ -28,7 +28,9 @@ import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
+import com.synonym.paykit.PublicContactPaymentResolution
 import com.synonym.paykit.PublicContactSharingPolicy
+import com.synonym.paykit.PublicPaymentResolutionStatus
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -839,12 +841,66 @@ class PaykitSdkServiceTest {
         val lockedGate = CompletableDeferred<List<ContactRecord>>()
         whenever(sdk.contactRecords()).doSuspendableAnswer { lockedGate.await() }
         whenever(sdk.fetchPubkyFollows(RING_PUBKY, 10_000u)).thenReturn(listOf("follow"))
+        whenever(sdk.resolvePublicContactPayment(RING_PUBKY, null)).thenReturn(
+            PublicContactPaymentResolution(PublicPaymentResolutionStatus.NO_ENDPOINT, emptyList(), emptyList()),
+        )
         val locked = async { service.contactRecords() }
         runCurrent()
         assertEquals(listOf("follow"), service.fetchPubkyFollows(RING_PUBKY))
+        assertTrue(service.resolvePublicContactPayment(RING_PUBKY).payableEndpoints.isEmpty())
         assertFalse(locked.isCompleted)
         lockedGate.complete(emptyList())
         assertEquals(emptyList<ContactRecord>(), locked.await())
+    }
+
+    @Test
+    fun `public payment resolution waits for setup`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.resolvePublicContactPayment(RING_PUBKY, null)).thenReturn(
+            PublicContactPaymentResolution(PublicPaymentResolutionStatus.NO_ENDPOINT, emptyList(), emptyList()),
+        )
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            platformInitializer = {},
+            settingsStore = mock(),
+            sdkFactory = { sdk },
+        )
+        val read = async { service.resolvePublicContactPayment(RING_PUBKY) }
+        runCurrent()
+        assertFalse(read.isCompleted)
+        verify(sdk, never()).resolvePublicContactPayment(RING_PUBKY, null)
+        service.initialize()
+        assertTrue(read.await().payableEndpoints.isEmpty())
+    }
+
+    @Test
+    fun `public payment resolution rejects interruption and allows fresh reads`() = runTest {
+        for (interruption in listOf("reset", "wipe", "cancel")) {
+            val sdk = mock<PaykitSdk>()
+            val gate = CompletableDeferred<Unit>()
+            whenever(sdk.resolvePublicContactPayment(RING_PUBKY, null)).doSuspendableAnswer {
+                gate.await()
+                PublicContactPaymentResolution(PublicPaymentResolutionStatus.NO_ENDPOINT, emptyList(), emptyList())
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val read = async { runSuspendCatching { service.resolvePublicContactPayment(RING_PUBKY) } }
+            runCurrent()
+            when (interruption) {
+                "reset" -> service.clearState()
+                "wipe" -> service.withWalletWipe {}
+                "cancel" -> read.cancel()
+            }
+            gate.complete(Unit)
+            if (interruption == "cancel") {
+                assertFailsWith<CancellationException> { read.await() }
+            } else {
+                assertTrue(read.await().isFailure)
+            }
+            assertTrue(service.resolvePublicContactPayment(RING_PUBKY).payableEndpoints.isEmpty())
+        }
     }
 
     @Test

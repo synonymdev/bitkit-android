@@ -25,6 +25,6 @@
     <action>Tap Choose Recipient, select the linked contact if needed, and tap Propose Subscription again</action>
     <action>Verify the sent confirmation (testTag "SubscriptionProposalSent") shows headline "Sent Proposal", the recipient contact, and the subscription name with 5,000 sats</action>
     <action>Tap OK</action>
-    <action>Verify a row for "Journey Sub" appears in the CREATED section with subtitle "Proposal sent"</action>
+    <action>Verify a row for "Journey Sub" appears in the CREATED section with subtitle "Proposal sent", not "Proposal queued"</action>
   </actions>
 </journey>

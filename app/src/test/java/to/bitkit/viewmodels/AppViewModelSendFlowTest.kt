@@ -6778,6 +6778,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `execution claim failure blocks versionless request without consuming private details`() = test {
         val request = paymentRequest()
         val privateContext = privatePaymentContext(null)
+        pubkyPublicKey.value = testPublicKey
+        enablePaykitUi()
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        val refreshStarted = CompletableDeferred<Unit>()
+        val finishRefresh = CompletableDeferred<Unit>()
+        whenever(paykitPaymentRequestRepo.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED))
+            .doSuspendableAnswer {
+                refreshStarted.complete(Unit)
+                finishRefresh.await()
+                Result.success(Unit)
+            }
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
         whenever(paykitPaymentRequestRepo.claimForPayment(request))
             .thenReturn(Result.failure(IllegalStateException("request claimed by another app")))
@@ -6801,6 +6813,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
 
         confirmCurrentPayment()
+
+        refreshStarted.await()
+        assertNull(sut.currentSheet.value)
+        assertFalse(finishRefresh.isCompleted)
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        verify(paykitPaymentProofRepo, never()).reconcile()
+        verify(paykitPaymentRequestRepo, never()).refresh(PaykitPaymentRequestRefreshMode.FULL)
+        finishRefresh.complete(Unit)
+        advanceUntilIdle()
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(paykitPaymentRequestRepo, never()).accept(request)
         verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())

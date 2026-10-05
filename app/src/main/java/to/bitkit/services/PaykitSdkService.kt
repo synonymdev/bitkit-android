@@ -1070,9 +1070,10 @@ class PaykitSdkService @Inject constructor(
     suspend fun resolvePublicContactPayment(
         counterparty: String,
     ): PaykitPublicContactPaymentResolution {
-        isSetup.await()
-        val resolution = operationLock.withLock(PaykitSdkOperationLock.Priority.Interactive) {
-            handle().resolvePublicContactPayment(counterparty, amount = null)
+        val resolution = publicRead { handle ->
+            val result = handle.resolvePublicContactPayment(counterparty, amount = null)
+            check(sdk === handle) { "Paykit runtime changed while resolving public payment endpoints" }
+            result
         }
         return resolution.toPaykitPublicContactPaymentResolution()
     }

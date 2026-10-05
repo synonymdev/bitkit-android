@@ -1190,6 +1190,57 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deleteProfile stops public profile reads before deleting contacts`() = test {
+        authenticateForTesting()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+        val records = listOf(
+            createContactRecord(VALID_CONTACT_KEY_A, label = "Alice"),
+            createContactRecord(VALID_CONTACT_KEY_B, label = "Bob"),
+        )
+        whenever(pubkyService.contactRecords()).thenReturn(records)
+        val bulkCancelled = CompletableDeferred<Unit>()
+        val screenCancelled = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer {
+                try {
+                    awaitCancellation()
+                } finally {
+                    bulkCancelled.complete(Unit)
+                }
+            }
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
+            .doSuspendableAnswer {
+                try {
+                    awaitCancellation()
+                } finally {
+                    screenCancelled.complete(Unit)
+                }
+            }
+        sut.loadContacts()
+        val screenLookup = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
+        val deletionStarted = CompletableDeferred<Unit>()
+        val finishDeletion = CompletableDeferred<Unit>()
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            deletionStarted.complete(Unit)
+            finishDeletion.await()
+            records
+        }
+        val deletion = async { sut.deleteProfile() }
+        deletionStarted.await()
+        bulkCancelled.await()
+        screenCancelled.await()
+        assertFalse(deletion.isCompleted)
+        finishDeletion.complete(Unit)
+        deletion.await().getOrThrow()
+        screenLookup.await()
+        assertTrue(sut.contacts.value.isEmpty())
+        verify(pubkyService).removeContact(VALID_CONTACT_KEY_A)
+        verify(pubkyService).removeContact(VALID_CONTACT_KEY_B)
+    }
+
+    @Test
     fun `deleteProfile should fail when signOut fails`() = test {
         authenticateForTesting()
         settingsFlow.value = SettingsData(

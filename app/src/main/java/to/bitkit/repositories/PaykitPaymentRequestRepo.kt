@@ -2,6 +2,7 @@
 
 package to.bitkit.repositories
 
+import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.OutboundPrivateMessageStatus
@@ -280,6 +281,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
+    private val refreshMutex = Mutex()
     private val targetDiscoveryMutex = Mutex()
     private val creationMutex = Mutex()
     private val processingLock = Any()
@@ -288,6 +290,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val completedRefreshVersion = AtomicLong()
     private var completedRefreshGeneration = -1L
     private var completedRefreshProofVersion = -1L
+    private var completedRefreshActionVersion = -1L
+    private var actionVersion = 0L
     private var completedRefreshMode = PaykitPaymentRequestRefreshMode.STORED
     private val repoScope = appScope(ioDispatcher, TAG)
     private var expirationJob: Job? = null
@@ -322,6 +326,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val generation: Long,
         val identity: String,
         val contacts: PaykitReceivedPaymentContacts,
+    )
+
+    private data class RefreshCheckpoint(val actionVersion: Long, val proofVersion: Long)
+
+    private data class RequestSnapshot(
+        val records: List<PaymentRequestRecord>,
+        val blockedPeers: List<LinkedPeerRecord>,
     )
 
     @Volatile
@@ -477,26 +488,39 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val refreshVersion = completedRefreshVersion.get()
         return withContext(ioDispatcher) {
             runSuspendCatching {
-                operationMutex.withLock {
-                    if (!isAvailable()) {
-                        clearStateLocked()
-                        return@withLock
-                    }
-                    if (!isCurrentState(generation, expectedIdentity)) return@withLock
-                    val proofVersion = paymentProofStore.backupStateVersion.value
-                    val hasFreshSnapshot = completedRefreshVersion.get() != refreshVersion &&
-                        completedRefreshGeneration == generation && completedRefreshProofVersion == proofVersion
-                    if (!forceFresh && hasFreshSnapshot && mode <= completedRefreshMode) {
-                        return@withLock
-                    }
-                    runSuspendCatching { synchronizeLocked(generation, expectedIdentity, mode) }
-                        .onFailure { discardExpiredRequestsLocked() }
-                        .getOrThrow()
-                    if (isCurrentState(generation, expectedIdentity)) {
-                        completedRefreshMode = mode
-                        completedRefreshGeneration = generation
-                        completedRefreshProofVersion = proofVersion
-                        completedRefreshVersion.incrementAndGet()
+                refreshMutex.withLock refresh@{
+                    val checkpoint = operationMutex.withLock operation@{
+                        if (!isAvailable()) {
+                            clearStateLocked()
+                            return@operation null
+                        }
+                        if (!isCurrentState(generation, expectedIdentity)) return@operation null
+                        val proofVersion = paymentProofStore.backupStateVersion.value
+                        val hasFreshSnapshot = completedRefreshVersion.get() != refreshVersion &&
+                            completedRefreshGeneration == generation && completedRefreshProofVersion == proofVersion &&
+                            completedRefreshActionVersion == actionVersion
+                        if (!forceFresh && hasFreshSnapshot && mode <= completedRefreshMode) return@operation null
+                        receivedContacts = null
+                        RefreshCheckpoint(actionVersion, proofVersion)
+                    } ?: return@refresh
+                    val snapshot = runSuspendCatching { fetchRequestSnapshot(expectedIdentity, mode) }
+                    operationMutex.withLock {
+                        if (!isCurrentState(generation, expectedIdentity)) return@withLock
+                        runSuspendCatching {
+                            val records = snapshot.getOrThrow()
+                            if (checkpoint.actionVersion != actionVersion) {
+                                synchronizeLocked(generation, expectedIdentity, PaykitPaymentRequestRefreshMode.STORED)
+                            } else {
+                                applyRequestSnapshotLocked(records, generation, expectedIdentity)
+                            }
+                        }.onFailure { discardExpiredRequestsLocked() }.getOrThrow()
+                        if (isCurrentState(generation, expectedIdentity)) {
+                            completedRefreshMode = mode
+                            completedRefreshGeneration = generation
+                            completedRefreshProofVersion = checkpoint.proofVersion
+                            completedRefreshActionVersion = actionVersion
+                            completedRefreshVersion.incrementAndGet()
+                        }
                     }
                 }
             }.onFailure {
@@ -633,6 +657,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         acceptedPaymentEndpointIdentifiers = endpointIdentifiers,
                         metadataJson = JsonObject(mapOf("note" to JsonPrimitive(note))).toString(),
                     )
+                    actionVersion++
                     val record = paykitSdkService.proposePaymentRequest(
                         counterparty = target.publicKey,
                         proposal = proposal,
@@ -645,7 +670,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         target = target,
                         endpointIdentifiers = endpointIdentifiers,
                         createdAt = proposalDate,
-                        reports = reports,
+                        wasSent = proposalWasSent(record, reports, generation, expectedIdentity),
                     )
                     publishCreatedRequest(request, generation, expectedIdentity)
                 }
@@ -706,12 +731,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
         // The published recurrence start and anchor stay on real time, so the offset never leaves this device.
         val proposal = buildSubscriptionProposal(draft, name, description, iconUri, endpoints, clock.now())
         PaykitSubscriptionProposal.validate(proposal)
+        actionVersion++
         val record = paykitSdkService.proposePaymentRequest(
             counterparty = target.publicKey,
             proposal = proposal,
             expectedIdentity = expectedIdentity,
         )
-        val deliveryStatus = if (proposalWasSent(record, processPendingMessages(target.publicKey))) {
+        val reports = processPendingMessages(target.publicKey)
+        val deliveryStatus = if (proposalWasSent(record, reports, generation, expectedIdentity)) {
             PaykitPaymentRequestDeliveryStatus.Sent
         } else {
             PaykitPaymentRequestDeliveryStatus.Queued
@@ -794,16 +821,35 @@ class PaykitPaymentRequestRepo @Inject constructor(
         )
     }
 
-    private fun proposalWasSent(
+    private suspend fun proposalWasSent(
         record: PaymentRequestRecord,
         reports: List<OutboundPrivateCounterpartySendReport>,
+        generation: Long,
+        expectedIdentity: String,
     ): Boolean {
         if (record.proposalOutboundStatus == OutboundPrivateMessageStatus.SENT) return true
         val messageId = record.proposalOutboundMessageId ?: return false
-        return reports.any {
+        val sentByDrain = reports.any {
             PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
                 messageId in it.report?.sent.orEmpty()
         }
+        if (sentByDrain) return true
+        val failedByDrain = reports.any {
+            PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
+                it.report?.failed.orEmpty().any { failure -> failure.outboundMessageId == messageId }
+        }
+        if (failedByDrain || !isCurrentState(generation, expectedIdentity)) return false
+        return runSuspendCatching {
+            paykitSdkService.allPaymentRequests(expectedIdentity).any {
+                PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
+                    it.paymentRequestId == record.paymentRequestId &&
+                    it.localRole == PaymentRequestLocalRole.PAYEE &&
+                    it.proposalOutboundMessageId == messageId &&
+                    it.proposalOutboundStatus == OutboundPrivateMessageStatus.SENT
+            }
+        }.onFailure {
+            Logger.warn("Failed to read Paykit proposal delivery status", it, context = TAG)
+        }.getOrDefault(false)
     }
 
     private fun publishCreatedSubscription(
@@ -966,6 +1012,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 val current = _subscriptions.value.firstOrNull { it.id == subscription.id }
                     ?.takeIf { it == subscription && it.isPayer && it.isProposalActionable(validationDate) }
                     ?: throw PaykitPaymentRequestError.RequestUnavailable
+                actionVersion++
                 val record = paykitSdkService.acceptPaymentRequest(
                     current.counterparty,
                     current.paymentRequestId,
@@ -1024,23 +1071,41 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun synchronizeLocked(
         generation: Long,
         expectedIdentity: String?,
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
     ) {
+        receivedContacts = null
+        val snapshot = fetchRequestSnapshot(expectedIdentity, mode)
+        applyRequestSnapshotLocked(snapshot, generation, expectedIdentity)
+    }
+
+    private suspend fun fetchRequestSnapshot(
+        expectedIdentity: String?,
+        mode: PaykitPaymentRequestRefreshMode,
+    ): RequestSnapshot {
         if (mode == PaykitPaymentRequestRefreshMode.FULL) processPendingMessages()
         if (mode != PaykitPaymentRequestRefreshMode.STORED) {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         }
+        val allRecords = paykitSdkService.allPaymentRequests(expectedIdentity)
+        val blockedPeers = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.BLOCKED }
+        return RequestSnapshot(allRecords, blockedPeers)
+    }
+
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    private suspend fun applyRequestSnapshotLocked(
+        snapshot: RequestSnapshot,
+        generation: Long,
+        expectedIdentity: String?,
+    ) {
         val now = clock.now()
         val subscriptionNow = subscriptionClock.now()
-        receivedContacts = null
-        val allRecords = paykitSdkService.allPaymentRequests(expectedIdentity)
+        val allRecords = snapshot.records
         val contacts = PaykitReceivedPaymentContacts.from(allRecords, Env.network)
         val records = allRecords.filter(::isBitkitPaymentRequest)
-        val blockedPeers = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.BLOCKED }
+        val blockedPeers = snapshot.blockedPeers
         val availableRecords = records.filterNot { record ->
             blockedPeers.any {
                 PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty)
@@ -1304,6 +1369,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     val current = _pendingRequests.value.firstOrNull { it.id == request.id }
                         ?: throw PaykitPaymentRequestError.RequestUnavailable
 
+                    actionVersion++
                     operation(current)
                     processPendingMessages()
                     val updatedRequest = current.copy(lifecycleState = resultingState)
@@ -1328,6 +1394,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             operationMutex.withLock {
                 val current = _subscriptions.value.firstOrNull { it.id == subscription.id }
                     ?: throw PaykitPaymentRequestError.RequestUnavailable
+                actionVersion++
                 val record = operation(current)
                 processPendingMessages()
                 val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
@@ -1710,14 +1777,8 @@ private fun PaymentRequestRecord.toCreatedPaykitPaymentRequest(
     target: PaykitPaymentRequestTarget,
     endpointIdentifiers: List<String>,
     createdAt: Instant,
-    reports: List<OutboundPrivateCounterpartySendReport>,
+    wasSent: Boolean,
 ): PaykitPaymentRequest {
-    val wasSent = proposalOutboundMessageId?.let { messageId ->
-        reports.any { report ->
-            PubkyPublicKeyFormat.matches(report.counterparty, counterparty) &&
-                messageId in report.report?.sent.orEmpty()
-        }
-    } == true
     return PaykitPaymentRequest(
         paymentRequestId = paymentRequestId,
         counterparty = target.publicKey,

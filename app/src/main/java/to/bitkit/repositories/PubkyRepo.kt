@@ -936,6 +936,7 @@ class PubkyRepo @Inject constructor(
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
+            clearSessionContactProfiles()
             deleteAllContacts()
             runSuspendCatching {
                 pubkyService.deletePaykitProfile()
@@ -1078,9 +1079,9 @@ class PubkyRepo @Inject constructor(
      * because the background refresh of [loadContacts] has not finished looking it up, so a screen showing that
      * contact does not wait behind bulk reads and an edit made there keeps the contact's avatar, bio and links. The
      * lookup takes the contact over from the refresh, which stops its own lookup and never applies a result for it,
-     * and a caller arriving meanwhile waits for the same lookup. Only a sign-out or an identity change stops it, not a
-     * later refresh. It returns at once for any other row; when the lookup fails, the row keeps its label. A profile
-     * the refresh already found for the contact but has not applied to the list yet is applied at once instead.
+     * and a caller arriving meanwhile waits for the same lookup. Sign-out, profile deletion or an identity change
+     * stops it, not a later refresh. It returns at once for any other row; when the lookup fails, the row keeps its
+     * label. A profile already found by the refresh but not yet applied to the contact list is applied at once.
      */
     suspend fun resolvePendingContactProfile(publicKey: String) {
         val owner = _publicKey.value ?: return

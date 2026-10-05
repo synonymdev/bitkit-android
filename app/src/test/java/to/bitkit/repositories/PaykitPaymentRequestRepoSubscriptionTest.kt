@@ -382,6 +382,33 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `creator proposal reports delivery completed by another drain`() = test {
+        val target = stubSubscriptionProposal()
+        val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalOutboundMessageId = 7uL)
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))).thenReturn(record)
+        whenever(paykitSdkService.allPaymentRequests(LOCAL_IDENTITY)).thenReturn(
+            listOf(record.copy(proposalOutboundStatus = OutboundPrivateMessageStatus.SENT)),
+        )
+
+        val creation = sut.proposeSubscription(
+            draft = PaykitSubscriptionDraft(
+                amountSats = 100_000uL,
+                name = "Monthly support",
+                description = "Thank you",
+                frequency = PaykitRecurrenceUnit.Month,
+                expiresAt = clock.now().plus(60.seconds),
+            ),
+            target = target,
+            savedPublicKeys = listOf(COUNTERPARTY),
+        ).getOrThrow()
+
+        assertEquals(PaykitPaymentRequestDeliveryStatus.Sent, creation.subscription.deliveryStatus)
+        assertEquals(listOf(creation.subscription), sut.subscriptions.value)
+        verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY)
+        verify(paykitSdkService).proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))
+    }
+
+    @Test
     fun `creator proposal publishes real time while the subscription clock offset is on`() = test {
         val target = stubSubscriptionProposal()
         subscriptionOffset = 31.days

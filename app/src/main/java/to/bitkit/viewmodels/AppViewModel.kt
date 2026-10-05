@@ -5770,6 +5770,11 @@ class AppViewModel @Inject constructor(
             toast(error)
             hideSheet()
         }
+        if (contactPaymentContext?.incomingPaymentRequest != null) {
+            viewModelScope.launch {
+                refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
+            }
+        }
     }
 
     fun handleDeeplinkIntent(intent: Intent) {
