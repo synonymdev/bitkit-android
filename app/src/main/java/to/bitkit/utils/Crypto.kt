@@ -33,6 +33,35 @@ import javax.inject.Singleton
 @Suppress("SwallowedException", "MagicNumber", "TooGenericExceptionCaught")
 @Singleton
 class Crypto @Inject constructor() {
+    companion object {
+        /**
+         * Puts the bundled BouncyCastle in place of the outdated "BC" provider that Android registers.
+         *
+         * `App.onCreate` calls this before anything can open a TLS connection. While the swap runs no
+         * provider offers the "BKS" keystore, and a native TLS verifier that loads its classes in that
+         * window fails for the rest of the process. Later calls do nothing.
+         */
+        @Synchronized
+        fun installSecurityProvider() {
+            // TODO show setup failure on UI? It throws from App.onCreate and stops start-up
+            try {
+                val provider = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
+                when {
+                    provider == null -> Security.addProvider(BouncyCastleProvider())
+                    provider::class.java != BouncyCastleProvider::class.java -> {
+                        // We substitute the outdated BC provider registered in Android.
+                        // Build the replacement first so the gap without a "BC" provider stays short.
+                        val replacement = BouncyCastleProvider()
+                        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+                        Security.insertProviderAt(replacement, 1)
+                    }
+                }
+            } catch (e: Exception) {
+                throw CryptoError.SecurityProviderSetupFailed()
+            }
+        }
+    }
+
     @Suppress("ArrayInDataClass")
     data class KeyPair(
         val privateKey: ByteArray,
@@ -50,20 +79,7 @@ class Crypto @Inject constructor() {
     private val transformation = "AES/GCM/NoPadding"
 
     init {
-        // TODO move init to VM (to enable error handling on UI)?
-        try {
-            val provider = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
-            when {
-                provider == null -> Security.addProvider(BouncyCastleProvider())
-                provider::class.java != BouncyCastleProvider::class.java -> {
-                    // We substitute the outdated BC provider registered in Android
-                    Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
-                    Security.insertProviderAt(BouncyCastleProvider(), 1)
-                }
-            }
-        } catch (e: Exception) {
-            throw CryptoError.SecurityProviderSetupFailed()
-        }
+        installSecurityProvider()
     }
 
     fun generateKeyPair(): KeyPair {
