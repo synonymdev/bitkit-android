@@ -386,6 +386,11 @@ class AppViewModel @Inject constructor(
         val onchainAddress: String,
     )
 
+    private data class SubscriptionNotificationTarget(
+        val identity: String,
+        val requestId: PaykitPaymentRequestId,
+    )
+
     private val processedPaymentsLock = Any()
     private val processedPayments = mutableSetOf<String>()
     private val contactPaymentContextLock = Any()
@@ -399,6 +404,7 @@ class AppViewModel @Inject constructor(
     private var shouldRestorePaymentRequestSheet = false
     private var preparedContactPaymentContext: ContactPaymentContext? = null
     private var requestedPaymentRequestIdentity: String? = null
+    private var deferredSubscriptionNotification: SubscriptionNotificationTarget? = null
     private var requestedPaymentRequestTags: ImmutableList<String> = persistentListOf()
     private var uncertainOnchainPaymentRequestId: PaykitPaymentRequestId? = null
     private var isPresentingPaymentRequest = false
@@ -1010,6 +1016,7 @@ class AppViewModel @Inject constructor(
             val currentIdentity = pubkyRepo.publicKey.value
             if (currentIdentity != null && !PubkyPublicKeyFormat.matches(currentIdentity, payerIdentity)) return
             invalidatePaymentRequestPresentation()
+            deferredSubscriptionNotification = null
             _requestedPaymentRequestId.update { requestId }
             requestedPaymentRequest = null
             shouldRestorePaymentRequestSheet = false
@@ -1102,7 +1109,7 @@ class AppViewModel @Inject constructor(
         if (!paykitPaymentRequestRepo.isPending(request)) return
         completePaymentRequestPresentation(request)
         paymentRequestPresentationGeneration++
-        clearRequestedPaymentRequest()
+        clearRequestedPaymentRequest(restoreDeferredReminder = false)
         clearPaymentRequestPresentationRetry(request.id)
     }
 
@@ -1194,6 +1201,22 @@ class AppViewModel @Inject constructor(
         val requestedIdentity = requestedPaymentRequestIdentity ?: return true
         val currentIdentity = pubkyRepo.publicKey.value ?: return false
         return PubkyPublicKeyFormat.matches(currentIdentity, requestedIdentity)
+    }
+
+    private fun subscriptionNotificationToDefer(): SubscriptionNotificationTarget? {
+        val presentationInProgress = isPresentingPaymentRequest || isSubmittingPaymentRequest ||
+            paymentRequestPreparation.value != null
+        val paymentInProgress = hasActiveContactPaymentContext() || isScanPendingOrActive() ||
+            paymentRequestSheetTransitionJob?.isActive == true
+        if (presentationInProgress || paymentInProgress) return null
+        val identity = requestedPaymentRequestIdentity ?: return null
+        val requestId = requestedPaymentRequestId.value ?: return null
+        if (!PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value) ||
+            paykitPaymentRequestRepo.pendingRequest(requestId) != null
+        ) {
+            return null
+        }
+        return SubscriptionNotificationTarget(identity, requestId)
     }
 
     private suspend fun presentIncomingPaymentRequestOrStop(
@@ -1466,17 +1489,31 @@ class AppViewModel @Inject constructor(
             }
         }
         completions.forEach { it.cancel() }
-        if (!preserveRequestedPaymentRequest) clearRequestedPaymentRequest()
+        if (!preserveRequestedPaymentRequest) {
+            deferredSubscriptionNotification = null
+            clearRequestedPaymentRequest()
+        }
         paymentRequestSheetTransitionJob?.cancel()
         paymentRequestSheetTransitionJob = null
     }
 
-    private fun clearRequestedPaymentRequest() {
+    private fun clearRequestedPaymentRequest(restoreDeferredReminder: Boolean = true) {
         _requestedPaymentRequestId.update { null }
         requestedPaymentRequest = null
         shouldRestorePaymentRequestSheet = false
         requestedPaymentRequestIdentity = null
         requestedPaymentRequestTags = persistentListOf()
+        if (restoreDeferredReminder) restoreDeferredSubscriptionNotification()
+    }
+
+    private fun restoreDeferredSubscriptionNotification() {
+        if (requestedPaymentRequestId.value != null) return
+        val reminder = deferredSubscriptionNotification?.takeIf {
+            PubkyPublicKeyFormat.matches(it.identity, pubkyRepo.publicKey.value)
+        }
+        deferredSubscriptionNotification = null
+        _requestedPaymentRequestId.update { reminder?.requestId }
+        requestedPaymentRequestIdentity = reminder?.identity
     }
 
     fun setPaymentRequestOverlayVisible(visible: Boolean) {
@@ -5324,6 +5361,7 @@ class AppViewModel @Inject constructor(
 
             else -> _currentSheet.update { null }
         }
+        restoreDeferredSubscriptionNotification()
         showQueuedPairingCodeSheet()
         if (shouldFlushDeferredScan) flushDeferredScan()
     }
@@ -5820,14 +5858,19 @@ class AppViewModel @Inject constructor(
 
     fun openIncomingPaymentRequestWithTags(id: PaykitPaymentRequestId, tags: List<String>) {
         val request = paykitPaymentRequestRepo.pendingRequest(id) ?: return
-        if (paykitPaymentRequestRepo.isProcessing(request) || requestedPaymentRequestId.value != null) {
+        val reminder = subscriptionNotificationToDefer()
+        if (paykitPaymentRequestRepo.isProcessing(request) ||
+            (requestedPaymentRequestId.value != null && reminder == null)
+        ) {
             toast(PaykitPaymentRequestError.OperationInProgress)
             return
         }
+        if (reminder != null) deferredSubscriptionNotification = reminder
         dismissedPreparingRequestIds.remove(id)
         invalidatePaymentRequestPresentation()
         clearPaymentRequestPresentationRetry(id)
         _requestedPaymentRequestId.update { id }
+        requestedPaymentRequestIdentity = null
         requestedPaymentRequest = request
         shouldRestorePaymentRequestSheet = _currentSheet.value is Sheet.PaymentRequests
         requestedPaymentRequestTags = tags.filter(String::isNotBlank).distinct().toImmutableList()

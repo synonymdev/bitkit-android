@@ -1822,6 +1822,97 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `missing subscription reminder allows manual payment retries and resumes after dismissal`() = test {
+        sut.setIsAuthenticated(true)
+        val reminder = paymentRequest().copy(
+            paymentRequestId = "subscription-reminder",
+            billingPeriod = PaykitBillingPeriod(
+                startsAt = Instant.parse("2026-08-25T12:00:00Z"),
+                endsAt = Instant.parse("2026-09-01T12:00:00Z"),
+            ),
+        )
+        val request = paymentRequest()
+        val anotherRequest = request.copy(paymentRequestId = "another-request")
+        val preparation = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { preparation.await() }
+        whenever(privatePaykitRepo.beginPaymentRequest(reminder)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
+        )
+        val bolt11 = "lnbcrt1manualrequest"
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(request, anotherRequest)
+        surfacedPaykitPaymentRequestIds += listOf(request.id, anotherRequest.id, reminder.id)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+
+        sut.onPaykitSubscriptionNotificationTapped(testPublicKey, reminder.id)
+        runCurrent()
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        assertEquals(request.id, sut.requestedPaymentRequestId.value)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+
+        sut.openIncomingPaymentRequest(anotherRequest.id)
+        runCurrent()
+        assertEquals(request.id, sut.requestedPaymentRequestId.value)
+        verify(privatePaykitRepo, never()).beginPaymentRequest(anotherRequest)
+        preparation.complete(Result.success(PublicPaykitPaymentResult.Opened(bolt11, privatePaymentContext(8uL))))
+        runCurrent()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        sut.onSheetVisible(sut.currentSheet.value)
+        runCurrent()
+        assertNull(sut.requestedPaymentRequestId.value)
+
+        pendingPaykitPaymentRequests.value = listOf(request, anotherRequest, reminder)
+        runCurrent()
+        sut.retryIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+        verify(privatePaykitRepo, never()).beginPaymentRequest(reminder)
+        sut.onSheetVisible(sut.currentSheet.value)
+        sut.hideSheet()
+        runCurrent()
+        verify(privatePaykitRepo).beginPaymentRequest(reminder)
+    }
+
+    @Test
+    fun `identity change discards a reminder deferred by manual payment`() = test {
+        sut.setIsAuthenticated(true)
+        val reminderId = paymentRequest().id.copy(billingPeriodStartsAt = "2026-08-25T12:00:00Z")
+        val request = paymentRequest().copy(paymentRequestId = "manual-request")
+        val preparation = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { preparation.await() }
+        pendingPaykitPaymentRequests.value = listOf(request)
+        surfacedPaykitPaymentRequestIds += request.id
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        sut.onPaykitSubscriptionNotificationTapped(testPublicKey, reminderId)
+        runCurrent()
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+
+        pubkyPublicKey.value = "pubky${"a".repeat(52)}"
+        runCurrent()
+        preparation.complete(Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList))
+        runCurrent()
+        assertNull(sut.requestedPaymentRequestId.value)
+        assertNull(sut.currentSheet.value)
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        assertNull(sut.requestedPaymentRequestId.value)
+    }
+
+    @Test
     fun `subscription notification clears only the target checked after refresh`() = test {
         sut.setIsAuthenticated(true)
         isPaykitEnabled.value = true
