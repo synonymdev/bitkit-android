@@ -1,6 +1,12 @@
 package to.bitkit.ui.screens.wallets.send
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +82,50 @@ class SendPendingScreenTest {
         saveScreenshot("ln112-babysit-pending-details-component.png")
         composeTestRule.onNodeWithText("Details").performClick()
         composeTestRule.runOnIdle { assertEquals("queued-local-activity", detailsId) }
+    }
+
+    @Test
+    fun recoveryErrorKeepsAllActionsInsideCompactViewport() {
+        var retries = 0
+        var closes = 0
+        composeTestRule.setContent {
+            AppThemeSurface {
+                CompositionLocalProvider(LocalInspectionMode provides true) {
+                    Box(Modifier.requiredSize(360.dp, 640.dp).testTag("pending-viewport")) {
+                        SendPendingContent(
+                            amount = 99_890L,
+                            isOnchain = true,
+                            activityId = null,
+                            txid = "ab".repeat(32),
+                            onClose = { closes++ },
+                            onViewDetails = {},
+                            canRetry = true,
+                            recoveryError = "The original payment could not be retried. Its funds remain protected. " +
+                                "There may be insufficient funds for the chosen fee. " +
+                                "Try another fee or check the transaction status.",
+                            onRetry = { retries++ },
+                        )
+                    }
+                }
+            }
+        }
+        val viewport = composeTestRule.onNodeWithTag("pending-viewport").fetchSemanticsNode().boundsInRoot
+        listOf("Retry original payment", "Details", "Close").forEach { text ->
+            val node = composeTestRule.onNodeWithText(text)
+            node.assertIsDisplayed()
+            val bounds = node.fetchSemanticsNode().boundsInRoot
+            check(bounds.top >= viewport.top && bounds.bottom <= viewport.bottom) {
+                "$text is clipped: $bounds outside $viewport"
+            }
+        }
+        val retryBounds = composeTestRule.onNodeWithText("Retry original payment").fetchSemanticsNode().boundsInRoot
+        val closeBounds = composeTestRule.onNodeWithText("Close").fetchSemanticsNode().boundsInRoot
+        check(retryBounds.bottom < closeBounds.top) { "Retry and Close overlap: $retryBounds / $closeBounds" }
+        composeTestRule.onNodeWithText("The original payment could not be retried.", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Retry original payment").performClick()
+        composeTestRule.onNodeWithText("Close").performClick()
+        composeTestRule.runOnIdle { assertEquals(1, retries); assertEquals(1, closes) }
+        saveScreenshot("ln112-pending-compact-error-component.png")
     }
 
     private fun assertUnresolved() {

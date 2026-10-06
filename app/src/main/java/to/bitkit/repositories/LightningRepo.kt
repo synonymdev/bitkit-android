@@ -1724,6 +1724,9 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    // A change signal only: consumers must reread and validate the original attempt.
+    val onchainSendAttemptUpdates get() = onchainSendAttemptStore.backupStateVersion
+
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
 
     suspend fun finishAcceptedShopActivity(requestId: PaykitPaymentRequestId, txid: String) {

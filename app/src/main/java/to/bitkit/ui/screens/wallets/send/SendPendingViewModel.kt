@@ -66,8 +66,9 @@ class SendPendingViewModel @Inject constructor(
                 val matchesOriginalWallet = walletId == WalletScope.default && attempt?.walletId == walletId
                 val hasOriginalReceipt = !attempt?.originalInputs.isNullOrEmpty() &&
                     attempt?.candidateTxids?.any { it.equals(txid, true) } == true
-                if (matchesOriginalWallet && hasOriginalReceipt && attempt?.isUnresolved == true) {
-                    _uiState.update { it.copy(recoveryAttempt = attempt) }
+                if (matchesOriginalWallet && hasOriginalReceipt && attempt != null) {
+                    if (attempt.isUnresolved) _uiState.update { it.copy(recoveryAttempt = attempt) }
+                    observeOriginalOrdinaryCompletion(attempt)
                 }
             }
         }
@@ -76,6 +77,40 @@ class SendPendingViewModel @Inject constructor(
             activityRepo.findActivityByPaymentId(txid, ActivityFilter.ONCHAIN, PaymentType.SENT, true, walletId)
                 .onSuccess { activity -> _uiState.update { it.copy(activityId = activity.rawId()) } }
         }
+    }
+
+    private fun observeOriginalOrdinaryCompletion(original: OnchainSendAttempt) {
+        // Shop and transfer completion have their own proof/order resolution routes.
+        if (original.requestId != null || original.isTransfer) return
+        viewModelScope.launch {
+            lightningRepo.onchainSendAttemptUpdates.collect {
+                runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.onSuccess { current ->
+                    if (current == null || !current.hasPositiveEvidence || !current.localFollowupComplete) {
+                        return@onSuccess
+                    }
+                    if (current.matchesOriginalOrdinaryRoute(original)) {
+                        _uiState.update {
+                            it.copy(
+                                recoveredTxid = current.txid,
+                                currentTxid = current.txid,
+                                recoveryAttempt = null,
+                                recoveryError = null,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun OnchainSendAttempt.matchesOriginalOrdinaryRoute(original: OnchainSendAttempt): Boolean {
+        val sameOperation = attemptId == original.attemptId && amountSats == original.amountSats &&
+            address == original.address && originalInputs == original.originalInputs
+        val sameWallet = walletId == original.walletId && walletIndex == original.walletIndex
+        val sameCandidateFamily = candidateTxids.any { it.equals(original.txid, true) } &&
+            candidateTxids.any { it.equals(txid, true) }
+        val ordinaryPayment = requestId == null && !isTransfer
+        return sameOperation && sameWallet && sameCandidateFamily && ordinaryPayment
     }
 
     fun retryOriginal(
@@ -94,13 +129,16 @@ class SendPendingViewModel @Inject constructor(
                 val result = runSuspendCatching { retry(original, feeRateSatsPerVByte).getOrThrow() }
                 result.onSuccess { outcome ->
                     _uiState.update {
+                        if (it.recoveredTxid != null) return@update it
                         it.copy(
                             recoveredTxid = (outcome as? OnchainSendOutcome.Accepted)?.txid,
                             recoveryError = (outcome as? OnchainSendOutcome.Rejected)?.reason,
                             currentTxid = outcome.txid,
                         )
                     }
-                }.onFailure { error -> _uiState.update { it.copy(recoveryError = error.message) } }
+                }.onFailure { error ->
+                    _uiState.update { if (it.recoveredTxid == null) it.copy(recoveryError = error.message) else it }
+                }
             } finally {
                 _uiState.update { it.copy(isRecovering = false) }
             }

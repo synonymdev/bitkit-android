@@ -7,6 +7,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,7 +48,6 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
@@ -104,7 +105,7 @@ fun SendPendingScreen(
     }
 
     uiState.recoveredTxid?.let { winner ->
-        LaunchedEffect(winner) { onRecovered(winner, uiState.recoveryAttempt?.amountSats?.toLong() ?: amount) }
+        LaunchedEffect(winner) { onRecovered(winner, uiState.amount) }
     }
     RecoveryAuthorization(
         uiState,
@@ -281,36 +282,49 @@ internal fun SendPendingContent(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            VerticalSpacer(16.dp)
-            BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
-
-            VerticalSpacer(32.dp)
-            BodyM(
-                stringResource(
-                    if (isOnchain) R.string.wallet__send_pending__onchain_description
-                    else R.string.wallet__send_pending__description,
-                ),
-                color = Colors.White64,
-            )
-
-            if (isOnchain) {
-                refusalReason?.let {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                VerticalSpacer(16.dp)
+                BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
+                recoveryError?.let {
                     VerticalSpacer(16.dp)
-                    BodyM(stringResource(R.string.wallet__send_pending__refusal, it), color = Colors.White64)
+                    BodyM(it, color = Colors.White64)
                 }
-                txid?.let {
-                    VerticalSpacer(16.dp)
-                    SelectionContainer {
-                        BodyM(stringResource(R.string.wallet__send_pending__txid, it), color = Colors.White64)
+
+                VerticalSpacer(32.dp)
+                BodyM(
+                    stringResource(
+                        if (isOnchain) {
+                            R.string.wallet__send_pending__onchain_description
+                        } else {
+                            R.string.wallet__send_pending__description
+                        },
+                    ),
+                    color = Colors.White64,
+                )
+
+                if (isOnchain) {
+                    refusalReason?.let {
+                        VerticalSpacer(16.dp)
+                        BodyM(stringResource(R.string.wallet__send_pending__refusal, it), color = Colors.White64)
+                    }
+                    txid?.let {
+                        VerticalSpacer(16.dp)
+                        SelectionContainer {
+                            BodyM(stringResource(R.string.wallet__send_pending__txid, it), color = Colors.White64)
+                        }
                     }
                 }
+
+                VerticalSpacer(32.dp)
+                HourglassAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
+                VerticalSpacer(16.dp)
             }
-
-            FillHeight()
-            HourglassAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
-            FillHeight()
-
-            recoveryError?.let { BodyM(it, color = Colors.White64) }
+            VerticalSpacer(16.dp)
             if (canRetry) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__send_pending__retry_title),

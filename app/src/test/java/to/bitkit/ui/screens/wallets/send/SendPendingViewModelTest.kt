@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -35,6 +36,8 @@ class SendPendingViewModelTest : BaseUnitTest() {
     private val activityRepo: ActivityRepo = mock()
     private val lightningRepo: LightningRepo = mock()
 
+    private val attemptUpdates = MutableStateFlow(0L)
+
     private val hash = "test_payment_hash"
     private val amount = 5000L
 
@@ -47,6 +50,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         )
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any(), any()) }
             .thenReturn(Result.failure(Exception("not found")))
+        whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
         sut = createViewModel()
     }
 
@@ -92,6 +96,83 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertEquals("cd".repeat(32), sut.uiState.value.currentTxid)
         assertEquals(original.amountSats, sut.uiState.value.recoveryAttempt?.amountSats)
     }
+
+    @Test
+    fun `exact ordinary observed successor resolves only after original local completion`() = test {
+        val original = pendingOriginal()
+        val winner = "cd".repeat(32)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, 9_999L)
+        advanceUntilIdle()
+        val lateResult = CompletableDeferred<OnchainSendOutcome>()
+        sut.retryOriginal(2uL) { _, _ -> Result.success(lateResult.await()) }
+        advanceUntilIdle()
+        val observed = original.copy(
+            txid = winner,
+            candidateTxids = original.candidateTxids + winner,
+            evidence = OnchainSendEvidence.Observed,
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(observed)
+        attemptUpdates.value++
+        advanceUntilIdle()
+        assertNull(sut.uiState.value.recoveredTxid)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(observed.copy(localFollowupComplete = true))
+        attemptUpdates.value++
+        advanceUntilIdle()
+        assertEquals(winner, sut.uiState.value.recoveredTxid)
+        assertEquals(1_000L, sut.uiState.value.amount)
+        assertNull(sut.uiState.value.recoveryAttempt)
+        lateResult.complete(OnchainSendOutcome.Unknown(original.txid!!))
+        advanceUntilIdle()
+        assertEquals(winner, sut.uiState.value.recoveredTxid)
+        assertEquals(winner, sut.uiState.value.currentTxid)
+        org.mockito.kotlin.verify(activityRepo, org.mockito.kotlin.never()).syncActivities()
+    }
+
+    @Test
+    fun `pending screen cannot resolve a foreign operation or wallet after update`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        val positive = original.copy(evidence = OnchainSendEvidence.Observed, localFollowupComplete = true)
+        listOf(
+            positive.copy(attemptId = "another-operation"),
+            positive.copy(walletId = "hardware"),
+            positive.copy(walletIndex = 1),
+            positive.copy(txid = "ef".repeat(32), candidateTxids = listOf("ef".repeat(32))),
+            positive.copy(requestId = to.bitkit.repositories.PaykitPaymentRequestId("foreign", "payer", "/pub/paykit")),
+        ).forEach { foreign ->
+            whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(foreign)
+            attemptUpdates.value++
+            advanceUntilIdle()
+            assertNull(sut.uiState.value.recoveredTxid)
+            assertEquals(1_000L, sut.uiState.value.amount)
+        }
+    }
+
+    @Test
+    fun `ordinary queued activity and nonpositive outcomes never resolve pending`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        listOf(OnchainSendEvidence.Pending, OnchainSendEvidence.Rejected, OnchainSendEvidence.Unknown).forEach {
+            whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original.copy(evidence = it))
+            attemptUpdates.value++
+            advanceUntilIdle()
+            assertNull(sut.uiState.value.recoveredTxid)
+        }
+    }
+
+    private fun pendingOriginal() = OnchainSendAttempt(
+        walletId = WalletScope.default, attemptId = "original", requestId = null,
+        orderId = null, address = "original-address", amountSats = 1_000uL, isMaxAmount = false,
+        feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+        txid = "ab".repeat(32), evidence = OnchainSendEvidence.Unknown,
+        originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+        candidateTxids = listOf("ab".repeat(32)),
+    )
 
     @Test
     fun `onchain activity enables original wallet Details without resolving acceptance`() = test {

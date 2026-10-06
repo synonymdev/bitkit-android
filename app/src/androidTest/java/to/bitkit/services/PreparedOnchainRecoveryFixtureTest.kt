@@ -70,6 +70,22 @@ class PreparedOnchainRecoveryFixtureTest {
     }
 
     @Test
+    fun verifyPersistedOriginalWinnerAfterUi() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Env.initAppStoragePath(context.filesDir.absolutePath)
+        hiltRule.inject()
+        val attempt = requireNotNull(store.current())
+        val expectedTxid = requireNotNull(InstrumentationRegistry.getArguments().getString("expectedWinnerTxid"))
+        org.junit.Assert.assertEquals(expectedTxid, attempt.txid)
+        org.junit.Assert.assertTrue(attempt.hasPositiveEvidence)
+        org.junit.Assert.assertTrue(attempt.localFollowupComplete)
+        org.junit.Assert.assertTrue(attempt.candidateTxids.contains(expectedTxid))
+        org.junit.Assert.assertFalse(attempt.originalInputs.isNullOrEmpty())
+        File(context.getExternalFilesDir(null), "recovery-final-native-receipt.json")
+            .writeText(Json.encodeToString(attempt))
+    }
+
+    @Test
     fun seedPreparedOriginalForRecoveryUi() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         Env.initAppStoragePath(context.filesDir.absolutePath)
@@ -79,11 +95,19 @@ class PreparedOnchainRecoveryFixtureTest {
         walletRepo.createWallet(null).getOrThrow()
         keychain.upsertString(Keychain.Key.PIN.name, "1234") // Public disposable-fixture PIN only.
         settingsStore.update {
-            it.copy(isPinEnabled = true, isPinForPaymentsEnabled = true, isBiometricEnabled = false)
+            it.copy(
+                isPinEnabled = true,
+                isPinForPaymentsEnabled = true,
+                isBiometricEnabled = false,
+                electrumServer = InstrumentationRegistry.getArguments().getString("fixtureElectrumUrl")
+                    ?: it.electrumServer,
+            )
         }
         lightningService.setup(walletIndex = 0)
         try {
             lightningService.start()
+            // Let the native initial background sync settle before forcing another sync in this fixture.
+            delay(15_000)
             lightningService.sync()
             val depositAddress = lightningService.newAddress()
             coreService.blocktank.regtestMine(1u)
