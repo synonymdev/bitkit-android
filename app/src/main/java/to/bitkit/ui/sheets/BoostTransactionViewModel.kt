@@ -18,12 +18,14 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.ext.BoostType
 import to.bitkit.ext.boostType
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.FeeRate
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
 import javax.inject.Inject
@@ -179,7 +181,7 @@ class BoostTransactionViewModel @Inject constructor(
         _uiState.update { it.copy(boosting = true) }
 
         viewModelScope.launch {
-            runCatching {
+            runSuspendCatching {
                 when (currentActivity.v1.txType) {
                     PaymentType.SENT -> handleRbfBoost(currentActivity)
                     PaymentType.RECEIVED -> handleCpfpBoost(currentActivity)
@@ -191,12 +193,16 @@ class BoostTransactionViewModel @Inject constructor(
     }
 
     private suspend fun handleRbfBoost(activity: Activity.Onchain) {
+        val feeRate = _uiState.value.feeRate
         lightningRepo.bumpFeeByRbf(
-            satsPerVByte = _uiState.value.feeRate,
+            satsPerVByte = feeRate,
             originalTxId = activity.v1.txId
         ).fold(
             onSuccess = { newTxId ->
-                handleBoostSuccess(newTxId, isRBF = true)
+                handleBoostSuccess(
+                    newTxId,
+                    activityRepo.recordRbfBoost(activity.v1, newTxId, feeRate),
+                )
             },
             onFailure = { error ->
                 handleError("RBF boost failed: ${error.message}", error)
@@ -211,7 +217,7 @@ class BoostTransactionViewModel @Inject constructor(
             destinationAddress = walletRepo.getOnchainAddress(),
         ).fold(
             onSuccess = { newTxId ->
-                handleBoostSuccess(newTxId, isRBF = false)
+                handleBoostSuccess(newTxId, updateCpfpActivity(newTxId))
             },
             onFailure = { error ->
                 handleError("CPFP boost failed: ${error.message}", error)
@@ -219,11 +225,11 @@ class BoostTransactionViewModel @Inject constructor(
         )
     }
 
-    private suspend fun handleBoostSuccess(newTxId: Txid, isRBF: Boolean) {
+    private fun handleBoostSuccess(newTxId: Txid, activityUpdate: Result<Unit>) {
         Logger.debug("Boost successful. newTxId: $newTxId", context = TAG)
-        updateActivity(newTxId = newTxId, isRBF = isRBF)
+        activityUpdate
             .onFailure { error ->
-                Logger.warn("Boost successful but activity update failed", e = error, context = TAG)
+                Logger.warn("Failed to update activity after successful boost", error, context = TAG)
             }
 
         _uiState.update { it.copy(boosting = false) }
@@ -286,22 +292,10 @@ class BoostTransactionViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Updates activity based on boost type.
-     * RBF: Updates current activity with boost data. Event handler will handle replacement.
-     * CPFP: Updates current activity and appends child txId to parent's boostTxIds.
-     */
-    private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result<Unit> {
-        Logger.debug("Updating activity for txId: $newTxId. isRBF: $isRBF", context = TAG)
-
+    private suspend fun updateCpfpActivity(newTxId: Txid): Result<Unit> {
         val currentActivity = activity?.v1
-            ?: return Result.failure(Exception("Activity required"))
-
-        return if (isRBF) {
-            handleRBFUpdate(currentActivity)
-        } else {
-            handleCPFPUpdate(currentActivity, newTxId)
-        }
+            ?: return Result.failure(AppError(message = "Activity required"))
+        return handleCPFPUpdate(currentActivity, newTxId)
     }
 
     /**
@@ -322,31 +316,6 @@ class BoostTransactionViewModel @Inject constructor(
             id = updatedActivity.v1.id,
             activity = updatedActivity
         )
-    }
-
-    /**
-     * Handles RBF (Replace By Fee) update by updating current activity to show boost status.
-     * The event handler (handleOnchainTransactionReplaced) will handle the replacement
-     * when the OnchainTransactionReplaced event fires.
-     */
-    private suspend fun handleRBFUpdate(
-        currentActivity: OnchainActivity,
-    ): Result<Unit> {
-        val updatedCurrentActivity = Activity.Onchain(
-            v1 = currentActivity.copy(
-                isBoosted = true,
-                feeRate = _uiState.value.feeRate,
-                fee = _uiState.value.totalFeeSats,
-                updatedAt = nowTimestamp().toEpochMilli().toULong()
-            )
-        )
-
-        activityRepo.updateActivity(
-            id = updatedCurrentActivity.v1.id,
-            activity = updatedCurrentActivity
-        )
-
-        return Result.success(Unit)
     }
 
     private fun handleError(message: String, error: Throwable? = null) {

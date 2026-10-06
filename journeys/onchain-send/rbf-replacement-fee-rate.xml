@@ -1,0 +1,28 @@
+<journey name="rbf replacement keeps the boosted fee rate">
+  <description>
+    Requires an English dev app with a disposable native wallet holding at least 100 000
+    confirmed Savings sats, and a regtest recipient address belonging to another wallet. Use the
+    regtest backend in journeys/README.md and do not mine until the confirmation step below.
+    This is an outgoing RBF boost, not incoming CPFP or a watch-only hardware payment. The
+    recommended Boost rate is at least the Fast tier, so its replacement should show that tier's
+    confirmation estimate, not the 1 sat/vB fallback. Ported from the matching iOS journey;
+    Android dev uses staging regtest, while iOS E2E_BUILD uses its configured regtest backend.
+    Both platforms keep the recommended fee when opening the pencil and use plus/minus
+    controls for custom Boost edits. Recipient text can be pasted manually;
+    agent runs must not type long addresses with adb input text.
+  </description>
+  <actions>
+    <action>On Home, tap Send (id "Send"), dismiss any camera permission dialog with Don't Allow, and tap Enter Manually (id "RecipientManual")</action>
+    <action>Enter the regtest recipient in id "RecipientInput" and tap Continue (id "AddressContinue")</action>
+    <action>Choose Savings as the source, enter 10 000 sats with the number pad, and tap Continue (id "ContinueAmount")</action>
+    <action>On the review screen (id "SendConfirm"), open Fee &amp; Speed, choose Custom, use the number pad to enter 1 sat/vB, and return to review with Continue</action>
+    <action>Swipe the send control (id "GRAB"), approve any fee warning and PIN prompt, wait for Sent (id "SendSuccess"), and tap Close (id "Close")</action>
+    <action>Open the unconfirmed sent transaction from Activity, note its transaction ID and total fee (id "ActivityFee"), and tap Boost (id "BoostButton")</action>
+    <action>Wait for the RBF Boost sheet (id "RBFBoost") to load its recommended Fast fee, open the pencil (id "CustomFeeButton"), and note the selected sat/vB rate and confirmation estimate</action>
+    <action>Swipe the Boost control (id "GRAB") and wait for success (id "BoostSuccessToast") without mining a block</action>
+    <action>Return to Activity and wait for the replacement transaction to appear; verify its row shows the Fast confirmation estimate from the Boost sheet</action>
+    <action>Open that row and verify it has a different transaction ID and a higher total fee (id "ActivityFee") than the original</action>
+    <action>Background and reopen Bitkit, unlock if needed, wait for sync, and verify the replacement's Activity row still shows the Fast estimate</action>
+    <action>Mine one regtest block, wait for sync, reopen the replacement transaction, and verify it is confirmed with the same higher total fee</action>
+  </actions>
+</journey>
