@@ -184,7 +184,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
 | `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; iOS has no app-log step, and closing the received sheet re-sizes its Spending Confirm, so the lower amounts can show before the swipe |
-| `subscriptions/review-and-subscribe.xml` | same file — Android sends a first payment due on acceptance in the same swipe for Lightning and on-chain savings; iOS still opens the send confirmation and asks for a second swipe when that payment is on-chain. Intentional for now, until iOS ports the single swipe |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS

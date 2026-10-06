@@ -5,8 +5,7 @@
     return to the list on its own: when the first period is due on acceptance the first payment starts
     by itself, from Lightning or on-chain savings, with no second swipe; otherwise the Subscribed
     confirmation opens directly. Both paths end on Close. A hardware wallet still shows the send
-    confirmation for the first payment. Android differs from iOS here on purpose for now: iOS still
-    asks for a second swipe on the send confirmation when the first payment is on-chain.
+    confirmation for the first payment.
     Run this on the payer instance immediately after the creator sends the proposal.
   </description>
   <actions>
