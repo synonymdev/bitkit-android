@@ -651,23 +651,20 @@ class PaykitSdkService @Inject constructor(
                     }
                 }
                 if (isStillCurrent?.invoke() == false) throw PubkyContactError.SignInChanged
-                val existing = completeSdkCall { handle.contactRecord(publicKey) }
-                check(restorePrivateConnection || existing != null) { "Contact no longer exists" }
                 val update = ContactUpdate(publicKey, label)
                 if (!restorePrivateConnection) {
+                    val existing = completeSdkCall { handle.contactRecord(publicKey) }
+                    check(existing != null) { "Contact no longer exists" }
                     return@withStateRevisionTracking completeSdkCall { handle.saveContact(update) }
                 }
-                val blockedPeers = completeSdkCall { handle.linkedPeers() }.filter {
-                    it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
-                }
-                restorePrivateContacts(handle, blockedPeers) { completeSdkCall { handle.saveContact(update) } }
+                completeSdkCall { handle.saveContactsAndUnblockPeers(listOf(update)) }.single()
             }
         }
     }
 
     /**
-     * Explicitly re-adds [updates] in one SDK save, restoring only their blocked private connections. The identity
-     * and sign-in checks run under the operation lock; restoration failures use the single-contact rollback path.
+     * Explicitly re-adds [updates] and restores their blocked private connections atomically. The identity
+     * and sign-in checks run under the operation lock.
      * An empty selection is skipped without accessing the SDK.
      */
     suspend fun saveContacts(
@@ -685,16 +682,8 @@ class PaykitSdkService @Inject constructor(
                         "Paykit identity changed before saving contacts"
                     }
                 }
-                val blockedPeers = completeSdkCall { handle.linkedPeers() }.filter { peer ->
-                    peer.state == LinkedPeerState.BLOCKED && updates.any {
-                        PubkyPublicKeyFormat.matches(peer.counterparty, it.publicKey)
-                    }
-                }
                 if (isStillCurrent?.invoke() == false) throw PubkyContactError.SignInChanged
-                restorePrivateContacts(handle, blockedPeers) {
-                    if (isStillCurrent?.invoke() == false) throw PubkyContactError.SignInChanged
-                    completeSdkCall { handle.saveContacts(updates) }
-                }
+                completeSdkCall { handle.saveContactsAndUnblockPeers(updates) }
             }
         }
     }
@@ -1362,36 +1351,6 @@ class PaykitSdkService @Inject constructor(
 
     private fun notifyBackupStateChanged() {
         _backupStateVersion.update { it + 1 }
-    }
-
-    private suspend fun <T> restorePrivateContacts(
-        handle: PaykitSdk,
-        blockedPeers: List<LinkedPeerRecord>,
-        save: suspend () -> T,
-    ): T {
-        var failure: Throwable? = null
-        return try {
-            runSuspendCatching {
-                blockedPeers.forEach { completeSdkCall { handle.unblockPeer(it.counterparty) } }
-                save()
-            }.onFailure { failure = it }.getOrThrow()
-        } catch (error: CancellationException) {
-            failure = error
-            throw error
-        } finally {
-            failure?.let { restorationError ->
-                withContext(NonCancellable) {
-                    blockedPeers.forEach { peer ->
-                        runSuspendCatching {
-                            handle.blockPeer(peer.counterparty)
-                        }.onFailure {
-                            invalidatePaykitKeyIfNeeded(it)
-                            restorationError.addSuppressed(it)
-                        }
-                    }
-                }
-            }
-        }
     }
 
     private suspend fun <T> withPaykitKey(block: suspend (PaykitSdk) -> T): T {

@@ -54,7 +54,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
-import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.description
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
@@ -1552,40 +1551,50 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `only explicit readd unblocks the contact`() = runTest {
+    fun `only explicit readd restores private connections`() = runTest {
         for (restoreConnection in listOf(false, true)) {
             val sdk = mock<PaykitSdk>()
-            whenever(sdk.saveContact(any())).thenReturn(mock())
-            whenever(sdk.linkedPeers()).thenReturn(
-                listOf(
-                    contactPeer(LinkedPeerState.BLOCKED),
-                ),
-            )
+            val record = mock<ContactRecord>()
+            whenever(sdk.contactRecord(RING_PUBKY)).thenReturn(record)
+            whenever(sdk.saveContact(any())).thenReturn(record)
+            whenever(sdk.saveContactsAndUnblockPeers(any())).thenReturn(listOf(record))
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+            assertSame(record, service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = restoreConnection))
+
             if (restoreConnection) {
-                service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
-                verify(sdk).unblockPeer(RING_PUBKY)
-            } else {
-                assertFailsWith<IllegalStateException> { service.saveContact(RING_PUBKY, "Contact") }
+                verify(sdk).saveContactsAndUnblockPeers(listOf(ContactUpdate(RING_PUBKY, "Contact")))
+                verify(sdk, never()).contactRecord(any())
                 verify(sdk, never()).saveContact(any())
-                verify(sdk, never()).unblockPeer(any())
+            } else {
+                verify(sdk).saveContact(ContactUpdate(RING_PUBKY, "Contact"))
+                verify(sdk, never()).saveContactsAndUnblockPeers(any())
             }
+            verify(sdk, never()).linkedPeers()
+            verify(sdk, never()).unblockPeer(any())
         }
     }
 
     @Test
-    fun `bulk contact save uses one inventory and save and tracks its backup change`() = runTest {
+    fun `editing a removed contact does not restore it`() = runTest {
         val sdk = mock<PaykitSdk>()
-        val otherKey = "5${RING_PUBKY.drop(1)}"
-        val selected = contactPeer(LinkedPeerState.BLOCKED)
-        val unselected = selected.copy(counterparty = otherKey)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        assertFailsWith<IllegalStateException> { service.saveContact(RING_PUBKY, "Contact") }
+
+        verify(sdk, never()).saveContact(any())
+        verify(sdk, never()).saveContactsAndUnblockPeers(any())
+    }
+
+    @Test
+    fun `bulk contact restore uses one SDK mutation and tracks its backup change`() = runTest {
+        val sdk = mock<PaykitSdk>()
         val updates = listOf(ContactUpdate("pubky$RING_PUBKY", "Contact"))
         val records = listOf(mock<ContactRecord>())
         var revision = "before"
         whenever(sdk.stateRevision()).thenAnswer { revision }
         whenever(sdk.backupStateRevision()).thenAnswer { revision }
-        whenever(sdk.linkedPeers()).thenReturn(listOf(selected, unselected))
-        whenever(sdk.saveContacts(updates)).thenAnswer {
+        whenever(sdk.saveContactsAndUnblockPeers(updates)).thenAnswer {
             revision = "saved"
             records
         }
@@ -1595,10 +1604,10 @@ class PaykitSdkServiceTest {
         verifyNoInteractions(sdk)
         assertSame(records, service.saveContacts(updates))
 
-        verify(sdk).linkedPeers()
-        verify(sdk).unblockPeer(RING_PUBKY)
-        verify(sdk, never()).unblockPeer(otherKey)
-        verify(sdk).saveContacts(updates)
+        verify(sdk).saveContactsAndUnblockPeers(updates)
+        verify(sdk, never()).linkedPeers()
+        verify(sdk, never()).unblockPeer(any())
+        verify(sdk, never()).saveContacts(any())
         verify(sdk, never()).saveContact(any())
         verify(sdk, never()).contactRecord(any())
         verify(sdk, never()).blockPeer(any())
@@ -1606,36 +1615,26 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `failed bulk restoration rolls back selected peers and permits retry`() = runTest {
-        for (failurePoint in listOf("lookup", "unblock", "save")) {
+    fun `failed contact restoration permits retry without compensating writes`() = runTest {
+        for (bulk in listOf(false, true)) {
             val sdk = mock<PaykitSdk>()
-            val secondKey = "5${RING_PUBKY.drop(1)}"
-            val peers = listOf(
-                contactPeer(LinkedPeerState.BLOCKED),
-                contactPeer(LinkedPeerState.BLOCKED).copy(counterparty = secondKey),
-            )
-            val updates = peers.map { ContactUpdate(it.counterparty, "Contact") }
+            val updates = listOf(ContactUpdate(RING_PUBKY, "Contact"))
+            val record = mock<ContactRecord>()
             val failure = IllegalStateException("storage failure")
-            whenever(sdk.linkedPeers()).thenReturn(peers)
-            whenever(sdk.saveContacts(updates)).thenReturn(emptyList())
-            when (failurePoint) {
-                "lookup" -> whenever(sdk.linkedPeers()).thenThrow(failure).thenReturn(peers)
-                "unblock" -> whenever(sdk.unblockPeer(secondKey)).thenThrow(failure).thenReturn(peers.last())
-                "save" -> whenever(sdk.saveContacts(updates)).thenThrow(failure).thenReturn(emptyList())
-            }
+            whenever(sdk.saveContactsAndUnblockPeers(updates)).thenThrow(failure).thenReturn(listOf(record))
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-
-            assertSame(failure, assertFailsWith<IllegalStateException> { service.saveContacts(updates) })
-
-            if (failurePoint == "lookup") {
-                verify(sdk, never()).blockPeer(any())
+            suspend fun save() = if (bulk) {
+                service.saveContacts(updates)
             } else {
-                peers.forEach { verify(sdk).blockPeer(it.counterparty) }
+                listOf(service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true))
             }
-            assertEquals(emptyList(), service.saveContacts(updates))
-            verify(sdk, times(2)).linkedPeers()
-            verify(sdk, times(if (failurePoint == "save") 2 else 1)).saveContacts(updates)
-            verify(sdk, never()).saveContact(any())
+
+            assertSame(failure, assertFailsWith<IllegalStateException> { save() })
+            assertEquals(listOf(record), save())
+
+            verify(sdk, times(2)).saveContactsAndUnblockPeers(updates)
+            verify(sdk, never()).blockPeer(any())
+            verify(sdk, never()).unblockPeer(any())
         }
     }
 
@@ -1654,8 +1653,7 @@ class PaykitSdkServiceTest {
                 releaseRead.await()
                 emptyList()
             }
-            whenever(sdk.linkedPeers()).thenReturn(emptyList())
-            whenever(sdk.saveContacts(any())).thenReturn(emptyList())
+            whenever(sdk.saveContactsAndUnblockPeers(any())).thenReturn(emptyList())
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
             val read = async { service.contactRecords() }
             runCurrent()
@@ -1668,7 +1666,11 @@ class PaykitSdkServiceTest {
             when (change) {
                 "identity" -> currentIdentity = "pubky8${RING_PUBKY.drop(1)}"
                 "sign-in" -> isCurrent = false
-                "cancel" -> save.cancel()
+                "cancel" -> {
+                    save.cancel()
+                    runCurrent()
+                    assertTrue(save.isCompleted)
+                }
             }
             releaseRead.complete(Unit)
             read.await()
@@ -1678,155 +1680,51 @@ class PaykitSdkServiceTest {
                 "sign-in" -> assertSame(PubkyContactError.SignInChanged, save.await().exceptionOrNull())
                 "cancel" -> assertFailsWith<CancellationException> { save.await() }
             }
-            verify(sdk, never()).saveContacts(any())
-            verify(sdk, never()).unblockPeer(any())
+            verify(sdk, never()).saveContactsAndUnblockPeers(any())
             service.saveContacts(updates, currentIdentity) { true }
-            verify(sdk).saveContacts(updates)
+            verify(sdk).saveContactsAndUnblockPeers(updates)
         }
     }
 
     @Test
-    fun `cancelled bulk save completes SDK mutation and rollback before releasing the queue`() = runTest {
-        val sdk = mock<PaykitSdk>()
-        whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(LinkedPeerState.BLOCKED)))
-        val releaseSave = CompletableDeferred<Unit>()
-        val releaseRollback = CompletableDeferred<Unit>()
-        val events = mutableListOf<String>()
-        whenever(sdk.saveContacts(any())).doSuspendableAnswer {
-            releaseSave.await()
-            events += "saved"
-            emptyList()
-        }
-        whenever(sdk.blockPeer(RING_PUBKY)).doSuspendableAnswer {
-            events += "rollback"
-            releaseRollback.await()
-            events += "blocked"
-            contactPeer(LinkedPeerState.BLOCKED)
-        }
-        whenever(sdk.contactRecords()).thenAnswer {
-            events += "next"
-            emptyList<ContactRecord>()
-        }
-        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-        val updates = listOf(ContactUpdate(RING_PUBKY, "Contact"))
-        val save = async { service.saveContacts(updates) }
-        runCurrent()
-        save.cancel()
-        val next = async { service.contactRecords() }
-        runCurrent()
-        assertEquals(emptyList(), events)
-        releaseSave.complete(Unit)
-        runCurrent()
-        assertEquals(listOf("saved", "rollback"), events)
-        assertFalse(next.isCompleted)
-        releaseRollback.complete(Unit)
-
-        assertFailsWith<CancellationException> { save.await() }
-        next.await()
-        assertEquals(listOf("saved", "rollback", "blocked", "next"), events)
-        verify(sdk).saveContacts(updates)
-        assertEquals(1L, service.backupStateVersion.value)
-    }
-
-    @Test
-    fun `failed private connection restoration leaves contact creation retryable`() = runTest {
-        for (failurePoint in listOf("lookup", "unblock", "save", "cancel")) {
+    fun `cancelled contact restore completes its atomic mutation before releasing the queue`() = runTest {
+        for (bulk in listOf(false, true)) {
             val sdk = mock<PaykitSdk>()
-            val peers = listOf(
-                contactPeer(LinkedPeerState.BLOCKED),
-            )
-            val failure = if (failurePoint == "cancel") {
-                CancellationException("cancelled")
-            } else {
-                IllegalStateException("storage failure")
+            val releaseSave = CompletableDeferred<Unit>()
+            val events = mutableListOf<String>()
+            whenever(sdk.saveContactsAndUnblockPeers(any())).doSuspendableAnswer {
+                releaseSave.await()
+                events += "saved"
+                listOf(mock<ContactRecord>())
             }
-            whenever(sdk.linkedPeers()).thenReturn(peers)
-            whenever(sdk.saveContact(any())).thenReturn(mock())
-            when (failurePoint) {
-                "lookup" -> whenever(sdk.linkedPeers()).thenThrow(failure).thenReturn(peers)
-                "unblock", "cancel" -> {
-                    whenever(sdk.unblockPeer(RING_PUBKY))
-                        .thenThrow(failure).thenReturn(peers.last().copy(state = LinkedPeerState.NOT_LINKED))
-                }
-                "save" -> whenever(sdk.saveContact(any())).thenThrow(failure).thenReturn(mock())
+            whenever(sdk.contactRecords()).thenAnswer {
+                events += "next"
+                emptyList<ContactRecord>()
             }
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-            val thrown = assertFailsWith(failure::class) {
-                service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+            val updates = listOf(ContactUpdate(RING_PUBKY, "Contact"))
+            val save = async {
+                if (bulk) {
+                    service.saveContacts(updates)
+                } else {
+                    service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+                }
             }
-            if (failure !is CancellationException) assertSame(failure, thrown)
-            assertEquals(failure.message, thrown.message)
-            if (failurePoint == "lookup") {
-                verify(sdk, never()).blockPeer(any())
-            } else {
-                verify(sdk).blockPeer(RING_PUBKY)
-            }
-            service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
-            verify(sdk, atLeastOnce()).saveContact(any())
-        }
-    }
+            runCurrent()
+            save.cancel()
+            val next = async { service.contactRecords() }
+            runCurrent()
+            assertEquals(emptyList(), events)
+            assertFalse(next.isCompleted)
+            releaseSave.complete(Unit)
 
-    @Test
-    fun `private connection restoration preserves failures from rollback`() = runTest {
-        val sdk = mock<PaykitSdk>()
-        val peers = listOf(
-            contactPeer(LinkedPeerState.BLOCKED),
-        )
-        val restorationFailure = IllegalStateException("save failed")
-        val rollbackFailure = IllegalStateException("block failed")
-        whenever(sdk.linkedPeers()).thenReturn(peers)
-        whenever(sdk.saveContact(any())).thenThrow(restorationFailure)
-        whenever(sdk.blockPeer(RING_PUBKY)).thenThrow(rollbackFailure)
-        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-
-        val thrown = assertFailsWith<IllegalStateException> {
-            service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true)
+            assertFailsWith<CancellationException> { save.await() }
+            next.await()
+            assertEquals(listOf("saved", "next"), events)
+            verify(sdk).saveContactsAndUnblockPeers(updates)
+            verify(sdk, never()).blockPeer(any())
+            assertEquals(1L, service.backupStateVersion.value)
         }
-
-        assertSame(restorationFailure, thrown)
-        assertEquals(listOf(rollbackFailure), thrown.suppressed.toList())
-        verify(sdk).blockPeer(RING_PUBKY)
-    }
-
-    @Test
-    fun `cancelled contact restore completes unblocking and rollback before releasing the queue`() = runTest {
-        val sdk = mock<PaykitSdk>()
-        whenever { sdk.linkedPeers() }.thenReturn(listOf(contactPeer(LinkedPeerState.BLOCKED)))
-        val releaseUnblock = CompletableDeferred<Unit>()
-        val releaseRollback = CompletableDeferred<Unit>()
-        val events = mutableListOf<String>()
-        whenever { sdk.unblockPeer(RING_PUBKY) }.doSuspendableAnswer {
-            releaseUnblock.await()
-            events += "unblocked"
-            contactPeer(LinkedPeerState.NOT_LINKED)
-        }
-        whenever { sdk.blockPeer(RING_PUBKY) }.doSuspendableAnswer {
-            events += "rollback"
-            releaseRollback.await()
-            events += "blocked"
-            contactPeer(LinkedPeerState.BLOCKED)
-        }
-        whenever { sdk.contactRecords() }.thenAnswer {
-            events += "next"
-            emptyList<ContactRecord>()
-        }
-        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-        val restore = async { service.saveContact(RING_PUBKY, "Contact", restorePrivateConnection = true) }
-        runCurrent()
-        restore.cancel()
-        val next = async { service.contactRecords() }
-        runCurrent()
-        assertEquals(emptyList(), events)
-        releaseUnblock.complete(Unit)
-        runCurrent()
-        assertEquals(listOf("unblocked", "rollback"), events)
-        assertFalse(next.isCompleted)
-        releaseRollback.complete(Unit)
-
-        assertFailsWith<CancellationException> { restore.await() }
-        next.await()
-        assertEquals(listOf("unblocked", "rollback", "blocked", "next"), events)
-        verify(sdk, never()).saveContact(any())
     }
 
     @Test
@@ -1850,8 +1748,7 @@ class PaykitSdkServiceTest {
         whenever(
             newSdk.identityStatus()
         ).thenReturn(IdentityStatus(newIdentity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
-        whenever(newSdk.linkedPeers()).thenReturn(emptyList())
-        whenever(newSdk.saveContact(any())).thenReturn(mock())
+        whenever(newSdk.saveContactsAndUnblockPeers(any())).thenReturn(listOf(mock()))
         val handles = ArrayDeque(listOf(originalSdk, newSdk))
         val service = PaykitSdkService(
             context = mock(),
@@ -1886,9 +1783,9 @@ class PaykitSdkServiceTest {
         identityChange.await()
         save.await()
 
-        verify(newSdk, never()).saveContact(any())
+        verify(newSdk, never()).saveContactsAndUnblockPeers(any())
         service.saveContact(contactKey, "Contact", restorePrivateConnection = true, expectedIdentity = newIdentity)
-        verify(newSdk).saveContact(any())
+        verify(newSdk).saveContactsAndUnblockPeers(any())
     }
 
     /**
@@ -1915,8 +1812,7 @@ class PaykitSdkServiceTest {
         whenever(
             newSdk.identityStatus()
         ).thenReturn(IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
-        whenever(newSdk.linkedPeers()).thenReturn(emptyList())
-        whenever(newSdk.saveContact(any())).thenReturn(mock())
+        whenever(newSdk.saveContactsAndUnblockPeers(any())).thenReturn(listOf(mock()))
         val handles = ArrayDeque(listOf(originalSdk, newSdk))
         val service = PaykitSdkService(
             context = mock(),
@@ -1951,9 +1847,9 @@ class PaykitSdkServiceTest {
         sessionChange.await()
         queuedSave.await()
 
-        verify(newSdk, never()).saveContact(any())
+        verify(newSdk, never()).saveContactsAndUnblockPeers(any())
         save { true }
-        verify(newSdk).saveContact(any())
+        verify(newSdk).saveContactsAndUnblockPeers(any())
     }
 
     @Test
