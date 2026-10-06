@@ -827,7 +827,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                     throw AppError("Registration unavailable")
                 }
                 capability = enabled
-            }.whenever(paykitSdkService).syncPaykitApp(any())
+            }.whenever(paykitSdkService).syncPaykitApp(any(), eq(Priority.Ordered))
             doSuspendableAnswer {
                 assertTrue(capability, "Withdrawal requires the private capability")
                 if (!failed && failureStage == "withdraw") {

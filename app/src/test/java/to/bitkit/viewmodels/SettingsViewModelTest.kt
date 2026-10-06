@@ -25,6 +25,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -79,7 +80,8 @@ class SettingsViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.identityExists).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
-        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive) }
+            .thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
@@ -121,13 +123,13 @@ class SettingsViewModelTest : BaseUnitTest() {
         assertEquals("", settings.publicPaykitBolt11)
         assertEquals("", settings.publicPaykitBolt11PaymentHash)
         assertEquals(0L, settings.publicPaykitBolt11ExpiresAtMillis)
-        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
     }
 
     @Test
     fun `disabling Paykit keeps public cleanup pending when public removal fails`() = test {
-        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }
+        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive) }
             .thenReturn(Result.failure(SettingsViewModelTestError("cleanup failed")))
         isPaykitEnabled.value = true
         settingsData.value = SettingsData(
@@ -154,7 +156,10 @@ class SettingsViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(settingsData.value.publicPaykitCleanupPending)
-        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(
+            publish = false,
+            appSyncPriority = Priority.Interactive,
+        )
         verify(publicPaykitRepo).syncPaykitApp(privateSharingEnabled = false)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
     }
@@ -177,7 +182,10 @@ class SettingsViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(settingsData.value.publicPaykitCleanupPending)
-        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(
+            publish = false,
+            appSyncPriority = Priority.Interactive,
+        )
         verify(publicPaykitRepo).syncPaykitApp(privateSharingEnabled = false)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
     }
@@ -203,7 +211,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         assertFalse(settings.sharesPrivatePaykitEndpoints)
         assertFalse(settings.publicPaykitCleanupPending)
         assertEquals("", settings.publicPaykitBolt11)
-        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
         verify(settingsStore, never()).setIsPaykitEnabled(any())
     }

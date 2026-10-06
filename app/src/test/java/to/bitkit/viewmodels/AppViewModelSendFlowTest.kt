@@ -9176,10 +9176,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 privateCleanup.await()
                 Result.success(Unit)
             }
-        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).doSuspendableAnswer {
-            publicCleanup.await()
-            Result.success(Unit)
-        }
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive))
+            .doSuspendableAnswer {
+                publicCleanup.await()
+                Result.success(Unit)
+            }
 
         val disable = async { contactPaymentSettingsRepo.setEnabled(false) }
         runCurrent()
@@ -9198,7 +9199,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(privatePaykitRepo, never()).retryPendingEndpointRemoval(any<Collection<String>>())
-        verify(publicPaykitRepo, times(1)).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo, times(1)).syncPublishedEndpoints(
+            publish = false,
+            appSyncPriority = Priority.Interactive,
+        )
         assertTrue(settingsData.value.publicPaykitCleanupPending)
         publicCleanup.complete(Unit)
         assertTrue(disable.await().isSuccess)

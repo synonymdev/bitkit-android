@@ -23,6 +23,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.PubkyProfile
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -54,6 +55,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
             Unit
         }
         whenever { publicPaykitRepo.syncPublishedEndpoints(any()) }.thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncPublishedEndpoints(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>()) }
@@ -118,21 +120,29 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         inOrder(privatePaykitRepo, publicPaykitRepo) {
             verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
-            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive)
         }
     }
 
     @Test
-    fun `failed private setup restores disabled settings`() = test {
+    fun `failed private setup restores sharing with withdrawal priority only when disabled`() = test {
         whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>()) }
             .thenReturn(Result.failure(ContactPaymentSettingsTestError("private setup failed")))
 
-        val result = createSut().setEnabled(true)
+        for (wasPublic in listOf(false, true)) {
+            clearInvocations(publicPaykitRepo)
+            settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = wasPublic)
 
-        assertTrue(result.isFailure)
-        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
-        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+            val result = createSut().setEnabled(true)
+
+            assertTrue(result.isFailure)
+            assertEquals(wasPublic, settingsFlow.value.sharesPublicPaykitEndpoints)
+            assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+            verify(publicPaykitRepo).syncPublishedEndpoints(
+                publish = wasPublic,
+                appSyncPriority = if (wasPublic) Priority.Ordered else Priority.Interactive,
+            )
+        }
     }
 
     @Test
@@ -150,7 +160,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         inOrder(privatePaykitRepo, publicPaykitRepo) {
             verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
-            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+            verify(publicPaykitRepo).syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive)
         }
     }
 
@@ -179,7 +189,8 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
                 sharesPrivatePaykitEndpoints = true,
             )
             val failure = ContactPaymentSettingsTestError("app update failed")
-            whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).thenReturn(Result.failure(failure))
+            whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive))
+                .thenReturn(Result.failure(failure))
             whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()))
                 .thenReturn(privateCleanup)
 
@@ -208,10 +219,11 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
                     privateCleanup.await()
                     cleanupResult
                 }
-            whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).doSuspendableAnswer {
-                publicCleanup.await()
-                cleanupResult
-            }
+            whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive))
+                .doSuspendableAnswer {
+                    publicCleanup.await()
+                    cleanupResult
+                }
             val sut = createSut()
 
             val disable = async { if (disablePaykit) sut.disablePaykit() else sut.setEnabled(false) }
@@ -238,7 +250,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
             assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
             inOrder(privatePaykitRepo, publicPaykitRepo) {
                 verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
-                verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+                verify(publicPaykitRepo).syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive)
                 verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
                 verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY))
             }
@@ -264,7 +276,10 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
 
         assertFalse(disable.isCompleted)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
-        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(
+            publish = false,
+            appSyncPriority = Priority.Interactive,
+        )
         rollback.complete(Unit)
 
         assertTrue(enable.await().isFailure)

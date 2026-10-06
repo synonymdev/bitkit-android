@@ -19,6 +19,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -208,11 +209,17 @@ class PublicPaykitRepo @Inject constructor(
         endpoints.filter { isPayable(it) }
     }
 
-    suspend fun syncPublishedEndpoints(publish: Boolean): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun syncPublishedEndpoints(publish: Boolean): Result<Unit> =
+        syncPublishedEndpoints(publish, Priority.Ordered)
+
+    internal suspend fun syncPublishedEndpoints(
+        publish: Boolean,
+        appSyncPriority: Priority,
+    ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (!publish) {
                 val endpointError = runSuspendCatching { removePublishedEndpoints() }.exceptionOrNull()
-                val appError = syncPaykitApp().exceptionOrNull()
+                val appError = syncPaykitApp(priority = appSyncPriority).exceptionOrNull()
                 if (endpointError != null) {
                     appError?.let(endpointError::addSuppressed)
                     throw endpointError
@@ -271,11 +278,16 @@ class PublicPaykitRepo @Inject constructor(
 
     suspend fun syncPaykitApp(
         privateSharingEnabled: Boolean? = null,
+    ): Result<Unit> = syncPaykitApp(privateSharingEnabled, Priority.Ordered)
+
+    internal suspend fun syncPaykitApp(
+        privateSharingEnabled: Boolean? = null,
+        priority: Priority,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val settings = settingsStore.data.first()
             val privateSharing = privateSharingEnabled ?: settings.sharesPrivatePaykitEndpoints
-            paykitSdkService.syncPaykitApp(privatePaymentsEnabled = privateSharing)
+            paykitSdkService.syncPaykitApp(privatePaymentsEnabled = privateSharing, priority = priority)
         }
     }
 

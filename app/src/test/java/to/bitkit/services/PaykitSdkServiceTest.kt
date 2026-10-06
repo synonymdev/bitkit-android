@@ -317,13 +317,15 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `queued passive messages yield to foreground work while ordered drains remain barriers`() = runTest {
+    fun `queued passive messages yield to foreground app sync while ordered drains remain barriers`() = runTest {
         val operations = listOf<suspend PaykitSdkService.(Priority) -> Any?>(
             { processPendingPrivateMessages(it) },
             { receivePrivateMessagesFromLinkedPeers(it) },
         )
         for (operation in operations) {
-            for (priority in listOf(Priority.Background, Priority.Ordered)) {
+            val priorities = listOf(Priority.Background, Priority.Ordered)
+                .flatMap { messages -> listOf(Priority.Ordered, Priority.Interactive).map { messages to it } }
+            for ((messagePriority, appPriority) in priorities) {
                 val sdk = mock<PaykitSdk>()
                 val release = CompletableDeferred<Unit>()
                 val events = mutableListOf<String>()
@@ -340,25 +342,34 @@ class PaykitSdkServiceTest {
                     events += "messages"
                     emptyList<PrivateStreamCounterpartyIntakeReport>()
                 }
-                whenever { sdk.identityStatus() }.thenAnswer {
-                    events += "interactive"
-                    IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+                whenever { sdk.identityStatus() }
+                    .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+                whenever { sdk.publishPaykitApp(any(), any()) }.thenAnswer {
+                    events += "publication"
+                    mock<PaykitApp>()
                 }
                 val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
                 val active = async { service.contactRecords() }
                 runCurrent()
-                val messages = async { service.operation(priority) }
-                val foreground = async { service.identityStatus(Priority.Interactive) }
+                val messages = async { service.operation(messagePriority) }
+                val publication = async {
+                    if (appPriority == Priority.Ordered) {
+                        service.syncPaykitApp(privatePaymentsEnabled = false)
+                    } else {
+                        service.syncPaykitApp(privatePaymentsEnabled = false, priority = appPriority)
+                    }
+                }
                 runCurrent()
                 assertTrue(events.isEmpty())
                 release.complete(Unit)
-                awaitAll(active, messages, foreground)
-                val queued = if (priority == Priority.Background) {
-                    listOf("interactive", "messages")
+                awaitAll(active, messages, publication)
+                val queued = if (messagePriority == Priority.Background && appPriority == Priority.Interactive) {
+                    listOf("publication", "messages")
                 } else {
-                    listOf("messages", "interactive")
+                    listOf("messages", "publication")
                 }
                 assertEquals(listOf("active completed") + queued, events)
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
             }
         }
     }

@@ -14,6 +14,7 @@ import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,7 +55,10 @@ class ContactPaymentSettingsRepo @Inject constructor(
                 val contacts = pubkyRepo.contacts.value.map { it.publicKey }
                 val privateCleanup = privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
                 val publicCleanup = when {
-                    hadPublicState -> publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                    hadPublicState -> publicPaykitRepo.syncPublishedEndpoints(
+                        publish = false,
+                        appSyncPriority = Priority.Interactive,
+                    )
                     previous.sharesPrivatePaykitEndpoints -> publicPaykitRepo.syncPaykitApp(
                         privateSharingEnabled = false,
                     )
@@ -113,7 +117,10 @@ class ContactPaymentSettingsRepo @Inject constructor(
             privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
                 .onFailure(error::addSuppressed)
         }
-        publicPaykitRepo.syncPublishedEndpoints(publish = previous.sharesPublicPaykitEndpoints)
+        publicPaykitRepo.syncPublishedEndpoints(
+            publish = previous.sharesPublicPaykitEndpoints,
+            appSyncPriority = if (previous.sharesPublicPaykitEndpoints) Priority.Ordered else Priority.Interactive,
+        )
             .onFailure {
                 error.addSuppressed(it)
                 markPublicPaykitRetry(error)
@@ -145,7 +152,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
         privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
             .onFailure { privateCleanupError = it }
 
-        publicPaykitRepo.syncPublishedEndpoints(publish = false)
+        publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive)
             .onFailure { publicCleanupError = it }
 
         publicCleanupError?.let { error ->

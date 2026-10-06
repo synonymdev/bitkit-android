@@ -695,9 +695,11 @@ class PaykitSdkService @Inject constructor(
         it.resolveProfile(publicKey, allowPubkyProfileFallback)
     }
 
-    suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean) {
+    suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean) = syncPaykitApp(privatePaymentsEnabled, Priority.Ordered)
+
+    internal suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean, priority: Priority) {
         isSetup.await()
-        operationLock.withLock {
+        operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
                 val capabilities = appCapabilities(completeSdkCall { handle.identityStatus() })
                 completeSdkCall {
