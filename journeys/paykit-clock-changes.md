@@ -24,6 +24,8 @@ Create a fresh wallet and a matching Pubky identity, save a contact, and link a 
 5. While a payment request is temporarily unavailable and presentation is retrying, move the clock forward and backward. Retry intervals should remain short, while actual payment expiry and approval continue to use absolute timestamps.
 6. Tap a due subscription reminder during background contact preparation, then repeat with Bitkit closed before the tap. Verify the exact unpaid billing period is presented after authentication and unlock. The notification refresh must read shared state without starting proof reconciliation or private-message maintenance. Record tap-to-sheet timing separately from identity activation, authentication, background preparation, and any SDK lock wait. Startup and foreground maintenance run independently and can still delay the cold-launch case.
 
+7. Repeat the cold-launch reminder while the startup request refresh fails before the stored request snapshot loads. Keep the reminder pending through the failure. Restore connectivity and allow a later refresh to open the exact due period without tapping the reminder again. Clear a stale reminder only after a successful snapshot confirms that period was handled or the subscription is inactive.
+
 These steps describe the remaining manual verification. Unit tests cover injected restoration failures, state preservation, retry timing, UTC recurrence, and notification scheduling; they do not replace a live Ring-session clock-change test.
 
 ## Connection loss and saved identity recovery

@@ -1735,6 +1735,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `subscription notification target survives failed cold start refresh`() = test {
+        sut.setIsAuthenticated(true)
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        val targetRequest = paymentRequest().copy(
+            paymentRequestId = "target-subscription",
+            billingPeriod = PaykitBillingPeriod(
+                startsAt = Instant.parse("2026-08-25T12:00:00Z"),
+                endsAt = Instant.parse("2026-09-01T12:00:00Z"),
+            ),
+        )
+        val otherRequest = targetRequest.copy(paymentRequestId = "other-subscription")
+        surfacedPaykitPaymentRequestIds += targetRequest.id
+        surfacedPaykitPaymentRequestIds += otherRequest.id
+        whenever(paykitPaymentRequestRepo.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.FULL))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+        whenever(privatePaykitRepo.beginPaymentRequest(targetRequest)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
+        )
+        isPaykitEnabled.value = true
+        sut.onPaykitSubscriptionNotificationTapped(testPublicKey, targetRequest.id)
+        runCurrent()
+        clearInvocations(toastManager, privatePaykitRepo, paykitPaymentRequestRepo)
+
+        pubkyContactsLoadVersion.value = 1L
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.FULL)
+        assertEquals(targetRequest.id, sut.requestedPaymentRequestId.value)
+        assertNull(sut.currentSheet.value)
+        verify(privatePaykitRepo, never()).beginPaymentRequest(any())
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
+        verify(toastManager, never()).enqueue(any())
+
+        whenever(paykitPaymentRequestRepo.refresh(PaykitPaymentRequestRefreshMode.FULL)).doSuspendableAnswer {
+            pendingPaykitPaymentRequests.value = listOf(otherRequest, targetRequest)
+            Result.success(Unit)
+        }
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            verify(privatePaykitRepo).beginPaymentRequest(targetRequest)
+            verify(privatePaykitRepo, never()).beginPaymentRequest(otherRequest)
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
     fun `subscription notification is ignored when unavailable or for another identity`() = test {
         val targetRequest = paymentRequest().copy(
             billingPeriod = PaykitBillingPeriod(

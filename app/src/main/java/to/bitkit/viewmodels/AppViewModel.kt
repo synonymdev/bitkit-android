@@ -772,7 +772,7 @@ class AppViewModel @Inject constructor(
         }
 
         isPaymentRequestIdentityActivating = true
-        try {
+        val requestRefresh = try {
             paykitPaymentRequestRepo.activate(state.publicKey)
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
             paymentRequestIdentity = state.publicKey
@@ -796,15 +796,16 @@ class AppViewModel @Inject constructor(
             privatePaykitRepo.pruneUnsavedContactState(state.contactKeys)
                 .onFailure { Logger.warn("Failed to prune private Paykit contact state", it, context = TAG) }
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
-            refreshIncomingPaykitPaymentRequests(forceFresh = true)
+            val result = refreshIncomingPaykitPaymentRequests(forceFresh = true)
             refreshPaymentRequestTargets(force = true)
             lastPrivatePaykitContactKeys = state.contactKeys
+            result
         } finally {
             if (PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) {
                 isPaymentRequestIdentityActivating = false
             }
         }
-        presentNextIncomingPaykitPaymentRequest()
+        requestRefresh.onSuccess { presentNextIncomingPaykitPaymentRequest() }
     }
 
     private suspend fun refreshPrivatePaykitEndpointsIfEnabled(
@@ -903,15 +904,17 @@ class AppViewModel @Inject constructor(
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
         forceFresh: Boolean = false,
         messagePriority: Priority = Priority.Ordered,
-    ) {
-        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
+    ): Result<Unit> {
+        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) {
+            return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+        }
         if (mode == PaykitPaymentRequestRefreshMode.FULL) paykitPaymentProofRepo.reconcile()
         val result = if (forceFresh) {
             paykitPaymentRequestRepo.refreshAfterStateChange(mode)
         } else {
             paykitPaymentRequestRepo.refresh(mode, messagePriority)
         }
-        result.onSuccess {
+        return result.onSuccess {
             activityRepo.backfillPaykitContacts()
             presentNextIncomingPaykitPaymentRequest()
         }
