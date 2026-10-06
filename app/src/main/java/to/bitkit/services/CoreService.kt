@@ -62,6 +62,7 @@ import com.synonym.bitkitcore.upsertActivity
 import com.synonym.bitkitcore.upsertCjitEntries
 import com.synonym.bitkitcore.upsertClosedChannels
 import com.synonym.bitkitcore.upsertInfo
+import com.synonym.bitkitcore.upsertOnchainActivityPreservingFeeRate
 import com.synonym.bitkitcore.upsertOrders
 import com.synonym.bitkitcore.upsertTransactionDetails
 import com.synonym.bitkitcore.wipeAllDatabases
@@ -114,6 +115,7 @@ import com.synonym.bitkitcore.TxOutput as BitkitCoreTxOutput
 import com.synonym.bitkitcore.getLnurlInvoiceForPayData as coreGetLnurlInvoiceForPayData
 import com.synonym.bitkitcore.getTransactionDetails as getBitkitCoreTransactionDetails
 import com.synonym.bitkitcore.markActivityAsSeen as coreMarkActivityAsSeen
+import com.synonym.bitkitcore.recordRbfBoost as coreRecordRbfBoost
 
 // region Core
 
@@ -405,6 +407,15 @@ class ActivityService(
 
     suspend fun upsert(activity: Activity) = ServiceQueue.CORE.background {
         upsertActivity(activity)
+    }
+
+    suspend fun recordRbfBoost(
+        originalActivityId: String,
+        replacementTxId: String,
+        feeRate: ULong,
+        walletId: String = defaultWalletId,
+    ) = ServiceQueue.CORE.background {
+        coreRecordRbfBoost(walletId, originalActivityId, replacementTxId, feeRate)
     }
 
     suspend fun upsertList(activities: List<Activity>) = ServiceQueue.CORE.background {
@@ -1235,12 +1246,7 @@ class ActivityService(
             return
         }
 
-        if (existingActivity != null && existingActivity is Activity.Onchain) {
-            val existingOnchain = existingActivity.v1
-            updateActivity(activityId = existingOnchain.id, activity = Activity.Onchain(onChain))
-        } else {
-            upsertActivity(Activity.Onchain(onChain))
-        }
+        upsertOnchainActivityPreservingFeeRate(onChain)
     }
 
     private fun PaymentDirection.toPaymentType(): PaymentType =
@@ -1494,7 +1500,7 @@ class ActivityService(
                 isBoosted = false,
                 updatedAt = System.currentTimeMillis().toULong() / 1000u
             )
-            updateActivity(activityId = replacedActivity.id, activity = Activity.Onchain(updatedActivity))
+            upsertOnchainActivityPreservingFeeRate(updatedActivity)
             Logger.info("Marked transaction $txid as replaced", context = TAG)
         } else {
             Logger.info(
@@ -1554,7 +1560,7 @@ class ActivityService(
             contact = replacementActivity.contact ?: replacedActivity?.contact,
             updatedAt = System.currentTimeMillis().toULong() / 1000u,
         )
-        updateActivity(activityId = replacementActivity.id, activity = Activity.Onchain(updatedActivity))
+        upsertOnchainActivityPreservingFeeRate(updatedActivity)
 
         if (replacedActivity != null) {
             copyTagsFromReplacedActivity(txid, conflictTxid, replacedActivity.id, replacementActivity.id)
@@ -1598,7 +1604,7 @@ class ActivityService(
                     updatedAt = System.currentTimeMillis().toULong() / 1000u
                 )
 
-                updateActivity(activityId = onchain.id, activity = Activity.Onchain(updatedActivity))
+                upsertOnchainActivityPreservingFeeRate(updatedActivity)
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction reorged for $txid", e, context = TAG)
             }
@@ -1618,7 +1624,7 @@ class ActivityService(
                     updatedAt = System.currentTimeMillis().toULong() / 1000u
                 )
 
-                updateActivity(activityId = onchain.id, activity = Activity.Onchain(updatedActivity))
+                upsertOnchainActivityPreservingFeeRate(updatedActivity)
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction evicted for $txid", e, context = TAG)
             }

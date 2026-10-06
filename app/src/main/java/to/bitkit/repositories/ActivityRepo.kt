@@ -290,6 +290,22 @@ class ActivityRepo @Inject constructor(
 
     suspend fun notifyPaymentActivityChanged() = notifyActivitiesChanged()
 
+    suspend fun recordRbfBoost(
+        original: OnchainActivity,
+        replacementTxId: String,
+        feeRate: ULong,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            coreService.activity.recordRbfBoost(
+                originalActivityId = original.id,
+                replacementTxId = replacementTxId,
+                feeRate = feeRate,
+                walletId = original.walletId,
+            )
+            notifyActivitiesChanged(tagsChanged = true)
+        }
+    }
+
     suspend fun shouldShowReceivedSheet(txid: String, value: ULong): Boolean {
         return coreService.activity.shouldShowReceivedSheet(txid, value)
     }

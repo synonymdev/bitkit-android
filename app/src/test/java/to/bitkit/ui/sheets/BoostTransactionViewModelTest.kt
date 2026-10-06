@@ -31,6 +31,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.sheets.BoostTransactionViewModel.Companion.MAX_FEE_RATE
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -237,6 +238,82 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         verify(lightningRepo).syncAsync()
         verify(activityRepo).updateActivity(any(), any(), any())
         verify(activityRepo, never()).deleteActivity(any(), any())
+    }
+
+    @Test
+    fun `successful RBF boost records the replacement rate without a stale row update`() = test {
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(25UL))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+        whenever(lightningRepo.bumpFeeByRbf(mockTxId, 25UL)).thenReturn(Result.success(newTxId))
+        whenever(activityRepo.recordRbfBoost(onchainActivity, newTxId, 25UL)).thenReturn(Result.success(Unit))
+        sut.setupActivity(activitySent)
+
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+        }
+
+        verify(activityRepo).recordRbfBoost(onchainActivity, newTxId, 25UL)
+        verify(activityRepo, never()).updateActivity(any(), any(), any())
+        verify(lightningRepo).syncAsync()
+    }
+
+    @Test
+    fun `failed RBF boost does not record replacement metadata`() = test {
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(25UL))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+        whenever(lightningRepo.bumpFeeByRbf(mockTxId, 25UL))
+            .thenReturn(Result.failure(AppError(message = "rejected")))
+        sut.setupActivity(activitySent)
+
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostFailed, awaitItem())
+        }
+
+        verify(activityRepo, never()).recordRbfBoost(any(), any(), any())
+        verify(activityRepo, never()).updateActivity(any(), any(), any())
+    }
+
+    @Test
+    fun `RBF recording uses the requested rate even if the sheet changes during the node call`() = test {
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(25UL))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+        whenever(lightningRepo.bumpFeeByRbf(mockTxId, 25UL)).thenAnswer {
+            sut.onChangeAmount(increase = true)
+            newTxId
+        }
+        whenever(activityRepo.recordRbfBoost(onchainActivity, newTxId, 25UL)).thenReturn(Result.success(Unit))
+        sut.setupActivity(activitySent)
+
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+        }
+
+        assertEquals(26UL, sut.uiState.value.feeRate)
+        verify(activityRepo).recordRbfBoost(onchainActivity, newTxId, 25UL)
+    }
+
+    @Test
+    fun `successful RBF broadcast stays successful if recording fails`() = test {
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(25UL))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+        whenever(lightningRepo.bumpFeeByRbf(mockTxId, 25UL)).thenReturn(Result.success(newTxId))
+        whenever(activityRepo.recordRbfBoost(onchainActivity, newTxId, 25UL))
+            .thenReturn(Result.failure(AppError(message = "storage unavailable")))
+        sut.setupActivity(activitySent)
+
+        sut.boostTransactionEffect.test {
+            sut.onConfirmBoost()
+            assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
+        }
+
+        verify(lightningRepo).syncAsync()
     }
 
     // region estimateTime dynamic tier tests
