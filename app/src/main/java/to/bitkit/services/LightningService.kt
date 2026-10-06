@@ -46,6 +46,7 @@ import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.ScoringFeeParameters
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
+import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
@@ -71,6 +72,7 @@ import to.bitkit.models.toAddressType
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendInput
+import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.utils.AppError
@@ -986,6 +988,22 @@ class LightningService internal constructor(
         }
     }
 
+    suspend fun observedOriginalSendFee(attempt: OnchainSendAttempt): ULong? {
+        check(attempt.hasPositiveEvidence && attempt.walletIndex == currentWalletIndex)
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        val txid = requireNotNull(attempt.txid)
+        check(txid.lowercase() in attempt.candidateTxids)
+        return callOnchainSend {
+            check(currentWalletIndex == attempt.walletIndex && node === originalNode)
+            val details = originalNode.getTransactionDetails(txid) ?: return@callOnchainSend null
+            val fee = exactOriginalSendFee(details, requireNotNull(attempt.originalInputs)) {
+                originalNode.getTransactionDetails(it)
+            }
+            check(currentWalletIndex == attempt.walletIndex && node === originalNode)
+            fee
+        }
+    }
+
     internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =
         ServiceQueue.LDK.background(ldkQueue) { runSuspendCatching { block() } }.getOrThrow()
 
@@ -1429,3 +1447,25 @@ class TrustedPeerForceCloseException : AppError(
 )
 
 class NetworkGraphCacheDeleteError : AppError("Failed to delete network graph cache")
+
+/** Exact signed transaction inputs/prevouts, never an estimate or a backend-absence inference. */
+internal fun exactOriginalSendFee(
+    details: TransactionDetails,
+    originalInputs: List<OnchainSendInput>,
+    previous: (String) -> TransactionDetails?,
+): ULong? {
+    val inputs = details.inputs.map { OnchainSendInput(it.txid, it.vout) }
+    check(inputs.isNotEmpty() && inputs.distinct().size == inputs.size && inputs.toSet() == originalInputs.toSet())
+    fun checkedSum(values: List<Long>): ULong = values.fold(0uL) { sum, value ->
+        check(value >= 0 && ULong.MAX_VALUE - sum >= value.toULong())
+        sum + value.toULong()
+    }
+    val inputValues = inputs.map { input ->
+        val parent = previous(input.txid) ?: return null
+        parent.outputs.single { it.n == input.vout }.value
+    }
+    val inputTotal = checkedSum(inputValues)
+    val outputTotal = checkedSum(details.outputs.map { it.value })
+    check(inputTotal >= outputTotal)
+    return inputTotal - outputTotal
+}

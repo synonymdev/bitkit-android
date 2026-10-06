@@ -1671,6 +1671,37 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `successor activity fee never reuses original nonzero fee and missing exact fee stays guarded`() = test {
+        val txid = "cd".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+            candidateTxids = listOf("ab".repeat(32), txid),
+            candidateFeeRates = mapOf("ab".repeat(32) to 1uL, txid to 3uL),
+            backupFollowup = to.bitkit.models.ActiveOnchainAttemptBackup.Followup("143", emptyList(), createdAtMillis = "123"),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(null)
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(activityService, never()).createSentOnchainActivityFromSendResult(
+            any(), any(), any(), any(), any(), any(), anyOrNull(), any(),
+        )
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(281uL)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid, attempt.address, attempt.amountSats, 281uL, 3uL, false, null, attempt.walletId,
+        )
+        verify(activityService).repairVerifiedSentOnchainFee(txid, attempt.walletId, 281uL, 3uL)
+        verify(onchainSendAttemptStore).retainWinningFee(attempt.attemptId, attempt.walletIndex, txid, 281uL)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+    }
+
+    @Test
     fun `accepted successor metadata uses the winning candidate authorized fee`() = test {
         val txid = "cd".repeat(32)
         val attempt = pendingSendAttempt().copy(
@@ -1683,6 +1714,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(coreService.activity).thenReturn(activityService)
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(281uL)
         whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
         sut.completeAcceptedOrdinaryFollowup(txid)
         val metadata = argumentCaptor<com.synonym.bitkitcore.PreActivityMetadata>()

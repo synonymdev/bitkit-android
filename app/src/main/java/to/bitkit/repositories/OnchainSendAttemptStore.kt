@@ -294,6 +294,17 @@ class OnchainSendAttemptStore @Inject constructor(
         }
     }
 
+    suspend fun retainWinningFee(attemptId: String, walletIndex: Int, txid: String, feeSats: ULong) =
+        withContext(ioDispatcher + NonCancellable) {
+            mutex.withLock {
+                val current = loadWithRetainedAccepted(walletIndex)
+                check(current?.attemptId == attemptId && walletIndex == lightningService.currentWalletIndex &&
+                    current.hasPositiveEvidence && current.txid.equals(txid, true))
+                val followup = requireNotNull(current.backupFollowup)
+                persist(current.copy(backupFollowup = followup.copy(feeSats = feeSats.toString())))
+            }
+        }
+
     suspend fun markLocalFollowupComplete(attemptId: String, walletIndex: Int) = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
             val current = loadWithRetainedAccepted(walletIndex)

@@ -1397,6 +1397,17 @@ class ActivityService(
         }
     }
 
+    /** Called only after exact original-node transaction/prevout verification, to repair an existing placeholder. */
+    suspend fun repairVerifiedSentOnchainFee(txid: String, walletId: String, fee: ULong, feeRate: ULong) =
+        ServiceQueue.CORE.background {
+            val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            val updated = existing.copy(fee = fee, feeRate = feeRate)
+            if (updated != existing) upsertActivity(Activity.Onchain(updated))
+            val restored = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(restored.fee == fee && restored.feeRate == feeRate)
+        }
+
     suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) {
         ServiceQueue.CORE.background {
             runCatching {

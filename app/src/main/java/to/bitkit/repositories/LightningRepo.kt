@@ -1683,6 +1683,14 @@ class LightningRepo @Inject constructor(
         ) { "Original local follow-up context is unavailable" }
         check(originalFollowup?.contact == null) { "Unsupported original contact follow-up" }
         val txId = requireNotNull(attempt.txid) { "On-chain send has no transaction id" }
+        val isSuccessor = attempt.candidateTxids.isNotEmpty() && !txId.equals(attempt.candidateTxids.first(), true)
+        val fee = if (isSuccessor) {
+            requireNotNull(lightningService.observedOriginalSendFee(attempt)) {
+                "Winning transaction fee is unavailable"
+            }.also { onchainSendAttemptStore.retainWinningFee(attempt.attemptId, attempt.walletIndex, txId, it) }
+        } else {
+            originalFollowup?.feeSats?.toULong() ?: 0uL
+        }
         val preActivityMetadata = PreActivityMetadata(
             walletId = attempt.walletId,
             paymentId = txId,
@@ -1701,12 +1709,15 @@ class LightningRepo @Inject constructor(
             txid = txId,
             address = attempt.address,
             amount = attempt.amountSats,
-            fee = originalFollowup?.feeSats?.toULong() ?: 0uL,
+            fee = fee,
             feeRate = attempt.winningFeeRateSatsPerVByte,
             isTransfer = attempt.isTransfer,
             channelId = attempt.channelId,
             walletId = attempt.walletId,
         )
+        if (isSuccessor) {
+            coreService.activity.repairVerifiedSentOnchainFee(txId, attempt.walletId, fee, attempt.winningFeeRateSatsPerVByte)
+        }
         check(coreService.activity.getOnchainActivityByTxId(txId, attempt.walletId) != null) {
             "Accepted on-chain transaction has no durable local activity"
         }
