@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -637,6 +638,11 @@ private fun SubscriptionDetailFooter(
     }
 }
 
+/** Figma draws the review clock at 288dp inside its 256dp slot, rotated 15 degrees and shifted 7dp left. */
+private const val CLOCK_SCALE = 288f / 256f
+private const val CLOCK_ROTATION_DEGREES = 15f
+private val CLOCK_OFFSET_X = (-7).dp
+
 @Composable
 fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRoute) {
     var route by remember(initialRoute) { mutableStateOf(initialRoute) }
@@ -801,7 +807,15 @@ private fun SubscriptionReview(
         Image(
             painter = painterResource(R.drawable.subscription_clock),
             contentDescription = null,
-            modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally)
+            modifier = Modifier
+                .size(256.dp)
+                .align(Alignment.CenterHorizontally)
+                .graphicsLayer {
+                    scaleX = CLOCK_SCALE
+                    scaleY = CLOCK_SCALE
+                    rotationZ = CLOCK_ROTATION_DEGREES
+                    translationX = CLOCK_OFFSET_X.toPx()
+                }
         )
         FillHeight()
         if (loading || subscription.isProposalActionable(now)) {
