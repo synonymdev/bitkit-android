@@ -100,6 +100,12 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
         )
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
+        whenever(paykitSdkService.processPendingPrivateMessages(any())).doSuspendableAnswer {
+            paykitSdkService.processPendingPrivateMessages()
+        }
+        whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers(any())).doSuspendableAnswer {
+            paykitSdkService.receivePrivateMessagesFromLinkedPeers()
+        }
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
         whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
         whenever(paykitSdkService.identityStatus(any())).doSuspendableAnswer { paykitSdkService.identityStatus() }

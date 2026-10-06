@@ -174,6 +174,7 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
@@ -431,6 +432,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isCreatingRequest).thenReturn(MutableStateFlow(false))
         whenever { paykitPaymentRequestRepo.refreshEligibleTargets(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.refreshAfterStateChange(any()) }.thenReturn(Result.success(Unit))
+        whenever { paykitPaymentRequestRepo.refresh(any(), any()) }.doSuspendableAnswer {
+            paykitPaymentRequestRepo.refresh(it.getArgument(0))
+        }
         whenever(paykitPaymentRequestRepo.automaticPendingRequests()).thenAnswer {
             pendingPaykitPaymentRequests.value.filterNot { it.id in surfacedPaykitPaymentRequestIds }
         }
@@ -807,6 +811,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `maintenance discovers targets and refreshes inbox without joining all contact preparation`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
         sut.startPaykitPaymentRequestPolling()
         val prepared = CompletableDeferred<Unit>()
@@ -815,7 +820,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             whenever(privatePaykitRepo.awaitContactPreparation()).doSuspendableAnswer { prepared.await() }
             advanceTimeBy(30.seconds.inWholeMilliseconds - 1)
             runCurrent()
-            clearInvocations(paykitPaymentRequestRepo)
+            clearInvocations(paykitPaymentRequestRepo, privatePaykitRepo)
 
             advanceTimeBy(1)
             runCurrent()
@@ -823,8 +828,78 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(privatePaykitRepo, never()).awaitContactPreparation()
             verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
             verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
+            inOrder(paykitPaymentRequestRepo, privatePaykitRepo) {
+                verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background)
+                verify(privatePaykitRepo).refreshKnownSavedContactEndpoints("payment request polling")
+            }
         } finally {
             prepared.complete(Unit)
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `maintenance defers routine contact preparation while incoming request is displayed`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1maintenance"
+        stubLightningScan(bolt11, 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            whenever(paykitPaymentRequestRepo.refresh(PaykitPaymentRequestRefreshMode.FULL)).doSuspendableAnswer {
+                pendingPaykitPaymentRequests.value = listOf(request)
+                Result.success(Unit)
+            }
+            clearInvocations(privatePaykitRepo)
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints("payment request polling")
+            verify(paykitPaymentRequestRepo, never()).markPresented(any())
+
+            resolution.complete(
+                Result.success(PublicPaykitPaymentResult.Opened(bolt11, privatePaymentContext(7uL))),
+            )
+            runCurrent()
+            assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints("payment request polling")
+            sut.onSheetVisible(sut.currentSheet.value)
+            runCurrent()
+            sut.hideSheet()
+            runCurrent()
+            advanceTimeBy(60.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(privatePaykitRepo).refreshKnownSavedContactEndpoints("payment request polling")
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `maintenance does not schedule contact preparation for identity replaced during intake`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            whenever(paykitPaymentRequestRepo.refresh(PaykitPaymentRequestRefreshMode.FULL)).doSuspendableAnswer {
+                pubkyPublicKey.value = null
+                Result.success(Unit)
+            }
+            clearInvocations(privatePaykitRepo)
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints("payment request polling")
+        } finally {
             sut.stopPaykitPaymentRequestPolling()
         }
     }

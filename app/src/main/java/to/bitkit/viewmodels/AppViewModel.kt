@@ -193,6 +193,7 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
@@ -901,13 +902,14 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshIncomingPaykitPaymentRequests(
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
         forceFresh: Boolean = false,
+        messagePriority: Priority = Priority.Ordered,
     ) {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         if (mode == PaykitPaymentRequestRefreshMode.FULL) paykitPaymentProofRepo.reconcile()
         val result = if (forceFresh) {
             paykitPaymentRequestRepo.refreshAfterStateChange(mode)
         } else {
-            paykitPaymentRequestRepo.refresh(mode)
+            paykitPaymentRequestRepo.refresh(mode, messagePriority)
         }
         result.onSuccess {
             activityRepo.backfillPaykitContacts()
@@ -929,7 +931,7 @@ class AppViewModel @Inject constructor(
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
-            refreshIncomingPaykitPaymentRequests()
+            refreshIncomingPaykitPaymentRequests(messagePriority = Priority.Background)
             refreshPaymentRequestTargets()
             var maintenanceIntervalIndex = 0
             var nextMaintenance = timeSource.markNow() + PAYKIT_MAINTENANCE_INTERVALS.first()
@@ -947,18 +949,34 @@ class AppViewModel @Inject constructor(
                         contactKeys = pubkyRepo.contacts.value.map { it.publicKey },
                         reason = "payment request polling",
                     )
-                    privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
                 }
+                val refreshIdentity = pubkyRepo.publicKey.value
                 refreshIncomingPaykitPaymentRequests(
                     if (refreshMaintenance) {
                         PaykitPaymentRequestRefreshMode.FULL
                     } else {
                         PaykitPaymentRequestRefreshMode.INBOX
                     },
+                    messagePriority = Priority.Background,
                 )
-                if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
+                if (refreshMaintenance) {
+                    refreshIdlePaykitContactEndpoints(refreshIdentity)
+                    refreshPaymentRequestTargets(force = true)
+                }
             }
         }
+    }
+
+    private suspend fun refreshIdlePaykitContactEndpoints(expectedIdentity: String?) {
+        currentCoroutineContext().ensureActive()
+        if (expectedIdentity == null) return
+        if (!PubkyPublicKeyFormat.matches(expectedIdentity, pubkyRepo.publicKey.value)) return
+        if (!isPaykitEnabled.value || isOnline.value != ConnectivityState.CONNECTED ||
+            isPaymentRequestPresentationBlocked()
+        ) {
+            return
+        }
+        privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
     }
 
     fun synchronizeSubscriptionNotifications(enabled: Boolean) {

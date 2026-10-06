@@ -114,6 +114,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
         )
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
+        whenever(paykitSdkService.processPendingPrivateMessages(any())).doSuspendableAnswer {
+            paykitSdkService.processPendingPrivateMessages()
+        }
+        whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers(any())).doSuspendableAnswer {
+            paykitSdkService.receivePrivateMessagesFromLinkedPeers()
+        }
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
         whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
         whenever(paykitSdkService.identityStatus(any())).doSuspendableAnswer { paykitSdkService.identityStatus() }
@@ -182,6 +188,40 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers()
         verify(paykitSdkService, times(3)).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
         verify(paykitSdkService, times(3)).linkedPeers(Priority.Background)
+        verify(paykitSdkService).processPendingPrivateMessages(Priority.Ordered)
+        verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers(Priority.Ordered)
+    }
+
+    @Test
+    fun `passive refresh message priority does not change action or forced refresh drains`() = test {
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED, Priority.Background).getOrThrow()
+        verify(paykitSdkService, never()).processPendingPrivateMessages(any())
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers(any())
+
+        sut.refresh(PaykitPaymentRequestRefreshMode.INBOX, Priority.Background).getOrThrow()
+        verify(paykitSdkService, never()).processPendingPrivateMessages(any())
+        verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers(Priority.Background)
+
+        sut.refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background).getOrThrow()
+        verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
+        verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers(Priority.Background)
+
+        clearInvocations(paykitSdkService)
+        sut.refreshAfterStateChange().getOrThrow()
+        verify(paykitSdkService).processPendingPrivateMessages(Priority.Ordered)
+        verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers(Priority.Ordered)
+        verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Ordered)
+        verify(paykitSdkService, never()).processPendingPrivateMessages(Priority.Background)
+
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        whenever(paykitSdkService.rejectPaymentRequest(COUNTERPARTY, PAYMENT_REQUEST_ID))
+            .thenReturn(record.copy(state = PaymentRequestLifecycleState.REJECTED))
+        clearInvocations(paykitSdkService)
+        sut.reject(sut.pendingRequests.value.single()).getOrThrow()
+        verify(paykitSdkService).processPendingPrivateMessages(Priority.Ordered)
+        verify(paykitSdkService, never()).processPendingPrivateMessages(Priority.Background)
     }
 
     @Test
@@ -265,7 +305,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             resume.await()
             emptyList()
         }
-        val first = async { sut.refresh() }
+        val first = async { sut.refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background) }
         reading.await()
         val queued = PaykitPaymentRequestRefreshMode.entries.map { mode -> async { sut.refresh(mode) } }
         runCurrent()
@@ -275,9 +315,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         queued.forEach { it.await().getOrThrow() }
         verify(paykitSdkService).allPaymentRequests(anyOrNull())
         verify(paykitSdkService).processPendingPrivateMessages()
+        verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
+        verify(paykitSdkService, never()).processPendingPrivateMessages(Priority.Ordered)
 
         sut.refresh().getOrThrow()
         verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
+        verify(paykitSdkService).processPendingPrivateMessages(Priority.Ordered)
     }
 
     @Test
@@ -911,6 +954,26 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh().getOrThrow()
         sut.refresh().getOrThrow()
         verify(presentationStore, times(2)).removeAcceptedOneTimeIds(LOCAL_IDENTITY, ids)
+    }
+
+    @Test
+    fun `terminal refresh revokes one time authorization even when acceptance cleanup fails`() = test {
+        for (state in listOf(PaymentRequestLifecycleState.CANCELED, PaymentRequestLifecycleState.PROOF_SUBMITTED)) {
+            restoreAcceptedRequest()
+            val record = paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED)
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+            sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+            val preparedRequest = sut.pendingRequests.value.single()
+            sut.ensurePaymentAllowed(preparedRequest).getOrThrow()
+
+            whenever(presentationStore.removeAcceptedOneTimeIds(any(), any()))
+                .thenThrow(IllegalStateException("disk"))
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record.copy(state = state)))
+            sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+
+            assertEquals(state, sut.paymentRequestHistory.value.single().lifecycleState)
+            assertTrue(sut.ensurePaymentAllowed(preparedRequest).isFailure)
+        }
     }
 
     @Test

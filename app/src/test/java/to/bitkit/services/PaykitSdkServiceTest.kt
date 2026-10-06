@@ -5,6 +5,7 @@ import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitApp
 import com.synonym.paykit.PaykitAppCapabilities
@@ -20,6 +21,7 @@ import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentListSyncChange
+import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PrivateStreamIntakeReport
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
@@ -258,6 +260,8 @@ class PaykitSdkServiceTest {
             { prepareAndResolvePrivateContactPayment(RING_PUBKY, null) },
             { prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null) },
             { processOutboundPrivateMessages(RING_PUBKY, Priority.Interactive) },
+            { processPendingPrivateMessages(Priority.Background) },
+            { receivePrivateMessagesFromLinkedPeers(Priority.Background) },
         )
         for (operation in operations) {
             val sdk = mock<PaykitSdk>()
@@ -280,6 +284,16 @@ class PaykitSdkServiceTest {
                 finished = true
                 mock()
             }
+            whenever { sdk.processPendingPrivateMessages() }.doSuspendableAnswer {
+                release.await()
+                finished = true
+                emptyList()
+            }
+            whenever { sdk.receivePrivateMessagesFromLinkedPeers() }.doSuspendableAnswer {
+                release.await()
+                finished = true
+                emptyList()
+            }
             whenever { sdk.contactRecords() }.thenAnswer {
                 assertTrue(finished)
                 emptyList<ContactRecord>()
@@ -299,6 +313,53 @@ class PaykitSdkServiceTest {
             assertEquals(emptyList(), next.await())
             assertTrue(finished)
             assertEquals(1L, service.backupStateVersion.value)
+        }
+    }
+
+    @Test
+    fun `queued passive messages yield to foreground work while ordered drains remain barriers`() = runTest {
+        val operations = listOf<suspend PaykitSdkService.(Priority) -> Any?>(
+            { processPendingPrivateMessages(it) },
+            { receivePrivateMessagesFromLinkedPeers(it) },
+        )
+        for (operation in operations) {
+            for (priority in listOf(Priority.Background, Priority.Ordered)) {
+                val sdk = mock<PaykitSdk>()
+                val release = CompletableDeferred<Unit>()
+                val events = mutableListOf<String>()
+                whenever { sdk.contactRecords() }.doSuspendableAnswer {
+                    release.await()
+                    events += "active completed"
+                    emptyList()
+                }
+                whenever { sdk.processPendingPrivateMessages() }.thenAnswer {
+                    events += "messages"
+                    emptyList<OutboundPrivateCounterpartySendReport>()
+                }
+                whenever { sdk.receivePrivateMessagesFromLinkedPeers() }.thenAnswer {
+                    events += "messages"
+                    emptyList<PrivateStreamCounterpartyIntakeReport>()
+                }
+                whenever { sdk.identityStatus() }.thenAnswer {
+                    events += "interactive"
+                    IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val active = async { service.contactRecords() }
+                runCurrent()
+                val messages = async { service.operation(priority) }
+                val foreground = async { service.identityStatus(Priority.Interactive) }
+                runCurrent()
+                assertTrue(events.isEmpty())
+                release.complete(Unit)
+                awaitAll(active, messages, foreground)
+                val queued = if (priority == Priority.Background) {
+                    listOf("interactive", "messages")
+                } else {
+                    listOf("messages", "interactive")
+                }
+                assertEquals(listOf("active completed") + queued, events)
+            }
         }
     }
 

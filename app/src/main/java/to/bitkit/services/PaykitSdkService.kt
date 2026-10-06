@@ -807,9 +807,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun receivePrivateMessagesFromLinkedPeers(): List<PrivateStreamCounterpartyIntakeReport> {
+    suspend fun receivePrivateMessagesFromLinkedPeers(): List<PrivateStreamCounterpartyIntakeReport> =
+        receivePrivateMessagesFromLinkedPeers(Priority.Ordered)
+
+    internal suspend fun receivePrivateMessagesFromLinkedPeers(
+        priority: Priority,
+    ): List<PrivateStreamCounterpartyIntakeReport> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.receivePrivateMessagesFromLinkedPeers() }
             }
@@ -837,9 +842,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun processPendingPrivateMessages(): List<OutboundPrivateCounterpartySendReport> {
+    suspend fun processPendingPrivateMessages(): List<OutboundPrivateCounterpartySendReport> =
+        processPendingPrivateMessages(Priority.Ordered)
+
+    internal suspend fun processPendingPrivateMessages(
+        priority: Priority,
+    ): List<OutboundPrivateCounterpartySendReport> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.processPendingPrivateMessages() }
             }
