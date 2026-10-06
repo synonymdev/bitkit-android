@@ -75,8 +75,14 @@ class TransferRepo @Inject constructor(
     }
 
     /** Uses only the bounded attempt's positive evidence and original order/balance context. */
-    suspend fun resumeAcceptedFunding(): Result<Unit> = runSuspendCatching {
+    suspend fun resumeAcceptedFunding(expectedAttempt: OnchainSendAttempt? = null): Result<Unit> = runSuspendCatching {
         val attempt = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
+        if (expectedAttempt != null) {
+            check(
+                attempt.attemptId == expectedAttempt.attemptId &&
+                    attempt.walletIndex == expectedAttempt.walletIndex && attempt.walletId == expectedAttempt.walletId
+            ) { "Restored funding operation is no longer current" }
+        }
         if (!attempt.isTransfer || !attempt.hasPositiveEvidence || attempt.localFollowupComplete) {
             return@runSuspendCatching
         }
@@ -85,7 +91,13 @@ class TransferRepo @Inject constructor(
         val order = blocktankRepo.fetchOrders(listOf(orderId)).getOrThrow().firstOrNull { it.id == orderId }
             ?: throw AppError("Original funding order is unavailable")
         check(order.payment?.onchain?.address == attempt.address) { "Original funding order address changed" }
-        persistAcceptedFunding(order, txid, attempt.transferContext).getOrThrow()
+        val context = requireNotNull(attempt.transferContext) { "Original funding context is unavailable" }
+        check(
+            order.clientBalanceSat == context.originalOrderClientBalanceSats &&
+                order.feeSat == context.originalOrderFeeSats
+        ) { "Original funding order terms changed or are unavailable" }
+        check(lightningRepo.currentOnchainSendAttempt() == attempt) { "Original funding operation changed" }
+        persistAcceptedFunding(order, txid, context).getOrThrow()
         lightningRepo.completeAcceptedTransferFollowup(orderId, txid)
     }.onFailure { Logger.warn("Failed to resume accepted funding", it, context = TAG) }
 

@@ -5491,13 +5491,20 @@ class AppViewModel @Inject constructor(
         hasAttemptedBroadcast: Boolean,
         requestId: PaykitPaymentRequestId? = activeIncomingPaymentRequest()?.id,
         identity: String? = hardwarePaymentIdentity(),
+        walletId: String? = _sendUiState.value.hardwareWalletId,
     ): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (contactPaymentContext?.incomingPaymentRequest?.id != requestId) return false
         val request = contactPaymentContext?.incomingPaymentRequest ?: return true
-        if (identity == null || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)) return false
+        if (identity == null || walletId == null) return false
+        if (walletId != _sendUiState.value.hardwareWalletId ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        ) {
+            return false
+        }
         val error = paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull()
-        if (!PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value) ||
+        if (walletId != _sendUiState.value.hardwareWalletId ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value) ||
             synchronized(contactPaymentContextLock) { activeContactPaymentContext } != contactPaymentContext
         ) return false
         if (error == null) return true
@@ -5506,7 +5513,16 @@ class AppViewModel @Inject constructor(
             return false
         }
 
-        paykitPaymentProofRepo.failOnchainPayment(request)
+        if (!paykitPaymentProofRepo.failHardwareOnchainPaymentBeforeDispatch(
+                request,
+                walletId,
+                identity,
+                hasAttemptedBroadcast,
+            )
+        ) {
+            toast(error)
+            return false
+        }
         releasePrivatePaymentListIfNeeded(contactPaymentContext)
         synchronized(contactPaymentContextLock) {
             if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null

@@ -1116,6 +1116,57 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `definite hardware prebroadcast denial releases only the exact original proof`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        val original = storedProofs.single()
+        storedProofs = storedProofs + original.copy(onchainWalletId = "foreign-wallet")
+        assertTrue(repo.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false))
+        assertEquals(listOf(original.copy(onchainWalletId = "foreign-wallet")), storedProofs)
+    }
+
+    @Test
+    fun `hardware cleanup cannot release attempted candidate foreign context or failed durable removal`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        val original = storedProofs.single()
+        assertFalse(repo.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, true))
+        assertFalse(repo.failHardwareOnchainPaymentBeforeDispatch(request, "foreign-wallet", LOCAL_IDENTITY, false))
+        assertFalse(repo.failHardwareOnchainPaymentBeforeDispatch(request, WalletScope.default, LOCAL_IDENTITY, false))
+        assertFalse(repo.failHardwareOnchainPaymentBeforeDispatch(request, walletId, COUNTERPARTY, false))
+        assertFalse(
+            repo.failHardwareOnchainPaymentBeforeDispatch(
+                request.copy(paymentRequestId = "different-request"),
+                walletId,
+                LOCAL_IDENTITY,
+                false,
+            )
+        )
+        assertEquals(listOf(original), storedProofs)
+        shouldFailNextSave = true
+        assertFalse(repo.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false))
+        assertEquals(listOf(original), storedProofs)
+        assertEquals(
+            PaykitPaymentRequestError.OperationInProgress,
+            repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).exceptionOrNull()
+        )
+        for (retained in listOf(
+            original.copy(paymentIdentifier = "ab".repeat(32)),
+            original.copy(onchainAcceptanceVerified = true),
+        )) {
+            storedProofs = listOf(retained)
+            assertFalse(repo.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false))
+            assertEquals(listOf(retained), storedProofs)
+        }
+    }
+
+    @Test
     fun `hardware core txid remains pending until fresh exact observation then resumes original proof`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val txid = "ab".repeat(32)

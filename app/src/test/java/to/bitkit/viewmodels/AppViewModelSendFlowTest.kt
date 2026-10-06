@@ -7083,10 +7083,52 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
 
+        whenever(
+            paykitPaymentProofRepo.failHardwareOnchainPaymentBeforeDispatch(
+                request,
+                "hardware-wallet",
+                testPublicKey,
+                false,
+            )
+        ).thenReturn(true)
         assertFalse(sut.authorizeHardwareContactPayment(hasAttemptedBroadcast = false))
 
-        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+        verify(paykitPaymentProofRepo).failHardwareOnchainPaymentBeforeDispatch(
+            request,
+            "hardware-wallet",
+            testPublicKey,
+            false,
+        )
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(request)
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+    }
+
+    @Test
+    fun `hardware prebroadcast proof removal failure retains private preparation`() = test {
+        pubkyPublicKey.value = testPublicKey
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(SendUiState(hardwareWalletId = "hardware-wallet"))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+        whenever(
+            paykitPaymentProofRepo.failHardwareOnchainPaymentBeforeDispatch(
+                request,
+                "hardware-wallet",
+                testPublicKey,
+                false,
+            )
+        ).thenReturn(false)
+        assertFalse(sut.authorizeHardwareContactPayment(false))
+        verify(paykitPaymentProofRepo).failHardwareOnchainPaymentBeforeDispatch(
+            request,
+            "hardware-wallet",
+            testPublicKey,
+            false,
+        )
+        verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
     }
 
     @Test
@@ -7130,6 +7172,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(sheet, sut.currentSheet.value)
         verify(toastManager).enqueue(any())
         verify(paykitPaymentProofRepo, never()).failOnchainPayment(request)
+        verify(paykitPaymentProofRepo, never()).failHardwareOnchainPaymentBeforeDispatch(any(), any(), any(), any())
 
         sut.onHardwareSignCancelled()
         advanceUntilIdle()
@@ -7144,6 +7187,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         val request = paymentRequest()
         setActiveContactPaymentContext(testPublicKey, PrivatePaykitPaymentContext("bitkit/server", 7uL), request)
+        setSendState(SendUiState(hardwareWalletId = "hardware-wallet"))
         val authorization = CompletableDeferred<Result<Unit>>()
         whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).doSuspendableAnswer { authorization.await() }
         val completed = CompletableDeferred<Boolean>()
@@ -7158,6 +7202,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentRequestRepo).ensurePaymentAllowed(request)
         verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
         verify(paykitPaymentProofRepo, never()).cancelPreparation(any())
+        verify(paykitPaymentProofRepo, never()).failHardwareOnchainPaymentBeforeDispatch(any(), any(), any(), any())
     }
 
     @Test

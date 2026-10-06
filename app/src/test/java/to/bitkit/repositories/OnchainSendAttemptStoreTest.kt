@@ -19,8 +19,18 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@OptIn(kotlin.time.ExperimentalTime::class)
 class OnchainSendAttemptStoreTest : BaseUnitTest() {
     private val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+
+    @Test
+    fun `admission followup timestamp uses the injected clock`() = test {
+        val keychain = mock<Keychain>()
+        val clock = mock<kotlin.time.Clock>()
+        whenever(clock.now()).thenReturn(kotlin.time.Instant.fromEpochMilliseconds(123_456L))
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), clock)
+        assertEquals("123456", store.admitForTest().backupFollowup?.createdAtMillis)
+    }
 
     @Test
     fun `restored exact candidate observes without resend and unsupported contact cannot acknowledge`() = test {
@@ -39,7 +49,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         whenever(keychain.upsertString(eq(key), any(), any())).doSuspendableAnswer {
             values[it.getArgument(2)] = it.getArgument(1)
         }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, service)
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         store.restoreActive(original)
         assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
         assertNull(store.observeExactTransaction("00".repeat(32)))
@@ -47,7 +57,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertEquals(OnchainSendEvidence.Observed, observed?.evidence)
         assertEquals(wire.candidateTxids, observed?.candidateTxids)
         assertFailsWith<IllegalStateException> { store.markLocalFollowupComplete(original.attemptId, 2) }
-        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service)
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         assertEquals(observed, reopened.current())
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
         val other = original.copy(attemptId = "00000000-0000-4000-8000-000000000009")
@@ -67,7 +77,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         store.restoreActive(accepted)
         assertTrue(store.current()?.localFollowupComplete == false)
         assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
@@ -82,7 +92,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val admitted = store.admitForTest()
         val local = admitted.copy(backupFollowup = null)
         saved = kotlinx.serialization.json.Json.encodeToString(OnchainSendAttempt.serializer(), local)
@@ -103,11 +113,11 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
             saved = it.getArgument(1)
         }
-        val firstStore = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val firstStore = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val attempt = firstStore.admitForTest()
         firstStore.recordOutcome(attempt.attemptId, OnchainSendOutcome.Unknown("ab".repeat(32)), attempt.walletIndex)
 
-        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
         assertNull(reopened.observeExactTransaction("cd".repeat(32)))
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
@@ -126,14 +136,14 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
         val context = OnchainTransferContext(txTotalSats = 99_000uL, preTransferOnchainSats = 125_000uL)
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val attempt = store.admit(
             walletId = "wallet-1", requestId = null, orderId = "order-1", address = "bcrt1qfunding",
             amountSats = 98_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
             channelId = null, tags = emptyList(), transferContext = context, beforeSendAttempt = {},
         )
 
-        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         assertEquals(context, reopened.current()?.transferContext)
         assertEquals(OnchainSendEvidence.Pending, reopened.current()?.evidence)
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
@@ -145,7 +155,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     fun `corrupt attempt refuses a new send without replacing evidence`() = test {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(key, 0)).thenReturn("not-json")
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
 
         assertFailsWith<OnchainSendAttemptUnreadableError> { store.admitForTest() }
         verify(keychain).loadString(key, 0)
@@ -162,7 +172,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         whenever(keychain.upsertString(eq(key), any(), any())).doSuspendableAnswer {
             values[it.getArgument(2)] = it.getArgument(1)
         }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, service)
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         val attempt = store.admitForTest()
         assertEquals(7, attempt.walletIndex)
         currentIndex = 8
@@ -183,7 +193,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             if (failWrite) error("storage unavailable")
             saved = it.getArgument(1)
         }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val attempt = store.admitForTest()
         val txid = "ab".repeat(32)
         failWrite = true
@@ -194,7 +204,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertEquals(OnchainSendEvidence.Accepted, store.current()?.evidence)
         assertFailsWith<IllegalStateException> { store.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex) }
         assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
-        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         assertEquals(OnchainSendEvidence.Pending, reopened.current()?.evidence)
         assertNull(reopened.current()?.txid)
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
@@ -207,7 +217,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val entered = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
         val first = async { store.admitForTest { callbacks++; entered.complete(Unit); finish.await() } }
@@ -229,7 +239,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             if (failWrite) error("storage unavailable")
             saved = it.getArgument(1)
         }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val admitted = CompletableDeferred<OnchainSendAttempt>()
         val send = launch { admitted.complete(store.admitForTest()); kotlinx.coroutines.awaitCancellation() }
         val attempt = admitted.await()
@@ -238,7 +248,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertFailsWith<IllegalStateException> {
             store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Accepted("ab".repeat(32)), attempt.walletIndex)
         }
-        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         assertEquals(OnchainSendEvidence.Pending, reopened.current()?.evidence)
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
     }
@@ -249,7 +259,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock())
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val attempt = store.admitForTest()
         val txid = "ab".repeat(32)
         store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Unknown(txid), attempt.walletIndex)

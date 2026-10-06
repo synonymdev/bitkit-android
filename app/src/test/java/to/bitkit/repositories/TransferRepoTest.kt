@@ -99,13 +99,60 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `accepted funding rejects changed original client balance and fee without acknowledgement or resend`() = test {
+        val original = previewBtOrder()
+        val txid = "ab".repeat(32)
+        val attempt = OnchainSendAttempt(
+            WalletScope.default, "attempt", null, original.id,
+            requireNotNull(original.payment?.onchain?.address), original.feeSat, false, 1uL, true, null, emptyList(),
+            OnchainSendEvidence.Accepted, txid,
+            transferContext = OnchainTransferContext(99_000uL, 125_000uL, original.clientBalanceSat, original.feeSat),
+        )
+        setupClockNowMock()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        for (changed in listOf(
+            original.copy(clientBalanceSat = original.clientBalanceSat + 1uL),
+            original.copy(feeSat = original.feeSat + 1uL),
+        )) {
+            whenever(blocktankRepo.fetchOrders(listOf(original.id))).thenReturn(Result.success(listOf(changed)))
+            assertTrue(sut.resumeAcceptedFunding().isFailure)
+        }
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(
+            attempt.copy(transferContext = OnchainTransferContext(99_000uL, 125_000uL))
+        )
+        whenever(blocktankRepo.fetchOrders(listOf(original.id))).thenReturn(Result.success(listOf(original)))
+        assertTrue(sut.resumeAcceptedFunding().isFailure)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        assertTrue(sut.resumeAcceptedFunding(attempt.copy(walletIndex = 1)).isFailure)
+        verify(transferDao, never()).insert(any())
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()
+        )
+        assertEquals(attempt, lightningRepo.currentOnchainSendAttempt())
+    }
+
+    @Test
     fun `startup resumes accepted original funding without a confirmation or native resend`() = test {
         val order = previewBtOrder()
         val txid = "ab".repeat(32)
         val attempt = OnchainSendAttempt(
-            WalletScope.default, "attempt", null, order.id,
-            requireNotNull(order.payment?.onchain?.address), order.feeSat, false, 1uL, true, null, emptyList(),
-            OnchainSendEvidence.Accepted, txid, transferContext = OnchainTransferContext(99_000uL, 125_000uL)
+            WalletScope.default,
+            "attempt",
+            null,
+            order.id,
+            requireNotNull(order.payment?.onchain?.address),
+            order.feeSat,
+            false,
+            1uL,
+            true,
+            null,
+            emptyList(),
+            OnchainSendEvidence.Accepted,
+            txid,
+            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
         )
         setupClockNowMock()
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
@@ -134,7 +181,7 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull()
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()
         )
         assertNotNull(restarted)
     }
@@ -144,9 +191,20 @@ class TransferRepoTest : BaseUnitTest() {
         val order = previewBtOrder()
         val txid = "ab".repeat(32)
         val attempt = OnchainSendAttempt(
-            WalletScope.default, "attempt", null, order.id,
-            requireNotNull(order.payment?.onchain?.address), order.feeSat, false, 1uL, true, null, emptyList(),
-            OnchainSendEvidence.Observed, txid, transferContext = OnchainTransferContext(99_000uL, 125_000uL)
+            WalletScope.default,
+            "attempt",
+            null,
+            order.id,
+            requireNotNull(order.payment?.onchain?.address),
+            order.feeSat,
+            false,
+            1uL,
+            true,
+            null,
+            emptyList(),
+            OnchainSendEvidence.Observed,
+            txid,
+            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
         )
         setupClockNowMock()
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
@@ -177,7 +235,7 @@ class TransferRepoTest : BaseUnitTest() {
         assertEquals(125_000L, persisted?.preTransferOnchainSats)
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull()
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()
         )
     }
 
@@ -185,9 +243,20 @@ class TransferRepoTest : BaseUnitTest() {
     fun `unknown funding cannot resume from local records or another transaction event`() = test {
         val order = previewBtOrder()
         val attempt = OnchainSendAttempt(
-            WalletScope.default, "attempt", null, order.id,
-            requireNotNull(order.payment?.onchain?.address), order.feeSat, false, 1uL, true, null, emptyList(),
-            OnchainSendEvidence.Unknown, "ab".repeat(32), transferContext = OnchainTransferContext(99_000uL, 125_000uL)
+            WalletScope.default,
+            "attempt",
+            null,
+            order.id,
+            requireNotNull(order.payment?.onchain?.address),
+            order.feeSat,
+            false,
+            1uL,
+            true,
+            null,
+            emptyList(),
+            OnchainSendEvidence.Unknown,
+            "ab".repeat(32),
+            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
         )
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
         nodeEvents.emit(Event.OnchainTransactionReceived("cd".repeat(32), mock()))

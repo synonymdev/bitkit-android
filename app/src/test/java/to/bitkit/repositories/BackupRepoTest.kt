@@ -96,6 +96,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val paykitPresentationStore = mock<PaykitPaymentRequestPresentationStore>()
     private val keychain = mock<Keychain>()
     private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
+    private val transferRepo = mock<TransferRepo>()
     private val vssStoreIdProvider = mock<to.bitkit.data.backup.VssStoreIdProvider>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val lightningService = mock<LightningService>()
@@ -149,6 +150,52 @@ class BackupRepoTest : BaseUnitTest() {
         }.thenReturn(Result.success(Unit))
 
         sut = createSut()
+    }
+
+    @Test
+    fun `restored accepted funding resumes after all original context is installed without a node transition`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val originalWire = requireNotNull(state.activeOnchainAttempt)
+        val original = originalWire.restored("regtest", originalWire.wallet.binding, WalletScope.default, 0)
+        val funding = original.copy(
+            requestId = null,
+            payerIdentity = null,
+            orderId = "original-order",
+            isTransfer = true,
+            evidence = OnchainSendEvidence.Accepted,
+            transferContext = OnchainTransferContext(2_000uL, 3_000uL, 900uL, 1_000uL),
+            backupFollowup = requireNotNull(original.backupFollowup).copy(contact = null),
+        )
+        val wire = to.bitkit.models.ActiveOnchainAttemptBackup.from(funding, "regtest", originalWire.wallet.binding)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(originalWire.wallet.binding)
+        whenever(transferRepo.resumeAcceptedFunding(any())).thenReturn(Result.success(Unit))
+        stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire))
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        val ordered = org.mockito.kotlin.inOrder(onchainSendAttemptStore, transferDao, privatePaykitRepo, transferRepo)
+        ordered.verify(onchainSendAttemptStore).restoreActive(
+            wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0)
+        )
+        ordered.verify(transferDao).upsert(any<List<TransferEntity>>())
+        ordered.verify(privatePaykitRepo).restoreBackup(anyOrNull())
+        ordered.verify(transferRepo).resumeAcceptedFunding(
+            wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0)
+        )
+        // Local follow-up failure preserves the restored guard and does not turn restore into a payment failure.
+        whenever(transferRepo.resumeAcceptedFunding(any())).thenReturn(Result.failure(AppError("storage unavailable")))
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        verify(onchainSendAttemptStore, times(2)).restoreActive(
+            wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0)
+        )
+        verify(transferRepo, times(2)).resumeAcceptedFunding(any())
+        stubWalletBackup(
+            paykitPaymentState = state.copy(
+                pendingProofs = emptyList(),
+                activeOnchainAttempt = wire.copy(status = "unknown")
+            )
+        )
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        verify(transferRepo, times(2)).resumeAcceptedFunding(any())
     }
 
     @Test
@@ -1207,6 +1254,7 @@ class BackupRepoTest : BaseUnitTest() {
         paykitPresentationStore = paykitPresentationStore,
         keychain = keychain,
         onchainSendAttemptStore = onchainSendAttemptStore,
+        transferRepo = Provider { transferRepo },
         vssStoreIdProvider = vssStoreIdProvider,
         preActivityMetadataRepo = preActivityMetadataRepo,
         lightningService = lightningService,

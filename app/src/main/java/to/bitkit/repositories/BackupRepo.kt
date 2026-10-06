@@ -113,6 +113,7 @@ class BackupRepo @Inject constructor(
     private val paykitPresentationStore: PaykitPaymentRequestPresentationStore,
     private val keychain: Keychain,
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
+    private val transferRepo: Provider<TransferRepo>,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
@@ -796,6 +797,7 @@ class BackupRepo @Inject constructor(
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
         keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, String(dataBytes))
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
+        var restoredAttempt: OnchainSendAttempt? = null
         parsed.paykitPaymentState?.let {
             val walletIndex = backupWalletIndex()
             it.activeOnchainAttempt?.let { wire ->
@@ -808,6 +810,7 @@ class BackupRepo @Inject constructor(
                 )
                 check(backupWalletIndex() == walletIndex) { "Backup wallet changed during restore" }
                 onchainSendAttemptStore.restoreActive(attempt)
+                restoredAttempt = attempt
                 check(backupWalletIndex() == walletIndex) { "Backup wallet changed during restore" }
             }
             paykitPaymentRequestRepo.get().clear()
@@ -832,6 +835,12 @@ class BackupRepo @Inject constructor(
             pubkyRepo.publicKey.value?.let { paykitPaymentRequestRepo.get().activate(it) }
         }
         keychain.delete(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
+        // Restore can finish while the node is already Running: no new lifecycle/event is guaranteed.
+        restoredAttempt?.takeIf { it.isTransfer && it.hasPositiveEvidence }?.let { attempt ->
+            transferRepo.get().resumeAcceptedFunding(attempt).onFailure {
+                Logger.warn("Restored accepted funding remains pending local follow-up", it, context = TAG)
+            }
+        }
         Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
         return parsed.createdAt
     }

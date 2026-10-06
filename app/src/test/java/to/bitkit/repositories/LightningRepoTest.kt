@@ -95,6 +95,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LargeClass")
+@OptIn(kotlin.time.ExperimentalTime::class)
 class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
@@ -1711,7 +1712,7 @@ class LightningRepoTest : BaseUnitTest() {
             if (writes == 3) error("transient accepted write failure")
             saved = it.getArgument(1)
         }
-        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService)
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
             coreService = coreService, lspNotificationsService = lspNotificationsService,
@@ -1736,7 +1737,12 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(txid, blocked.attempt?.txid)
         repo.completeAcceptedOrdinaryFollowup(txid)
 
-        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, lightningService).current()
+        val reopened = OnchainSendAttemptStore(
+            testDispatcher,
+            keychain,
+            lightningService,
+            kotlin.time.Clock.System
+        ).current()
         assertEquals(txid, reopened?.txid)
         assertEquals(OnchainSendEvidence.Accepted, reopened?.evidence)
         assertTrue(reopened?.localFollowupComplete == true)

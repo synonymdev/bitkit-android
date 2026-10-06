@@ -372,7 +372,10 @@ fun SendSheet(
                         },
                         authorizeContactPayment = { hasAttemptedBroadcast ->
                             appViewModel.authorizeHardwareContactPayment(
-                                hasAttemptedBroadcast, uiState.incomingPaymentRequestId, paymentIdentity,
+                                hasAttemptedBroadcast,
+                                uiState.incomingPaymentRequestId,
+                                paymentIdentity,
+                                walletId,
                             )
                         },
                         onBack = {

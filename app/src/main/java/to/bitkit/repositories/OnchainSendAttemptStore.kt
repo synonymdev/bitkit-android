@@ -14,12 +14,15 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.nowMillis
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.services.LightningService
 import to.bitkit.utils.AppError
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 sealed interface OnchainSendOutcome {
     val txid: String
@@ -104,11 +107,13 @@ class OnchainSendNotDispatchedError(cause: Throwable) : AppError("On-chain send 
 class OnchainSendPendingError(cause: Throwable, val txid: String? = null) :
     AppError("On-chain send outcome is unknown; do not send again", cause)
 
+@OptIn(ExperimentalTime::class)
 @Singleton
 class OnchainSendAttemptStore @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val lightningService: LightningService,
+    private val clock: Clock,
 ) {
     companion object {
         private val KEY = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
@@ -172,7 +177,7 @@ class OnchainSendAttemptStore @Inject constructor(
                 backupFollowup = ActiveOnchainAttemptBackup.Followup(
                     feeSats = "0",
                     tags = tags,
-                    createdAtMillis = System.currentTimeMillis().toString(),
+                    createdAtMillis = nowMillis(clock).toString(),
                     channelId = channelId,
                 ),
             )

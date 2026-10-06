@@ -461,6 +461,32 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
     }
 
+    suspend fun failHardwareOnchainPaymentBeforeDispatch(
+        request: PaykitPaymentRequest,
+        walletId: String,
+        identity: String,
+        hasAttemptedBroadcast: Boolean,
+    ): Boolean = withContext(ioDispatcher) {
+        if (hasAttemptedBroadcast || walletId == WalletScope.default) return@withContext false
+        val originalIdentity = PubkyPublicKeyFormat.normalized(identity) ?: return@withContext false
+        operationMutex.withLock {
+            runSuspendCatching {
+                if (currentIdentity() != originalIdentity) return@runSuspendCatching false
+                val proofs = loadProofs()
+                val original = proofs.singleOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, originalIdentity) && it.requestId == request.id &&
+                        it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
+                        it.paymentStarted && it.paymentIdentifier == null && it.proofData == null &&
+                        !it.onchainAcceptanceVerified
+                } ?: return@runSuspendCatching false
+                // Only the caller's definite first-dispatch authorization denial permits this removal.
+                persist(proofs - original)
+                true
+            }.onFailure { Logger.warn("Failed to clear denied hardware preparation", it, context = TAG) }
+                .getOrDefault(false)
+        }
+    }
+
     suspend fun failOnchainPayment(request: PaykitPaymentRequest) {
         removeRequestProofs(request) {
             it.kind == PaykitPaymentProofKind.Onchain &&

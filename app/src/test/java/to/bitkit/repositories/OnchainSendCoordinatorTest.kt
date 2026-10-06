@@ -16,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
+@OptIn(kotlin.time.ExperimentalTime::class)
 class OnchainSendCoordinatorTest : BaseUnitTest() {
     private val input = OnchainSendInput("11".repeat(32), 0u)
     private val firstTxid = "ab".repeat(32)
@@ -37,7 +38,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                     if (failWrite) error("storage unavailable")
                     saved = it.getArgument(1)
                 }
-            store = OnchainSendAttemptStore(testDispatcher, keychain, service)
+            store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         }
 
         suspend fun admit(isMax: Boolean = false): OnchainSendAttempt = store.admit(
@@ -86,7 +87,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 error("not requested")
         }
         assertTrue(OnchainSendCoordinator(f.store, sender, testDispatcher).sendInitial(attempt).isSuccess)
-        val reopened = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service)
+        val reopened = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service, kotlin.time.Clock.System)
         assertEquals(listOf(firstTxid), reopened.current()?.candidateTxids)
         assertEquals(listOf(input), reopened.current()?.originalInputs)
         assertEquals(1, sends)
@@ -358,7 +359,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         assertEquals(original.orderId, retained?.orderId)
         assertEquals(original.originalInputs, retained?.originalInputs)
         assertEquals(OnchainSendEvidence.Pending, retained?.evidence)
-        val restarted = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service)
+        val restarted = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service, kotlin.time.Clock.System)
         assertEquals(retained, restarted.current())
         assertFailsWith<OnchainSendBlockedError> { f.admit() }
     }
@@ -420,7 +421,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         assertEquals(OnchainSendEvidence.Observed, retained.evidence)
         f.failWrite = false
         f.store.markLocalFollowupComplete(attempt.attemptId, 0)
-        val reopened = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service)
+        val reopened = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service, kotlin.time.Clock.System)
         assertEquals(firstTxid, reopened.current()?.txid)
         assertTrue(reopened.current()?.localFollowupComplete == true)
     }
@@ -451,7 +452,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         assertEquals(OnchainSendEvidence.Observed, f.store.current()?.evidence)
         f.failWrite = false
         f.store.markLocalFollowupComplete(original.attemptId, 0)
-        val restarted = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service)
+        val restarted = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service, kotlin.time.Clock.System)
         assertEquals(firstTxid, restarted.current()?.txid)
         assertTrue(restarted.current()?.localFollowupComplete == true)
     }
