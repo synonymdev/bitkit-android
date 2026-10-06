@@ -29,14 +29,14 @@ class CryptoTest {
 
     @Before
     fun setUp() {
-        sut = Crypto()
         baselineProvider = Security.getProvider(BC)
         baselinePosition = positionOf(baselineProvider)
+        sut = Crypto()
     }
 
     @After
     fun tearDown() {
-        // The provider list is shared by the whole JVM, so put back what setUp saw for the next test class
+        // The provider list is shared by the whole JVM, so restore BC as it was before this test started
         Security.removeProvider(BC)
         baselineProvider?.let { Security.insertProviderAt(it, baselinePosition) }
     }
