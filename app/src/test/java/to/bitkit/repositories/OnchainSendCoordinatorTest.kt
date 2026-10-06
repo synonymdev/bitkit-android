@@ -458,6 +458,43 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `post dispatch fallback never returns another attempt or wallet winner`() = test {
+        for (failBroadcast in listOf(true, false)) {
+            for (changeWallet in listOf(true, false)) {
+                val f = Fixture()
+                val original = f.unresolved()
+                var current = original
+                val other = original.copy(
+                    attemptId = if (changeWallet) original.attemptId else "different-attempt",
+                    walletId = if (changeWallet) "different-wallet" else original.walletId,
+                    txid = "ef".repeat(32), evidence = OnchainSendEvidence.Accepted,
+                    localFollowupComplete = true,
+                )
+                val store = mock<OnchainSendAttemptStore>()
+                whenever { store.current() }.doSuspendableAnswer { current }
+                whenever { store.retainPreparedReceipt(any(), any(), any(), any()) }.thenReturn(original)
+                whenever { store.broadcastPreparedCandidate(any(), any(), any(), any()) }.doSuspendableAnswer {
+                    current = other
+                    if (failBroadcast) error("native dispatch result unavailable")
+                    OnchainSendOutcome.Unknown(nextTxid)
+                }
+                whenever { store.recordOutcome(any(), any(), any()) }.doSuspendableAnswer {
+                    error("original operation is no longer current")
+                }
+                val sender = object : OnchainPreparedSender {
+                    override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend = error("unused")
+                    override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong) =
+                        PreparedOnchainSend(f.receipt(nextTxid)) { OnchainSendOutcome.Unknown(nextTxid) }
+                }
+                val result = OnchainSendCoordinator(store, sender, testDispatcher)
+                    .retryOriginal(original.attemptId, original.walletId, 2uL) {}
+                assertTrue(result.isFailure, "A later winner must not satisfy the original retry")
+                assertEquals(other, current)
+            }
+        }
+    }
+
+    @Test
     fun `candidate fees retain authorized successor rate and select the actual older winner`() = test {
         val f = Fixture()
         val original = f.unresolved()

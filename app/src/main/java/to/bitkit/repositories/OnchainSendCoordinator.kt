@@ -174,14 +174,18 @@ class OnchainSendCoordinator(
             )
         }.getOrElse { error ->
             val winner = runSuspendCatching { store.current() }.getOrNull()
-            if (winner?.hasPositiveEvidence == true) return OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId && winner.hasPositiveEvidence) {
+                return OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
+            }
             throw OnchainSendPendingError(error, prepared.receipt.txid)
         }
         val recorded = runSuspendCatching {
             store.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex)
         }.getOrElse { error ->
             val winner = runSuspendCatching { store.current() }.getOrNull()
-            if (winner?.hasPositiveEvidence == true) return OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId && winner.hasPositiveEvidence) {
+                return OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
+            }
             if (outcome is OnchainSendOutcome.Accepted && outcome.txid.equals(prepared.receipt.txid, true)) {
                 return outcome
             }
