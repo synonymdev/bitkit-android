@@ -1021,8 +1021,10 @@ class PaykitSdkServiceTest {
             whenever(sdk.paymentRequests()).thenReturn(listOf(request))
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
             assertFailsWith<PubkyContactError.ActiveSubscription> { service.removeContact(RING_PUBKY) }
+            assertTrue(service.removeContacts(listOf(RING_PUBKY)).isEmpty())
             verify(sdk, never()).blockPeer(any())
             verify(sdk, never()).removeContact(any())
+            verify(sdk, never()).removeContactsAndBlockPeers(any())
             if (endsNaturally) {
                 whenever(recurrence.endsAt).thenReturn("2026-02-01T00:00:00Z")
             } else {
@@ -1030,6 +1032,9 @@ class PaykitSdkServiceTest {
             }
             service.removeContact(RING_PUBKY)
             verify(sdk).removeContact(RING_PUBKY)
+            val removed = listOf(mock<ContactRecord>())
+            whenever(sdk.removeContactsAndBlockPeers(listOf(RING_PUBKY))).thenReturn(removed)
+            assertEquals(removed, service.removeContacts(listOf(RING_PUBKY)))
         }
     }
 

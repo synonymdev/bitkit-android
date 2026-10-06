@@ -786,11 +786,11 @@ class AppViewModel @Inject constructor(
             if (!state.contactsLoaded) return
 
             val removedKeys = lastPrivatePaykitContactKeys - state.contactKeys
-            removedKeys.forEach {
-                privatePaykitRepo.removeSavedContact(it)
+            if (removedKeys.isNotEmpty()) {
+                privatePaykitRepo.removeSavedContacts(removedKeys)
                     .onFailure { error ->
                         Logger.warn(
-                            "Failed to remove private Paykit contact '${PubkyPublicKeyFormat.redacted(it)}'",
+                            "Failed to remove private Paykit contacts",
                             error,
                             context = TAG,
                         )

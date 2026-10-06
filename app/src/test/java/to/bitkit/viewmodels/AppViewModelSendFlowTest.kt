@@ -482,6 +482,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removeSavedContact(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.removeSavedContacts(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.reconcileReceivedPayments() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.handleOnchainActivity(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
@@ -9323,11 +9324,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyContactsLoadVersion.value = 2L
         advanceUntilIdle()
 
-        verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
+        verify(privatePaykitRepo).removeSavedContacts(setOf(contact.publicKey))
         verify(privatePaykitRepo).scheduleSavedContactPreparation(emptySet<String>())
         verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
         inOrder(privatePaykitRepo, paykitPaymentRequestRepo).apply {
-            verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
+            verify(privatePaykitRepo).removeSavedContacts(setOf(contact.publicKey))
             verify(paykitPaymentRequestRepo).refreshAfterStateChange()
         }
         verify(paykitPaymentRequestRepo, never()).refresh(any())

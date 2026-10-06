@@ -1260,6 +1260,7 @@ class PubkyRepoTest : BaseUnitTest() {
             createContactRecord(VALID_CONTACT_KEY_B, label = "Bob"),
         )
         whenever(pubkyService.contactRecords()).thenReturn(records)
+        whenever(pubkyService.removeContacts(records.map { it.publicKey })).thenReturn(records)
         val bulkCancelled = CompletableDeferred<Unit>()
         val screenCancelled = CompletableDeferred<Unit>()
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
@@ -1298,8 +1299,8 @@ class PubkyRepoTest : BaseUnitTest() {
         deletion.await().getOrThrow()
         screenLookup.await()
         assertTrue(sut.contacts.value.isEmpty())
-        verify(pubkyService).removeContact(VALID_CONTACT_KEY_A)
-        verify(pubkyService).removeContact(VALID_CONTACT_KEY_B)
+        verify(pubkyService).removeContacts(records.map { it.publicKey })
+        verify(pubkyService, never()).removeContact(any())
     }
 
     @Test

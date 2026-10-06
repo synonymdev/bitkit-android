@@ -110,6 +110,7 @@ class PrivatePaykitRepo @Inject constructor(
     private var activePreparationKeys = emptySet<String>()
     private var preparationJob: Job? = null
     private var preparationGeneration = 0
+    private var isDeletingProfile = false
     private var pendingForceRefreshLightning = false
     private val unavailableLinkRetryAt = mutableMapOf<String, KotlinInstant>()
     private var state: PrivatePaykitState? = null
@@ -201,6 +202,7 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private fun scheduleContactPreparation(publicKeys: Collection<String>, forceRefreshLightning: Boolean = false) {
+        if (isDeletingProfile) return
         pendingPreparationKeys.addAll(publicKeys.filter { forceRefreshLightning || it !in activePreparationKeys })
         pendingForceRefreshLightning = pendingForceRefreshLightning || forceRefreshLightning
         if (preparationJob?.isActive == true || pendingPreparationKeys.isEmpty()) return
@@ -242,6 +244,15 @@ class PrivatePaykitRepo @Inject constructor(
         clearPendingMessageDrainRetries()
     }
 
+    suspend fun beginProfileDeletion() = withContext(serializedDispatcher) {
+        isDeletingProfile = true
+        invalidateContactPreparation()
+    }
+
+    suspend fun endProfileDeletion() = withContext(serializedDispatcher) {
+        isDeletingProfile = false
+    }
+
     suspend fun refreshSavedContactEndpoints(
         publicKey: String,
         savedPublicKeys: Collection<String>,
@@ -274,6 +285,7 @@ class PrivatePaykitRepo @Inject constructor(
         savedPublicKeys: Collection<String>,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
+            if (isDeletingProfile) return@runSuspendCatching
             val settings = settingsStore.data.first()
             val hasDisabledPublications = !settings.sharesPrivatePaykitEndpoints && hasPublishedPrivateEndpoints()
             val cleanupPending = isContactSharingCleanupPending()
@@ -296,28 +308,29 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             val savedKeys = rememberSavedContacts(savedPublicKeys, replacing = true).toSet()
             val staleKeys = ensureState().contacts.keys.filter { it !in savedKeys }
-            staleKeys.forEach { removeSavedContact(it).getOrThrow() }
+            removeSavedContacts(staleKeys).getOrThrow()
             addressReservationRepo.clearContactAssignments(excludingPublicKeys = savedKeys)
         }
     }
 
-    suspend fun removeSavedContact(publicKey: String): Result<Unit> = withContext(serializedDispatcher) {
+    suspend fun removeSavedContact(publicKey: String): Result<Unit> = removeSavedContacts(listOf(publicKey))
+
+    suspend fun removeSavedContacts(publicKeys: Collection<String>): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
-            val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
-            knownSavedContactKeys.remove(normalizedKey)
-            pendingPreparationKeys.remove(normalizedKey)
-            unavailableLinkRetryAt.remove(normalizedKey)
-            removePublishedEndpoints(normalizedKey).onFailure {
-                updateDeletedContactCleanupPending(normalizedKey, true)
-                Logger.warn(
-                    "Failed to remove private Paykit endpoints for '${redacted(normalizedKey)}'",
-                    it,
-                    context = TAG,
-                )
-            }.getOrThrow()
-            clearContactState(normalizedKey)
-            addressReservationRepo.clearContactAssignment(normalizedKey)
-            updateDeletedContactCleanupPending(normalizedKey, false)
+            val keys = publicKeys.mapNotNull(::normalizedPublicKey).toSet()
+            if (keys.isEmpty()) return@runSuspendCatching
+            knownSavedContactKeys.removeAll(keys)
+            pendingPreparationKeys.removeAll(keys)
+            keys.forEach(unavailableLinkRetryAt::remove)
+            if (!isDeletingProfile) {
+                removePublishedEndpoints(keys).onFailure {
+                    updateDeletedContactCleanupPending(keys, true)
+                    Logger.warn("Failed to remove private Paykit endpoints for deleted contacts", it, context = TAG)
+                }.getOrThrow()
+            }
+            clearContactStates(keys)
+            addressReservationRepo.removeContactAssignments(keys)
+            if (!isDeletingProfile) updateDeletedContactCleanupPending(keys, false)
         }
     }
 
@@ -1373,9 +1386,6 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private suspend fun removePublishedEndpoints(publicKey: String): Result<Unit> =
-        removePublishedEndpoints(listOf(publicKey))
-
     private suspend fun removePublishedEndpoints(publicKeys: Collection<String>): Result<Unit> =
         withContext(serializedDispatcher) {
             publicationMutex.withLock {
@@ -1540,17 +1550,10 @@ class PrivatePaykitRepo @Inject constructor(
         withContext(serializedDispatcher) {
             runSuspendCatching {
                 val savedKeys = savedPublicKeys.mapNotNull { normalizedPublicKey(it) }.toSet()
-                ensureState().contacts.keys.filter { it !in savedKeys }.forEach {
-                    clearContactState(it)
-                }
+                clearContactStates(ensureState().contacts.keys.filter { it !in savedKeys })
                 addressReservationRepo.clearContactAssignments(excludingPublicKeys = savedKeys)
-                persistState(markWalletBackup = true)
             }
         }
-
-    private suspend fun clearContactState(publicKey: String) {
-        clearContactStates(listOf(publicKey))
-    }
 
     private suspend fun clearContactStates(publicKeys: Collection<String>) {
         if (publicKeys.isEmpty()) return
@@ -1694,9 +1697,7 @@ class PrivatePaykitRepo @Inject constructor(
                 .mapNotNull(::normalizedPublicKey)
                 .filterNot { it in remainingPendingKeys }
             clearContactStates(successfulKeys)
-            successfulKeys.forEach { publicKey ->
-                addressReservationRepo.clearContactAssignment(publicKey)
-            }
+            addressReservationRepo.removeContactAssignments(successfulKeys)
             removalResult.getOrThrow()
         }
     }

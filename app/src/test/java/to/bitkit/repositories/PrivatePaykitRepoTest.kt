@@ -1319,6 +1319,25 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `profile deletion stops preparation and avoids repeated withdrawal`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        sut.beginProfileDeletion()
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any())
+
+        sut.removeSavedContacts(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any())
+        verify(addressReservationRepo).removeContactAssignments(setOf(CONTACT_KEY, OTHER_CONTACT_KEY))
+
+        sut.endProfileDeletion()
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `cleanup stops a stalled preparation before later contacts are visited`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
         val linkStarted = CompletableDeferred<Unit>()

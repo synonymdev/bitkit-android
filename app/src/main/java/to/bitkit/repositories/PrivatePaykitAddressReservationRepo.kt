@@ -241,6 +241,20 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }
     }
 
+    suspend fun removeContactAssignments(publicKeys: Collection<String>) = withContext(ioDispatcher) {
+        val removedKeys = publicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
+        locked { current ->
+            val next = current.copy(
+                contactAssignments = current.contactAssignments.filterKeys { it !in removedKeys },
+                contactAssignmentHistory = current.contactAssignmentHistory.filterKeys { it !in removedKeys },
+            )
+            if (next == current) return@locked
+            ledger = next
+            persist(next)
+            notifyBackupStateChanged()
+        }
+    }
+
     suspend fun clear() = withContext(ioDispatcher) {
         locked {
             ledger = PrivatePaykitReservationData()

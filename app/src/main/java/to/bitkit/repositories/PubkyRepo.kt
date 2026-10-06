@@ -996,12 +996,13 @@ class PubkyRepo @Inject constructor(
             if (!it.isMissingPubkyData()) throw it
             emptyList()
         }
-        records.forEach { record ->
-            runSuspendCatching {
-                pubkyService.removeContact(record.publicKey)
-            }.onFailure {
-                Logger.warn("Failed to delete contact '${redacted(record.publicKey)}'", it, context = TAG)
+        runSuspendCatching {
+            val removed = pubkyService.removeContacts(records.map { it.publicKey })
+            if (removed.size != records.size) {
+                Logger.warn("Retained contacts that could not be removed during profile deletion", context = TAG)
             }
+        }.onFailure {
+            Logger.warn("Failed to delete contacts", it, context = TAG)
         }
         pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
         notifyBackupStateChanged()

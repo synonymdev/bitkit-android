@@ -733,6 +733,25 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> {
+        if (publicKeys.isEmpty()) return emptyList()
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                val now = nowMillis()
+                val subscribedKeys = completeSdkCall { handle.paymentRequests() }.filter {
+                    val endsAt = it.terms?.recurrence?.endsAt?.let { timestamp ->
+                        runSuspendCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
+                    }
+                    it.state == PaymentRequestLifecycleState.ACTIVE_RECURRING && (endsAt == null || endsAt > now)
+                }.mapNotNull { PubkyPublicKeyFormat.normalized(it.counterparty) }.toSet()
+                val removableKeys = publicKeys.filter { PubkyPublicKeyFormat.normalized(it) !in subscribedKeys }
+                if (removableKeys.isEmpty()) return@withStateRevisionTracking emptyList()
+                completeSdkCall { handle.removeContactsAndBlockPeers(removableKeys) }
+            }
+        }
+    }
+
     suspend fun resolveContactProfile(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
