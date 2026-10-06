@@ -229,6 +229,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import kotlin.time.TimeSource
 
 @OptIn(ExperimentalTime::class)
@@ -4410,6 +4411,7 @@ class AppViewModel @Inject constructor(
             address = address,
             amount = amount,
             tags = tags,
+            paymentDeadlineAt = incomingPaymentRequest?.paymentDeadlineAt,
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
@@ -4531,7 +4533,7 @@ class AppViewModel @Inject constructor(
         val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
 
         var authorizationError: Throwable? = null
-        val result = sendLightning(decodedInvoice.bolt11, paymentAmount) {
+        val result = sendLightning(decodedInvoice.bolt11, paymentAmount, incomingPaymentRequest?.paymentDeadlineAt) {
             authorizationError = incomingPaymentRequest?.let {
                 paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
             }
@@ -4886,6 +4888,7 @@ class AppViewModel @Inject constructor(
         address: String,
         amount: ULong,
         tags: List<String> = emptyList(),
+        paymentDeadlineAt: Instant? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
     ): Result<Txid> {
@@ -4899,6 +4902,7 @@ class AppViewModel @Inject constructor(
                 amount == walletRepo.balanceState.value.maxSendOnchainSats,
             tags = tags,
             beforeSendAttempt = beforeSendAttempt,
+            paymentDeadlineAt = paymentDeadlineAt,
             onBroadcast = {
                 broadcastTxId = it
                 onBroadcast(it)
@@ -4909,9 +4913,15 @@ class AppViewModel @Inject constructor(
     private suspend fun sendLightning(
         bolt11: String,
         amount: ULong? = null,
+        paymentDeadlineAt: Instant? = null,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
-        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount, onBeforeSend = onBeforeSend).onSuccess { hash ->
+        return lightningRepo.payInvoice(
+            bolt11 = bolt11,
+            sats = amount,
+            paymentDeadlineAt = paymentDeadlineAt,
+            onBeforeSend = onBeforeSend,
+        ).onSuccess { hash ->
             // Wait until matching payment event is received (with timeout for hold invoices)
             val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
                 when (it) {
@@ -5588,22 +5598,45 @@ class AppViewModel @Inject constructor(
         return true
     }
 
+    val hardwarePaymentDeadlineAt: Instant?
+        get() = synchronized(contactPaymentContextLock) {
+            activeContactPaymentContext?.incomingPaymentRequest?.paymentDeadlineAt
+        }
+
     suspend fun authorizeHardwareContactPayment(hasAttemptedBroadcast: Boolean): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         val request = contactPaymentContext?.incomingPaymentRequest ?: return true
         val error = paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull() ?: return true
+        handleHardwarePaymentFailure(error, contactPaymentContext, hasAttemptedBroadcast)
+        return false
+    }
+
+    suspend fun onHardwarePaymentDeadlineExpired(hasAttemptedBroadcast: Boolean) {
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        handleHardwarePaymentFailure(
+            PaykitPaymentRequestError.RequestExpired,
+            contactPaymentContext,
+            hasAttemptedBroadcast
+        )
+    }
+
+    private suspend fun handleHardwarePaymentFailure(
+        error: Throwable,
+        contactPaymentContext: ContactPaymentContext?,
+        hasAttemptedBroadcast: Boolean,
+    ) {
         if (hasAttemptedBroadcast) {
             toast(error)
-            return false
+            return
         }
 
-        paykitPaymentProofRepo.failOnchainPayment(request)
+        contactPaymentContext?.incomingPaymentRequest?.let { paykitPaymentProofRepo.failOnchainPayment(it) }
+        isSubmittingPaymentRequest = false
         releasePrivatePaymentListIfNeeded(contactPaymentContext)
         synchronized(contactPaymentContextLock) {
             if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
         }
         handlePaymentPreparationFailure(error, contactPaymentContext)
-        return false
     }
 
     fun completeHardwareContactPayment(txId: String) {
@@ -6497,20 +6530,24 @@ private class LightningPaymentFailedError(
 private fun Throwable.isDefiniteOnchainPreBroadcastFailure(): Boolean =
     generateSequence(this as Throwable?) { it.cause }
         .any {
-            it is ServiceError.NodeNotSetup ||
-                it is ServiceError.NodeNotStarted ||
-                it is NodeException.NotRunning ||
-                it is NodeException.OnchainTxCreationFailed ||
-                it is NodeException.OnchainTxSigningFailed ||
-                it is NodeException.WalletOperationFailed ||
-                it is NodeException.PersistenceFailed ||
-                it is NodeException.InvalidAddress ||
-                it is NodeException.InvalidAmount ||
-                it is NodeException.InvalidNetwork ||
-                it is NodeException.InvalidFeeRate ||
-                it is NodeException.InsufficientFunds ||
-                it is NodeException.CoinSelectionFailed ||
-                it is NodeException.NoSpendableOutputs
+            when (it) {
+                is ServiceError.NodeNotSetup,
+                is ServiceError.NodeNotStarted,
+                is ServiceError.PaymentDeadlineExpired,
+                is NodeException.NotRunning,
+                is NodeException.OnchainTxCreationFailed,
+                is NodeException.OnchainTxSigningFailed,
+                is NodeException.WalletOperationFailed,
+                is NodeException.PersistenceFailed,
+                is NodeException.InvalidAddress,
+                is NodeException.InvalidAmount,
+                is NodeException.InvalidNetwork,
+                is NodeException.InvalidFeeRate,
+                is NodeException.InsufficientFunds,
+                is NodeException.CoinSelectionFailed,
+                is NodeException.NoSpendableOutputs -> true
+                else -> false
+            }
         }
 
 sealed interface LnurlParams {

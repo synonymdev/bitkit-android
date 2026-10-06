@@ -7,6 +7,7 @@ import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
@@ -67,6 +68,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -91,6 +93,7 @@ data class PaykitPaymentRequest(
     val lifecycleState: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
     val billingPeriod: PaykitBillingPeriod? = null,
     val paymentProofKind: PaykitPaymentProofKind? = null,
+    val paymentDeadlineAt: Instant? = null,
 ) {
     enum class ParseFailure(
         val logValue: String,
@@ -122,8 +125,12 @@ data class PaykitPaymentRequest(
     val requiresAcceptance: Boolean
         get() = billingPeriod == null && lifecycleState == PaymentRequestLifecycleState.PROPOSED
 
-    fun isExpired(now: Instant): Boolean =
+    fun isProposalExpired(now: Instant): Boolean =
         lifecycleState == PaymentRequestLifecycleState.PROPOSED && expiresAt?.let { it <= now } == true
+
+    fun isPaymentDeadlineExpired(now: Instant): Boolean = paymentDeadlineAt?.let { now > it } == true
+
+    fun isExpired(now: Instant): Boolean = isProposalExpired(now) || isPaymentDeadlineExpired(now)
 
     fun acceptsLightningInvoiceAmountMsats(amountMsats: ULong?): Boolean =
         amountMsats == null || amountMsats == satsToMsat(amountSats)
@@ -194,6 +201,7 @@ private data class ParsedPaykitPaymentRequestTerms(
     val amountSats: ULong,
     val endpoints: List<String>,
     val expiresAt: Instant?,
+    val paymentDeadlineAt: Instant?,
 )
 
 enum class PaykitPaymentRequestDeliveryStatus { Queued, Sent }
@@ -923,6 +931,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         runSuspendCatching {
             val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
             val generation = stateGeneration.get()
+            if (request.isPaymentDeadlineExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
             if (!isLocallyPayable(request)) throw PaykitPaymentRequestError.RequestUnavailable
             if (forExecution && !hasCurrentExecutionContext(request)) {
                 throw PaykitPaymentRequestError.RequestUnavailable
@@ -939,6 +948,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             if (forExecution && !hasCurrentExecutionContext(request)) {
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
+            if (request.isPaymentDeadlineExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
         }
     }
 
@@ -1642,6 +1652,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .filter { it.lifecycleState == PaymentRequestLifecycleState.PROPOSED }
             .mapNotNull { it.expiresAt }
             .map { it - now }
+        val paymentDeadlineDelays = _pendingRequests.value
+            .mapNotNull { it.paymentDeadlineAt }
+            .map { it - now + 1.nanoseconds }
         // Subscription dates run on the subscription clock, which the offset can move ahead of real time.
         val subscriptionDelays = _subscriptions.value
             .filter {
@@ -1651,7 +1664,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .flatMap { listOfNotNull(it.proposalExpiresAt, it.recurrence.endsAt) }
             .filter { it > subscriptionNow }
             .map { it - subscriptionNow }
-        val delayDuration = (requestDelays + subscriptionDelays).minOrNull()?.coerceAtLeast(Duration.ZERO)
+        val delayDuration = (requestDelays + paymentDeadlineDelays + subscriptionDelays)
+            .minOrNull()?.coerceAtLeast(Duration.ZERO)
             ?: return
         expirationJob = repoScope.launch {
             delay(delayDuration)
@@ -1664,7 +1678,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
 }
 
 private fun List<PaykitPaymentRequest>.withExpiredLifecycle(now: Instant): List<PaykitPaymentRequest> = map { request ->
-    if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(now)) {
+    if (request.isProposalExpired(now)) {
         request.copy(lifecycleState = PaymentRequestLifecycleState.PROPOSAL_EXPIRED)
     } else {
         request
@@ -1732,8 +1746,14 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
             },
         )
     }
-    if (requiresActionableRequest && requestTerms.paymentDeadline != null) {
+    val paymentDeadlineAt = (requestTerms.paymentDeadline as? PaymentDeadline.At)?.timestamp
+        ?.takeIf { it.endsWith('Z') }
+        ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+    if (requiresActionableRequest && requestTerms.paymentDeadline != null && paymentDeadlineAt == null) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline)
+    }
+    if (requiresActionableRequest && paymentDeadlineAt?.let { now > it } == true) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
     }
     if (requestTerms.amount.asset != PaykitIssuerInterop.BITCOIN_ASSET) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
@@ -1760,7 +1780,7 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
     }
 
-    val parsedTerms = ParsedPaykitPaymentRequestTerms(requestTerms, amountSats, endpoints, expiresAt)
+    val parsedTerms = ParsedPaykitPaymentRequestTerms(requestTerms, amountSats, endpoints, expiresAt, paymentDeadlineAt)
     return PaykitPaymentRequestParseResult.Parsed(toPaykitPaymentRequest(expectedRole, parsedTerms, now))
 }
 
@@ -1776,6 +1796,7 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     note = parsedTerms.terms.metadata.note(),
     createdAt = lastEventAt?.let { runCatching { Instant.parse(it) }.getOrNull() },
     expiresAt = parsedTerms.expiresAt,
+    paymentDeadlineAt = parsedTerms.paymentDeadlineAt,
     acceptedPaymentEndpointIdentifiers = parsedTerms.endpoints,
     deliveryStatus = if (expectedRole == PaymentRequestLocalRole.PAYEE) {
         if (proposalOutboundStatus == OutboundPrivateMessageStatus.SENT) {

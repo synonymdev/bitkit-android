@@ -976,6 +976,23 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `payInvoice forwards the payment deadline after final authorization`() = test {
+        startNodeForTesting()
+        val deadline = kotlin.time.Instant.parse("2026-10-06T12:00:00Z")
+        whenever(lightningService.send("bolt11", 1000uL, deadline)).thenReturn("payment-id")
+        var authorized = false
+
+        val result = sut.payInvoice("bolt11", 1000uL, deadline) {
+            authorized = true
+            true
+        }
+
+        assertTrue(authorized)
+        assertEquals("payment-id", result.getOrThrow())
+        verify(lightningService).send("bolt11", 1000uL, deadline)
+    }
+
+    @Test
     fun `payInvoice should proceed after timeout when channels are not usable`() = test {
         startNodeForTesting()
         val testPaymentId = "testPaymentId"
@@ -1531,7 +1548,8 @@ class LightningRepoTest : BaseUnitTest() {
                 sats = any(),
                 satsPerVByte = any(),
                 utxosToSpend = anyOrNull(),
-                isMaxAmount = any()
+                isMaxAmount = any(),
+                paymentDeadlineAt = anyOrNull(),
             )
         ).thenReturn("testPaymentId")
 

@@ -84,9 +84,14 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 
 ## Payment deadline history
 
-`payment-deadline-history.xml` covers requests with actual-payment deadlines.
+`absolute-payment-deadline.xml` covers one-time requests with absolute payment deadlines,
+including acceptance before proposal expiry, payment after proposal expiry, and a deadline
+crossed while payment preparation waits. The deadline is inclusive and separate from proposal
+expiry. A sent payment's proof can still be delivered after its payment deadline.
+
+`payment-deadline-history.xml` covers expired one-time requests and recurring payment deadlines.
 Bitkit keeps their lifecycle and paid-period history, and subscription cancellation,
-but does not accept them, offer payments, or schedule payment reminders. The journey
+but does not offer expired payments or support recurring payment deadlines. The journey
 requires a controlled shared-runtime peer to prepare the accepted and paid records; repository
 tests cover these states without sending funds. On Android, unpaid history rows show
 lifecycle labels, while paid rows show subscription names, notes, or dates. Active

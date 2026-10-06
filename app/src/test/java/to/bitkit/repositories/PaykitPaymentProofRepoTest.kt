@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
@@ -255,6 +256,43 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `completed payments remain reconcilable after their payment deadline`() = test {
+        val deadline = PaymentDeadline.At("2000-01-01T00:00:00Z")
+        val record = paymentRequestRecord().let {
+            it.copy(
+                state = PaymentRequestLifecycleState.ACCEPTED,
+                terms = requireNotNull(it.terms).copy(paymentDeadline = deadline),
+            )
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+            .thenReturn(record)
+        val lightning = readyLightningProof(PAYMENT_REQUEST_ID)
+        val onchain = lightning.copy(
+            kind = PaykitPaymentProofKind.Onchain,
+            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+            paymentIdentifier = "ab".repeat(32),
+            proofData = "ab".repeat(32),
+        )
+
+        listOf(lightning, onchain).forEach { proof ->
+            storedProofs = listOf(proof)
+
+            paymentProofRepo().reconcile()
+
+            assertTrue(storedProofs.isEmpty())
+            verify(paykitSdkService).submitPaymentProof(
+                counterparty = eq(COUNTERPARTY),
+                paymentRequestId = eq(PAYMENT_REQUEST_ID),
+                paymentAppId = eq("bitkit"),
+                paymentEndpointIdentifier = eq(proof.paymentEndpointIdentifier),
+                proofJson = any(),
+                billingPeriod = isNull(),
+            )
+        }
+    }
+
+    @Test
     fun `failed proof reconciliation does not stop later proofs`() = test {
         val secondPaymentRequestId = "550e8400-e29b-41d4-a716-446655440001"
         storedProofs = listOf(
@@ -437,6 +475,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val errors = listOf(
             ServiceError.NodeNotSetup(),
             ServiceError.NodeNotStarted(),
+            to.bitkit.utils.AppError(ServiceError.PaymentDeadlineExpired()),
             NodeNotRunningError("payInvoice", NodeLifecycleState.Stopped),
             NodeRunTimeoutError("payInvoice"),
             NodeException.NotRunning("stopped"),

@@ -269,14 +269,14 @@ class TrezorViewModelTest : BaseUnitTest() {
         sut.broadcastSignedTx()
         advanceUntilIdle()
 
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
     fun `broadcastSignedTx should not restore signed step after reset`() = test {
         loadSignedTx()
         val broadcastResult = CompletableDeferred<Result<String>>()
-        whenever(trezorRepo.broadcastRawTx(any()))
+        whenever(trezorRepo.broadcastRawTx(any(), org.mockito.kotlin.anyOrNull()))
             .doSuspendableAnswer { broadcastResult.await() }
 
         sut.broadcastSignedTx()
@@ -300,7 +300,7 @@ class TrezorViewModelTest : BaseUnitTest() {
         val broadcastResults = ArrayDeque(
             listOf(firstBroadcastResult, secondBroadcastResult)
         )
-        whenever(trezorRepo.broadcastRawTx(any()))
+        whenever(trezorRepo.broadcastRawTx(any(), org.mockito.kotlin.anyOrNull()))
             .doSuspendableAnswer { broadcastResults.removeFirst().await() }
 
         sut.broadcastSignedTx()

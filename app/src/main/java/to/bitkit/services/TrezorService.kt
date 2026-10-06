@@ -48,8 +48,11 @@ import com.synonym.bitkitcore.trezorSignMessage
 import com.synonym.bitkitcore.trezorSignTxFromPsbt
 import com.synonym.bitkitcore.trezorVerifyMessage
 import to.bitkit.async.ServiceQueue
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.Instant
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("TooManyFunctions")
@@ -57,6 +60,7 @@ import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 class TrezorService @Inject constructor(
     private val transport: TrezorTransport,
     private val uiHandler: TrezorUiHandler,
+    private val clock: Clock = Clock.System,
 ) {
     @Volatile
     private var callbackRegistered = false
@@ -237,8 +241,15 @@ class TrezorService @Inject constructor(
         }
     }
 
-    suspend fun broadcastRawTx(serializedTx: String, electrumUrl: String): String {
+    suspend fun broadcastRawTx(
+        serializedTx: String,
+        electrumUrl: String,
+        paymentDeadlineAt: Instant? = null,
+    ): String {
         return ServiceQueue.CORE.background {
+            if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+                throw ServiceError.PaymentDeadlineExpired()
+            }
             onchainBroadcastRawTx(serializedTx = serializedTx, electrumUrl = electrumUrl)
         }
     }

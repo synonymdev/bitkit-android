@@ -38,6 +38,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.SendUiState
+import kotlin.time.Instant
 
 private const val SEND_SIGN_VISUAL_TOP_RATIO = 0.54f
 
@@ -49,6 +50,8 @@ fun HwSendSignScreen(
     viewModel: HwSendViewModel,
     prepareContactPayment: suspend () -> Boolean,
     authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
+    onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit,
+    paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -62,6 +65,7 @@ fun HwSendSignScreen(
         amountSats = sendUiState.amount,
         satsPerVByte = satsPerVByte,
         tags = sendUiState.selectedTags,
+        paymentDeadlineAt = paymentDeadlineAt,
     )
 
     val onBackRequest: () -> Unit = { if (uiState.canLeave) onBack() }
@@ -83,7 +87,12 @@ fun HwSendSignScreen(
         vendor = vendor,
         onBack = onBackRequest,
         onOpenConnect = {
-            viewModel.signAndBroadcast(request, prepareContactPayment, authorizeContactPayment)
+            viewModel.signAndBroadcast(
+                request,
+                prepareContactPayment,
+                authorizeContactPayment,
+                onPaymentDeadlineExpired
+            )
         },
     )
 
@@ -96,6 +105,7 @@ fun HwSendSignScreen(
                     passphrase,
                     prepareContactPayment,
                     authorizeContactPayment,
+                    onPaymentDeadlineExpired,
                 )
             },
             onDismiss = viewModel::dismissPassphrase,

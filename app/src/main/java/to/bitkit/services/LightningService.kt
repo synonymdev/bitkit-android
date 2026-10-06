@@ -82,8 +82,10 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
@@ -142,6 +144,7 @@ class LightningService internal constructor(
     private val loggerLdk: LoggerLdk,
     private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
     private val ldkQueue: CoroutineContext,
+    private val clock: Clock = Clock.System,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
@@ -187,6 +190,7 @@ class LightningService internal constructor(
         watchOnlyAccountStore: WatchOnlyAccountStore,
         loggerLdk: LoggerLdk,
         watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
+        clock: Clock = Clock.System,
     ) : this(
         bgDispatcher = bgDispatcher,
         ioDispatcher = ioDispatcher,
@@ -197,6 +201,7 @@ class LightningService internal constructor(
         loggerLdk = loggerLdk,
         watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
         ldkQueue = ServiceQueue.LDK.queueContext,
+        clock = clock,
     )
 
     @Volatile
@@ -955,6 +960,7 @@ class LightningService internal constructor(
         satsPerVByte: ULong,
         utxosToSpend: List<SpendableUtxo>? = null,
         isMaxAmount: Boolean = false,
+        paymentDeadlineAt: Instant? = null,
     ): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -964,6 +970,7 @@ class LightningService internal constructor(
         )
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            ensurePaymentDeadline(paymentDeadlineAt)
             if (isMaxAmount) {
                 node.onchainPayment().sendAllToAddress(
                     address = address,
@@ -981,7 +988,7 @@ class LightningService internal constructor(
         }
     }
 
-    suspend fun send(bolt11: String, sats: ULong? = null): PaymentId {
+    suspend fun send(bolt11: String, sats: ULong? = null, paymentDeadlineAt: Instant? = null): PaymentId {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.debug("Paying bolt11: $bolt11", context = TAG)
@@ -990,6 +997,7 @@ class LightningService internal constructor(
             .getOrElse { throw LdkError(it as NodeException) }
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            ensurePaymentDeadline(paymentDeadlineAt)
             runCatching {
                 when (sats != null) {
                     true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, null)
@@ -999,6 +1007,12 @@ class LightningService internal constructor(
         }.onFailure {
             loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
         }.getOrThrow()
+    }
+
+    private fun ensurePaymentDeadline(paymentDeadlineAt: Instant?) {
+        if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+            throw ServiceError.PaymentDeadlineExpired()
+        }
     }
 
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {

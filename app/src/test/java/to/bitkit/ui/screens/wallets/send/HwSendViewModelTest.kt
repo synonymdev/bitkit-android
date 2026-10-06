@@ -35,11 +35,15 @@ import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AppError
+import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwSendViewModelTest : BaseUnitTest() {
@@ -52,6 +56,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
 
     private lateinit var sut: HwSendViewModel
+    private var now = Instant.parse("2026-10-06T11:59:59Z")
 
     @Before
     fun setUp() {
@@ -63,6 +68,9 @@ class HwSendViewModelTest : BaseUnitTest() {
             preActivityMetadataRepo = preActivityMetadataRepo,
             coreService = coreService,
             activityRepo = activityRepo,
+            clock = object : Clock {
+                override fun now() = now
+            },
         )
     }
 
@@ -277,7 +285,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertEquals("Payment timed out", toasts.single().description)
         assertFalse(sut.uiState.value.isSigning)
         verify(hwWalletRepo, never()).signFunding(any(), any())
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -445,13 +453,135 @@ class HwSendViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
         verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
         verify(hwWalletRepo, never()).signFunding(any(), any())
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
         assertEquals(HwSendUiState(), sut.uiState.value)
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
 
         verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `expiry in broadcast queue releases only a never submitted attempt`() = test {
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
+            .thenReturn(Result.failure(AppError(ServiceError.PaymentDeadlineExpired())))
+        val attempts = mutableListOf<Boolean>()
+
+        sut.signAndBroadcast(
+            request().copy(paymentDeadlineAt = deadline),
+            authorizeContactPayment = {
+                attempts += it
+                true
+            },
+            onPaymentDeadlineExpired = { attempts += it },
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf(false, false), attempts)
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+        assertFalse(sut.uiState.value.isSigning)
+        sut.cancel()
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+    }
+
+    @Test
+    fun `expiry during rebroadcast keeps the earlier uncertain attempt`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException("connection failed")),
+            Result.failure(AppError(ServiceError.PaymentDeadlineExpired())),
+        )
+        val attempts = mutableListOf<Boolean>()
+        val authorize: suspend (Boolean) -> Boolean = {
+            attempts += it
+            attempts.size < 3
+        }
+        val request = request().copy(paymentDeadlineAt = deadline)
+
+        sut.signAndBroadcast(
+            request,
+            authorizeContactPayment = authorize,
+            onPaymentDeadlineExpired = { attempts += it }
+        )
+        advanceUntilIdle()
+        sut.signAndBroadcast(
+            request,
+            authorizeContactPayment = authorize,
+            onPaymentDeadlineExpired = { attempts += it }
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf(false, true, true), attempts)
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        assertFalse(sut.uiState.value.isSigning)
+        sut.cancel()
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        verify(hwWalletRepo).signFunding(WALLET_ID, fixture.funding)
+    }
+
+    @Test
+    fun `expiry before rebroadcast preserves uncertainty without repeating authorization`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
+        val request = request().copy(paymentDeadlineAt = deadline)
+        var authorizations = 0
+        var expiredPriorAttempt: Boolean? = null
+        val authorize: suspend (Boolean) -> Boolean = {
+            authorizations++
+            true
+        }
+        sut.signAndBroadcast(request, authorizeContactPayment = authorize)
+        advanceUntilIdle()
+        now = deadline + 1.seconds
+
+        sut.signAndBroadcast(
+            request,
+            authorizeContactPayment = authorize,
+            onPaymentDeadlineExpired = { expiredPriorAttempt = it },
+        )
+        advanceUntilIdle()
+        sut.cancel()
+
+        assertEquals(1, authorizations)
+        assertEquals(true, expiredPriorAttempt)
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.isSigning)
+        verify(hwWalletRepo).broadcastFunding(fixture.signedTx, deadline)
+    }
+
+    @Test
+    fun `expiry during retry authorization preserves the earlier uncertain attempt`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
+        val request = request().copy(paymentDeadlineAt = deadline)
+        sut.signAndBroadcast(request)
+        advanceUntilIdle()
+
+        sut.signAndBroadcast(request, authorizeContactPayment = {
+            assertTrue(it)
+            now = deadline + 1.seconds
+            false
+        })
+        advanceUntilIdle()
+        sut.cancel()
+
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.isSigning)
+        verify(hwWalletRepo).broadcastFunding(fixture.signedTx, deadline)
     }
 
     private suspend fun stubSuccessfulPayment(): PaymentFixture {

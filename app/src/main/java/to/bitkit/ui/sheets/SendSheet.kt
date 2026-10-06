@@ -363,6 +363,8 @@ fun SendSheet(
                         viewModel = hwSendViewModel,
                         prepareContactPayment = appViewModel::prepareHardwareContactPayment,
                         authorizeContactPayment = appViewModel::authorizeHardwareContactPayment,
+                        onPaymentDeadlineExpired = appViewModel::onHardwarePaymentDeadlineExpired,
+                        paymentDeadlineAt = appViewModel.hardwarePaymentDeadlineAt,
                         onBack = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle

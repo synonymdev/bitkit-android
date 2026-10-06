@@ -2027,12 +2027,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginPaymentRequest rechecks expiration after private resolution`() = test {
-        val request = paymentRequest()
-        whenever(clock.now()).thenReturn(
-            Instant.fromEpochSeconds(NOW_SECONDS),
-            Instant.fromEpochSeconds(NOW_SECONDS + 61),
-        )
+    fun `beginPaymentRequest rechecks proposal and payment deadlines after private resolution`() = test {
         whenever {
             paykitSdkService.prepareAndResolvePrivatePaymentRequest(
                 eq(CONTACT_KEY),
@@ -2048,8 +2043,22 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(coreService.decode(SERVER_PRIVATE_BOLT11))
             .thenReturn(Scanner.Lightning(lightningInvoice(SERVER_PRIVATE_BOLT11, byteArrayOf(8, 8, 8))))
 
-        assertFailsWith<PaykitPaymentRequestError.RequestExpired> {
-            sut.beginPaymentRequest(request).getOrThrow()
+        val requests = listOf(
+            paymentRequest(),
+            paymentRequest().copy(
+                lifecycleState = PaymentRequestLifecycleState.ACCEPTED,
+                expiresAt = Instant.fromEpochSeconds(NOW_SECONDS - 1),
+                paymentDeadlineAt = Instant.fromEpochSeconds(NOW_SECONDS + 60),
+            ),
+        )
+        requests.forEach { request ->
+            whenever(clock.now()).thenReturn(
+                Instant.fromEpochSeconds(NOW_SECONDS),
+                Instant.fromEpochSeconds(NOW_SECONDS + 61),
+            )
+            assertFailsWith<PaykitPaymentRequestError.RequestExpired> {
+                sut.beginPaymentRequest(request).getOrThrow()
+            }
         }
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
