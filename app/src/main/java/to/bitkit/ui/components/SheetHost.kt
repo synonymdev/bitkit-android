@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -66,6 +67,7 @@ sealed interface Sheet {
     data class Send(
         val route: SendRoute = SendRoute.Recipient,
         val hardwareWalletId: String? = null,
+        val preparingRequest: PaykitPaymentRequest? = null,
     ) : Sheet
     data class Receive(
         val route: ReceiveRoute = ReceiveRoute.QR,

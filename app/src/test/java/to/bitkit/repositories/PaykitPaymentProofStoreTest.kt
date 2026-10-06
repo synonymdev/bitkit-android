@@ -38,9 +38,9 @@ class PaykitPaymentProofStoreTest : BaseUnitTest() {
     @Test
     fun `unverified txid proof stays in flight without claiming local completion`() = test {
         val identity = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        val requestId = PaykitPaymentRequestId("request", "counterparty", "bitkit/wallet")
+        val requestId = PaykitPaymentRequestId("request", "counterparty")
         val proof = PendingPaykitPaymentProof(
-            identity = identity, requestId = requestId, paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+            identity = identity, requestId = requestId, paymentEndpointIdentifier = MethodId.P2wpkh.rawValue, paymentAppId = "bitkit",
             kind = PaykitPaymentProofKind.Onchain, paymentStarted = true,
             paymentIdentifier = "ab".repeat(32), proofData = "ab".repeat(32),
         )

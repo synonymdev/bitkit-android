@@ -655,6 +655,8 @@
     <string name="profile__auth_approval_authorize">Authorize</string>
     <string name="profile__auth_approval_authorizing">Authorizing…</string>
     <string name="profile__auth_approval_ok">OK</string>
+    <string name="profile__auth_approval_paykit_access_description">Read and manage your private Paykit data, and send Paykit messages on your behalf. Your Pubky identity secret and wallet spending keys are not shared.</string>
+    <string name="profile__auth_approval_paykit_access_title">Paykit access</string>
     <string name="profile__auth_approval_permissions">Requested permissions</string>
     <string name="profile__auth_approval_requester">Requester ID: %1$s</string>
     <string name="profile__auth_approval_service">A service is requesting permission to access and edit your &lt;accent&gt;%1$s&lt;/accent&gt; data.</string>

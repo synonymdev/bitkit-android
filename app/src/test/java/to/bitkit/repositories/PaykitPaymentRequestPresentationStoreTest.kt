@@ -8,6 +8,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -40,7 +41,7 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
             Unit
         }
         val sut = PaykitPaymentRequestPresentationStore(keychain)
-        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY, "bitkit/server")
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
 
         val loadError = assertFailsWith<PaykitPaymentStateUnreadableError> { sut.load(IDENTITY) }
         val saveError = assertFailsWith<PaykitPaymentStateUnreadableError> { sut.save(IDENTITY, setOf(requestId)) }
@@ -63,8 +64,8 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
             Unit
         }
         val sut = PaykitPaymentRequestPresentationStore(keychain)
-        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY, "bitkit/server")
-        val subscriptionId = PaykitSubscriptionId("subscription", COUNTERPARTY, "bitkit/server")
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
+        val subscriptionId = PaykitSubscriptionId("subscription", COUNTERPARTY)
         val dismissedOnly = PaykitSubscriptionPresentationState(dismissedPaymentIds = setOf(requestId))
         val accepted = dismissedOnly.copy(
             acceptedAt = mapOf(subscriptionId to Instant.parse("2026-09-24T08:00:00.123Z")),
@@ -93,6 +94,82 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `accepted one time ownership survives reopening and wallet restore`() = test {
+        val keychain = mock<Keychain>()
+        val values = mutableMapOf<String, String>()
+        whenever(keychain.loadString(any())).thenAnswer { values[it.getArgument<String>(0)] }
+        whenever(keychain.upsertString(any(), any())).thenAnswer {
+            values[it.getArgument(0)] = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
+        val secondId = PaykitPaymentRequestId("second", COUNTERPARTY)
+        sut.addAcceptedOneTimeId(IDENTITY, requestId)
+        sut.addAcceptedOneTimeId(COUNTERPARTY, secondId)
+        sut.addAcceptedOneTimeId(IDENTITY, secondId)
+        sut.save(IDENTITY, setOf(requestId))
+
+        val reopened = PaykitPaymentRequestPresentationStore(keychain)
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(secondId), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
+        assertEquals(emptyMap(), reopened.backupSnapshot())
+        assertEquals(3L, sut.backupStateVersion.value)
+        val backup = reopened.acceptedOneTimeBackupSnapshot()
+        reopened.restoreBackup(emptyMap())
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+
+        values.clear()
+        reopened.restoreBackup(emptyMap())
+        reopened.restoreAcceptedOneTimeRequests(backup)
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(secondId), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
+    }
+
+    @Test
+    fun `acceptance cleanup removes only specified ids from the current stored identity`() = test {
+        val keychain = mock<Keychain>()
+        val key = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
+        var stored: String? = null
+        whenever(keychain.loadString(key)).thenAnswer { stored }
+        whenever(keychain.upsertString(eq(key), any())).thenAnswer {
+            stored = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val finished = PaykitPaymentRequestId("finished", COUNTERPARTY)
+        val live = PaykitPaymentRequestId("live", COUNTERPARTY)
+        sut.addAcceptedOneTimeId(IDENTITY, finished)
+        sut.addAcceptedOneTimeId(COUNTERPARTY, finished)
+        sut.addAcceptedOneTimeId(IDENTITY, live)
+
+        assertEquals(setOf(live), sut.removeAcceptedOneTimeIds(IDENTITY, setOf(finished)))
+        val reopened = PaykitPaymentRequestPresentationStore(keychain)
+        assertEquals(setOf(live), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(finished), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
+        clearInvocations(keychain)
+        reopened.removeAcceptedOneTimeIds(IDENTITY, setOf(finished))
+        verify(keychain, never()).upsertString(any(), any())
+    }
+
+    @Test
+    fun `unreadable accepted one time ownership is preserved and fails closed`() = test {
+        val keychain = mock<Keychain>()
+        val acceptedKey = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
+        whenever(keychain.loadString(acceptedKey)).thenReturn("not-json")
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+
+        assertFailsWith<PaykitPaymentStateUnreadableError> { sut.loadAcceptedOneTimeIds(IDENTITY) }
+        assertFailsWith<PaykitPaymentStateUnreadableError> {
+            sut.addAcceptedOneTimeId(IDENTITY, PaykitPaymentRequestId("request", COUNTERPARTY))
+        }
+        assertFailsWith<PaykitPaymentStateUnreadableError> {
+            sut.removeAcceptedOneTimeIds(IDENTITY, setOf(PaykitPaymentRequestId("request", COUNTERPARTY)))
+        }
+        verify(keychain, never()).upsertString(any(), any())
+    }
+
+    @Test
     fun `backup restore preserves precise acceptance billing boundaries`() = test {
         val keychain = mock<Keychain>()
         var storedValue: String? = null
@@ -102,8 +179,8 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
             Unit
         }
         val sut = PaykitPaymentRequestPresentationStore(keychain)
-        val millisecondId = PaykitSubscriptionId("millisecond", COUNTERPARTY, "bitkit/server")
-        val nanosecondId = PaykitSubscriptionId("nanosecond", COUNTERPARTY, "bitkit/server")
+        val millisecondId = PaykitSubscriptionId("millisecond", COUNTERPARTY)
+        val nanosecondId = PaykitSubscriptionId("nanosecond", COUNTERPARTY)
         val acceptedAt = mapOf(
             millisecondId to Instant.parse("2026-09-24T10:00:00.123Z"),
             nanosecondId to Instant.parse("2026-09-24T10:00:00.123456789Z"),
@@ -139,7 +216,7 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     fun `invalid subscription timestamp identifies its preserved key`() = test {
         val keychain = mock<Keychain>()
         val value = """
-            {"subscriptionStatesByIdentity":{"$IDENTITY":{"acceptances":[{"id":{"paymentRequestId":"subscription","counterparty":"$COUNTERPARTY","counterpartyReceiverPath":"bitkit/server"},"acceptedAt":"not-a-timestamp"}]}}}
+            {"subscriptionStatesByIdentity":{"$IDENTITY":{"acceptances":[{"id":{"paymentRequestId":"subscription","counterparty":"$COUNTERPARTY"},"acceptedAt":"not-a-timestamp"}]}}}
         """.trimIndent()
         whenever(keychain.loadString(KEY)).thenReturn(value)
 

@@ -74,7 +74,7 @@ After this shape check, Bitkit validates that the value is usable: an on-chain a
 
 ## Delivery prerequisites
 
-The issuer and wallet must be linked Paykit peers on the same receiver path before Bitkit polls the request. The issuer must advertise a usable endpoint for at least one identifier retained from the request. A request that fails the request gate is not presented; a request whose endpoint cannot be resolved is deferred until usable payment details arrive.
+The issuer and wallet identities must be linked Paykit peers before Bitkit polls the request. Requests may require a specific payment App; Bitkit uses the SDK's request-specific resolver and preserves the selected App in its proof. The issuer can include exact `paymentEndpoints` in the Payment Request or supply current endpoints resolved for the requested App. At least one endpoint must be usable for an identifier retained from the request; embedded endpoints do not require separate advertisement. A request that fails the request gate is not presented; a request whose endpoint cannot be resolved is deferred until usable payment details arrive.
 
 ## Contract fixtures
 

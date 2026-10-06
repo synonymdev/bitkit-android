@@ -21,7 +21,6 @@ import to.bitkit.di.SubscriptionClock
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY
-import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH
 import to.bitkit.ui.EXTRA_PAYKIT_PAYER_IDENTITY
 import to.bitkit.ui.EXTRA_PAYKIT_PAYMENT_REQUEST_ID
 import to.bitkit.ui.EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE
@@ -81,7 +80,7 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
         }
         val pendingWorkNames = pendingRequestIds.mapNotNullTo(mutableSetOf()) { requestId ->
             requestId.billingPeriodStartsAt?.let {
-                "$WORK_PREFIX$payerIdentity|${requestId.counterparty}|${requestId.counterpartyReceiverPath}|" +
+                "$WORK_PREFIX$payerIdentity|${requestId.counterparty}|" +
                     "${requestId.paymentRequestId}|$it"
             }
         }
@@ -133,7 +132,7 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
 
     private fun workName(payerIdentity: String, subscription: PaykitSubscription, period: PaykitBillingPeriod) =
         "$WORK_PREFIX$payerIdentity|${subscription.counterparty}|" +
-            "${subscription.counterpartyReceiverPath}|${subscription.paymentRequestId}|${period.startsAt}"
+            "${subscription.paymentRequestId}|${period.startsAt}"
 
     private fun notificationWork(
         payerIdentity: String,
@@ -147,7 +146,6 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
                 EXTRA_PAYKIT_PAYMENT_REQUEST_ID to subscription.paymentRequestId,
                 EXTRA_PAYKIT_PAYER_IDENTITY to payerIdentity,
                 EXTRA_PAYKIT_COUNTERPARTY to subscription.counterparty,
-                EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH to subscription.counterpartyReceiverPath,
                 EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT to period.startsAt.toString(),
             )
         )
@@ -206,10 +204,6 @@ class PaykitSubscriptionNotificationWorker @AssistedInject constructor(
                 putString(EXTRA_PAYKIT_PAYER_IDENTITY, inputData.getString(EXTRA_PAYKIT_PAYER_IDENTITY))
                 putString(EXTRA_PAYKIT_PAYMENT_REQUEST_ID, inputData.getString(EXTRA_PAYKIT_PAYMENT_REQUEST_ID))
                 putString(EXTRA_PAYKIT_COUNTERPARTY, inputData.getString(EXTRA_PAYKIT_COUNTERPARTY))
-                putString(
-                    EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH,
-                    inputData.getString(EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH),
-                )
                 putString(
                     EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT,
                     inputData.getString(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT),

@@ -105,6 +105,12 @@ class ActivityRepo @Inject constructor(
         Logger.debug("Activity state reset", context = TAG)
     }
 
+    suspend fun backfillPaykitContacts(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            if (coreService.activity.backfillPaykitContacts()) notifyActivitiesChanged()
+        }.onFailure { Logger.warn("Failed to backfill Paykit activity contacts", it, context = TAG) }
+    }
+
     suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("syncActivities called", context = TAG)
 
@@ -525,6 +531,7 @@ class ActivityRepo @Inject constructor(
                 return@runCatching
             }
 
+            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = false)
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(normalizedKey, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
@@ -556,6 +563,7 @@ class ActivityRepo @Inject constructor(
             }
             if (activity.contact() == null) return@runCatching
 
+            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = true)
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(null, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()

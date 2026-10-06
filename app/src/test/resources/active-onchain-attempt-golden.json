@@ -10,10 +10,10 @@
         "requestId": {
           "paymentRequestId": "550e8400-e29b-41d4-a716-446655440000",
           "counterparty": "pubkyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
-          "counterpartyReceiverPath": "bitkit/server",
           "billingPeriodStartsAt": null
         },
         "paymentEndpointIdentifier": "btc-regtest-p2wpkh",
+        "paymentAppId": "bitkit",
         "kind": "bitcoin-onchain-txid",
         "paymentStarted": true,
         "paymentIdentifier": "abababababababababababababababababababababababababababababababab",
@@ -38,7 +38,6 @@
       "requestId": {
         "paymentRequestId": "550e8400-e29b-41d4-a716-446655440000",
         "counterparty": "pubkyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
-        "counterpartyReceiverPath": "bitkit/server",
         "billingPeriodStartsAt": null
       },
       "orderId": null,

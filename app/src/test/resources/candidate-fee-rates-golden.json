@@ -14,6 +14,7 @@
           "billingPeriodStartsAt": null
         },
         "paymentEndpointIdentifier": "btc-regtest-p2wpkh",
+        "paymentAppId": "bitkit",
         "kind": "bitcoin-onchain-txid",
         "paymentStarted": true,
         "paymentIdentifier": "abababababababababababababababababababababababababababababababab",

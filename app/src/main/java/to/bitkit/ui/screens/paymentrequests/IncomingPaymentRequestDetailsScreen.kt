@@ -79,6 +79,7 @@ fun IncomingPaymentRequestDetailsScreen(
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
+    val requestedPaymentRequestId by appViewModel.requestedPaymentRequestId.collectAsStateWithLifecycle()
     val request = pending.firstOrNull { it.id == id } ?: history.firstOrNull { it.id == id }
     val contact = request?.let { paymentRequest ->
         contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, paymentRequest.counterparty) }
@@ -90,6 +91,7 @@ fun IncomingPaymentRequestDetailsScreen(
         request = request,
         contact = contact,
         isPending = isPending,
+        isPreparing = requestedPaymentRequestId == id,
         onBack = onBack,
         onPay = { appViewModel.openIncomingPaymentRequestWithTags(id, it) },
         onDismiss = request?.let { { appViewModel.dismissIncomingPaymentRequest(it) } },
@@ -97,10 +99,11 @@ fun IncomingPaymentRequestDetailsScreen(
 }
 
 @Composable
-private fun IncomingPaymentRequestDetailsContent(
+internal fun IncomingPaymentRequestDetailsContent(
     request: PaykitPaymentRequest?,
     contact: PubkyProfile?,
     isPending: Boolean,
+    isPreparing: Boolean,
     onBack: () -> Unit,
     onPay: (List<String>) -> Unit,
     onDismiss: (suspend () -> Result<Unit>)?,
@@ -250,6 +253,7 @@ private fun IncomingPaymentRequestDetailsContent(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
                     enabled = !isDismissing,
+                    isLoading = isPreparing,
                     onClick = { onPay(selectedTags) },
                     icon = {
                         Icon(
@@ -258,7 +262,9 @@ private fun IncomingPaymentRequestDetailsContent(
                             modifier = Modifier.size(16.dp)
                         )
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("PaymentRequestDetailsPay")
                 )
             }
         }

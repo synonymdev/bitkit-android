@@ -200,6 +200,23 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Paykit backfill notifies activity observers only after a changed row`() = test {
+        whenever(coreService.activity.backfillPaykitContacts()).thenReturn(false, true)
+
+        sut.backfillPaykitContacts().getOrThrow()
+        assertEquals(0L, sut.activitiesChanged.value)
+        sut.backfillPaykitContacts().getOrThrow()
+        assertTrue(sut.activitiesChanged.value > 0L)
+        assertEquals(0L, sut.activityTagsChanged.value)
+    }
+
+    @Test
+    fun `Paykit backfill preserves cancellation`() = test {
+        whenever(coreService.activity.backfillPaykitContacts()).thenThrow(CancellationException("canceled"))
+        assertFailsWith<CancellationException> { sut.backfillPaykitContacts() }
+    }
+
+    @Test
     fun `syncActivities success flow`() = test {
         val payments = listOf(testPaymentDetails)
         wheneverBlocking { lightningRepo.getPayments() }.thenReturn(Result.success(payments))

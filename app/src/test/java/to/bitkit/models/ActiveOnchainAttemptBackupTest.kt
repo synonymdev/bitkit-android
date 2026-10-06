@@ -18,7 +18,7 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     private fun golden(): WalletBackupV1 {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
         val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        assertEquals("1e392cdfaa82f48bed7be194ddaa3efe62efbf41a54fd14b70590d9a11f6f7b2", hash)
+        assertEquals("42bd135dbc91aa0b2004f2633f6f8b28c46dddf8da3c6f949cf2ff036c07e0a6", hash)
         return json.decodeFromString(bytes.decodeToString())
     }
 
@@ -26,7 +26,7 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     fun `shared iOS candidate fee golden preserves exact map and older winner fee`() {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        assertEquals("ff666fce72a1dbcc870fc277aabbf1a28926f5f926a772d87e3d4960403ce34c", hash)
+        assertEquals("8487f073ee55b9049aeed241819055138c82af8a596104bc2eada95b6ce96aa7", hash)
         val backup = Json { ignoreUnknownKeys = true }.decodeFromString<WalletBackupV1>(bytes.decodeToString())
         val state = requireNotNull(backup.paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)

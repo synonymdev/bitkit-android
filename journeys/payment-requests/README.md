@@ -6,7 +6,7 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 
 ## Setup
 
-Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save the fixture issuer as a contact, link it on receiver path `bitkit/server`, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. The `bitkit/server` path belongs to the third-party fixture issuer; use `bitkit/wallet` when another Bitkit instance is the issuer.
+Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save and link the fixture issuer as a contact, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. Its App ID is `paykit-server`; Bitkit uses `bitkit`.
 
 The accepted journey uses:
 
@@ -18,11 +18,36 @@ The accepted journey uses:
 
 Rejected fixture shapes stay in unit tests because Bitkit intentionally does not present requests that fail the contract gate.
 
-`request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked on receiver path `bitkit/wallet`, and the payer holds enough balance to pay 21,000 sats.
+`request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked, and the payer holds enough balance to pay 21,000 sats.
+Its Android-only Sent receipt checks leave the 5,000 sats request open through payment and the
+existing foreground synchronization. A protocol proof changes the note-free subtitle to
+"Proof submitted"; a nonblank note still takes precedence. This is not inferred from a chain
+payment. iOS keeps a static note/date receipt with no lifecycle subtitle, so these receipt-status
+steps do not apply there.
 
 `contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
 
 `definite-pre-broadcast-retry.xml` uses the linked fixture issuer and the local regtest LNURL server. Configure its LNURL-pay metadata endpoint normally, but make its invoice callback fail the first request and succeed after it is switched back to the healthy response. Do not republish the Paykit payment list between attempts. This makes the first send fail before Lightning dispatch and proves that the same private payment details can be opened and paid on retry.
+
+## Foreground synchronization
+
+Bitkit checks the private inbox and shared request state every 10 seconds while foregrounded and online.
+Outbound retries, endpoint publication, and target discovery also run on startup,
+explicit refreshes, and maintenance rounds after 30 seconds, then every 60 seconds.
+Maintenance uses elapsed time, including slow requests; polling remains serialized and does not
+start catch-up rounds. Incoming messages wait for the next poll plus synchronization time.
+
+## Accepting install
+
+Acceptance intent is saved before the remote operation and included in wallet backups.
+An interrupted response is reconciled against the shared request before payment. Restoring
+the wallet restores its pending acceptances; this does not support running the same wallet
+on multiple devices concurrently.
+
+`accepted-device-ownership.xml` extends the failing LNURL fixture to two separate installs sharing
+one Pubky identity and App ID. Only the accepting install may retry after restart; the other keeps
+the accepted request in history without payment controls. Confirm acceptance in shared request
+state after the callback failure, before testing the second install.
 
 ## Reference evidence
 
@@ -59,10 +84,10 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 
 ## Payment deadline history
 
-`payment-deadline-history.xml` covers rc56 requests with actual-payment deadlines.
+`payment-deadline-history.xml` covers requests with actual-payment deadlines.
 Bitkit keeps their lifecycle and paid-period history, and subscription cancellation,
 but does not accept them, offer payments, or schedule payment reminders. The journey
-requires a controlled rc56 peer to prepare the accepted and paid records; repository
+requires a controlled shared-runtime peer to prepare the accepted and paid records; repository
 tests cover these states without sending funds. On Android, unpaid history rows show
 lifecycle labels, while paid rows show subscription names, notes, or dates. Active
 subscriptions are opened from Overview. The journeys record each fixture's payment
@@ -72,3 +97,9 @@ subscription must have no end date so cancellation is available. The proposal re
 must explain that its payment details are unsupported and offer no Subscribe control.
 
 `automatic-presentation.xml` uses the same two-wallet setup and leaves the payer in the foreground. `confirmation-controls.xml` checks Android's fixed amount and confirmation footer on a compact screen with large text; it is not ported to iOS because the confirmation layout is different there.
+
+Incoming preparation uses the existing Send confirmation sheet with saved sender, amount and note.
+Its payment control stays disabled and loading until fresh resolution and wallet validation finish.
+Closing during preparation leaves the request pending and suppresses automatic reopening for the
+current identity's app session; Pay from the request list or details explicitly retries it.
+An unfunded wallet can verify loading followed by native rejection, not an enabled payment control.

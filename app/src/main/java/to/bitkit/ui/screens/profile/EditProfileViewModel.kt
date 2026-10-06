@@ -268,6 +268,7 @@ class EditProfileViewModel @Inject constructor(
             )
         }
         try {
+            privatePaykitRepo.beginProfileDeletion()
             privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
             val result = pubkyRepo.deleteProfileWithSessionRetry()
             if (result.isSuccess) {
@@ -283,6 +284,7 @@ class EditProfileViewModel @Inject constructor(
                 _uiState.update { it.copy(showDeleteFailureDialog = true) }
             }
         } finally {
+            withContext(NonCancellable) { privatePaykitRepo.endProfileDeletion() }
             _uiState.update { it.copy(isDeleting = false) }
         }
     }

@@ -271,6 +271,7 @@ fun ContentView(
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val context = LocalContext.current
@@ -539,6 +540,7 @@ fun ContentView(
                                 walletViewModel = walletViewModel,
                                 startDestination = sheet.route,
                                 hardwareWalletId = sheet.hardwareWalletId,
+                                preparingRequest = sheet.preparingRequest,
                                 hwSendViewModel = hwSendViewModel,
                             )
                         }
@@ -694,7 +696,6 @@ fun ContentView(
                         onHomeCalculatorInputActiveChanged = { isHomeCalculatorInputActive = it },
                     )
 
-                    val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
                     LaunchedEffect(
                         isPaykitEnabled,
@@ -773,6 +774,11 @@ fun ContentView(
             )
 
             BottomSheetOverlayHost(state = bottomSheetOverlayState)
+
+            val hasOverlaySheet = bottomSheetOverlayState.entries.isNotEmpty() || drawerState.isOpen
+            LaunchedEffect(hasOverlaySheet) {
+                appViewModel.setPaymentRequestOverlayVisible(hasOverlaySheet)
+            }
         }
     }
 }
@@ -858,7 +864,6 @@ private fun RootNavHost(
                             Routes.SubscriptionDetail(
                                 paymentRequestId = it.paymentRequestId,
                                 counterparty = it.counterparty,
-                                counterpartyReceiverPath = it.counterpartyReceiverPath,
                             )
                         )
                     },
@@ -875,7 +880,6 @@ private fun RootNavHost(
                     id = PaykitSubscriptionId(
                         paymentRequestId = route.paymentRequestId,
                         counterparty = route.counterparty,
-                        counterpartyReceiverPath = route.counterpartyReceiverPath,
                     ),
                     onBack = { navController.popBackStack() },
                 )
@@ -1435,7 +1439,6 @@ private fun NavGraphBuilder.contacts(
                         Sheet.Receive(
                             route = ReceiveRoute.PaymentRequestAmount(
                                 publicKey = it.publicKey,
-                                receiverPath = it.receiverPath,
                             )
                         )
                     )
@@ -2194,14 +2197,12 @@ fun NavController.navigateToLanguageSettings() = navigateTo(Routes.LanguageSetti
 private fun PaykitPaymentRequestId.toRoute() = Routes.PaymentRequestDetails(
     paymentRequestId = paymentRequestId,
     counterparty = counterparty,
-    counterpartyReceiverPath = counterpartyReceiverPath,
     billingPeriodStartsAt = billingPeriodStartsAt,
 )
 
 private fun Routes.PaymentRequestDetails.toId() = PaykitPaymentRequestId(
     paymentRequestId = paymentRequestId,
     counterparty = counterparty,
-    counterpartyReceiverPath = counterpartyReceiverPath,
     billingPeriodStartsAt = billingPeriodStartsAt,
 )
 
@@ -2529,14 +2530,12 @@ sealed interface Routes {
     data class SubscriptionDetail(
         val paymentRequestId: String,
         val counterparty: String,
-        val counterpartyReceiverPath: String,
     ) : Routes.InternalOnly
 
     @Serializable
     data class PaymentRequestDetails(
         val paymentRequestId: String,
         val counterparty: String,
-        val counterpartyReceiverPath: String,
         val billingPeriodStartsAt: String? = null,
     ) : Routes.InternalOnly
 

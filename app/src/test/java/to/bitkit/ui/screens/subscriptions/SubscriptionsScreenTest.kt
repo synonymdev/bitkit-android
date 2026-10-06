@@ -359,7 +359,6 @@ class SubscriptionsScreenTest {
     ) = PaykitSubscription(
         paymentRequestId = "subscription",
         counterparty = "pubkypayee",
-        counterpartyReceiverPath = "bitkit/server",
         amountValue = "0.001",
         amountSats = amountSats,
         note = "Subscription",

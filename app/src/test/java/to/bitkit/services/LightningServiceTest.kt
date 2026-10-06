@@ -15,9 +15,11 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.lightningdevkit.ldknode.AddressInfo
 import org.lightningdevkit.ldknode.AddressType
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
+import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -57,6 +59,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import com.synonym.bitkitcore.AddressType as BitkitAddressType
 
 private const val VERIFY_TIMEOUT_MS = 2_000L
 private const val RELEASE_GATE_PROBE_MS = 200L
@@ -105,6 +108,33 @@ class LightningServiceTest : BaseUnitTest() {
         whenever(node.listChannels()).thenReturn(listOf(readyButNotUsable))
 
         assertFalse(sut.canReceive())
+    }
+
+    @Test
+    fun `address derivation forwards companion account and keychain without changing account zero`() = test {
+        val onchain = mock<OnchainPayment>()
+        whenever(node.onchainPayment()).thenReturn(onchain)
+        val address = AddressInfo(201u, "derived-address", KeychainKind.INTERNAL)
+        whenever(onchain.addressInfosForAccount(AddressType.NATIVE_SEGWIT, 5u, KeychainKind.INTERNAL, 200u, 200u))
+            .thenReturn(listOf(address))
+        whenever(onchain.addressInfosForAccount(AddressType.NATIVE_SEGWIT, 0u, KeychainKind.EXTERNAL, 0u, 200u))
+            .thenReturn(listOf(address))
+
+        val companion = sut.addressInfosForType(BitkitAddressType.P2WPKH, true, 200, 200, accountIndex = 5u)
+        val primary = sut.addressInfosForType(BitkitAddressType.P2WPKH, false, 0, 200)
+
+        assertEquals(listOf(AddressDerivationInfo("derived-address", 201)), companion)
+        assertEquals(companion, primary)
+        verify(onchain).addressInfosForAccount(AddressType.NATIVE_SEGWIT, 5u, KeychainKind.INTERNAL, 200u, 200u)
+        verify(onchain).addressInfosForAccount(AddressType.NATIVE_SEGWIT, 0u, KeychainKind.EXTERNAL, 0u, 200u)
+    }
+
+    @Test
+    fun `listOnchainWalletAccounts returns registered accounts from LDK`() = test {
+        val accounts = listOf(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 5u))
+        whenever(node.listOnchainWalletAccounts()).thenReturn(accounts)
+
+        assertEquals(accounts, sut.listOnchainWalletAccounts())
     }
 
     @Test

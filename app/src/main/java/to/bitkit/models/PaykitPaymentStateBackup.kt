@@ -17,6 +17,7 @@ data class PaykitPaymentStateBackup(
     val subscriptions: Map<String, Subscription>,
     val pendingProofs: List<Proof>,
     val activeOnchainAttempt: ActiveOnchainAttemptBackup? = null,
+    val acceptedOneTimeRequests: Map<String, Set<PaykitPaymentRequestId>>? = null,
 ) {
     @Serializable
     data class Subscription(
@@ -42,6 +43,7 @@ data class PaykitPaymentStateBackup(
         val identity: String,
         val requestId: PaykitPaymentRequestId,
         val paymentEndpointIdentifier: String,
+        val paymentAppId: String,
         val kind: String,
         val paymentStarted: Boolean,
         val paymentIdentifier: String? = null,
@@ -57,6 +59,7 @@ data class PaykitPaymentStateBackup(
             identity = proof.identity,
             requestId = proof.requestId,
             paymentEndpointIdentifier = proof.paymentEndpointIdentifier,
+            paymentAppId = proof.paymentAppId,
             kind = proof.kind.type,
             paymentStarted = proof.paymentStarted,
             paymentIdentifier = proof.paymentIdentifier,
@@ -73,6 +76,7 @@ data class PaykitPaymentStateBackup(
             identity = identity,
             requestId = requestId.copy(billingPeriodStartsAt = billingPeriod?.startsAt?.toString()),
             paymentEndpointIdentifier = paymentEndpointIdentifier,
+            paymentAppId = paymentAppId,
             kind = requireNotNull(PaykitPaymentProofKind.entries.find { it.type == kind }),
             paymentStarted = paymentStarted,
             paymentIdentifier = paymentIdentifier,
