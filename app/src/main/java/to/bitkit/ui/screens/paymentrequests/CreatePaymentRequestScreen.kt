@@ -48,6 +48,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
+import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.ui.LocalCurrencies
@@ -505,17 +506,27 @@ fun PaymentRequestSentScreen(
     onDone: () -> Unit,
 ) {
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
+    val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contact = contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, request.counterparty) }
-    PaymentRequestSentContent(request = request, contact = contact, onDone = onDone)
+    PaymentRequestSentContent(
+        request = request,
+        history = history.toImmutableList(),
+        contact = contact,
+        onDone = onDone,
+    )
 }
 
 @Composable
 internal fun PaymentRequestSentContent(
     modifier: Modifier = Modifier,
     request: PaykitPaymentRequest,
+    history: ImmutableList<PaykitPaymentRequest>,
     contact: PubkyProfile?,
     onDone: () -> Unit,
 ) {
+    val currentRequest = history.firstOrNull {
+        it.id == request.id && it.direction == PaykitPaymentRequestDirection.Outgoing
+    } ?: request
     Column(
         horizontalAlignment = Alignment.Start,
         modifier = modifier
@@ -543,7 +554,7 @@ internal fun PaymentRequestSentContent(
         VerticalSpacer(12.dp)
         BodyM(
             text = stringResource(
-                if (request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
+                if (currentRequest.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
                     R.string.wallet__payment_request_sent_description
                 } else {
                     R.string.wallet__payment_request_queued_description
@@ -555,15 +566,9 @@ internal fun PaymentRequestSentContent(
         )
         VerticalSpacer(24.dp)
         PaymentRequestCard(
-            request = request,
+            request = currentRequest,
             contact = contact,
-            compactSubtitle = request.note?.takeIf(String::isNotBlank) ?: if (
-                request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent
-            ) {
-                stringResource(R.string.wallet__payment_request_waiting)
-            } else {
-                stringResource(R.string.wallet__payment_request_sending)
-            },
+            compactSubtitle = currentRequest.note?.takeIf(String::isNotBlank) ?: paymentRequestStatus(currentRequest),
         )
         VerticalSpacer(32.dp)
         PrimaryButton(
@@ -603,6 +608,7 @@ private val previewCreatedRequest = PaykitPaymentRequest(
     createdAt = Instant.parse("2027-01-15T08:00:00Z"),
     expiresAt = previewDraft.expiresAt,
     acceptedPaymentEndpointIdentifiers = listOf("btc-lightning-bolt11"),
+    direction = PaykitPaymentRequestDirection.Outgoing,
 )
 
 @Preview(showSystemUi = true)
@@ -647,6 +653,7 @@ private fun PaymentRequestSentPreview() {
         BottomSheetPreview {
             PaymentRequestSentContent(
                 request = previewCreatedRequest,
+                history = persistentListOf(),
                 contact = PubkyProfile.placeholder(previewTarget.publicKey),
                 onDone = {},
                 modifier = Modifier.sheetHeight(),

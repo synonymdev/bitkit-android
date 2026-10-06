@@ -19,6 +19,11 @@ The accepted journey uses:
 Rejected fixture shapes stay in unit tests because Bitkit intentionally does not present requests that fail the contract gate.
 
 `request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked, and the payer holds enough balance to pay 21,000 sats.
+Its Android-only Sent receipt checks leave the 5,000 sats request open through payment and the
+existing foreground synchronization. A protocol proof changes the note-free subtitle to
+"Proof submitted"; a nonblank note still takes precedence. This is not inferred from a chain
+payment. iOS keeps a static note/date receipt with no lifecycle subtitle, so these receipt-status
+steps do not apply there.
 
 `contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
 
