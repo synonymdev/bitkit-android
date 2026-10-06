@@ -33,6 +33,8 @@ import to.bitkit.env.Env
 import to.bitkit.models.HwWalletId
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.Toast
+import to.bitkit.models.addressTypeForDerivationPath
+import to.bitkit.models.toAccountType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
 import to.bitkit.repositories.TrezorRepo
@@ -684,9 +686,21 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(watcher = it.watcher.copy(selectedAccountType = type)) }
     }
 
+    /**
+     * Copies the last fetched xpub into the watcher and selects the account type of its derivation
+     * path, since a normalized xpub/tpub would otherwise be detected as legacy.
+     */
     fun populateWatcherFromXpub() {
-        val xpub = trezorRepo.state.value.lastPublicKey?.xpub ?: return
-        _uiState.update { it.copy(watcher = it.watcher.copy(extendedKey = xpub)) }
+        val publicKey = trezorRepo.state.value.lastPublicKey ?: return
+        val accountType = addressTypeForDerivationPath(publicKey.path)?.toAccountType()
+        _uiState.update {
+            it.copy(
+                watcher = it.watcher.copy(
+                    extendedKey = publicKey.xpub,
+                    selectedAccountType = accountType ?: it.watcher.selectedAccountType,
+                )
+            )
+        }
     }
 
     fun startWatcher() {
