@@ -6,8 +6,8 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
@@ -163,6 +163,52 @@ class SendPendingViewModelTest : BaseUnitTest() {
             advanceUntilIdle()
             assertNull(sut.uiState.value.recoveredTxid)
         }
+    }
+
+    @Test
+    fun `transfer pending follows exact funded order only after durable completion`() = test {
+        val original = pendingOriginal().copy(
+            isTransfer = true,
+            orderId = "original-order",
+            transferContext = to.bitkit.repositories.OnchainTransferContext(1_200uL, 20_000uL, 1_000uL, 200uL),
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        sut.retryOriginal(2uL) { _, _ -> Result.success(OnchainSendOutcome.Accepted(original.txid!!)) }
+        advanceUntilIdle()
+        assertNull(sut.uiState.value.recoveredTxid)
+        assertNull(sut.uiState.value.recoveredTransfer)
+        val winner = "cd".repeat(32)
+        val observed = original.copy(
+            txid = winner,
+            candidateTxids = original.candidateTxids + winner,
+            evidence = OnchainSendEvidence.Observed,
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(observed)
+        attemptUpdates.value++
+        advanceUntilIdle()
+        assertNull(sut.uiState.value.recoveredTransfer)
+        val complete = observed.copy(localFollowupComplete = true)
+        listOf(
+            complete.copy(orderId = "different-order"),
+            complete.copy(transferContext = original.transferContext!!.copy(txTotalSats = 1_300uL)),
+            complete.copy(attemptId = "different-attempt"),
+            complete.copy(walletIndex = 1),
+        ).forEach { unrelated ->
+            whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(unrelated)
+            attemptUpdates.value++
+            advanceUntilIdle()
+            assertNull(sut.uiState.value.recoveredTransfer)
+        }
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(complete)
+        attemptUpdates.value++
+        advanceUntilIdle()
+        assertEquals(winner, sut.uiState.value.currentTxid)
+        assertEquals(complete, sut.uiState.value.recoveredTransfer)
+        assertNull(sut.uiState.value.recoveredTxid)
+        assertNull(sut.uiState.value.recoveryAttempt)
+        org.mockito.kotlin.verify(activityRepo, org.mockito.kotlin.never()).syncActivities()
     }
 
     private fun pendingOriginal() = OnchainSendAttempt(

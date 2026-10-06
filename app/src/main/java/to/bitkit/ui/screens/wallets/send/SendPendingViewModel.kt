@@ -68,7 +68,7 @@ class SendPendingViewModel @Inject constructor(
                     attempt?.candidateTxids?.any { it.equals(txid, true) } == true
                 if (matchesOriginalWallet && hasOriginalReceipt && attempt != null) {
                     if (attempt.isUnresolved) _uiState.update { it.copy(recoveryAttempt = attempt) }
-                    observeOriginalOrdinaryCompletion(attempt)
+                    observeOriginalCompletion(attempt)
                 }
             }
         }
@@ -79,19 +79,21 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
-    private fun observeOriginalOrdinaryCompletion(original: OnchainSendAttempt) {
-        // Shop and transfer completion have their own proof/order resolution routes.
-        if (original.requestId != null || original.isTransfer) return
+    private fun observeOriginalCompletion(original: OnchainSendAttempt) {
+        // Shop completion has its own proof resolution route.
+        if (original.requestId != null) return
+        if (original.isTransfer && (original.orderId == null || original.transferContext == null)) return
         viewModelScope.launch {
             lightningRepo.onchainSendAttemptUpdates.collect {
                 runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.onSuccess { current ->
                     if (current == null || !current.hasPositiveEvidence || !current.localFollowupComplete) {
                         return@onSuccess
                     }
-                    if (current.matchesOriginalOrdinaryRoute(original)) {
+                    if (current.matchesOriginalRoute(original)) {
                         _uiState.update {
                             it.copy(
-                                recoveredTxid = current.txid,
+                                recoveredTxid = current.txid.takeUnless { current.isTransfer },
+                                recoveredTransfer = current.takeIf { current.isTransfer },
                                 currentTxid = current.txid,
                                 recoveryAttempt = null,
                                 recoveryError = null,
@@ -103,14 +105,15 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
-    private fun OnchainSendAttempt.matchesOriginalOrdinaryRoute(original: OnchainSendAttempt): Boolean {
+    private fun OnchainSendAttempt.matchesOriginalRoute(original: OnchainSendAttempt): Boolean {
         val sameOperation = attemptId == original.attemptId && amountSats == original.amountSats &&
             address == original.address && originalInputs == original.originalInputs
         val sameWallet = walletId == original.walletId && walletIndex == original.walletIndex
         val sameCandidateFamily = candidateTxids.any { it.equals(original.txid, true) } &&
             candidateTxids.any { it.equals(txid, true) }
-        val ordinaryPayment = requestId == null && !isTransfer
-        return sameOperation && sameWallet && sameCandidateFamily && ordinaryPayment
+        val samePurpose = requestId == null && isTransfer == original.isTransfer &&
+            orderId == original.orderId && transferContext == original.transferContext
+        return sameOperation && sameWallet && sameCandidateFamily && samePurpose
     }
 
     fun retryOriginal(
@@ -129,15 +132,22 @@ class SendPendingViewModel @Inject constructor(
                 val result = runSuspendCatching { retry(original, feeRateSatsPerVByte).getOrThrow() }
                 result.onSuccess { outcome ->
                     _uiState.update {
-                        if (it.recoveredTxid != null) return@update it
+                        if (it.recoveredTxid != null || it.recoveredTransfer != null) return@update it
                         it.copy(
-                            recoveredTxid = (outcome as? OnchainSendOutcome.Accepted)?.txid,
+                            recoveredTxid = (outcome as? OnchainSendOutcome.Accepted)?.txid
+                                .takeUnless { original.isTransfer },
                             recoveryError = (outcome as? OnchainSendOutcome.Rejected)?.reason,
                             currentTxid = outcome.txid,
                         )
                     }
                 }.onFailure { error ->
-                    _uiState.update { if (it.recoveredTxid == null) it.copy(recoveryError = error.message) else it }
+                    _uiState.update {
+                        if (it.recoveredTxid == null && it.recoveredTransfer == null) {
+                            it.copy(recoveryError = error.message)
+                        } else {
+                            it
+                        }
+                    }
                 }
             } finally {
                 _uiState.update { it.copy(isRecovering = false) }
@@ -190,4 +200,5 @@ data class SendPendingUiState(
     val recoveryError: String? = null,
     val currentTxid: String? = null,
     val recoveredTxid: String? = null,
+    val recoveredTransfer: OnchainSendAttempt? = null,
 )

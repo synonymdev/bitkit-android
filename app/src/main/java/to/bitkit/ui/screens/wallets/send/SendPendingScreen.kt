@@ -7,8 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,8 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -79,6 +79,7 @@ fun SendPendingScreen(
     onRecovered: (String, Long) -> Unit,
     savedStateHandle: SavedStateHandle,
     onNavigateToPin: () -> Unit,
+    onRecoveredTransfer: (OnchainSendAttempt) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -106,6 +107,9 @@ fun SendPendingScreen(
 
     uiState.recoveredTxid?.let { winner ->
         LaunchedEffect(winner) { onRecovered(winner, uiState.amount) }
+    }
+    uiState.recoveredTransfer?.let { winner ->
+        LaunchedEffect(winner.attemptId, winner.txid) { onRecoveredTransfer(winner) }
     }
     RecoveryAuthorization(
         uiState,

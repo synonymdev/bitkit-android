@@ -4399,6 +4399,20 @@ class AppViewModel @Inject constructor(
         return result
     }
 
+    fun onRecoveredTransfer(original: OnchainSendAttempt) {
+        viewModelScope.launch {
+            runSuspendCatching {
+                val current = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
+                if (current != original || !current.isTransfer || current.requestId != null) return@runSuspendCatching
+                if (!current.hasPositiveEvidence || !current.localFollowupComplete) return@runSuspendCatching
+                if (current.txid == null || current.transferContext == null) return@runSuspendCatching
+                val orderId = current.orderId ?: return@runSuspendCatching
+                hideSheet()
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))
+            }.onFailure { Logger.warn("Failed to open recovered transfer", it, context = TAG) }
+        }
+    }
+
     fun showPendingTransfer(attempt: OnchainSendAttempt) {
         if (!attempt.isTransfer || attempt.orderId == null || !attempt.blocksNextSend) return
         showSheet(

@@ -8396,6 +8396,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `completed original transfer opens its funded order without another send`() = test {
+        val txid = "ab".repeat(32)
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original-funding", requestId = null,
+            orderId = "original-order", address = "bcrt1qoriginalorder", amountSats = 1_000uL,
+            isMaxAmount = false, feeRateSatsPerVByte = 2uL, isTransfer = true,
+            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Observed,
+            txid = txid, localFollowupComplete = true,
+            transferContext = to.bitkit.repositories.OnchainTransferContext(1_200uL, 20_000uL),
+        )
+        sut.mainScreenEffect.test {
+            whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original.copy(localFollowupComplete = false))
+            sut.onRecoveredTransfer(original)
+            advanceUntilIdle()
+            expectNoEvents()
+            whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original.copy(orderId = "different-order"))
+            sut.onRecoveredTransfer(original)
+            advanceUntilIdle()
+            expectNoEvents()
+            whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+            sut.onRecoveredTransfer(original)
+            advanceUntilIdle()
+            assertEquals(MainScreenEffect.Navigate(Routes.OrderDetail("original-order")), awaitItem())
+        }
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
     fun `retained transfer Pending opens original funding recovery without changing send inputs`() = test {
         val original = OnchainSendAttempt(
             walletId = WalletScope.default, attemptId = "original-funding", requestId = null,
