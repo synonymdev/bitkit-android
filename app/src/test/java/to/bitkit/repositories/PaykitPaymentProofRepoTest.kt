@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.BroadcastException
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
@@ -252,7 +253,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.isEmpty())
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
         assertFalse(storedProofs.single().paymentStarted)
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -343,6 +344,50 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         assertTrue(storedProofs.isEmpty())
         verify(paykitSdkService).processPendingPrivateMessages()
+    }
+
+    @Test
+    fun `completed payments remain reconcilable after their payment deadline`() = test {
+        val deadline = PaymentDeadline.At("2000-01-01T00:00:00Z")
+        val record = paymentRequestRecord().let {
+            it.copy(
+                state = PaymentRequestLifecycleState.ACCEPTED,
+                terms = requireNotNull(it.terms).copy(paymentDeadline = deadline),
+            )
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+            .thenReturn(record)
+        val lightning = readyLightningProof(PAYMENT_REQUEST_ID)
+        val onchain = lightning.copy(
+            kind = PaykitPaymentProofKind.Onchain,
+            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+            paymentIdentifier = "ab".repeat(32),
+            proofData = "ab".repeat(32),
+            onchainAddress = ONCHAIN_ADDRESS,
+            onchainAmountSats = paymentRequest(MethodId.P2wpkh.rawValue).amountSats,
+        )
+
+        listOf(lightning, onchain).forEach { proof ->
+            if (proof.kind == PaykitPaymentProofKind.Onchain) {
+                whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(
+                    acceptedAttempt(paymentRequest(MethodId.P2wpkh.rawValue), requireNotNull(proof.paymentIdentifier)),
+                )
+            }
+            storedProofs = listOf(proof)
+
+            paymentProofRepo().reconcile()
+
+            assertTrue(storedProofs.isEmpty())
+            verify(paykitSdkService).submitPaymentProof(
+                counterparty = eq(COUNTERPARTY),
+                paymentRequestId = eq(PAYMENT_REQUEST_ID),
+                paymentAppId = eq("bitkit"),
+                paymentEndpointIdentifier = eq(proof.paymentEndpointIdentifier),
+                proofJson = any(),
+                billingPeriod = isNull(),
+            )
+        }
     }
 
     @Test
@@ -539,6 +584,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val errors = listOf(
             ServiceError.NodeNotSetup(),
             ServiceError.NodeNotStarted(),
+            to.bitkit.utils.AppError(ServiceError.PaymentDeadlineExpired()),
             NodeNotRunningError("payInvoice", NodeLifecycleState.Stopped),
             NodeRunTimeoutError("payInvoice"),
             NodeException.NotRunning("stopped"),
@@ -1415,7 +1461,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService).submitPaymentProof(any(), any(), any(), eq(MethodId.P2wpkh.rawValue),
             eq("""{"data":"$txid","type":"bitcoin-onchain-txid"}"""), isNull())
         assertTrue(storedProofs.isEmpty())
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -1433,7 +1479,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.single().onchainAcceptanceVerified)
         assertEquals(walletId, storedProofs.single().onchainWalletId)
         assertEquals(request.id, repo.onchainPaymentResolutions.value.single().requestId)
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -1453,7 +1499,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertNull(storedProofs.single().proofData)
         assertFalse(storedProofs.single().onchainAcceptanceVerified)
         verify(hwWalletRepo, times(2)).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats)
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
         verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
     }
 
@@ -1506,10 +1552,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(Result.failure(BroadcastException.ElectrumException("response lost after dispatch")))
         val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock())
         send.signAndBroadcast(HwSendRequest(walletId, ONCHAIN_ADDRESS, request.amountSats, 2uL, emptyList(),
-            request.id, LOCAL_IDENTITY)) {
+            request.id, LOCAL_IDENTITY), prepareContactPayment = {
             repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
             true
-        }
+        })
         advanceUntilIdle()
         assertFalse(send.uiState.value.isSigning)
         assertFalse(send.uiState.value.isBroadcastUnresolved)
@@ -1548,7 +1594,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain)
             .exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress)
         verify(hwWalletRepo, never()).observeExactTransaction(any(), any(), any(), any())
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     private fun TestScope.observeRequestStateChanges() {

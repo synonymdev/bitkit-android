@@ -399,6 +399,10 @@ fun SendSheet(
                                 walletId,
                             )
                         },
+                        onPaymentDeadlineExpired = { attempted ->
+                            appViewModel.onHardwarePaymentDeadlineExpired(attempted, uiState.incomingPaymentRequestId, paymentIdentity, walletId)
+                        },
+                        paymentDeadlineAt = appViewModel.hardwarePaymentDeadlineAt,
                         onBack = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle

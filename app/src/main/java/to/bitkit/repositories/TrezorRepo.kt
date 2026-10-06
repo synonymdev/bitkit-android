@@ -96,6 +96,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @OptIn(ExperimentalTime::class)
@@ -612,12 +613,14 @@ class TrezorRepo @Inject constructor(
 
     suspend fun broadcastRawTx(
         serializedTx: String,
+        paymentDeadlineAt: Instant? = null,
     ): Result<String> = withContext(ioDispatcher) {
         runSuspendCatching {
             awaitSetup()
             trezorService.broadcastRawTx(
                 serializedTx = serializedTx,
                 electrumUrl = currentElectrumUrl(),
+                paymentDeadlineAt = paymentDeadlineAt,
             )
         }.onFailure {
             Logger.error("Trezor broadcastRawTx failed", it, context = TAG)

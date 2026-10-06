@@ -195,6 +195,7 @@ import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import java.math.BigDecimal
 import java.net.URLEncoder
@@ -456,8 +457,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
         whenever { paykitPaymentRequestRepo.ensurePaymentAllowed(any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.claimForPayment(any()) }.thenReturn(Result.success(Unit))
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer {
-            if (it.getArgument<suspend () -> Boolean>(2)()) {
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), anyOrNull(), any()) }.doSuspendableAnswer {
+            if (it.getArgument<suspend () -> Boolean>(3)()) {
                 lightningRepo.payInvoice(it.getArgument(0), it.getArgument<ULong?>(1))
             } else {
                 Result.failure(PaymentAbortedBeforeSend())
@@ -1846,7 +1847,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val preparation = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
         whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { preparation.await() }
         whenever(privatePaykitRepo.beginPaymentRequest(reminder)).thenReturn(
-            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList),
         )
         val bolt11 = "lnbcrt1manualrequest"
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
@@ -7195,6 +7196,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
         )
         verify(
             paykitPaymentProofRepo
@@ -7345,6 +7347,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
         )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
     }
@@ -7905,6 +7908,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hardware queue expiry only releases an original payment that never broadcast`() = test {
+        pubkyPublicKey.value = testPublicKey
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        val request = paymentRequest().copy(paymentDeadlineAt = Instant.parse("2026-10-06T12:00:00Z"))
+        val privateContext = privatePaymentContext(7uL)
+        val sheet = Sheet.Send(SendRoute.HardwareSign)
+        whenever(paykitPaymentProofRepo.failHardwareOnchainPaymentBeforeDispatch(
+            request, "hardware-wallet", testPublicKey, false,
+        )).thenReturn(true)
+        for (priorAttempt in listOf(false, true)) {
+            clearInvocations(paykitPaymentProofRepo, privatePaykitRepo, paykitPaymentRequestRepo, toastManager)
+            setActiveContactPaymentContext(testPublicKey, privateContext, request)
+            setSendState(SendUiState(hardwareWalletId = "hardware-wallet"))
+            sut.showSheet(sheet)
+
+            sut.onHardwarePaymentDeadlineExpired(priorAttempt)
+            runCurrent()
+
+            verify(paykitPaymentRequestRepo, never()).ensurePaymentAllowed(any())
+            verify(toastManager).enqueue(any())
+            verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
+            if (priorAttempt) {
+                assertEquals(sheet, sut.currentSheet.value)
+                verify(paykitPaymentProofRepo, never()).failHardwareOnchainPaymentBeforeDispatch(any(), any(), any(), any())
+                verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+            } else {
+                assertNull(sut.currentSheet.value)
+                verify(paykitPaymentProofRepo).failHardwareOnchainPaymentBeforeDispatch(request, "hardware-wallet", testPublicKey, false)
+                verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+            }
+        }
+    }
+
+    @Test
     fun `hardware authorization denial before first broadcast releases private payment details`() = test {
         pubkyPublicKey.value = testPublicKey
         val request = paymentRequest()
@@ -8163,7 +8200,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         ).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-        )
+                paymentDeadlineAt = anyOrNull(),
+            )
     }
 
     @Test
@@ -8264,7 +8302,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         ).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-        )
+                paymentDeadlineAt = anyOrNull(),
+            )
     }
 
     @Test
@@ -8294,7 +8333,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         ).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-        )
+                paymentDeadlineAt = anyOrNull(),
+            )
     }
 
     @Test
@@ -8664,6 +8704,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `definite onchain failure after send attempt releases private payment details`() = test {
         for (error in listOf(
             NodeException.InvalidAddress("invalid address"),
+            AppError(ServiceError.PaymentDeadlineExpired()),
             NodeException.InsufficientFunds("insufficient funds"),
             NodeException.WalletOperationFailed("wallet"),
             NodeException.PersistenceFailed("io"),
@@ -8922,6 +8963,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
         )
     }
 
@@ -8966,6 +9008,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
         )
     }
 
@@ -9030,6 +9073,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
         )
     }
 
@@ -9054,6 +9098,52 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+    }
+
+    @Test
+    fun `payment deadline crossed during LNURL callback prevents Lightning submission`() = test {
+        val request = paymentRequest().copy(paymentDeadlineAt = Instant.parse("2026-10-06T12:00:00Z"))
+        val privateContext = privatePaymentContext(7uL)
+        val lnurl = LnurlPayData(
+            uri = "lnurl1deadline",
+            callback = "https://example.com/callback",
+            minSendable = 1_000uL,
+            maxSendable = 100_000_000uL,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(lightningRepo.fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(request.amountSats), null))
+            .doSuspendableAnswer {
+                whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
+                    .thenReturn(Result.failure(PaykitPaymentRequestError.RequestExpired))
+                Result.success(lightningInvoice("lnbcrt1deadline", request.amountSats))
+            }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = lnurl.uri,
+                amount = request.amountSats,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(lnurl),
+                isPaymentRequest = true,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).failLightningPayment("010203")
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        verify(lightningRepo).payInvoice(any(), anyOrNull(), eq(request.paymentDeadlineAt), any())
     }
 
     @Test
@@ -9093,6 +9183,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             orderId = anyOrNull(),
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
         )
     }
 
@@ -10052,6 +10143,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 orderId = anyOrNull(),
                 transferContext = anyOrNull(),
                 payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)

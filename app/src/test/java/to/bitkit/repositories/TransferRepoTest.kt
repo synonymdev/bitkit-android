@@ -129,8 +129,9 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()
-        )
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+            )
         assertEquals(attempt, lightningRepo.currentOnchainSendAttempt())
     }
 
@@ -181,8 +182,9 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()
-        )
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+            )
         assertNotNull(restarted)
     }
 
@@ -235,8 +237,9 @@ class TransferRepoTest : BaseUnitTest() {
         assertEquals(125_000L, persisted?.preTransferOnchainSats)
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()
-        )
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+            )
     }
 
     @Test

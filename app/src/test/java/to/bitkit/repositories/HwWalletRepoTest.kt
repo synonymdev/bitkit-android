@@ -181,7 +181,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         finish.complete(Unit)
         assertTrue(result.await().getOrThrow())
         verify(trezorRepo).getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -209,7 +209,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             .completeObservedHardwarePayment(HARDWARE_WALLET_ID, txid, address, amount, 1000uL, 2uL)
         verify(trezorRepo, times(2))
             .getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -225,7 +225,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertTrue(sut.observeExactTransaction(HARDWARE_WALLET_ID, txid).isFailure)
         assertTrue(sut.observeExactTransaction(HIDDEN_WALLET_ID, txid).isFailure)
         verify(trezorRepo, times(2)).getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -239,7 +239,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
             .thenReturn(Result.success(incoming))
         assertFalse(createRepo().observeExactTransaction(HARDWARE_WALLET_ID, txid).getOrThrow())
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     private fun passphraseCapableFeatures(): TrezorFeatures =
@@ -2284,7 +2284,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
         verify(trezorRepo, never()).disconnectStaleSession(any())
     }
 
@@ -2314,7 +2314,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
         assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -2374,7 +2374,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo).disconnectStaleSession("dev1")
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -2415,7 +2415,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo, never()).disconnectStaleSession(any())
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test

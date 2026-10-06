@@ -40,8 +40,11 @@ import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.HwErrorPresenter
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @HiltViewModel
 class HwSendViewModel @Inject constructor(
@@ -50,6 +53,7 @@ class HwSendViewModel @Inject constructor(
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val coreService: CoreService,
     private val activityRepo: ActivityRepo,
+    private val clock: Clock = Clock.System,
 ) : ViewModel() {
     private companion object {
         const val TAG = "HwSendViewModel"
@@ -81,6 +85,7 @@ class HwSendViewModel @Inject constructor(
         request: HwSendRequest,
         prepareContactPayment: suspend () -> Boolean = { true },
         authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
+        onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
     ) {
         if (pendingResult.value != null || _uiState.value.isSigning || signingJob?.isActive == true) return
         if (pendingBroadcast?.matches(request) == false) return
@@ -112,13 +117,10 @@ class HwSendViewModel @Inject constructor(
                         payment = payment.copy(isPreparedForBroadcast = true)
                         pendingBroadcast = payment
                     }
-                    if (!authorizeContactPayment(payment.hasAttemptedBroadcast)) return@runCatching
-                    _uiState.update { it.copy(isBroadcastUnresolved = true) }
-                    payment = payment.copy(hasAttemptedBroadcast = true)
-                    pendingBroadcast = payment
-                    val result = withTimeout(BROADCAST_TIMEOUT) {
-                        hwWalletRepo.broadcastFunding(payment.signedTx).getOrThrow()
+                    if (!authorizeBroadcast(payment, authorizeContactPayment, onPaymentDeadlineExpired)) {
+                        return@runCatching
                     }
+                    val result = broadcast(payment, onPaymentDeadlineExpired) ?: return@runCatching
                     runSuspendCatching { persistResult(request, result) }
                         .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
                     pendingResult.update {
@@ -140,11 +142,50 @@ class HwSendViewModel @Inject constructor(
         }
     }
 
+    private suspend fun authorizeBroadcast(
+        payment: PendingHwSendBroadcast,
+        authorizeContactPayment: suspend (Boolean) -> Boolean,
+        onPaymentDeadlineExpired: suspend (Boolean) -> Unit,
+    ): Boolean {
+        if (payment.request.paymentDeadlineAt?.let { clock.now() > it } == true) {
+            _uiState.update { it.copy(isBroadcastUnresolved = payment.hasAttemptedBroadcast) }
+            onPaymentDeadlineExpired(payment.hasAttemptedBroadcast)
+            return false
+        }
+        val authorized = authorizeContactPayment(payment.hasAttemptedBroadcast)
+        if (!authorized && payment.hasAttemptedBroadcast &&
+            payment.request.paymentDeadlineAt?.let { clock.now() > it } == true
+        ) {
+            _uiState.update { it.copy(isBroadcastUnresolved = true) }
+        }
+        return authorized
+    }
+
+    private suspend fun broadcast(
+        payment: PendingHwSendBroadcast,
+        onPaymentDeadlineExpired: suspend (Boolean) -> Unit,
+    ): HwFundingBroadcastResult? {
+        _uiState.update { it.copy(isBroadcastUnresolved = true) }
+        pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)
+        return withTimeout(BROADCAST_TIMEOUT) {
+            hwWalletRepo.broadcastFunding(payment.signedTx, payment.request.paymentDeadlineAt)
+        }.getOrElse { error ->
+            if (generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }) {
+                pendingBroadcast = payment
+                _uiState.update { it.copy(isBroadcastUnresolved = payment.hasAttemptedBroadcast) }
+                onPaymentDeadlineExpired(payment.hasAttemptedBroadcast)
+                return null
+            }
+            throw error
+        }
+    }
+
     fun submitPassphrase(
         request: HwSendRequest,
         passphrase: String,
         prepareContactPayment: suspend () -> Boolean = { true },
         authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
+        onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
     ) {
         if (passphrase.isEmpty()) return
         val state = _uiState.value
@@ -159,7 +200,12 @@ class HwSendViewModel @Inject constructor(
                     .onSuccess {
                         if (!_uiState.value.isPassphraseRequired) return@onSuccess
                         _uiState.update { it.copy(isPassphraseRequired = false) }
-                        signAndBroadcast(request, prepareContactPayment, authorizeContactPayment)
+                        signAndBroadcast(
+                            request,
+                            prepareContactPayment,
+                            authorizeContactPayment,
+                            onPaymentDeadlineExpired,
+                        )
                     }
                     .onFailure { error ->
                         if (error is HwPassphraseMismatchError) {
@@ -387,6 +433,7 @@ data class HwSendRequest(
     val tags: List<String>,
     val paymentRequestId: PaykitPaymentRequestId? = null,
     val paymentIdentity: String? = null,
+    val paymentDeadlineAt: Instant? = null,
 )
 
 private data class PendingHwSendBroadcast(

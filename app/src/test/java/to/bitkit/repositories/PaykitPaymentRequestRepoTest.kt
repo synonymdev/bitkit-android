@@ -72,6 +72,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -633,6 +634,36 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `absolute payment deadlines preserve fractional seconds and include the deadline instant`() {
+        val deadline = START_TIME + 123.milliseconds
+        val record = paymentRequestRecord(paymentDeadline = PaymentDeadline.At(deadline.toString()))
+
+        listOf(deadline - 1.nanoseconds, deadline).forEach { now ->
+            val parsed = record.parseIncomingPaykitPaymentRequest(now) as PaykitPaymentRequestParseResult.Parsed
+            assertEquals(deadline, parsed.request.paymentDeadlineAt)
+            assertFalse(parsed.request.isExpired(now))
+        }
+        val expired = record.parseIncomingPaykitPaymentRequest(deadline + 1.nanoseconds)
+            as PaykitPaymentRequestParseResult.Rejected
+        assertEquals(PaykitPaymentRequest.ParseFailure.Expired, expired.reason)
+    }
+
+    @Test
+    fun `malformed and recurring payment deadlines remain non actionable`() {
+        val deadlines = listOf(
+            PaymentDeadline.At("not-a-timestamp"),
+            PaymentDeadline.At("2027-01-15T09:00:00+01:00"),
+            PaymentDeadline.PeriodStart(3600uL),
+        )
+
+        deadlines.forEach { deadline ->
+            val result = paymentRequestRecord(paymentDeadline = deadline).parseIncomingPaykitPaymentRequest(START_TIME)
+                as PaykitPaymentRequestParseResult.Rejected
+            assertEquals(PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline, result.reason)
+        }
+    }
+
+    @Test
     fun `peer intake failure does not drop received requests`() = test {
         val record = paymentRequestRecord()
         val error = mock<PrivateOperationError> {
@@ -665,7 +696,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 PaykitPaymentRequest.ParseFailure.NonActionableState,
             paymentRequestRecord().copy(terms = null) to PaykitPaymentRequest.ParseFailure.MissingTerms,
             paymentRequestRecord(asset = "BTC") to PaykitPaymentRequest.ParseFailure.UnsupportedAsset,
-            paymentRequestRecord(paymentDeadline = PaymentDeadline.At(clock.now().plus(1.seconds).toString())) to
+            paymentRequestRecord(paymentDeadline = PaymentDeadline.PeriodStart(3600uL)) to
                 PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline,
             paymentRequestRecord(amount = "not-bitcoin") to PaykitPaymentRequest.ParseFailure.InvalidAmount,
             paymentRequestRecord(amount = "184467440737.09551615") to
@@ -809,7 +840,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 paymentRequestRecord(
                     id = "deadline-$state",
                     state = state,
-                    paymentDeadline = PaymentDeadline.At(clock.now().toString()),
+                    paymentDeadline = PaymentDeadline.At((clock.now() - 1.seconds).toString()),
                 )
             },
         )
@@ -1042,7 +1073,14 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun `final authorization rechecks identity after asynchronous peer lookup`() = test {
         restoreAcceptedRequest()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
-            .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED)))
+            .thenReturn(
+                listOf(
+                    paymentRequestRecord(
+                        state = PaymentRequestLifecycleState.ACCEPTED,
+                        paymentDeadline = PaymentDeadline.At((clock.now() + 60.seconds).toString()),
+                    ),
+                ),
+            )
         sut.refresh().getOrThrow()
         val request = sut.pendingRequests.value.single()
         val checking = CompletableDeferred<Unit>()
@@ -1058,6 +1096,77 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         checked.complete(Unit)
 
         assertTrue(authorization.await().isFailure)
+    }
+
+    @Test
+    fun `accepted request remains payable after proposal expiry until its payment deadline`() = test {
+        restoreAcceptedRequest()
+        val deadline = clock.now() + 1.seconds
+        val record = paymentRequestRecord(
+            state = PaymentRequestLifecycleState.ACCEPTED,
+            expiresAt = (clock.now() - 1.seconds).toString(),
+            paymentDeadline = PaymentDeadline.At(deadline.toString()),
+        )
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+
+        sut.ensurePaymentAllowed(request).getOrThrow()
+        sut.ensurePaymentAllowed(request.copy(lifecycleState = PaymentRequestLifecycleState.PROPOSED)).getOrThrow()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(sut.isPending(request))
+        sut.ensurePaymentAllowed(request).getOrThrow()
+        advanceTimeBy(1)
+        runCurrent()
+
+        assertFalse(sut.isPending(request))
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(PaykitPaymentRequestError.RequestExpired, sut.ensurePaymentAllowed(request).exceptionOrNull())
+        assertEquals(PaymentRequestLifecycleState.ACCEPTED, sut.paymentRequestHistory.value.single().lifecycleState)
+        assertEquals(deadline, sut.paymentRequestHistory.value.single().paymentDeadlineAt)
+        verify(presentationStore, never()).removeAcceptedOneTimeIds(any(), any())
+    }
+
+    @Test
+    fun `final authorization rejects a deadline crossed during peer lookup`() = test {
+        restoreAcceptedRequest()
+        val record = paymentRequestRecord(
+            state = PaymentRequestLifecycleState.ACCEPTED,
+            paymentDeadline = PaymentDeadline.At((clock.now() + 1.seconds).toString()),
+        )
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val checking = CompletableDeferred<Unit>()
+        val checked = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            checking.complete(Unit)
+            checked.await()
+            emptyList()
+        }
+
+        val authorization = async { sut.ensurePaymentAllowed(request) }
+        checking.await()
+        advanceTimeBy(1_001)
+        checked.complete(Unit)
+
+        assertEquals(PaykitPaymentRequestError.RequestExpired, authorization.await().exceptionOrNull())
+    }
+
+    @Test
+    fun `deadline authorization preserves cancellation during peer lookup`() = test {
+        restoreAcceptedRequest()
+        val record = paymentRequestRecord(
+            state = PaymentRequestLifecycleState.ACCEPTED,
+            paymentDeadline = PaymentDeadline.At((clock.now() + 60.seconds).toString()),
+        )
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        whenever(paykitSdkService.linkedPeers()).thenThrow(CancellationException("cancelled"))
+
+        assertFailsWith<CancellationException> { sut.ensurePaymentAllowed(request) }
     }
 
     @Test

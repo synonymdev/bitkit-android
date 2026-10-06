@@ -235,6 +235,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import kotlin.time.TimeSource
 
 @OptIn(ExperimentalTime::class)
@@ -4449,6 +4450,7 @@ class AppViewModel @Inject constructor(
             tags = tags,
             requestId = incomingPaymentRequest?.id,
             payerIdentity = originalPayer,
+            paymentDeadlineAt = incomingPaymentRequest?.paymentDeadlineAt,
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
@@ -4741,7 +4743,7 @@ class AppViewModel @Inject constructor(
         val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
 
         var authorizationError: Throwable? = null
-        val result = sendLightning(decodedInvoice.bolt11, paymentAmount) {
+        val result = sendLightning(decodedInvoice.bolt11, paymentAmount, incomingPaymentRequest?.paymentDeadlineAt) {
             authorizationError = incomingPaymentRequest?.let {
                 paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
             }
@@ -5100,6 +5102,7 @@ class AppViewModel @Inject constructor(
         tags: List<String> = emptyList(),
         requestId: PaykitPaymentRequestId? = null,
         payerIdentity: String? = null,
+        paymentDeadlineAt: Instant? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
     ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
@@ -5112,6 +5115,7 @@ class AppViewModel @Inject constructor(
         tags = tags,
         requestId = requestId,
         payerIdentity = payerIdentity,
+        paymentDeadlineAt = paymentDeadlineAt,
         beforeSendAttempt = beforeSendAttempt,
         onBroadcast = onBroadcast,
     )
@@ -5119,9 +5123,15 @@ class AppViewModel @Inject constructor(
     private suspend fun sendLightning(
         bolt11: String,
         amount: ULong? = null,
+        paymentDeadlineAt: Instant? = null,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
-        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount, onBeforeSend = onBeforeSend).onSuccess { hash ->
+        return lightningRepo.payInvoice(
+            bolt11 = bolt11,
+            sats = amount,
+            paymentDeadlineAt = paymentDeadlineAt,
+            onBeforeSend = onBeforeSend,
+        ).onSuccess { hash ->
             // Wait until matching payment event is received (with timeout for hold invoices)
             val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
                 when (it) {
@@ -5808,6 +5818,24 @@ class AppViewModel @Inject constructor(
         return incomingPaymentRequest == null || PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
     }
 
+    val hardwarePaymentDeadlineAt: Instant?
+        get() = synchronized(contactPaymentContextLock) {
+            activeContactPaymentContext?.incomingPaymentRequest?.paymentDeadlineAt
+        }
+
+    suspend fun onHardwarePaymentDeadlineExpired(
+        hasAttemptedBroadcast: Boolean,
+        requestId: PaykitPaymentRequestId? = activeIncomingPaymentRequest()?.id,
+        identity: String? = hardwarePaymentIdentity(),
+        walletId: String? = _sendUiState.value.hardwareWalletId,
+    ) {
+        val context = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        val request = context?.incomingPaymentRequest ?: return
+        if (request.id != requestId || identity == null || walletId == null ||
+            walletId != _sendUiState.value.hardwareWalletId || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)) return
+        handleHardwarePaymentFailure(PaykitPaymentRequestError.RequestExpired, context, request, walletId, identity, hasAttemptedBroadcast)
+    }
+
     suspend fun authorizeHardwareContactPayment(
         hasAttemptedBroadcast: Boolean,
         requestId: PaykitPaymentRequestId? = activeIncomingPaymentRequest()?.id,
@@ -5829,6 +5857,17 @@ class AppViewModel @Inject constructor(
             synchronized(contactPaymentContextLock) { activeContactPaymentContext } != contactPaymentContext
         ) return false
         if (error == null) return true
+        return handleHardwarePaymentFailure(error, contactPaymentContext, request, walletId, identity, hasAttemptedBroadcast)
+    }
+
+    private suspend fun handleHardwarePaymentFailure(
+        error: Throwable,
+        contactPaymentContext: ContactPaymentContext?,
+        request: PaykitPaymentRequest,
+        walletId: String,
+        identity: String,
+        hasAttemptedBroadcast: Boolean,
+    ): Boolean {
         if (hasAttemptedBroadcast) {
             toast(error)
             return false
@@ -5848,6 +5887,7 @@ class AppViewModel @Inject constructor(
         synchronized(contactPaymentContextLock) {
             if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
         }
+        isSubmittingPaymentRequest = false
         handlePaymentPreparationFailure(error, contactPaymentContext)
         return false
     }

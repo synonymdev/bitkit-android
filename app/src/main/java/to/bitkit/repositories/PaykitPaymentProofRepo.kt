@@ -467,12 +467,15 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     suspend fun failLightningPayment(paymentHash: String, submissionError: Throwable): Boolean {
-        val error = submissionError.asNodeException() ?: submissionError
+        val error = generateSequence(submissionError) { it.cause }
+            .firstOrNull { it is ServiceError.PaymentDeadlineExpired }
+            ?: submissionError.asNodeException() ?: submissionError
         when (error) {
             is NodeNotRunningError,
             is NodeRunTimeoutError,
             is ServiceError.NodeNotSetup,
             is ServiceError.NodeNotStarted,
+            is ServiceError.PaymentDeadlineExpired,
             is NodeException.NotRunning,
             is NodeException.InvalidInvoice,
             is NodeException.InvalidAmount,

@@ -113,6 +113,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 @Singleton
 @Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
@@ -1393,10 +1394,17 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong? = null,
         onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> = payInvoice(bolt11, sats, null, onBeforeSend)
+
+    suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         waitForUsableChannels()
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
-        runCatching { lightningService.send(bolt11, sats) }.also {
+        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt) }.also {
             syncState()
         }
     }
@@ -1494,6 +1502,7 @@ class LightningRepo @Inject constructor(
         orderId: String? = null,
         transferContext: OnchainTransferContext? = null,
         payerIdentity: String? = null,
+        paymentDeadlineAt: Instant? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
@@ -1550,7 +1559,8 @@ class LightningRepo @Inject constructor(
                     satsPerVByte,
                     utxosForSend,
                     isMaxAmount,
-                    attempt.walletIndex
+                    attempt.walletIndex,
+                    paymentDeadlineAt,
                 )
                     .also { prepared ->
                         if (!isMaxAmount && utxosForSend != null) {
