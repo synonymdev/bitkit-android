@@ -5,6 +5,7 @@ import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitSdk
@@ -151,6 +152,9 @@ class PubkyRepoTest : BaseUnitTest() {
             Unit
         }
         whenever(pubkyService.contactRecords()).thenReturn(emptyList())
+        whenever { pubkyService.initializeAndImportSession(any()) }.doSuspendableAnswer {
+            runSuspendCatching { pubkyService.importSession(it.getArgument(0)) }
+        }
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -193,16 +197,8 @@ class PubkyRepoTest : BaseUnitTest() {
             PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice"),
             PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob"),
         )
-        for (profile in profiles) {
-            whenever(
-                pubkyService.saveContact(
-                    profile.publicKey,
-                    profile.name,
-                    restorePrivateConnection = true,
-                    expectedIdentity = VALID_SELF_KEY,
-                ),
-            ).thenReturn(mock())
-        }
+        val updates = profiles.map { ContactUpdate(it.publicKey, it.name) }
+        whenever(pubkyService.saveContacts(eq(updates), eq(VALID_SELF_KEY), any())).thenReturn(emptyList())
         whenever(pubkyService.resolveContactProfile(any(), any(), any(), anyOrNull()))
             .thenAnswer { throw TestAppError("Offline") }
 
@@ -210,33 +206,32 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(profiles, sut.contacts.value)
-        for (profile in profiles) {
-            verify(pubkyService).saveContact(
-                profile.publicKey,
-                profile.name,
-                restorePrivateConnection = true,
-                expectedIdentity = VALID_SELF_KEY,
-            )
-        }
+        assertTrue(sut.importContacts(profiles).isSuccess)
+        verify(pubkyService).saveContacts(eq(updates), eq(VALID_SELF_KEY), any())
+        verify(pubkyService, never()).saveContact(any(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         verify(pubkyService, never()).resolveContactProfile(any(), any(), any(), anyOrNull())
     }
 
     @Test
-    fun `failed import keeps successful contacts and retry saves only missing contacts`() = test {
+    fun `failed batch keeps existing contacts and retries all selected missing contacts`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
         val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
-        whenever(pubkyService.saveContact(alice.publicKey, alice.name, true, VALID_SELF_KEY))
-            .thenReturn(mock())
-        whenever(pubkyService.saveContact(bob.publicKey, bob.name, true, VALID_SELF_KEY))
-            .thenAnswer { throw TestAppError("Storage unavailable") }.thenReturn(mock())
+        val carol = PubkyProfile.placeholder("pubky8${VALID_CONTACT_KEY_A.removePrefix("pubky").drop(1)}")
+            .copy(name = "Carol")
+        val existingUpdate = listOf(ContactUpdate(alice.publicKey, alice.name))
+        whenever(pubkyService.saveContacts(eq(existingUpdate), eq(VALID_SELF_KEY), any())).thenReturn(emptyList())
+        assertTrue(sut.importContacts(listOf(alice)).isSuccess)
+        val updates = listOf(bob, carol).map { ContactUpdate(it.publicKey, it.name) }
+        whenever(pubkyService.saveContacts(eq(updates), eq(VALID_SELF_KEY), any()))
+            .thenAnswer { throw TestAppError("Storage unavailable") }.thenReturn(emptyList())
 
-        assertTrue(sut.importContacts(listOf(alice, bob)).isFailure)
+        assertTrue(sut.importContacts(listOf(alice, bob, carol)).isFailure)
         assertEquals(listOf(alice), sut.contacts.value)
-        assertTrue(sut.importContacts(listOf(alice, bob)).isSuccess)
-        assertEquals(listOf(alice, bob), sut.contacts.value)
-        verify(pubkyService).saveContact(alice.publicKey, alice.name, true, VALID_SELF_KEY)
-        verify(pubkyService, times(2)).saveContact(bob.publicKey, bob.name, true, VALID_SELF_KEY)
+        assertTrue(sut.importContacts(listOf(alice, bob, carol)).isSuccess)
+        assertEquals(listOf(alice, bob, carol), sut.contacts.value)
+        verify(pubkyService).saveContacts(eq(existingUpdate), eq(VALID_SELF_KEY), any())
+        verify(pubkyService, times(2)).saveContacts(eq(updates), eq(VALID_SELF_KEY), any())
     }
 
     @Test
@@ -252,16 +247,15 @@ class PubkyRepoTest : BaseUnitTest() {
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Alice")
         whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(ownKeys + VALID_CONTACT_KEY_B)
         stubFollowLookup(VALID_CONTACT_KEY_B, "Alice")
-        whenever(pubkyService.saveContact(alice.publicKey, alice.name, true, VALID_CONTACT_KEY_A))
-            .thenReturn(mock())
-        whenever(pubkyService.saveContact(VALID_CONTACT_KEY_A, ownProfile.name, true, VALID_CONTACT_KEY_A))
-            .thenAnswer { throw TestAppError("Cannot save own identity") }
+        val updates = listOf(ContactUpdate(alice.publicKey, alice.name))
+        whenever(pubkyService.saveContacts(eq(updates), eq(VALID_CONTACT_KEY_A), any())).thenReturn(emptyList())
 
         assertTrue(sut.prepareImport().isSuccess)
         assertEquals(ownProfile, sut.pendingImportProfile.value)
         assertEquals(listOf(alice), sut.pendingImportContacts.value)
         assertTrue(sut.importContacts(sut.pendingImportContacts.value).isSuccess)
         assertEquals(listOf(alice), sut.contacts.value)
+        verify(pubkyService).saveContacts(eq(updates), eq(VALID_CONTACT_KEY_A), any())
 
         whenever(pubkyService.getContacts(VALID_CONTACT_KEY_A)).thenReturn(ownKeys)
 
@@ -2251,6 +2245,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val imported = CompletableDeferred<String>()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
         whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer { imported.await() }
+        clearInvocations(pubkyService)
         val repo = createSut()
         val cancelledWaiter = async { repo.awaitInitialization() }
         val waiter = async { repo.awaitInitialization() }
@@ -2262,6 +2257,8 @@ class PubkyRepoTest : BaseUnitTest() {
         waiter.await()
 
         assertEquals(VALID_SELF_KEY, repo.publicKey.value)
+        verify(pubkyService, never()).initialize()
+        verify(pubkyService).initializeAndImportSession("saved_session")
         verify(pubkyService).importSession("saved_session")
     }
 
@@ -2301,9 +2298,9 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `initialize should flag session restoration failure when service startup fails with identity error`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
-        whenever(pubkyService.initialize()).thenAnswer {
+        doSuspendableAnswer {
             throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
-        }
+        }.whenever(pubkyService).initializeAndImportSession("saved_session")
         val repo = createSut()
 
         repo.awaitInitialization()
@@ -2319,9 +2316,9 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `initialize should not flag session restoration failure when service startup fails with non-identity error`() =
         test {
             whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
-            whenever(pubkyService.initialize()).thenAnswer {
+            doSuspendableAnswer {
                 throw AppError(PaykitException.Storage("storage_error", "Corrupted state"))
-            }
+            }.whenever(pubkyService).initializeAndImportSession("saved_session")
             val repo = createSut()
 
             repo.awaitInitialization()
@@ -2378,7 +2375,8 @@ class PubkyRepoTest : BaseUnitTest() {
         }
         for (failure in failures) {
             currentFailure = failure
-            sut.initialize()
+            sut = createSut()
+            sut.awaitInitialization()
             assertFalse(sut.isAuthenticated.value)
             verify(pubkyService, never()).signIn(any())
             verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
@@ -2452,7 +2450,8 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
             .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Ring User")))
 
-        sut.initialize()
+        sut = createSut()
+        sut.awaitInitialization()
 
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertFalse(sut.sessionRestorationFailed.value)
@@ -2533,11 +2532,10 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `restoration retry recovers service startup failure and skips an active session`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
         var isOnline = false
-        whenever(pubkyService.initialize()).thenAnswer {
+        doSuspendableAnswer {
             if (!isOnline) throw TestAppError("Offline")
-            Unit
-        }
-        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+            Result.success(VALID_SELF_KEY)
+        }.whenever(pubkyService).initializeAndImportSession("saved_session")
         val repo = createSut()
         repo.awaitInitialization()
         assertNull(repo.publicKey.value)
@@ -2548,6 +2546,7 @@ class PubkyRepoTest : BaseUnitTest() {
         clearInvocations(pubkyService)
 
         repo.restoreSessionIfNeeded()
+        verify(pubkyService, never()).initializeAndImportSession(any())
         verify(pubkyService, never()).importSession(any())
         verify(pubkyService, never()).signIn(any())
     }
@@ -3084,11 +3083,11 @@ class PubkyRepoTest : BaseUnitTest() {
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
         val saveStarted = CompletableDeferred<Unit>()
         val finishSave = CompletableDeferred<Unit>()
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), any(), any(), anyOrNull()))
+        whenever(pubkyService.saveContacts(any(), eq(VALID_SELF_KEY), any()))
             .doSuspendableAnswer {
                 saveStarted.complete(Unit)
                 finishSave.await()
-                createContactRecord(VALID_CONTACT_KEY_A)
+                listOf(createContactRecord(VALID_CONTACT_KEY_A))
             }
         assertFalse(sut.isImportingContacts.value)
         val caller = launch { sut.importContacts(listOf(alice)) }
@@ -3103,40 +3102,44 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `importContacts stops saving quietly once the identity changes`() = test {
+    fun `importContacts discards a completed batch after the same identity signs in again`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val alice = PubkyProfile.placeholder(VALID_CONTACT_KEY_A).copy(name = "Alice")
         val bob = PubkyProfile.placeholder(VALID_CONTACT_KEY_B).copy(name = "Bob")
         val saveStarted = CompletableDeferred<Unit>()
         val finishSave = CompletableDeferred<Unit>()
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), any(), any(), anyOrNull()))
+        var isStillCurrent: (() -> Boolean)? = null
+        whenever(pubkyService.saveContacts(any(), eq(VALID_SELF_KEY), any()))
             .doSuspendableAnswer {
+                isStillCurrent = it.getArgument(2)
                 saveStarted.complete(Unit)
                 finishSave.await()
-                createContactRecord(VALID_CONTACT_KEY_A)
+                listOf(createContactRecord(VALID_CONTACT_KEY_A), createContactRecord(VALID_CONTACT_KEY_B))
             }
         val import = async { sut.importContacts(listOf(alice, bob)) }
         saveStarted.await()
+        assertEquals(true, isStillCurrent?.invoke())
 
         sut.wipeLocalState()
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        assertEquals(false, isStillCurrent?.invoke())
         finishSave.complete(Unit)
 
         assertTrue(import.await().isFailure)
-        verifyBlocking(pubkyService, never()) {
-            saveContact(eq(VALID_CONTACT_KEY_B), any(), any(), any(), anyOrNull())
-        }
+        verify(pubkyService).saveContacts(any(), eq(VALID_SELF_KEY), any())
         assertTrue(sut.contacts.value.isEmpty())
         assertFalse(sut.isImportingContacts.value)
         assertNull(sut.contactImportFailure.value)
+        assertEquals(0L, sut.contactImportVersion.value)
     }
 
     @Test
     fun `importContacts clears the pending import only once it succeeds`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), any(), any(), anyOrNull()))
+        whenever(pubkyService.saveContacts(any(), eq(VALID_SELF_KEY), any()))
             .thenAnswer { throw TestAppError("Storage unavailable") }
-            .thenReturn(createContactRecord(VALID_CONTACT_KEY_A))
+            .thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A)))
         assertTrue(sut.prepareImport().isSuccess)
         assertEquals(1, sut.pendingImportContacts.value.size)
 
@@ -3159,7 +3162,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.getContacts(VALID_SELF_KEY)).thenReturn(listOf(VALID_CONTACT_KEY_A))
         val saveStarted = CompletableDeferred<Unit>()
         val failSave = CompletableDeferred<Unit>()
-        whenever(pubkyService.saveContact(eq(VALID_CONTACT_KEY_A), any(), any(), any(), anyOrNull()))
+        whenever(pubkyService.saveContacts(any(), eq(VALID_SELF_KEY), any()))
             .doSuspendableAnswer {
                 saveStarted.complete(Unit)
                 failSave.await()

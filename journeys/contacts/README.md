@@ -23,7 +23,13 @@ after deletion. Unavailable private-link lookups are retried after five minutes 
 
 For Import All, include the identity's own key in the following list. Repeat with a spelling that changes only the final z-base32 padding bits, which still represents the same 32-byte key. The preview friend count and saved contacts exclude that identity, while the other follows import normally. Carry the same self-follow checks and padding-alias repeat in the matching iOS journey.
 
-Network and storage fault injection are outside journey-runner capabilities. Manually disable connectivity after the preview has loaded: importing the prepared contacts must still finish. Simulate a failed local save: stay on import, preserve successful saves, and retry only missing contacts without claiming complete success. On Android, a failed Continue on the payment-sharing screen should offer recovery guidance and leave saved contacts intact.
+Network and storage fault injection are outside journey-runner capabilities. After the preview has
+loaded, verify that importing its prepared contacts does not repeat profile lookups; saving shared
+contact state still requires Pubky storage access. Simulate a failed contact batch: stay on import,
+preserve previously saved contacts, and retry the entire unsaved selection without claiming partial
+success. Duplicate selections and contacts already saved are skipped. Payment sharing remains a
+separate step. On Android, a failed Continue on the payment-sharing screen should offer recovery
+guidance and leave saved contacts intact.
 
 ## Foreground wait isolation
 

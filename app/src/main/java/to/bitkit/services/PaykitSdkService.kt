@@ -292,8 +292,21 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun initialize() {
+        initialize { initializeRuntime() }
+    }
+
+    suspend fun initializeAndImportSession(secret: String): Result<PubkySessionBootstrapResult> {
+        var imported: Result<PubkySessionBootstrapResult>? = null
+        initialize {
+            imported = runSuspendCatching { importSessionLocked(secret) }
+            if (imported.isFailure) initializeRuntime()
+        }
+        return imported ?: runSuspendCatching { importSession(secret) }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun initialize(activate: suspend () -> Unit) {
         setupMutex.withLock {
             if (isSetup.isCompleted && !setupFailed) return
             if (setupFailed) {
@@ -304,31 +317,7 @@ class PaykitSdkService @Inject constructor(
             try {
                 platformInitializer()
                 launch { republishIdentityIfNeeded() }
-                operationLock.withLock {
-                    refreshPaykitKey(force = true)
-                    var handle = handle()
-                    val identityStatus = try {
-                        completeSdkCall { handle.initialize() }
-                    } catch (e: PaykitException.Identity) {
-                        invalidatePaykitKeyIfNeeded(e)
-                        if (!sessionProvider.canDeferStaleSession(e.context)) throw e
-
-                        Logger.warn(
-                            "Deferring stale Paykit session restoration until SDK setup completes",
-                            e,
-                            context = TAG,
-                        )
-                        sessionProvider.suspendStoredSessionAccess()
-                        resetRuntime()
-                        try {
-                            handle = handle()
-                            completeSdkCall { handle.initialize() }
-                        } finally {
-                            sessionProvider.resumeStoredSessionAccess()
-                        }
-                    }
-                    publishAppIfLiveSessionAvailable(handle, identityStatus)
-                }
+                operationLock.withLock { activate() }
                 isSetup.complete(Unit)
             } catch (t: Throwable) {
                 setupFailed = true
@@ -336,6 +325,32 @@ class PaykitSdkService @Inject constructor(
                 throw t
             }
         }
+    }
+
+    private suspend fun initializeRuntime() {
+        refreshPaykitKey(force = true)
+        var handle = handle()
+        val identityStatus = try {
+            completeSdkCall { handle.initialize() }
+        } catch (e: PaykitException.Identity) {
+            invalidatePaykitKeyIfNeeded(e)
+            if (!sessionProvider.canDeferStaleSession(e.context)) throw e
+
+            Logger.warn(
+                "Deferring stale Paykit session restoration until SDK setup completes",
+                e,
+                context = TAG,
+            )
+            sessionProvider.suspendStoredSessionAccess()
+            resetRuntime()
+            try {
+                handle = handle()
+                completeSdkCall { handle.initialize() }
+            } finally {
+                sessionProvider.resumeStoredSessionAccess()
+            }
+        }
+        publishAppIfLiveSessionAvailable(handle, identityStatus)
     }
 
     suspend fun republishIdentityIfNeeded(publicKey: String? = null, now: Long = nowMillis()) {
@@ -410,20 +425,19 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun importSession(secret: String): PubkySessionBootstrapResult {
         isSetup.await()
-        return operationLock.withLock {
-            val result = bootstrap().importSession(
-                sessionSecret = secret,
-                localSecretKey = sessionProvider.loadLocalSecretKey(),
-                requiredCapabilities = paykitAuthorizerSessionCapabilities(),
-            )
+        return operationLock.withLock { importSessionLocked(secret) }
+    }
 
-            activateBootstrapResult(
-                result = result,
-            )
+    private suspend fun importSessionLocked(secret: String): PubkySessionBootstrapResult {
+        val result = bootstrap().importSession(
+            sessionSecret = secret,
+            localSecretKey = sessionProvider.loadLocalSecretKey(),
+            requiredCapabilities = paykitAuthorizerSessionCapabilities(),
+        )
 
-            notifyBackupStateChanged()
-            result
-        }
+        activateBootstrapResult(result)
+        notifyBackupStateChanged()
+        return result
     }
 
     suspend fun signUp(
@@ -647,7 +661,41 @@ class PaykitSdkService @Inject constructor(
                 val blockedPeers = completeSdkCall { handle.linkedPeers() }.filter {
                     it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
                 }
-                restorePrivateContact(handle, blockedPeers, update)
+                restorePrivateContacts(handle, blockedPeers) { completeSdkCall { handle.saveContact(update) } }
+            }
+        }
+    }
+
+    /**
+     * Explicitly re-adds [updates] in one SDK save, restoring only their blocked private connections. The identity
+     * and sign-in checks run under the operation lock; restoration failures use the single-contact rollback path.
+     * An empty selection is skipped without accessing the SDK.
+     */
+    suspend fun saveContacts(
+        updates: List<ContactUpdate>,
+        expectedIdentity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
+    ): List<ContactRecord> {
+        if (updates.isEmpty()) return emptyList()
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                if (expectedIdentity != null) {
+                    val identity = completeSdkCall { handle.identityStatus() }?.publicKey
+                    check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) {
+                        "Paykit identity changed before saving contacts"
+                    }
+                }
+                val blockedPeers = completeSdkCall { handle.linkedPeers() }.filter { peer ->
+                    peer.state == LinkedPeerState.BLOCKED && updates.any {
+                        PubkyPublicKeyFormat.matches(peer.counterparty, it.publicKey)
+                    }
+                }
+                if (isStillCurrent?.invoke() == false) throw PubkyContactError.SignInChanged
+                restorePrivateContacts(handle, blockedPeers) {
+                    if (isStillCurrent?.invoke() == false) throw PubkyContactError.SignInChanged
+                    completeSdkCall { handle.saveContacts(updates) }
+                }
             }
         }
     }
@@ -1195,8 +1243,12 @@ class PaykitSdkService @Inject constructor(
     }
 
     private suspend fun refreshPaykitKey(force: Boolean = false) {
-        if (force) cachedPaykitKey = null
+        if (force) {
+            cachedPaykitKey = null
+            cachedBackupState = null
+        }
         val root = sessionProvider.loadLocalSecretKey() ?: run {
+            if (cachedPaykitKey != null) cachedBackupState = null
             cachedPaykitKey = null
             return
         }
@@ -1205,6 +1257,7 @@ class PaykitSdkService @Inject constructor(
         val cached = cachedPaykitKey
         if (cached != null && cached.publicKey == publicKey && cached.generation == savedGeneration) return
         cachedPaykitKey = null
+        cachedBackupState = null
         val key = paykitKey(root)
         sessionProvider.setPaykitIdentitySecretKey(key)
         cachedPaykitKey = PaykitKeyGeneration(publicKey, key.keyGeneration())
@@ -1293,16 +1346,16 @@ class PaykitSdkService @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
-    private suspend fun restorePrivateContact(
+    private suspend fun <T> restorePrivateContacts(
         handle: PaykitSdk,
         blockedPeers: List<LinkedPeerRecord>,
-        update: ContactUpdate,
-    ): ContactRecord {
+        save: suspend () -> T,
+    ): T {
         var failure: Throwable? = null
         return try {
             runSuspendCatching {
                 blockedPeers.forEach { completeSdkCall { handle.unblockPeer(it.counterparty) } }
-                completeSdkCall { handle.saveContact(update) }
+                save()
             }.onFailure { failure = it }.getOrThrow()
         } catch (error: CancellationException) {
             failure = error
@@ -1344,6 +1397,11 @@ class PaykitSdkService @Inject constructor(
                     .getOrThrow()
             },
             readStateRevision = { handle.stateRevision() },
+            readObservedSnapshot = {
+                handle.observedBackupStateRevision()?.let {
+                    PaykitBackupStateSnapshot(it.stateRevision, it.backupRevision)
+                }
+            },
             cachedSnapshot = cachedBackupState,
             onSnapshot = { cachedBackupState = it },
             onChange = ::notifyBackupStateChanged,
@@ -1475,18 +1533,14 @@ internal data class PaykitBackupStateSnapshot(val stateRevision: String, val bac
 internal suspend fun <T> withPaykitBackupStateTracking(
     readRevision: suspend () -> String,
     readStateRevision: () -> String? = { null },
+    readObservedSnapshot: () -> PaykitBackupStateSnapshot? = { null },
     cachedSnapshot: PaykitBackupStateSnapshot? = null,
     onSnapshot: (PaykitBackupStateSnapshot?) -> Unit = {},
     onChange: () -> Unit,
     operation: suspend () -> T,
 ): T {
-    val observedStateRevision = runSuspendCatching { readStateRevision() }.getOrNull()
-    val previousRevision = if (cachedSnapshot != null && observedStateRevision == cachedSnapshot.stateRevision) {
-        cachedSnapshot.backupRevision
-    } else {
-        runSuspendCatching { readRevision() }.getOrNull()
-    }
-    val previousStateRevision = runSuspendCatching { readStateRevision() }.getOrNull()
+    val previousRevision = cachedSnapshot?.backupRevision
+        ?: runSuspendCatching { readRevision() }.getOrNull()
     var succeeded = false
     return try {
         operation().also { succeeded = true }
@@ -1498,13 +1552,12 @@ internal suspend fun <T> withPaykitBackupStateTracking(
                 return@withContext
             }
             val nextStateRevision = runSuspendCatching { readStateRevision() }.getOrNull()
-            val unchangedRevision = previousStateRevision?.takeIf { it == nextStateRevision }
-            if (unchangedRevision != null && previousRevision != null) {
-                onSnapshot(PaykitBackupStateSnapshot(unchangedRevision, previousRevision))
-                return@withContext
-            }
-            val nextRevision = runSuspendCatching { readRevision() }.getOrNull()
-            val stateRevision = runSuspendCatching { readStateRevision() }.getOrNull()
+            val observedSnapshot = runSuspendCatching { readObservedSnapshot() }.getOrNull()
+                ?.takeIf { it.stateRevision == nextStateRevision }
+            val nextRevision = observedSnapshot?.backupRevision
+                ?: runSuspendCatching { readRevision() }.getOrNull()
+            val stateRevision = observedSnapshot?.stateRevision
+                ?: runSuspendCatching { readStateRevision() }.getOrNull()
             onSnapshot(
                 if (stateRevision != null && nextRevision != null) {
                     PaykitBackupStateSnapshot(stateRevision, nextRevision)

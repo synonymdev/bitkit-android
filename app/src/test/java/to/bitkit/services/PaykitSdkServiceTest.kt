@@ -1,10 +1,12 @@
 package to.bitkit.services
 
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.ObservedBackupStateRevision
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitApp
@@ -34,6 +36,7 @@ import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicContactPaymentResolution
 import com.synonym.paykit.PublicContactSharingPolicy
 import com.synonym.paykit.PublicPaymentResolutionStatus
+import com.synonym.paykit.paykitAuthorizerSessionCapabilities
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -49,6 +52,7 @@ import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.description
@@ -519,6 +523,7 @@ class PaykitSdkServiceTest {
     fun `identity failure during cancellation invalidates the cached backup snapshot`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.observedBackupStateRevision()).thenReturn(ObservedBackupStateRevision("state", "backup"))
         whenever { sdk.backupStateRevision() }.thenReturn("backup")
         whenever { sdk.processPendingPrivateMessages() }.thenReturn(emptyList())
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -563,6 +568,105 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `saved session setup activates once before admitting public reads`() = runTest {
+        val keychain = mock<Keychain>()
+        val store = mock<PubkyStore>()
+        whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+        val settings = mock<SettingsStore>()
+        whenever(settings.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = false)))
+        val bootstrap = mock<PubkySessionBootstrap>()
+        val imported = CompletableDeferred<PubkySessionBootstrapResult>()
+        whenever(bootstrap.importSession("saved-session", null, "capabilities"))
+            .doSuspendableAnswer { imported.await() }
+        val sdk = mock<PaykitSdk>()
+        val initialized = CompletableDeferred<IdentityStatus>()
+        whenever(sdk.initialize()).doSuspendableAnswer { initialized.await() }
+        var handlesCreated = 0
+        val service = PaykitSdkService(
+            mock(),
+            keychain,
+            store,
+            bootstrapFactory = { bootstrap },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            platformInitializer = {},
+            settingsStore = settings,
+        ) {
+            handlesCreated++
+            sdk
+        }
+        mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
+            native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+            val restoration = async { service.initializeAndImportSession("saved-session") }
+            val read = async { service.resolveContactProfile(RING_PUBKY, true) }
+            runCurrent()
+            assertFalse(read.isCompleted)
+            assertEquals(0, handlesCreated)
+
+            val access = localSessionAccess(ByteArray(32) { 1 })
+            val result = PubkySessionBootstrapResult(access, RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            imported.complete(result)
+            runCurrent()
+            assertFalse(read.isCompleted)
+            verify(sdk, never()).resolveProfile(any(), any())
+            initialized.complete(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+
+            assertSame(result, restoration.await().getOrThrow())
+            assertNull(read.await())
+            service.initialize()
+            assertEquals(1, handlesCreated)
+            inOrder(keychain, sdk) {
+                verify(keychain).upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session")
+                verify(sdk).initialize()
+                verify(sdk).publishPaykitNoiseKeyAuthorization()
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                verify(sdk).resolveProfile(RING_PUBKY, true)
+            }
+            verify(sdk, times(1)).initialize()
+            verify(sdk, times(1)).publishPaykitApp(any(), any())
+        }
+    }
+
+    @Test
+    fun `failed saved session import retains credentials and permits setup retry`() = runTest {
+        val failures = listOf(
+            PaykitException.Identity("identity_error", "Expired session"),
+            PaykitException.Transport("transport_error", "Offline"),
+            CancellationException("Cancelled"),
+        )
+        for (failure in failures) {
+            val keychain = mock<Keychain>()
+            val bootstrap = mock<PubkySessionBootstrap>()
+            whenever(bootstrap.importSession("saved-session", null, "capabilities")).thenThrow(failure)
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.contactRecords()).thenReturn(emptyList())
+            val service = PaykitSdkService(
+                mock(),
+                keychain,
+                mock(),
+                bootstrapFactory = { bootstrap },
+                ioDispatcher = StandardTestDispatcher(testScheduler),
+                platformInitializer = {},
+                settingsStore = mock(),
+            ) { sdk }
+
+            mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
+                native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+                if (failure is CancellationException) {
+                    assertFailsWith<CancellationException> { service.initializeAndImportSession("saved-session") }
+                    assertFailsWith<CancellationException> { service.contactRecords() }
+                    service.initialize()
+                } else {
+                    assertSame(failure, service.initializeAndImportSession("saved-session").exceptionOrNull())
+                }
+            }
+            assertEquals(emptyList(), service.contactRecords())
+            verify(sdk).initialize()
+            verify(keychain, never()).delete(any())
+            verify(keychain, never()).upsertString(any(), any())
+        }
+    }
+
+    @Test
     fun `wallet wipe drains initialization before cleanup and allows fresh work`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.contactRecords()).thenReturn(emptyList())
@@ -599,6 +703,7 @@ class PaykitSdkServiceTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.observedBackupStateRevision()).thenReturn(ObservedBackupStateRevision("state", "backup"))
         whenever(sdk.backupStateRevision()).thenReturn("backup")
         var handlesCreated = 0
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) {
@@ -1409,6 +1514,161 @@ class PaykitSdkServiceTest {
                 verify(sdk, never()).unblockPeer(any())
             }
         }
+    }
+
+    @Test
+    fun `bulk contact save uses one inventory and save and tracks its backup change`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val otherKey = "5${RING_PUBKY.drop(1)}"
+        val selected = contactPeer(LinkedPeerState.BLOCKED)
+        val unselected = selected.copy(counterparty = otherKey)
+        val updates = listOf(ContactUpdate("pubky$RING_PUBKY", "Contact"))
+        val records = listOf(mock<ContactRecord>())
+        var revision = "before"
+        whenever(sdk.stateRevision()).thenAnswer { revision }
+        whenever(sdk.backupStateRevision()).thenAnswer { revision }
+        whenever(sdk.linkedPeers()).thenReturn(listOf(selected, unselected))
+        whenever(sdk.saveContacts(updates)).thenAnswer {
+            revision = "saved"
+            records
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        assertEquals(emptyList(), service.saveContacts(emptyList()))
+        verifyNoInteractions(sdk)
+        assertSame(records, service.saveContacts(updates))
+
+        verify(sdk).linkedPeers()
+        verify(sdk).unblockPeer(RING_PUBKY)
+        verify(sdk, never()).unblockPeer(otherKey)
+        verify(sdk).saveContacts(updates)
+        verify(sdk, never()).saveContact(any())
+        verify(sdk, never()).contactRecord(any())
+        verify(sdk, never()).blockPeer(any())
+        assertEquals(1L, service.backupStateVersion.value)
+    }
+
+    @Test
+    fun `failed bulk restoration rolls back selected peers and permits retry`() = runTest {
+        for (failurePoint in listOf("lookup", "unblock", "save")) {
+            val sdk = mock<PaykitSdk>()
+            val secondKey = "5${RING_PUBKY.drop(1)}"
+            val peers = listOf(
+                contactPeer(LinkedPeerState.BLOCKED),
+                contactPeer(LinkedPeerState.BLOCKED).copy(counterparty = secondKey),
+            )
+            val updates = peers.map { ContactUpdate(it.counterparty, "Contact") }
+            val failure = IllegalStateException("storage failure")
+            whenever(sdk.linkedPeers()).thenReturn(peers)
+            whenever(sdk.saveContacts(updates)).thenReturn(emptyList())
+            when (failurePoint) {
+                "lookup" -> whenever(sdk.linkedPeers()).thenThrow(failure).thenReturn(peers)
+                "unblock" -> whenever(sdk.unblockPeer(secondKey)).thenThrow(failure).thenReturn(peers.last())
+                "save" -> whenever(sdk.saveContacts(updates)).thenThrow(failure).thenReturn(emptyList())
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+            assertSame(failure, assertFailsWith<IllegalStateException> { service.saveContacts(updates) })
+
+            if (failurePoint == "lookup") {
+                verify(sdk, never()).blockPeer(any())
+            } else {
+                peers.forEach { verify(sdk).blockPeer(it.counterparty) }
+            }
+            assertEquals(emptyList(), service.saveContacts(updates))
+            verify(sdk, times(2)).linkedPeers()
+            verify(sdk, times(if (failurePoint == "save") 2 else 1)).saveContacts(updates)
+            verify(sdk, never()).saveContact(any())
+        }
+    }
+
+    @Test
+    fun `queued bulk save rejects changed identity ended sign-in and cancellation`() = runTest {
+        for (change in listOf("identity", "sign-in", "cancel")) {
+            val sdk = mock<PaykitSdk>()
+            val identity = "pubky$RING_PUBKY"
+            var currentIdentity = identity
+            var isCurrent = true
+            val releaseRead = CompletableDeferred<Unit>()
+            whenever(sdk.identityStatus()).thenAnswer {
+                IdentityStatus(currentIdentity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            }
+            whenever(sdk.contactRecords()).doSuspendableAnswer {
+                releaseRead.await()
+                emptyList()
+            }
+            whenever(sdk.linkedPeers()).thenReturn(emptyList())
+            whenever(sdk.saveContacts(any())).thenReturn(emptyList())
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val read = async { service.contactRecords() }
+            runCurrent()
+            val updates = listOf(ContactUpdate("pubky5${RING_PUBKY.drop(1)}", "Contact"))
+            val save = async {
+                runSuspendCatching { service.saveContacts(updates, identity) { isCurrent } }
+            }
+            runCurrent()
+            assertFalse(save.isCompleted)
+            when (change) {
+                "identity" -> currentIdentity = "pubky8${RING_PUBKY.drop(1)}"
+                "sign-in" -> isCurrent = false
+                "cancel" -> save.cancel()
+            }
+            releaseRead.complete(Unit)
+            read.await()
+
+            when (change) {
+                "identity" -> assertIs<IllegalStateException>(save.await().exceptionOrNull())
+                "sign-in" -> assertSame(PubkyContactError.SignInChanged, save.await().exceptionOrNull())
+                "cancel" -> assertFailsWith<CancellationException> { save.await() }
+            }
+            verify(sdk, never()).saveContacts(any())
+            verify(sdk, never()).unblockPeer(any())
+            service.saveContacts(updates, currentIdentity) { true }
+            verify(sdk).saveContacts(updates)
+        }
+    }
+
+    @Test
+    fun `cancelled bulk save completes SDK mutation and rollback before releasing the queue`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(LinkedPeerState.BLOCKED)))
+        val releaseSave = CompletableDeferred<Unit>()
+        val releaseRollback = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        whenever(sdk.saveContacts(any())).doSuspendableAnswer {
+            releaseSave.await()
+            events += "saved"
+            emptyList()
+        }
+        whenever(sdk.blockPeer(RING_PUBKY)).doSuspendableAnswer {
+            events += "rollback"
+            releaseRollback.await()
+            events += "blocked"
+            contactPeer(LinkedPeerState.BLOCKED)
+        }
+        whenever(sdk.contactRecords()).thenAnswer {
+            events += "next"
+            emptyList<ContactRecord>()
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val updates = listOf(ContactUpdate(RING_PUBKY, "Contact"))
+        val save = async { service.saveContacts(updates) }
+        runCurrent()
+        save.cancel()
+        val next = async { service.contactRecords() }
+        runCurrent()
+        assertEquals(emptyList(), events)
+        releaseSave.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("saved", "rollback"), events)
+        assertFalse(next.isCompleted)
+        releaseRollback.complete(Unit)
+
+        assertFailsWith<CancellationException> { save.await() }
+        next.await()
+        assertEquals(listOf("saved", "rollback", "blocked", "next"), events)
+        verify(sdk).saveContacts(updates)
+        assertEquals(1L, service.backupStateVersion.value)
     }
 
     @Test

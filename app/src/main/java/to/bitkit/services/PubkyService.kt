@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.bitkitcore.approvePubkyAuth
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitPublicKeys
 import com.synonym.paykit.ProfileResolution
@@ -31,6 +32,10 @@ class PubkyService @Inject constructor(
 
     suspend fun initialize() = ServiceQueue.CORE.background {
         paykitSdkService.initialize()
+    }
+
+    suspend fun initializeAndImportSession(secret: String): Result<String> = ServiceQueue.CORE.background {
+        paykitSdkService.initializeAndImportSession(secret).map { it.publicKey }
     }
 
     suspend fun republishIdentityIfNeeded(publicKey: String? = null) =
@@ -215,6 +220,14 @@ class PubkyService @Inject constructor(
             expectedIdentity,
             isStillCurrent,
         )
+    }
+
+    suspend fun saveContacts(
+        updates: List<ContactUpdate>,
+        expectedIdentity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
+    ): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.saveContacts(updates, expectedIdentity, isStillCurrent)
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.CORE.background {

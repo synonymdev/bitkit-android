@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import coil3.ImageLoader
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import io.ktor.client.HttpClient
@@ -377,23 +378,25 @@ class PubkyRepo @Inject constructor(
     private suspend fun initializeSession(notifyFailure: Boolean = true): Boolean {
         _isRestoringSession.update { true }
         try {
-            runSuspendCatching {
-                ensureServiceInitialized()
+            val savedSession = runSuspendCatching { keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) }
+            val importedSession = runSuspendCatching {
+                ensureServiceInitialized(savedSession.getOrNull())
             }.onFailure {
                 Logger.error("Failed to initialize paykit", it, context = TAG)
                 if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
                     _sessionRestorationFailed.update { true }
                 }
-            }.getOrNull() ?: return false
+            }.getOrElse { return false }
 
             if (notifyFailure) _sessionRestorationFailed.update { false }
             val result = runSuspendCatching {
-                val savedSessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+                val savedSessionSecret = savedSession.getOrThrow()
                 val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
 
                 resolveSessionInitialization(
                     savedSessionSecret = savedSessionSecret,
                     storedSecretKeyHex = storedSecretKeyHex,
+                    importedSession = importedSession,
                 )
             }.onFailure {
                 Logger.error("Failed to initialize paykit", it, context = TAG)
@@ -428,23 +431,34 @@ class PubkyRepo @Inject constructor(
         keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
     }.getOrNull()?.isNotBlank() == true
 
-    private suspend fun ensureServiceInitialized() = withContext(ioDispatcher) {
-        serviceInitializeMutex.withLock {
-            if (!isServiceInitialized) {
-                pubkyService.initialize()
+    private suspend fun ensureServiceInitialized(savedSessionSecret: String? = null): Result<String>? =
+        withContext(ioDispatcher) {
+            serviceInitializeMutex.withLock {
+                if (isServiceInitialized) return@withLock null
+                val importedSession = if (savedSessionSecret.isNullOrEmpty()) {
+                    pubkyService.initialize()
+                    null
+                } else {
+                    pubkyService.initializeAndImportSession(savedSessionSecret)
+                }
                 isServiceInitialized = true
+                importedSession
             }
         }
-    }
 
     private suspend fun resolveSessionInitialization(
         savedSessionSecret: String?,
         storedSecretKeyHex: String?,
+        importedSession: Result<String>?,
     ): InitResult = withContext(ioDispatcher) {
         if (!savedSessionSecret.isNullOrEmpty()) {
             runSuspendCatching {
-                val publicKey = pubkyService.importSession(savedSessionSecret).ensurePubkyPrefix()
-                InitResult.Restored(publicKey)
+                val publicKey = if (importedSession != null) {
+                    importedSession.getOrThrow()
+                } else {
+                    pubkyService.importSession(savedSessionSecret)
+                }
+                InitResult.Restored(publicKey.ensurePubkyPrefix())
             }.getOrElse {
                 if (it.isPaykitTemporarilyUnavailable()) {
                     Logger.warn("Deferred session restoration, keeping saved session", it, context = TAG)
@@ -1210,21 +1224,23 @@ class PubkyRepo @Inject constructor(
 
     /**
      * Saves [profiles], the follows [prepareImport] resolved, without looking them up again; receiver discovery runs
-     * during contact refresh. A contact already saved is skipped, and a failed save keeps the others and fails the
-     * import, so a retry saves only the missing contacts. The import runs in the repository scope, so it finishes even
-     * when the caller is cancelled, stops saving once the identity changes, and clears the pending import once it
+     * during contact refresh. Contacts already saved and duplicate selections are skipped. The remaining contacts
+     * are saved atomically, so a failed batch leaves them all pending for retry. The import runs in the repository
+     * scope, so it finishes even when the caller is cancelled, rejects an ended sign-in, and clears the import once it
      * succeeds. A success bumps [contactImportVersion] and a failure sets [contactImportFailure], so both reach the app
      * after the import screens are gone. An import stopped by an identity change, such as a sign-out, reports nothing.
      */
     suspend fun importContacts(profiles: List<PubkyProfile>): Result<Unit> =
         scope.async(start = CoroutineStart.UNDISPATCHED) {
-            val owner = _publicKey.value
+            val signIn = currentSignIn()
             activeContactImports.update { it + 1 }
             try {
-                saveImportedContacts(profiles)
-                    .onSuccess { _contactImportVersion.update { it + 1 } }
+                saveImportedContacts(profiles, signIn)
+                    .onSuccess {
+                        if (signIn != null && isCurrent(signIn)) _contactImportVersion.update { it + 1 }
+                    }
                     .onFailure { error ->
-                        if (_publicKey.value != owner) {
+                        if (signIn != null && !isCurrent(signIn)) {
                             Logger.info("Stopped a contact import after the identity changed", context = TAG)
                             return@onFailure
                         }
@@ -1236,32 +1252,25 @@ class PubkyRepo @Inject constructor(
             }
         }.await()
 
-    private suspend fun saveImportedContacts(profiles: List<PubkyProfile>): Result<Unit> = runSuspendCatching {
+    private suspend fun saveImportedContacts(
+        profiles: List<PubkyProfile>,
+        expectedSignIn: PubkySignIn?,
+    ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
-            val owner = requireNotNull(_publicKey.value) { "Not authenticated" }
-            val imported = mutableListOf<PubkyProfile>()
+            val signIn = requireNotNull(expectedSignIn) { "Not authenticated" }
+            requireCurrent(signIn)
             val existing = _contacts.value.map { it.publicKey }.toMutableSet()
-            var firstError: Throwable? = null
-            for (profile in profiles.distinctBy { it.publicKey }) {
-                if (profile.publicKey in existing) continue
-                check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
-                runSuspendCatching {
-                    pubkyService.saveContact(
-                        profile.publicKey,
-                        profile.name,
-                        restorePrivateConnection = true,
-                        expectedIdentity = owner,
-                    )
-                    imported.add(profile)
-                    existing.add(profile.publicKey)
-                }.onFailure {
-                    firstError = firstError ?: it
-                    Logger.warn("Failed to import contact '${redacted(profile.publicKey)}'", it, context = TAG)
-                }
+            val imported = profiles.filter { existing.add(it.publicKey) }
+            if (imported.isNotEmpty()) {
+                pubkyService.saveContacts(
+                    updates = imported.map { ContactUpdate(it.publicKey, it.name) },
+                    expectedIdentity = signIn.publicKey,
+                    isStillCurrent = { isCurrent(signIn) },
+                )
             }
             synchronized(contactsLock) {
-                check(_publicKey.value == owner) { "Pubky identity changed while importing contacts" }
-                cacheSessionContactProfiles(owner, imported)
+                requireCurrent(signIn)
+                cacheSessionContactProfiles(signIn.publicKey, imported)
                 updateContacts { current ->
                     val currentKeys = current.map { it.publicKey }.toSet()
                     (current + imported.filter { it.publicKey !in currentKeys })
@@ -1270,7 +1279,6 @@ class PubkyRepo @Inject constructor(
             }
             markContactsLoaded()
             Logger.info("Imported '${imported.size}' contacts", context = TAG)
-            firstError?.let { throw it }
             clearPendingImport()
         }
     }
