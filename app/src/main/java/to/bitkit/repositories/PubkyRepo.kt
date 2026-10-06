@@ -153,7 +153,12 @@ class PubkyRepo @Inject constructor(
     private val scope = appScope(ioDispatcher, TAG)
     private val serviceInitializeMutex = Mutex()
     private val initializeMutex = Mutex()
+    private val completedRestoreVersion = AtomicLong()
+    private var completedRestoreSignInGeneration = -1L
     private val loadProfileMutex = Mutex()
+    private val completedProfileLoadVersion = AtomicLong()
+    private var completedProfileSignInGeneration = -1L
+    private var completedProfileWriteGeneration = -1L
     private val loadContactsMutex = Mutex()
     private val contactsLock = Any()
     private var contactsRevision = 0L
@@ -323,45 +328,57 @@ class PubkyRepo @Inject constructor(
 
     suspend fun initialize() = withContext(ioDispatcher) {
         val restored = initializeMutex.withLock { initializeSession() }
-        if (restored) {
-            loadProfile()
-            loadContacts()
-        }
+        if (restored) loadIdentityData()
         checkAdoptedSource()
     }
 
     suspend fun restoreSessionIfNeeded() = withContext(ioDispatcher) {
         awaitInitialization()
-        val restored = initializeMutex.withLock { restoreSessionLocked() }
-        if (restored) {
-            loadProfile()
-            loadContacts()
-        }
+        val restored = restoreSession()
+        if (restored) loadIdentityData()
         restored
     }
 
     /**
-     * Waits until a saved identity can be used. When no session is active, it retries the restore once, after any
-     * resume retry, adoption, identity creation or backup restore already under way, so an earlier success is never
-     * restored twice. The retry runs in the repository scope, so cancelling the caller does not interrupt it, and the
-     * profile and contacts it loads are not awaited.
+     * Waits for a usable saved identity, sharing any in-flight restore. Later calls can retry failures.
+     * Restoration waits for active identity work and runs in the repository scope, so cancelling the caller does not
+     * interrupt it. Profile and contact loading are not awaited.
      */
     suspend fun awaitIdentityReady(): PubkyIdentityReadiness = withContext(ioDispatcher) {
         awaitInitialization()
         if (_publicKey.value != null) return@withContext PubkyIdentityReadiness.Ready
         scope.async {
-            val restored = initializeMutex.withLock { restoreSessionLocked() }
+            val restored = restoreSession()
             if (restored) {
-                scope.launch {
-                    loadProfile()
-                    loadContacts()
-                }
+                scope.launch { loadIdentityData() }
             }
         }.await()
         when {
             _publicKey.value != null -> PubkyIdentityReadiness.Ready
             runSuspendCatching { hasIdentity() }.getOrNull() == false -> PubkyIdentityReadiness.Missing
             else -> PubkyIdentityReadiness.Unavailable
+        }
+    }
+
+    private suspend fun loadIdentityData() {
+        coroutineScope {
+            launch { loadProfile() }
+            launch { loadContacts() }
+        }
+    }
+
+    private suspend fun restoreSession(): Boolean {
+        val version = completedRestoreVersion.get()
+        return initializeMutex.withLock {
+            if (completedRestoreVersion.get() != version &&
+                completedRestoreSignInGeneration == signInGeneration.get()
+            ) {
+                return@withLock false
+            }
+            restoreSessionLocked().also {
+                completedRestoreSignInGeneration = signInGeneration.get()
+                completedRestoreVersion.incrementAndGet()
+            }
         }
     }
 
@@ -699,39 +716,45 @@ class PubkyRepo @Inject constructor(
     // region Profile loading
 
     suspend fun loadProfile() {
-        val pk = _publicKey.value ?: return
-        loadProfileMutex.lock()
-        if (_publicKey.value != pk) {
-            loadProfileMutex.unlock()
-            return
-        }
-        val writeGeneration = profileWriteGeneration.get()
-        val isCurrentLoad = { _publicKey.value == pk && profileWriteGeneration.get() == writeGeneration }
-
-        _isLoadingProfile.update { true }
-        try {
-            runSuspendCatching {
-                withContext(ioDispatcher) {
-                    resolveContactProfile(pk, retry = true).getOrThrow()
-                        ?: throw AppError("Profile not found")
-                }
-            }.onSuccess { loadedProfile ->
-                var isCurrent = false
-                _profile.update {
-                    isCurrent = isCurrentLoad()
-                    if (isCurrent) loadedProfile else it
-                }
-                if (!isCurrent) {
-                    Logger.debug("Skipped stale profile load for '${redacted(pk)}'", context = TAG)
-                    return@onSuccess
-                }
-                cacheMetadata(loadedProfile, isCurrentLoad)
-            }.onFailure {
-                Logger.error("Failed to load profile", it, context = TAG)
+        val signIn = currentSignIn() ?: return
+        val version = completedProfileLoadVersion.get()
+        loadProfileMutex.withLock {
+            if (!isCurrent(signIn)) return
+            val writeGeneration = profileWriteGeneration.get()
+            if (completedProfileLoadVersion.get() != version && completedProfileSignInGeneration == signIn.generation &&
+                completedProfileWriteGeneration == writeGeneration
+            ) {
+                return
             }
-        } finally {
-            _isLoadingProfile.update { false }
-            loadProfileMutex.unlock()
+            val isCurrentLoad = { isCurrent(signIn) && profileWriteGeneration.get() == writeGeneration }
+
+            _isLoadingProfile.update { true }
+            try {
+                runSuspendCatching {
+                    withContext(ioDispatcher) {
+                        resolveContactProfile(signIn.publicKey, retry = true).getOrThrow()
+                            ?: throw AppError("Profile not found")
+                    }
+                }.onSuccess { loadedProfile ->
+                    var isCurrent = false
+                    _profile.update {
+                        isCurrent = isCurrentLoad()
+                        if (isCurrent) loadedProfile else it
+                    }
+                    if (!isCurrent) {
+                        Logger.debug("Skipped stale profile load for '${redacted(signIn.publicKey)}'", context = TAG)
+                        return@onSuccess
+                    }
+                    cacheMetadata(loadedProfile, isCurrentLoad)
+                }.onFailure {
+                    Logger.error("Failed to load profile", it, context = TAG)
+                }
+                completedProfileSignInGeneration = signIn.generation
+                completedProfileWriteGeneration = writeGeneration
+                completedProfileLoadVersion.incrementAndGet()
+            } finally {
+                _isLoadingProfile.update { false }
+            }
         }
     }
 

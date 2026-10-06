@@ -850,6 +850,74 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `overlapping profile loads share success or failure and allow a later refresh`() = test {
+        listOf(false, true).forEachCase({ "fails=$it" }) { fails ->
+            resetForCase()
+            authenticateForTesting(publicKey = VALID_SELF_KEY)
+            val finishLoad = CompletableDeferred<Unit>()
+            whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+                finishLoad.await()
+                if (fails) throw TestAppError("Offline")
+                createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Loaded"))
+            }
+            clearInvocations(pubkyService)
+
+            val loads = List(3) { async { sut.loadProfile() } }
+            assertTrue(sut.isLoadingProfile.value)
+            finishLoad.complete(Unit)
+            loads.awaitAll()
+
+            val attempts = if (fails) 2 else 1
+            verify(pubkyService, times(attempts)).resolveContactProfile(VALID_SELF_KEY, true)
+            assertFalse(sut.isLoadingProfile.value)
+            sut.loadProfile()
+            verify(pubkyService, times(attempts * 2)).resolveContactProfile(VALID_SELF_KEY, true)
+        }
+    }
+
+    @Test
+    fun `profile load after a save does not reuse an outdated in-flight read`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val finishLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            finishLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Loaded"))
+        }
+        clearInvocations(pubkyService)
+
+        val first = async { sut.loadProfile() }
+        assertTrue(saveNewProfile().isSuccess)
+        val next = async { sut.loadProfile() }
+        finishLoad.complete(Unit)
+        first.await()
+        next.await()
+
+        verify(pubkyService, times(2)).resolveContactProfile(VALID_SELF_KEY, true)
+        assertEquals("Loaded", sut.profile.value?.name)
+    }
+
+    @Test
+    fun `cancelled profile load leaves queued refresh available`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val finishLoad = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            finishLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Loaded"))
+        }
+        clearInvocations(pubkyService)
+
+        val first = launch { sut.loadProfile() }
+        val next = async { sut.loadProfile() }
+        first.cancelAndJoin()
+        finishLoad.complete(Unit)
+        next.await()
+
+        verify(pubkyService, times(2)).resolveContactProfile(VALID_SELF_KEY, true)
+        assertEquals("Loaded", sut.profile.value?.name)
+        assertFalse(sut.isLoadingProfile.value)
+    }
+
+    @Test
     fun `loadProfile should return early when no public key`() = test {
         sut.loadProfile()
 
@@ -2613,6 +2681,86 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals(PubkyIdentityReadiness.Ready, readiness.await())
         retry.await()
         verify(pubkyService, times(1)).importSession("saved_session")
+    }
+
+    @Test
+    fun `overlapping failed restoration retries share the attempt and allow a later retry`() = test {
+        val restore = stubSavedSessionRestore()
+        sut.initialize()
+        val finishRetry = CompletableDeferred<Unit>()
+        restore.answer = {
+            finishRetry.await()
+            throw PaykitException.ConcurrentUpdate("concurrent_update", "Locked")
+        }
+        clearInvocations(pubkyService)
+
+        val retry = async { sut.restoreSessionIfNeeded() }
+        val readiness = async { sut.awaitIdentityReady() }
+        val otherRetry = async { sut.restoreSessionIfNeeded() }
+        finishRetry.complete(Unit)
+
+        assertFalse(retry.await())
+        assertFalse(otherRetry.await())
+        assertEquals(PubkyIdentityReadiness.Unavailable, readiness.await())
+        verify(pubkyService, times(1)).importSession("saved_session")
+
+        restore.answer = { VALID_SELF_KEY }
+        assertTrue(sut.restoreSessionIfNeeded())
+        verify(pubkyService, times(2)).importSession("saved_session")
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+    }
+
+    @Test
+    fun `cancelled restoration leaves a queued identity retry available`() = test {
+        val restore = stubSavedSessionRestore()
+        sut.initialize()
+        val finishRetry = CompletableDeferred<Unit>()
+        restore.answer = {
+            finishRetry.await()
+            VALID_SELF_KEY
+        }
+        clearInvocations(pubkyService)
+        val retry = launch { sut.restoreSessionIfNeeded() }
+        val readiness = async { sut.awaitIdentityReady() }
+
+        restore.answer = { VALID_SELF_KEY }
+        retry.cancelAndJoin()
+
+        assertEquals(PubkyIdentityReadiness.Ready, readiness.await())
+        verify(pubkyService, times(2)).importSession("saved_session")
+    }
+
+    @Test
+    fun `session restoration loads contacts without waiting for the own profile`() = test {
+        listOf("initialize", "restore", "readiness").forEachCase({ it }) { entry ->
+            resetForCase()
+            val restore = stubSavedSessionRestore()
+            restore.answer = { VALID_SELF_KEY }
+            val finishProfile = CompletableDeferred<Unit>()
+            whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+                finishProfile.await()
+                createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+            }
+            var contactsLoaded = false
+            whenever(pubkyService.contactRecords()).thenAnswer {
+                contactsLoaded = true
+                emptyList<ContactRecord>()
+            }
+
+            val restoration = async {
+                when (entry) {
+                    "initialize" -> sut.initialize()
+                    "restore" -> sut.restoreSessionIfNeeded()
+                    else -> sut.awaitIdentityReady()
+                }
+            }
+            val loadedWhileProfilePending = contactsLoaded
+            finishProfile.complete(Unit)
+            restoration.await()
+
+            assertTrue(loadedWhileProfilePending)
+            assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        }
     }
 
     @Test
