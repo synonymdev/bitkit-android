@@ -112,6 +112,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         kind: PaykitPaymentProofKind,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
+            releaseInterruptedShopPreparation()
             val onchainAttempt = lightningRepo.currentOnchainSendAttempt()
             if (onchainAttempt?.requestId == request.id) throw PaykitPaymentRequestError.OperationInProgress
             operationMutex.withLock {
@@ -550,7 +551,33 @@ class PaykitPaymentProofRepo @Inject constructor(
         }.onFailure { Logger.warn("Failed to prepare Paykit subscription cancellation", it, context = TAG) }
     }
 
+    private suspend fun releaseInterruptedShopPreparation() {
+        runSuspendCatching {
+            lightningRepo.releaseInterruptedShopPreparation { attempt ->
+                operationMutex.withLock {
+                    val proofs = loadProofs()
+                    val original = proofs.filter {
+                        it.requestId == attempt.requestId &&
+                            PubkyPublicKeyFormat.matches(it.identity, requireNotNull(attempt.payerIdentity))
+                    }
+                    val safe = original.all {
+                        it.kind == PaykitPaymentProofKind.Onchain && it.onchainWalletId == attempt.walletId &&
+                            it.paymentIdentifier == null && it.proofData == null && !it.onchainAcceptanceVerified &&
+                            (
+                                !it.paymentStarted ||
+                                    (it.onchainAddress == attempt.address && it.onchainAmountSats == attempt.amountSats)
+                                )
+                    }
+                    if (!safe) return@withLock false
+                    if (original.isNotEmpty()) persist(proofs - original.toSet())
+                    true
+                }
+            }
+        }.onFailure { Logger.warn("Failed to clear interrupted Shop preparation", it, context = TAG) }
+    }
+
     suspend fun reconcile() = withContext(ioDispatcher) {
+        releaseInterruptedShopPreparation()
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
             .onFailure {
                 Logger.warn("Failed to read on-chain send evidence during proof reconciliation", it, context = TAG)

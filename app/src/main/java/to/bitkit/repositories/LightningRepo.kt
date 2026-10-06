@@ -1757,6 +1757,10 @@ class LightningRepo @Inject constructor(
 
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
 
+    suspend fun releaseInterruptedShopPreparation(
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = onchainSendAttemptStore.releaseInterruptedShopPreparation(removeOriginalProof)
+
     suspend fun finishAcceptedShopActivity(requestId: PaykitPaymentRequestId, txid: String) {
         val attempt = onchainSendAttemptStore.current()
         if (attempt?.requestId == requestId && attempt.txid.equals(txid, ignoreCase = true) &&

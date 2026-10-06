@@ -50,6 +50,49 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restart never releases legacy empty guards or recorded candidates`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val original = store.admitForTest()
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        assertEquals(false, reopened.releaseInterruptedShopPreparation { error("legacy guard must remain") })
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            original.address,
+            original.amountSats,
+        )
+        val retained = store.retainPreparedReceipt(original.attemptId, 0, receipt, false)
+        assertEquals(false, reopened.releaseInterruptedShopPreparation { error("signed candidate must remain") })
+        assertEquals(retained, reopened.current())
+    }
+
+    @Test
+    fun `admission is durable before a callback consumes request details`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        store.admitForTest {
+            assertTrue(saved != null, "guard must exist before proof mutation")
+        }
+    }
+
+    @Test
+    fun `failed admission save does not consume request details`() = test {
+        val keychain = mock<Keychain>()
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { error("storage failure") }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        var callbacks = 0
+        assertFailsWith<IllegalStateException> { store.admitForTest { callbacks++ } }
+        assertEquals(0, callbacks)
+    }
+
+    @Test
     fun `admission followup timestamp uses the injected clock`() = test {
         val keychain = mock<Keychain>()
         val clock = mock<kotlin.time.Clock>()

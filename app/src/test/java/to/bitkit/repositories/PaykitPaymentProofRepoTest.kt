@@ -107,6 +107,51 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `restart clears only the original proof from interrupted predispatch admission`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        var saved: String? = null
+        val keychain = mock<to.bitkit.data.keychain.Keychain>()
+        val key = to.bitkit.data.keychain.Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val attempts = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        val admitted = attempts.admit(
+            walletId = WalletScope.default, requestId = request.id, orderId = null,
+            address = ONCHAIN_ADDRESS, amountSats = request.amountSats, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            payerIdentity = LOCAL_IDENTITY,
+            beforeSendAttempt = { repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow() },
+        )
+        assertTrue(admitted.preparationPending)
+        assertTrue(storedProofs.single().paymentStarted)
+        assertFalse(attempts.releaseInterruptedShopPreparation { error("live preparation must not be cleared") })
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        whenever(lightningRepo.currentOnchainSendAttempt()).doSuspendableAnswer { reopened.current() }
+        whenever(lightningRepo.releaseInterruptedShopPreparation(any())).doSuspendableAnswer {
+            reopened.releaseInterruptedShopPreparation(it.getArgument(0))
+        }
+        val startedProof = storedProofs.single()
+        storedProofs = listOf(startedProof.copy(paymentIdentifier = "ab".repeat(32)))
+        repo.reconcile()
+        assertEquals(admitted, reopened.current())
+        assertEquals("ab".repeat(32), storedProofs.single().paymentIdentifier)
+        storedProofs = listOf(startedProof)
+        shouldFailProofRemoval = true
+        repo.reconcile()
+        assertEquals(admitted, reopened.current())
+        assertTrue(storedProofs.single().paymentStarted)
+        repo.reconcile()
+        assertNull(reopened.current())
+        assertTrue(storedProofs.isEmpty())
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        assertFalse(storedProofs.single().paymentStarted)
+        verify(hwWalletRepo, never()).broadcastFunding(any())
+    }
+
+    @Test
     fun `lightning association cannot bypass a started onchain request`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue).copy(
             acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue, MethodId.Bolt11.rawValue),

@@ -16,6 +16,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
 import to.bitkit.models.ActiveOnchainAttemptBackup
+import to.bitkit.models.WalletScope
 import to.bitkit.services.LightningService
 import to.bitkit.utils.AppError
 import java.util.UUID
@@ -86,6 +87,7 @@ data class OnchainSendAttempt(
     val candidateFeeRates: Map<String, ULong> = emptyMap(),
     val backupFollowup: ActiveOnchainAttemptBackup.Followup? = null,
     val restoredFromBackup: Boolean = false,
+    val preparationPending: Boolean = false,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -132,6 +134,7 @@ class OnchainSendAttemptStore @Inject constructor(
 
     // One known positive result per existing wallet guard; entries disappear after a successful durable write.
     private val retainedPositive = mutableMapOf<Int, OnchainSendAttempt>()
+    private val inFlightPreparations = mutableSetOf<String>()
 
     suspend fun current(): OnchainSendAttempt? = withContext(ioDispatcher) {
         mutex.withLock { loadWithRetainedAccepted(lightningService.currentWalletIndex) }
@@ -165,7 +168,6 @@ class OnchainSendAttemptStore @Inject constructor(
             ) {
                 throw OnchainSendBlockedError(loadWithRetainedAccepted(walletIndex) ?: previous)
             }
-            beforeSendAttempt()
             val attempt = OnchainSendAttempt(
                 walletId = walletId,
                 attemptId = UUID.randomUUID().toString(),
@@ -181,6 +183,7 @@ class OnchainSendAttemptStore @Inject constructor(
                 walletIndex = walletIndex,
                 transferContext = transferContext,
                 payerIdentity = payerIdentity,
+                preparationPending = requestId != null,
                 backupFollowup = ActiveOnchainAttemptBackup.Followup(
                     feeSats = "0",
                     tags = tags,
@@ -189,7 +192,34 @@ class OnchainSendAttemptStore @Inject constructor(
                 ),
             )
             persist(attempt)
+            inFlightPreparations += attempt.attemptId
+            var callbackCompleted = false
+            try {
+                beforeSendAttempt()
+                callbackCompleted = true
+            } finally {
+                if (!callbackCompleted) inFlightPreparations -= attempt.attemptId
+            }
             attempt
+        }
+    }
+
+    suspend fun releaseInterruptedShopPreparation(
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = withContext(ioDispatcher + NonCancellable) {
+        mutex.withLock {
+            val current = loadWithRetainedAccepted(lightningService.currentWalletIndex) ?: return@withLock false
+            if (current.attemptId in inFlightPreparations) return@withLock false
+            if (!current.preparationPending || current.restoredFromBackup || current.requestId == null) {
+                return@withLock false
+            }
+            if (current.walletId != WalletScope.default || current.payerIdentity.isNullOrBlank()) return@withLock false
+            if (current.evidence != OnchainSendEvidence.Pending || current.txid != null) return@withLock false
+            if (current.candidateTxids.isNotEmpty() || current.originalInputs != null) return@withLock false
+            if (!removeOriginalProof(current)) return@withLock false
+            keychain.delete(KEY, current.walletIndex)
+            _backupStateVersion.update { it + 1 }
+            true
         }
     }
 
@@ -233,7 +263,11 @@ class OnchainSendAttemptStore @Inject constructor(
                 txid = receipt.txid.lowercase(),
                 evidence = OnchainSendEvidence.Pending,
                 refusalReason = null,
-            ).also { persist(it) }
+                preparationPending = false,
+            ).also {
+                persist(it)
+                inFlightPreparations -= attemptId
+            }
         }
     }
 
@@ -284,9 +318,10 @@ class OnchainSendAttemptStore @Inject constructor(
 
     suspend fun releaseBeforeDispatch(attemptId: String, walletIndex: Int) = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
+            inFlightPreparations -= attemptId
             val current = loadWithRetainedAccepted(walletIndex)
             if (current?.attemptId == attemptId && current.evidence == OnchainSendEvidence.Pending &&
-                current.candidateTxids.isEmpty()
+                current.candidateTxids.isEmpty() && !current.preparationPending
             ) {
                 keychain.delete(KEY, walletIndex)
                 _backupStateVersion.update { it + 1 }
@@ -345,7 +380,7 @@ class OnchainSendAttemptStore @Inject constructor(
             check(existing == null || !existing.blocksNextSend || existing == attempt) {
                 "Cannot replace an existing active on-chain operation"
             }
-            persist(attempt.copy(localFollowupComplete = false))
+            persist(attempt.copy(localFollowupComplete = false, preparationPending = false))
             retainedPositive.remove(attempt.walletIndex)
         }
     }
