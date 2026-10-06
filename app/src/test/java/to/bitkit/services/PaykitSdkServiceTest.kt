@@ -655,14 +655,66 @@ class PaykitSdkServiceTest {
                     assertFailsWith<CancellationException> { service.initializeAndImportSession("saved-session") }
                     assertFailsWith<CancellationException> { service.contactRecords() }
                     service.initialize()
+                    verify(sdk).initialize()
                 } else {
                     assertSame(failure, service.initializeAndImportSession("saved-session").exceptionOrNull())
+                    verify(sdk, never()).initialize()
                 }
             }
             assertEquals(emptyList(), service.contactRecords())
-            verify(sdk).initialize()
             verify(keychain, never()).delete(any())
             verify(keychain, never()).upsertString(any(), any())
+        }
+    }
+
+    @Test
+    fun `session activation conflict returns without fallback and retry completes authorization`() = runTest {
+        for (failAuthorization in listOf(false, true)) {
+            val keychain = mock<Keychain>()
+            val store = mock<PubkyStore>()
+            whenever(store.data).thenReturn(flowOf(PubkyStoreData()))
+            val settings = mock<SettingsStore>()
+            whenever(settings.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = false)))
+            val bootstrap = mock<PubkySessionBootstrap>()
+            val result = PubkySessionBootstrapResult(
+                localSessionAccess(ByteArray(32) { 1 }),
+                RING_PUBKY,
+                PubkyIdentityCapability.PRIVATE_LINK_CAPABLE,
+            )
+            whenever { bootstrap.importSession("saved-session", null, "capabilities") }.thenReturn(result)
+            whenever { bootstrap.importSession("new-session", null, "capabilities") }.thenReturn(result)
+            val sdk = mock<PaykitSdk>()
+            val failure = PaykitException.ConcurrentUpdate("concurrent_update", "Resource locked")
+            val status = IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            whenever { sdk.initialize() }.thenReturn(status)
+            if (failAuthorization) {
+                whenever { sdk.publishPaykitNoiseKeyAuthorization() }.thenThrow(failure).thenReturn(mock())
+            } else {
+                whenever { sdk.initialize() }.thenThrow(failure).thenReturn(status)
+            }
+            val service = PaykitSdkService(
+                mock(),
+                keychain,
+                store,
+                bootstrapFactory = { bootstrap },
+                ioDispatcher = StandardTestDispatcher(testScheduler),
+                platformInitializer = {},
+                settingsStore = settings,
+            ) { sdk }
+
+            mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
+                native.`when`<String> { paykitAuthorizerSessionCapabilities() }.thenReturn("capabilities")
+                assertSame(failure, service.initializeAndImportSession("saved-session").exceptionOrNull())
+                verify(sdk, times(1)).initialize()
+                verify(sdk, never()).publishPaykitApp(any(), any())
+                verify(keychain).upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session")
+                verify(keychain, never()).delete(any())
+
+                assertSame(result, service.importSession("new-session"))
+                verify(sdk, times(2)).initialize()
+                verify(sdk, times(if (failAuthorization) 2 else 1)).publishPaykitNoiseKeyAuthorization()
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+            }
         }
     }
 

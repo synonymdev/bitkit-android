@@ -300,7 +300,6 @@ class PaykitSdkService @Inject constructor(
         var imported: Result<PubkySessionBootstrapResult>? = null
         initialize {
             imported = runSuspendCatching { importSessionLocked(secret) }
-            if (imported.isFailure) initializeRuntime()
         }
         return imported ?: runSuspendCatching { importSession(secret) }
     }
