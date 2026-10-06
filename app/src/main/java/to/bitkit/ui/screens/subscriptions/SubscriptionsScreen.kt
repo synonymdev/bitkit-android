@@ -672,11 +672,9 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
                 VerticalSpacer(16.dp)
             }
         } else {
-            val payOnAcceptance = subscription.paymentDueOnAcceptance(now, Clock.System.now()) != null
             when (route) {
                 is SubscriptionRoute.Review -> SubscriptionReview(
                     subscription = subscription,
-                    payOnAcceptance = payOnAcceptance,
                     now = now,
                     contact = contacts.contactFor(subscription),
                     onDetails = {
@@ -756,7 +754,6 @@ fun SubscriptionFirstPaymentProgress(
     SubscriptionReview(
         subscription = subscription,
         contact = contact,
-        payOnAcceptance = true,
         now = rememberSubscriptionNow(persistentListOf(subscription)),
         onDetails = {},
         onSubscribe = { true },
@@ -769,7 +766,6 @@ fun SubscriptionFirstPaymentProgress(
 private fun SubscriptionReview(
     subscription: PaykitSubscription,
     contact: PubkyProfile,
-    payOnAcceptance: Boolean,
     now: Instant,
     onDetails: () -> Unit,
     onSubscribe: suspend () -> Boolean,
@@ -810,13 +806,7 @@ private fun SubscriptionReview(
         FillHeight()
         if (loading || subscription.isProposalActionable(now)) {
             SwipeToConfirm(
-                text = stringResource(
-                    if (payOnAcceptance) {
-                        R.string.subscriptions__swipe_to_subscribe_and_pay
-                    } else {
-                        R.string.subscriptions__swipe_to_subscribe
-                    }
-                ),
+                text = stringResource(R.string.subscriptions__swipe_to_subscribe),
                 color = Colors.Brand,
                 loading = loading,
                 confirmed = isPaying,
