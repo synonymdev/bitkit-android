@@ -400,11 +400,7 @@ class TransferViewModel @Inject constructor(
                 }
                 return true
             }
-            ToastEventBus.send(
-                AppError(
-                    previous.refusalReason ?: context.getString(R.string.wallet__send_pending__funding_description)
-                )
-            )
+            transferEffects.emit(TransferEffect.OnFundingPending(previous))
             return false
         }
         if (cacheStore.data.first().paidOrders.containsKey(order.id)) return true
@@ -446,9 +442,7 @@ class TransferViewModel @Inject constructor(
             .fold(
                 onSuccess = { outcome ->
                     if (outcome !is OnchainSendOutcome.Accepted) {
-                        ToastEventBus.send(
-                            AppError(context.getString(R.string.wallet__send_pending__funding_description))
-                        )
+                        showRetainedFundingPending(order)
                         return@fold false
                     }
                     // Survive ViewModel clearance between accepted broadcast and paid-order cache write.
@@ -466,10 +460,17 @@ class TransferViewModel @Inject constructor(
                     true
                 },
                 onFailure = {
-                    ToastEventBus.send(it)
+                    if (!showRetainedFundingPending(order)) ToastEventBus.send(it)
                     false
                 }
             )
+    }
+
+    private suspend fun showRetainedFundingPending(order: IBtOrder): Boolean {
+        val attempt = lightningRepo.currentOnchainSendAttempt() ?: return false
+        if (attempt.orderId != order.id || !attempt.isTransfer || !attempt.blocksNextSend) return false
+        transferEffects.emit(TransferEffect.OnFundingPending(attempt))
+        return true
     }
 
     private suspend fun resolveSpendingConfirmPlan(
@@ -2162,6 +2163,7 @@ data class TransferValues(
 sealed interface TransferEffect {
     data object OnQuoteReady : TransferEffect
     data object OnSpendingFundingPaid : TransferEffect
+    data class OnFundingPending(val attempt: to.bitkit.repositories.OnchainSendAttempt) : TransferEffect
     data object OnHwTxSigned : TransferEffect
     data class ToastException(val e: Throwable) : TransferEffect
     data class ToastError(val title: String, val description: String) : TransferEffect

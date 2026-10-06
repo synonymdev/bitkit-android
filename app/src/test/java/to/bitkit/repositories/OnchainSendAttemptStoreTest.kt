@@ -24,6 +24,32 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     private val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
 
     @Test
+    fun `preparation cancellation cleanup releases only exact empty guard and never a receipt`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val empty = store.admitForTest()
+        store.releaseBeforeDispatch("foreign-attempt", 0)
+        assertEquals(empty, store.current())
+        store.releaseBeforeDispatch(empty.attemptId, 0)
+        assertNull(store.current())
+        val original = store.admitForTest()
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            original.address,
+            original.amountSats,
+        )
+        val retained = store.retainPreparedReceipt(original.attemptId, 0, receipt, false)
+        store.releaseBeforeDispatch(original.attemptId, 0)
+        assertEquals(retained, store.current())
+        assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
+    }
+
+    @Test
     fun `admission followup timestamp uses the injected clock`() = test {
         val keychain = mock<Keychain>()
         val clock = mock<kotlin.time.Clock>()

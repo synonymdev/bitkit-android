@@ -458,6 +458,30 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `candidate fees retain authorized successor rate and select the actual older winner`() = test {
+        val f = Fixture()
+        val original = f.unresolved()
+        val sender = object : OnchainPreparedSender {
+            override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend = error("unused")
+            override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong) =
+                PreparedOnchainSend(f.receipt(nextTxid)) {
+                    val saved = kotlinx.serialization.json.Json.decodeFromString<OnchainSendAttempt>(
+                        requireNotNull(f.saved)
+                    )
+                    assertEquals(3uL, saved.candidateFeeRates[nextTxid])
+                    OnchainSendOutcome.Unknown(nextTxid)
+                }
+        }
+        val coordinator = OnchainSendCoordinator(f.store, sender, testDispatcher)
+        coordinator.retryOriginal(original.attemptId, original.walletId, 3uL) {}.getOrThrow()
+        val reopened = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service, kotlin.time.Clock.System)
+        assertEquals(3uL, reopened.current()?.winningFeeRateSatsPerVByte)
+        reopened.observeExactTransaction(firstTxid)
+        assertEquals(1uL, reopened.current()?.winningFeeRateSatsPerVByte)
+        assertEquals(mapOf(firstTxid to 1uL, nextTxid to 3uL), reopened.current()?.candidateFeeRates)
+    }
+
+    @Test
     fun `overflowing authorized recovery fee never reaches native preparation`() = test {
         assertEquals(UInt.MAX_VALUE.toULong(), OnchainRecoveryFeeRate.maximum)
         assertEquals(null, OnchainRecoveryFeeRate.parse("4294967296"))

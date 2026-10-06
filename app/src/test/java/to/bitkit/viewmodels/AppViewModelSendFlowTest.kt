@@ -8378,19 +8378,49 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             tags = emptyList(),
             evidence = OnchainSendEvidence.Accepted,
             txid = txid,
+            candidateTxids = listOf(txid),
+            originalInputs = listOf(to.bitkit.repositories.OnchainSendInput("11".repeat(32), 0u)),
         )
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
         setSendState(SendUiState(address = "bcrt1qdifferentrecipient", amount = 2_000u, payMethod = SendMethod.ONCHAIN))
         stubOnchainSend("bcrt1qdifferentrecipient", 2_000u, Result.failure(OnchainSendBlockedError(previous)))
         whenever(lightningRepo.completeAcceptedOrdinaryFollowup(txid))
-            .doSuspendableAnswer { throw AppError("attempt reload unavailable") }
+            .doSuspendableAnswer { Unit }
 
         sut.sendEffect.test {
             confirmCurrentPayment()
-            assertEquals(SendEffect.NavigateToPending(txid, 1_000, false, isOnchain = true), awaitItem())
+            expectNoEvents()
         }
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
         verify(lightningRepo).completeAcceptedOrdinaryFollowup(txid)
+    }
+
+    @Test
+    fun `retained transfer Pending opens original funding recovery without changing send inputs`() = test {
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original-funding", requestId = null,
+            orderId = "order-1", address = "bcrt1qoriginalorder", amountSats = 1_000uL,
+            isMaxAmount = false, feeRateSatsPerVByte = 2uL, isTransfer = true,
+            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Rejected,
+            txid = "ab".repeat(32), refusalReason = "declined",
+        )
+        setSendState(SendUiState(address = "bcrt1qother", amount = 9_000u))
+        sut.showPendingTransfer(original)
+        advanceUntilIdle()
+        assertEquals(
+            Sheet.Send(
+                SendRoute.Pending(
+                    paymentHash = requireNotNull(original.txid),
+                    amount = 1_000,
+                    observeResolution = false,
+                    isOnchain = true,
+                    walletId = original.walletId,
+                    refusalReason = original.refusalReason,
+                )
+            ),
+            sut.currentSheet.value,
+        )
+        assertEquals("bcrt1qother", sut.sendUiState.value.address)
     }
 
     @Test

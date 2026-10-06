@@ -57,6 +57,7 @@ data class OnchainPreparedReceipt(
     val inputs: List<OnchainSendInput>,
     val address: String,
     val amountSats: ULong,
+    val feeRateSatsPerVByte: ULong? = null,
 )
 
 @Serializable
@@ -82,9 +83,15 @@ data class OnchainSendAttempt(
     val payerIdentity: String? = null,
     val originalInputs: List<OnchainSendInput>? = null,
     val candidateTxids: List<String> = emptyList(),
+    val candidateFeeRates: Map<String, ULong> = emptyMap(),
     val backupFollowup: ActiveOnchainAttemptBackup.Followup? = null,
     val restoredFromBackup: Boolean = false,
 ) {
+    val winningFeeRateSatsPerVByte: ULong
+        get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
+            candidateTxids.isEmpty() || txid.equals(candidateTxids.first(), ignoreCase = true)
+        } ?: error("Winning candidate fee rate is unavailable")
+
     val isUnresolved: Boolean
         get() = evidence == OnchainSendEvidence.Pending ||
             evidence == OnchainSendEvidence.Rejected ||
@@ -214,10 +221,15 @@ class OnchainSendAttemptStore @Inject constructor(
                 require(current.originalInputs == null && current.candidateTxids.isEmpty() && current.txid == null)
                 require((current.isMaxAmount && current.requestId == null) || receipt.amountSats == current.amountSats)
             }
+            val feeRate = receipt.feeRateSatsPerVByte ?: current.feeRateSatsPerVByte
+            require(OnchainRecoveryFeeRate.isValid(feeRate))
+            val existingFeeRate = current.candidateFeeRates[receipt.txid.lowercase()]
+            require(existingFeeRate == null || existingFeeRate == feeRate)
             current.copy(
                 amountSats = receipt.amountSats,
                 originalInputs = current.originalInputs ?: receipt.inputs,
                 candidateTxids = (current.candidateTxids + receipt.txid.lowercase()).distinct(),
+                candidateFeeRates = current.candidateFeeRates + (receipt.txid.lowercase() to feeRate),
                 txid = receipt.txid.lowercase(),
                 evidence = OnchainSendEvidence.Pending,
                 refusalReason = null,

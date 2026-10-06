@@ -275,8 +275,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     /** Authorize a successor against the existing payer proof without preparing or consuming private context again. */
     suspend fun authorizeOnchainRecovery(attempt: OnchainSendAttempt): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
+            val current = lightningRepo.currentOnchainSendAttempt()
             operationMutex.withLock {
-                val current = lightningRepo.currentOnchainSendAttempt()
                 val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
                 if (current != attempt || !attempt.isUnresolved) {
                     throw PaykitPaymentRequestError.OperationInProgress
@@ -338,6 +338,25 @@ class PaykitPaymentProofRepo @Inject constructor(
                 pendingProof(request, paymentEndpointIdentifier, PaykitPaymentProofKind.Onchain)
             }.getOrNull()
         }
+        // Admission acquires attempt-store then proof mutex; never acquire the store while holding this mutex.
+        val original = runSuspendCatching {
+            operationMutex.withLock {
+                loadProofs().lastOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id &&
+                        it.kind == PaykitPaymentProofKind.Onchain && it.paymentStarted && it.proofData == null &&
+                        (
+                            it.paymentIdentifier == null ||
+                                (hasCandidateFamily && it.matchesOriginalShopAttempt(requireNotNull(attempt)))
+                            )
+                }
+            }
+        }.getOrNull()
+        if (original == null && hasCandidateFamily) return@withContext false
+        val evidenceProof = original ?: fallbackProof ?: return@withContext false
+        if (!hasPositiveEvidence(evidenceProof)) return@withContext false
+        if (runSuspendCatching { lightningRepo.finishAcceptedShopActivity(request.id, txid) }.isFailure) {
+            return@withContext false
+        }
         val completed = operationMutex.withLock {
             val completion = runSuspendCatching {
                 val proofs = loadProofs().toMutableList()
@@ -353,6 +372,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                         it.proofData == null
                 }
                 if (hasCandidateFamily && index < 0) return@runSuspendCatching false
+                if (original != null && (index < 0 || proofs[index] != original)) return@runSuspendCatching false
                 val originalProof = if (index >= 0) proofs[index] else fallbackProof
                 if (originalProof == null || !hasPositiveEvidence(originalProof)) return@runSuspendCatching false
                 val proof = if (index >= 0) {
@@ -370,7 +390,6 @@ class PaykitPaymentProofRepo @Inject constructor(
                     )
                 }
                 if (!hasPositiveEvidence(proof)) return@runSuspendCatching false
-                lightningRepo.finishAcceptedShopActivity(request.id, txid)
                 if (index >= 0) proofs[index] = proof else proofs += proof
                 val retained = persistAndSubmit(listOf(proof), proofs)
                 if (retained) publishOnchainResolution(proof, txid)
@@ -391,10 +410,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     proofData = txid.lowercase(),
                     onchainAcceptanceVerified = true,
                 )
-                val delivered = runSuspendCatching {
-                    lightningRepo.finishAcceptedShopActivity(request.id, txid)
-                    submitReady(proof)
-                }
+                val delivered = runSuspendCatching { submitReady(proof) }
                     .onFailure { Logger.warn("Failed to complete a Paykit on-chain payment proof", it, context = TAG) }
                     .getOrDefault(false)
                 if (delivered) publishOnchainResolution(proof, txid)
@@ -546,6 +562,30 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
         if (!store.hasPendingProofs()) return@withContext
 
+        // Snapshot immutable proofs, finish their exact accepted activity without the proof lock,
+        // then revalidate the same record under the lock before marking or delivering its proof.
+        val activityReady = mutableSetOf<PendingPaykitPaymentProof>()
+        val snapshot = runSuspendCatching {
+            operationMutex.withLock { loadProofs().also { if (it.isEmpty()) persist(emptyList()) } }
+        }.getOrElse { return@withContext }
+        if (snapshot.isEmpty()) return@withContext
+        snapshot.filter { it.kind == PaykitPaymentProofKind.Onchain && it.onchainWalletId == WalletScope.default }
+            .forEach { proof ->
+                val txid = proof.proofData ?: attempt?.txid
+                val validCompletedProof = proof.paymentStarted && proof.proofData?.isHex(HASH_BYTE_COUNT) == true &&
+                    proof.paymentIdentifier.equals(proof.proofData, ignoreCase = true)
+                val positive = if (proof.proofData == null) {
+                    attempt.matchesPositiveShopProof(proof)
+                } else {
+                    validCompletedProof && (proof.onchainAcceptanceVerified || attempt.matchesPositiveShopProof(proof))
+                }
+                if (positive && txid != null && runSuspendCatching {
+                        lightningRepo.finishAcceptedShopActivity(proof.requestId, txid)
+                    }.isSuccess
+                ) {
+                    activityReady += proof
+                }
+            }
         var completedShopTxid: String? = null
         operationMutex.withLock {
             runSuspendCatching {
@@ -566,7 +606,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 }
 
                 proofs.forEach { proof ->
-                    runSuspendCatching { reconcileProof(proof, payments, attempt) }
+                    runSuspendCatching { reconcileProof(proof, payments, attempt, proof in activityReady) }
                         .onSuccess { if (it && proof.onchainWalletId == WalletScope.default) completedShopTxid = attempt?.txid }
                         .onFailure {
                             Logger.warn(
@@ -590,7 +630,13 @@ class PaykitPaymentProofRepo @Inject constructor(
         proof: PendingPaykitPaymentProof,
         payments: List<PaymentDetails>,
         attempt: OnchainSendAttempt?,
+        activityReady: Boolean,
     ): Boolean {
+        if (proof.kind == PaykitPaymentProofKind.Onchain && proof.onchainWalletId == WalletScope.default &&
+            !activityReady
+        ) {
+            return false
+        }
         return when {
             proof.kind == PaykitPaymentProofKind.Onchain && proof.proofData != null -> {
                 if (!proof.paymentStarted || !proof.proofData.isHex(HASH_BYTE_COUNT) ||
@@ -602,12 +648,10 @@ class PaykitPaymentProofRepo @Inject constructor(
                     val proofs = loadProofs().toMutableList()
                     val index = proofs.indexOf(proof)
                     if (index < 0) return false
-                    lightningRepo.finishAcceptedShopActivity(proof.requestId, proof.proofData)
                     val verified = proof.copy(onchainAcceptanceVerified = true)
                     proofs[index] = verified
                     return persistAndSubmit(listOf(verified), proofs)
                 }
-                lightningRepo.finishAcceptedShopActivity(proof.requestId, proof.proofData)
                 submitReady(proof)
                 attempt.matchesPositiveShopProof(proof)
             }
@@ -662,7 +706,6 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (proof.onchainWalletId != WalletScope.default) return reconcileHardwareOnchainProof(proof)
         if (!attempt.matchesPositiveShopProof(proof)) return false
         val txid = attempt?.txid ?: return false
-        lightningRepo.finishAcceptedShopActivity(proof.requestId, txid)
 
         val proofs = loadProofs().toMutableList()
         val index = proofs.indexOf(proof)

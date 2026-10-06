@@ -115,7 +115,7 @@ class OnchainSendCoordinator(
                 store.retainPreparedReceipt(
                     original.attemptId,
                     original.walletIndex,
-                    prepared.receipt,
+                    prepared.receipt.copy(feeRateSatsPerVByte = original.feeRateSatsPerVByte),
                     isRecovery = false,
                 )
                 submit(original, prepared)
@@ -148,7 +148,7 @@ class OnchainSendCoordinator(
                 val retained = store.retainPreparedReceipt(
                     attempt.attemptId,
                     attempt.walletIndex,
-                    prepared.receipt,
+                    prepared.receipt.copy(feeRateSatsPerVByte = feeRateSatsPerVByte),
                     isRecovery = true,
                 )
                 authorizeOriginal(retained)

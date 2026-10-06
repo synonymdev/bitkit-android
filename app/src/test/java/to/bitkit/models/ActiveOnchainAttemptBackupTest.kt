@@ -4,13 +4,14 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import to.bitkit.repositories.OnchainSendEvidence
+import to.bitkit.test.BaseUnitTest
 import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
-class ActiveOnchainAttemptBackupTest {
+class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     private val json = Json { ignoreUnknownKeys = true }
     private val binding = "fe843546f607f38ba7b1e8fe479c3103139ebea5b83628cbaa465e41cf6cb6c0"
 
@@ -19,6 +20,56 @@ class ActiveOnchainAttemptBackupTest {
         val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
         assertEquals("1e392cdfaa82f48bed7be194ddaa3efe62efbf41a54fd14b70590d9a11f6f7b2", hash)
         return json.decodeFromString(bytes.decodeToString())
+    }
+
+    @Test
+    fun `shared iOS candidate fee golden preserves exact map and older winner fee`() {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
+        val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        assertEquals("ff666fce72a1dbcc870fc277aabbf1a28926f5f926a772d87e3d4960403ce34c", hash)
+        val backup = Json { ignoreUnknownKeys = true }.decodeFromString<WalletBackupV1>(bytes.decodeToString())
+        val state = requireNotNull(backup.paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        wire.validateProofs(state.pendingProofs, "wallet0")
+        val attempt = wire.restored("regtest", wire.wallet.binding, "wallet0", 0)
+        assertEquals(4uL, attempt.winningFeeRateSatsPerVByte)
+        assertEquals(2uL, attempt.copy(txid = attempt.candidateTxids.first()).winningFeeRateSatsPerVByte)
+        assertEquals(wire, ActiveOnchainAttemptBackup.from(attempt, "regtest", wire.wallet.binding))
+    }
+
+    @Test
+    fun `candidate fee wire survives restore and rejects foreign candidates or invalid UInt32 rates`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
+        val winner = requireNotNull(wire.txid)
+        val json = Json { ignoreUnknownKeys = true }
+        fun withRates(rates: Map<String, String>): ActiveOnchainAttemptBackup {
+            val fields = json.parseToJsonElement(json.encodeToString(wire)) as kotlinx.serialization.json.JsonObject
+            val candidateFees = kotlinx.serialization.json.JsonObject(
+                rates.mapValues { kotlinx.serialization.json.JsonPrimitive(it.value) }
+            )
+            return json.decodeFromString(
+                kotlinx.serialization.json.JsonObject(fields + ("candidateFeeRates" to candidateFees)).toString()
+            )
+        }
+        val enhanced = withRates(mapOf(winner to "3"))
+        val restored = enhanced.restored("regtest", binding, "wallet0", 0)
+        assertEquals(3uL, restored.winningFeeRateSatsPerVByte)
+        val exported = ActiveOnchainAttemptBackup.from(restored, "regtest", binding)
+        assertEquals(enhanced, exported)
+        listOf(
+            mapOf("00".repeat(32) to "3"),
+            mapOf(winner to "0"),
+            mapOf(winner to "4294967296"),
+            mapOf(winner to "03"),
+        ).forEach {
+            assertFailsWith<IllegalArgumentException> { withRates(it).restored("regtest", binding, "wallet0", 0) }
+        }
+        val original = wire.copy(txid = wire.candidateTxids.first()).restored("regtest", binding, "wallet0", 0)
+        assertEquals(wire.feeRateSatsPerVByte.toULong(), original.winningFeeRateSatsPerVByte)
+        if (wire.candidateTxids.size > 1) {
+            val successor = wire.copy(txid = wire.candidateTxids.last()).restored("regtest", binding, "wallet0", 0)
+            assertFailsWith<IllegalStateException> { successor.winningFeeRateSatsPerVByte }
+        }
     }
 
     @Test

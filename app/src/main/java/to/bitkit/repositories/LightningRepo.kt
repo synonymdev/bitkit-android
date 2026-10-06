@@ -1541,30 +1541,40 @@ class LightningRepo @Inject constructor(
             }
             return@executeWhenNodeRunning Result.failure(error)
         }
-        val preparedResult = runSuspendCatching {
-            lightningService.prepareOnchainSend(
-                address,
-                sats,
-                satsPerVByte,
-                utxosForSend,
-                isMaxAmount,
-                attempt.walletIndex
-            )
-                .also { prepared ->
-                    if (!isMaxAmount && utxosForSend != null) {
-                        check(
-                            prepared.receipt.inputs.toSet() == utxosForSend.map {
-                                OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
-                            }.toSet()
+        val preparedResult = try {
+            runSuspendCatching {
+                lightningService.prepareOnchainSend(
+                    address,
+                    sats,
+                    satsPerVByte,
+                    utxosForSend,
+                    isMaxAmount,
+                    attempt.walletIndex
+                )
+                    .also { prepared ->
+                        if (!isMaxAmount && utxosForSend != null) {
+                            check(
+                                prepared.receipt.inputs.toSet() == utxosForSend.map {
+                                    OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
+                                }.toSet()
+                            )
+                        }
+                        onchainSendAttemptStore.retainPreparedReceipt(
+                            attempt.attemptId,
+                            attempt.walletIndex,
+                            prepared.receipt.copy(feeRateSatsPerVByte = satsPerVByte),
+                            isRecovery = false,
                         )
                     }
-                    onchainSendAttemptStore.retainPreparedReceipt(
-                        attempt.attemptId,
-                        attempt.walletIndex,
-                        prepared.receipt,
-                        isRecovery = false,
-                    )
-                }
+            }
+        } catch (cancelled: CancellationException) {
+            // Release only the exact empty pre-dispatch guard. A retained receipt remains protected.
+            withContext(NonCancellable) {
+                runSuspendCatching {
+                    onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+                }.onFailure { Logger.warn("Failed to release cancelled preparation", it, context = TAG) }
+            }
+            throw cancelled
         }
         val prepared = preparedResult.getOrElse {
             // Preparation and receipt persistence never dispatch. A failed save leaves the preguard if cleanup fails.
@@ -1682,7 +1692,7 @@ class LightningRepo @Inject constructor(
             txId = txId,
             address = attempt.address,
             isReceive = false,
-            feeRate = attempt.feeRateSatsPerVByte,
+            feeRate = attempt.winningFeeRateSatsPerVByte,
             isTransfer = attempt.isTransfer,
             channelId = attempt.channelId ?: "",
         )
@@ -1692,7 +1702,7 @@ class LightningRepo @Inject constructor(
             address = attempt.address,
             amount = attempt.amountSats,
             fee = originalFollowup?.feeSats?.toULong() ?: 0uL,
-            feeRate = attempt.feeRateSatsPerVByte,
+            feeRate = attempt.winningFeeRateSatsPerVByte,
             isTransfer = attempt.isTransfer,
             channelId = attempt.channelId,
             walletId = attempt.walletId,

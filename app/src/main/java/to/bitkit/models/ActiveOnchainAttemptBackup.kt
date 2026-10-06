@@ -28,6 +28,7 @@ data class ActiveOnchainAttemptBackup(
     val originalInputs: List<Input>? = null,
     val candidateTxids: List<String> = emptyList(),
     val feeRateSatsPerVByte: String,
+    val candidateFeeRates: Map<String, String>? = null,
     val followup: Followup? = null,
     val transfer: Transfer? = null,
 ) {
@@ -69,6 +70,10 @@ data class ActiveOnchainAttemptBackup(
         )
         require(unsigned(feeRateSatsPerVByte) <= UInt.MAX_VALUE.toULong())
         require(candidateTxids.distinct().size == candidateTxids.size && candidateTxids.all { it.matches(HEX) })
+        val restoredFeeRates = candidateFeeRates.orEmpty().mapValues { (txid, rate) ->
+            require(txid.matches(HEX) && txid in candidateTxids)
+            unsigned(rate).also { require(it > 0uL && it <= UInt.MAX_VALUE.toULong()) }
+        }
         val inputs = originalInputs?.map { input ->
             require(input.txid.matches(HEX) && unsigned(input.vout) <= UInt.MAX_VALUE.toULong())
             OnchainSendInput(input.txid, unsigned(input.vout).toUInt())
@@ -108,7 +113,8 @@ data class ActiveOnchainAttemptBackup(
             feeRateSatsPerVByte = unsigned(feeRateSatsPerVByte), isTransfer = orderId != null,
             channelId = followup?.channelId, tags = followup?.tags.orEmpty(), evidence = evidence,
             txid = txid, refusalReason = rejectionReason, localFollowupComplete = false,
-            originalInputs = inputs, candidateTxids = candidateTxids, transferContext = transferContext,
+            originalInputs = inputs, candidateTxids = candidateTxids, candidateFeeRates = restoredFeeRates,
+            transferContext = transferContext,
             backupFollowup = followup, restoredFromBackup = true,
         )
     }
@@ -153,6 +159,8 @@ data class ActiveOnchainAttemptBackup(
                 txid = attempt.txid, rejectionReason = attempt.refusalReason,
                 originalInputs = attempt.originalInputs?.map { Input(it.txid, it.vout.toString()) },
                 candidateTxids = attempt.candidateTxids, feeRateSatsPerVByte = attempt.feeRateSatsPerVByte.toString(),
+                candidateFeeRates = attempt.candidateFeeRates.takeIf { it.isNotEmpty() }
+                    ?.mapValues { it.value.toString() },
                 followup = attempt.backupFollowup,
                 transfer = attempt.transferContext?.let {
                     Transfer(

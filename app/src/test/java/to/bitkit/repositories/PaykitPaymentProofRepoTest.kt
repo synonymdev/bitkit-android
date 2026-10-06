@@ -12,6 +12,9 @@ import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -892,6 +895,31 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.single().onchainMatchingTransactionIdsBeforeAttempt.isEmpty())
         assertNull(storedProofs.single().proofData)
         verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `Shop reconciliation never holds proof mutex while finishing attempt activity`() = test {
+        val txid = "ab".repeat(32)
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedAttempt(request, txid))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        val finishing = CompletableDeferred<Unit>()
+        val proofLockReleased = CompletableDeferred<Unit>()
+        whenever(lightningRepo.finishAcceptedShopActivity(request.id, txid)).doSuspendableAnswer {
+            finishing.complete(Unit)
+            proofLockReleased.await()
+        }
+        val reconciliation = launch { repo.reconcile() }
+        finishing.await()
+        withTimeout(1_000) {
+            repo.backupSnapshot()
+            proofLockReleased.complete(Unit)
+            reconciliation.join()
+        }
+        assertTrue(storedProofs.isEmpty())
     }
 
     @Test

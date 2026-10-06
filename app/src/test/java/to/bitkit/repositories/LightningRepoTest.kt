@@ -1618,13 +1618,14 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `UI cancellation after admission never releases pending guard`() = test {
+    fun `preparation cancellation releases empty admitted guard without dispatch`() = test {
         val attempt = pendingSendAttempt()
         val repo = prepareGuardedSend(attempt)
         whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
             .thenThrow(CancellationException("screen closed"))
         assertFailsWith<CancellationException> { repo.sendOnChain("address", 1_000uL) }
-        verify(onchainSendAttemptStore, never()).releaseBeforeDispatch(any(), any())
+        verify(onchainSendAttemptStore).releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+        verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
     }
 
     @Test
@@ -1667,6 +1668,26 @@ class LightningRepoTest : BaseUnitTest() {
         ).thenReturn(attempt)
         startNodeForTesting()
         return spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+    }
+
+    @Test
+    fun `accepted successor metadata uses the winning candidate authorized fee`() = test {
+        val txid = "cd".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+            candidateTxids = listOf("ab".repeat(32), txid),
+            candidateFeeRates = mapOf("ab".repeat(32) to 1uL, txid to 3uL),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        val metadata = argumentCaptor<com.synonym.bitkitcore.PreActivityMetadata>()
+        verify(preActivityMetadataRepo).addPreActivityMetadata(metadata.capture())
+        assertEquals(3uL, metadata.firstValue.feeRate)
     }
 
     @Test

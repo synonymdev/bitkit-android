@@ -4297,6 +4297,13 @@ class AppViewModel @Inject constructor(
                 // Finish the earlier payment, but this blocked confirmation did not send the new payment.
                 runSuspendCatching { lightningRepo.completeAcceptedOrdinaryFollowup(previous.txid) }
                     .onFailure { Logger.warn("Failed to finish earlier ordinary send locally", it, context = TAG) }
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__error_sending_title),
+                    description = context.getString(R.string.wallet__send_pending__blocked_new_send),
+                )
+                hideSheet()
+                return
             }
             previous?.refusalReason?.let {
                 toast(
@@ -4390,6 +4397,22 @@ class AppViewModel @Inject constructor(
             }.onFailure { Logger.warn("Failed to finish original recovered send locally", it, context = TAG) }
         }
         return result
+    }
+
+    fun showPendingTransfer(attempt: OnchainSendAttempt) {
+        if (!attempt.isTransfer || attempt.orderId == null || !attempt.blocksNextSend) return
+        showSheet(
+            Sheet.Send(
+                SendRoute.Pending(
+                    paymentHash = attempt.txid.orEmpty(),
+                    amount = attempt.amountSats.toLong(),
+                    observeResolution = false,
+                    isOnchain = true,
+                    walletId = attempt.walletId,
+                    refusalReason = attempt.refusalReason,
+                )
+            )
+        )
     }
 
     private fun showUnresolvedOnchainSend(

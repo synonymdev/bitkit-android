@@ -1480,8 +1480,14 @@ class TransferViewModelTest : BaseUnitTest() {
         quoteOrder(order)
 
         prepareConfirm()
+        val retained = acceptedFundingAttempt(order, null).copy(evidence = OnchainSendEvidence.Unknown)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(null, retained)
+        val effects = mutableListOf<TransferEffect>()
+        val collector = launch { sut.transferEffects.collect { effects += it } }
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
+        assertEquals(listOf<TransferEffect>(TransferEffect.OnFundingPending(retained)), effects)
+        collector.cancel()
 
         verify(cacheStore, never()).addPaidOrder(any(), any())
         verify(transferRepo, never()).createTransfer(
