@@ -74,6 +74,7 @@ import to.bitkit.models.deriveHardwareWalletId
 import to.bitkit.models.findHardwareWalletId
 import to.bitkit.models.isReplacedBy
 import to.bitkit.models.matches
+import to.bitkit.models.storedAccountKey
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
@@ -1285,7 +1286,7 @@ class TrezorRepo @Inject constructor(
                     path = path,
                     coin = coin,
                     showOnTrezor = false,
-                ).xpub
+                ).storedAccountKey(addressType)
             }
             if (result.isSuccess) {
                 return XpubFetchResult(xpub = result.getOrThrow())
