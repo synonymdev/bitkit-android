@@ -43,6 +43,7 @@ class Crypto @Inject constructor() {
          */
         @Synchronized
         fun installSecurityProvider() {
+            // TODO show setup failure on UI? It throws from App.onCreate and stops start-up
             try {
                 val provider = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
                 when {
