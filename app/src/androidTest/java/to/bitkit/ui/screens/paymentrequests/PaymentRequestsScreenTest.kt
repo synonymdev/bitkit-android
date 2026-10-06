@@ -4,8 +4,10 @@ package to.bitkit.ui.screens.paymentrequests
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
@@ -39,6 +41,31 @@ import kotlin.time.Instant
 class PaymentRequestsScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    @Test
+    fun detailsDisablePayWhilePreparationIsPending() {
+        val isPreparing = mutableStateOf(false)
+        val request = request()
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                IncomingPaymentRequestDetailsContent(
+                    request = request,
+                    contact = PubkyProfile.placeholder(request.counterparty),
+                    isPending = true,
+                    isPreparing = isPreparing.value,
+                    onBack = {},
+                    onPay = {},
+                    onDismiss = { Result.success(Unit) },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("PaymentRequestDetailsPay").assertIsEnabled()
+        composeTestRule.runOnIdle { isPreparing.value = true }
+        composeTestRule.onNodeWithTag("PaymentRequestDetailsPay").assertIsNotEnabled()
+        composeTestRule.runOnIdle { isPreparing.value = false }
+        composeTestRule.onNodeWithTag("PaymentRequestDetailsPay").assertIsEnabled()
+    }
 
     @Test
     fun queueShowsIncomingRequestAndSeeAllAction() {

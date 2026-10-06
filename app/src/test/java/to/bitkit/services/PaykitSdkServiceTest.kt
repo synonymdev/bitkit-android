@@ -5,6 +5,7 @@ import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitApp
 import com.synonym.paykit.PaykitAppCapabilities
 import com.synonym.paykit.PaykitAppRegistry
@@ -73,6 +74,7 @@ import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.repositories.PubkyContactError
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
 import kotlin.coroutines.cancellation.CancellationException
@@ -251,8 +253,13 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `cancelled private preparation finishes the active SDK call before releasing the queue`() = runTest {
-        for (isRequest in listOf(false, true)) {
+    fun `cancelled private operation finishes the active SDK call before releasing the queue`() = runTest {
+        val operations = listOf<suspend PaykitSdkService.() -> Any?>(
+            { prepareAndResolvePrivateContactPayment(RING_PUBKY, null) },
+            { prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null) },
+            { processOutboundPrivateMessages(RING_PUBKY, Priority.Interactive) },
+        )
+        for (operation in operations) {
             val sdk = mock<PaykitSdk>()
             val release = CompletableDeferred<Unit>()
             var finished = false
@@ -268,18 +275,17 @@ class PaykitSdkServiceTest {
                     finished = true
                     mock()
                 }
+            whenever { sdk.processOutboundPrivateMessages(RING_PUBKY) }.doSuspendableAnswer {
+                release.await()
+                finished = true
+                mock()
+            }
             whenever { sdk.contactRecords() }.thenAnswer {
                 assertTrue(finished)
                 emptyList<ContactRecord>()
             }
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-            val preparation = async {
-                if (isRequest) {
-                    service.prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null)
-                } else {
-                    service.prepareAndResolvePrivateContactPayment(RING_PUBKY, null)
-                }
-            }
+            val preparation = async { service.operation() }
             runCurrent()
             val next = async { service.contactRecords() }
             preparation.cancel()
@@ -294,6 +300,99 @@ class PaykitSdkServiceTest {
             assertTrue(finished)
             assertEquals(1L, service.backupStateVersion.value)
         }
+    }
+
+    @Test
+    fun `foreground request work overtakes queued routine reads but not active work`() = runTest {
+        val operations = listOf<suspend PaykitSdkService.() -> Any?>(
+            { identityStatus(Priority.Interactive) },
+            { linkedPeers(Priority.Interactive) },
+            { allPaymentRequests(null, Priority.Interactive) },
+            { processOutboundPrivateMessages(RING_PUBKY, Priority.Interactive) },
+        )
+        for (operation in operations) {
+            val sdk = mock<PaykitSdk>()
+            val release = CompletableDeferred<Unit>()
+            val events = mutableListOf<String>()
+            whenever { sdk.contactRecords() }.doSuspendableAnswer {
+                release.await()
+                events += "active completed"
+                emptyList()
+            }
+            whenever { sdk.pendingOutboundPrivateCounterparties() }.thenAnswer {
+                events += "background"
+                emptyList<String>()
+            }
+            whenever { sdk.identityStatus() }.thenAnswer {
+                events += "interactive"
+                IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            }
+            whenever { sdk.linkedPeers() }.thenAnswer {
+                events += "interactive"
+                emptyList<LinkedPeerRecord>()
+            }
+            whenever { sdk.listPaymentRequests(any()) }.thenAnswer {
+                events += "interactive"
+                emptyList<PaymentRequestRecord>()
+            }
+            whenever { sdk.processOutboundPrivateMessages(RING_PUBKY) }.thenAnswer {
+                events += "interactive"
+                mock<OutboundPrivateSendReport>()
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val active = async { service.contactRecords() }
+            runCurrent()
+            val background = async { service.pendingOutboundPrivateCounterparties(Priority.Background) }
+            val cancelled = async { service.operation() }
+            runCurrent()
+            cancelled.cancel()
+            val foreground = async { service.operation() }
+            runCurrent()
+            assertTrue(events.isEmpty())
+            release.complete(Unit)
+            active.await()
+            foreground.await()
+            background.await()
+            assertFailsWith<CancellationException> { cancelled.await() }
+            assertEquals(listOf("active completed", "interactive", "background"), events)
+        }
+    }
+
+    @Test
+    fun `foreground identity read cannot overtake queued signout`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        val signedOut = IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT)
+        whenever { sdk.contactRecords() }.doSuspendableAnswer {
+            release.await()
+            emptyList()
+        }
+        whenever { sdk.pendingOutboundPrivateCounterparties() }.thenAnswer {
+            events += "background"
+            emptyList<String>()
+        }
+        whenever { sdk.signOut() }.thenAnswer {
+            events += "signout"
+            signedOut
+        }
+        whenever { sdk.identityStatus() }.thenAnswer {
+            events += "identity"
+            signedOut
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val active = async { service.contactRecords() }
+        runCurrent()
+        val background = async { service.pendingOutboundPrivateCounterparties(Priority.Background) }
+        val signout = async { service.signOut() }
+        val identity = async { service.identityStatus(Priority.Interactive) }
+        runCurrent()
+        release.complete(Unit)
+        active.await()
+        background.await()
+        signout.await()
+        assertEquals(signedOut, identity.await())
+        assertEquals(listOf("background", "signout", "identity"), events)
     }
 
     @Test

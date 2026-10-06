@@ -59,6 +59,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
@@ -143,6 +144,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             LinkedPeerHandshakeReport(it.getArgument(0), LinkedPeerState.LINKED, 1uL, null)
         }
         whenever { paykitSdkService.pendingOutboundPrivateCounterparties() }.thenReturn(emptyList())
+        whenever(paykitSdkService.linkedPeers(any())).doSuspendableAnswer { paykitSdkService.linkedPeers() }
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties(any())).doSuspendableAnswer {
+            paykitSdkService.pendingOutboundPrivateCounterparties()
+        }
         whenever { paykitSdkService.clearPrivatePaymentLists(any()) }.thenAnswer {
             privateListDeliveryReport(clearedCounterparties = it.getArgument(0))
         }
@@ -446,6 +451,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.closeAndClear()
 
         verifyBlocking(paykitSdkService, atLeast(8)) { ensureLinkWithPeer(CONTACT_KEY) }
+        verify(paykitSdkService, atLeast(1)).linkedPeers(Priority.Background)
+        verify(paykitSdkService, atLeast(1)).pendingOutboundPrivateCounterparties(Priority.Background)
         verify(paykitSdkService, never()).processOutboundPrivateMessages(any())
         verify(paykitSdkService, never()).receivePrivateMessages(any())
         verify(paykitSdkService, never()).processPendingPrivateMessages()
@@ -1099,6 +1106,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any())
         verifyBlocking(paykitSdkService, atLeast(1)) { linkedPeers() }
         verifyBlocking(paykitSdkService, times(3)) { pendingOutboundPrivateCounterparties() }
+        verify(paykitSdkService, times(3)).pendingOutboundPrivateCounterparties(Priority.Ordered)
+        verify(paykitSdkService, never()).pendingOutboundPrivateCounterparties(Priority.Background)
+        verify(paykitSdkService, never()).linkedPeers(Priority.Background)
         verify(paykitSdkService).processOutboundPrivateMessages(CONTACT_KEY)
         verify(paykitSdkService).receivePrivateMessages(CONTACT_KEY)
         verify(paykitSdkService, never()).processOutboundPrivateMessages(OTHER_CONTACT_KEY)

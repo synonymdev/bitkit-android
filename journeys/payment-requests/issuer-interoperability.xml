@@ -17,9 +17,9 @@
     <action>Tap the pending Payment Requests bell (testTag "PaymentRequestsBell")</action>
     <action>Verify the incoming Payment Requests sheet (testTag "PaymentRequestsSheet") appears</action>
     <action>Tap Pay (testTag "PaymentRequestPay-71300000-0000-4000-8000-000000000001")</action>
-    <action>If confirmation is not already open, verify progress (id "PaymentRequestPreparing") is visible while the request is being prepared</action>
+    <action>Verify the existing Payment Request confirmation sheet shows 100,000 sats with its payment swipe control (id "GRAB") disabled and showing progress while the request is prepared</action>
     <action>Verify the Payment Request confirmation screen (testTag "PaymentRequestConfirm") shows 100,000 sats</action>
-    <action>Verify progress (id "PaymentRequestPreparing") is no longer visible</action>
+    <action>Wait for fresh validation and wallet preparation to finish; verify the same sheet stays open and its payment swipe control stops showing progress</action>
     <action>Tap Show details (testTag "SendConfirmToggleDetails")</action>
     <action>Verify the recipient (testTag "ReviewContactRecipient") is the saved fixture issuer contact</action>
   </actions>

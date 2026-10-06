@@ -61,6 +61,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitReadLane
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -115,6 +116,14 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
         whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
+        whenever(paykitSdkService.identityStatus(any())).doSuspendableAnswer { paykitSdkService.identityStatus() }
+        whenever(paykitSdkService.linkedPeers(any())).doSuspendableAnswer { paykitSdkService.linkedPeers() }
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull(), any())).doSuspendableAnswer {
+            paykitSdkService.allPaymentRequests(it.getArgument(0))
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {
+            paykitSdkService.processOutboundPrivateMessages(it.getArgument(0))
+        }
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
         whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
@@ -171,6 +180,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(paykitSdkService).processPendingPrivateMessages()
         verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers()
+        verify(paykitSdkService, times(3)).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
+        verify(paykitSdkService, times(3)).linkedPeers(Priority.Background)
     }
 
     @Test
@@ -218,6 +229,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertEquals(2, reads)
             verify(paykitSdkService, times(if (failure == null) 2 else 1)).processPendingPrivateMessages()
             verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers()
+            verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
+            verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Ordered)
         }
     }
 
@@ -373,6 +386,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(sut.pendingRequests.value.isEmpty())
         verify(paykitSdkService, times(2)).linkedPeers()
+        verify(paykitSdkService).linkedPeers(Priority.Background)
+        verify(paykitSdkService).linkedPeers(Priority.Ordered)
+        verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
+        verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Ordered)
     }
 
     @Test
@@ -1296,6 +1313,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(PaykitPaymentRequestDeliveryStatus.Queued, request.deliveryStatus)
         assertEquals(LOCAL_IDENTITY, creation.creatorIdentity)
         assertTrue(creation.wasPublishedToActiveState)
+        verify(paykitSdkService).identityStatus(Priority.Interactive)
+        verify(paykitSdkService).linkedPeers(Priority.Interactive)
+        verify(paykitSdkService).processOutboundPrivateMessages(COUNTERPARTY, Priority.Interactive)
     }
 
     @Test
@@ -1325,7 +1345,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertTrue(creation.wasPublishedToActiveState)
             assertEquals(LOCAL_IDENTITY, creation.creatorIdentity)
         }
-        verify(paykitSdkService, times(cases.size)).allPaymentRequests(LOCAL_IDENTITY)
+        verify(paykitSdkService, times(cases.size)).allPaymentRequests(LOCAL_IDENTITY, Priority.Interactive)
         verify(paykitSdkService, times(cases.size)).proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))
     }
 
@@ -1669,6 +1689,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
 
         verifyBlocking(paykitSdkService) { canReceivePaymentRequests(COUNTERPARTY, PaykitReadLane.Bulk) }
+        verify(paykitSdkService).identityStatus(Priority.Interactive)
+        verify(paykitSdkService).linkedPeers(Priority.Interactive)
+        verify(paykitSdkService).identityStatus(Priority.Background)
+        verify(paykitSdkService).linkedPeers(Priority.Background)
     }
 
     @Test

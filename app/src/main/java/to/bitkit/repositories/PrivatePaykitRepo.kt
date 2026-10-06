@@ -45,6 +45,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.Logger
@@ -1045,13 +1046,14 @@ class PrivatePaykitRepo @Inject constructor(
         reason: String,
         retryKeys: Collection<String>,
         includeUnsavedPeers: Boolean = false,
+        priority: Priority = Priority.Ordered,
     ) {
         val retryKeys = retryKeys.mapNotNull(::normalizedPublicKey).toSet()
         currentCoroutineContext().ensureActive()
         if (retryKeys.isEmpty()) return
         runSuspendCatching {
             val generation = preparationGeneration
-            val alreadyLinkedKeys = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.LINKED }
+            val alreadyLinkedKeys = paykitSdkService.linkedPeers(priority).filter { it.state == LinkedPeerState.LINKED }
                 .mapNotNull { normalizedPublicKey(it.counterparty) }.toSet()
             (retryKeys - alreadyLinkedKeys).forEach { retryKey ->
                 currentCoroutineContext().ensureActive()
@@ -1072,7 +1074,7 @@ class PrivatePaykitRepo @Inject constructor(
             }
             currentCoroutineContext().ensureActive()
             if (generation != preparationGeneration) return@runSuspendCatching
-            val pendingKeys = paykitSdkService.pendingOutboundPrivateCounterparties()
+            val pendingKeys = paykitSdkService.pendingOutboundPrivateCounterparties(priority)
                 .mapNotNull(::normalizedPublicKey).toSet().intersect(retryKeys)
             pendingKeys.forEach { publicKey ->
                 currentCoroutineContext().ensureActive()
@@ -1085,7 +1087,7 @@ class PrivatePaykitRepo @Inject constructor(
             }
             currentCoroutineContext().ensureActive()
             if (generation != preparationGeneration) return@runSuspendCatching
-            val linkedKeys = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.LINKED }
+            val linkedKeys = paykitSdkService.linkedPeers(priority).filter { it.state == LinkedPeerState.LINKED }
                 .mapNotNull { normalizedPublicKey(it.counterparty) }.toSet().intersect(retryKeys)
             linkedKeys.forEach { publicKey ->
                 currentCoroutineContext().ensureActive()
@@ -1138,9 +1140,9 @@ class PrivatePaykitRepo @Inject constructor(
             pendingMessageDrainRetryKeys.toList()
         }
         if (retryKeys.isEmpty()) return@withContext
-        val pendingKeys = pendingPrivateMessageDrainKeys(retryKeys)
+        val pendingKeys = pendingPrivateMessageDrainKeys(retryKeys, priority = Priority.Background)
         if (pendingKeys.isNotEmpty()) {
-            drainPendingPrivateMessages(reason, retryKeys = pendingKeys)
+            drainPendingPrivateMessages(reason, retryKeys = pendingKeys, priority = Priority.Background)
         }
         updatePendingMessageDrainRetryKeys(retryKeys)
     }
@@ -1159,7 +1161,7 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun updatePendingMessageDrainRetryKeys(retryKeys: Collection<String>) {
-        val remainingKeys = pendingPrivateMessageDrainKeys(retryKeys)
+        val remainingKeys = pendingPrivateMessageDrainKeys(retryKeys, priority = Priority.Background)
         synchronized(pendingMessageDrainRetryLock) {
             pendingMessageDrainRetryKeys.removeAll(retryKeys.toSet())
             pendingMessageDrainRetryKeys.addAll(remainingKeys)
@@ -1169,11 +1171,12 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun pendingPrivateMessageDrainKeys(
         retryKeys: Collection<String>,
         retryMissingPeers: Boolean = false,
+        priority: Priority = Priority.Ordered,
     ): Set<String> {
         val retryKeys = retryKeys.toSet()
         if (retryKeys.isEmpty()) return emptySet()
 
-        val linkedPeers = runSuspendCatching { paykitSdkService.linkedPeers() }
+        val linkedPeers = runSuspendCatching { paykitSdkService.linkedPeers(priority) }
             .getOrElse {
                 Logger.warn("Failed to inspect private Paykit link state", it, context = TAG)
                 return retryKeys
@@ -1184,7 +1187,7 @@ class PrivatePaykitRepo @Inject constructor(
                 }
             }
             .toMap()
-        val pendingOutbound = runSuspendCatching { paykitSdkService.pendingOutboundPrivateCounterparties() }
+        val pendingOutbound = runSuspendCatching { paykitSdkService.pendingOutboundPrivateCounterparties(priority) }
             .getOrElse {
                 Logger.warn("Failed to inspect pending private Paykit messages", it, context = TAG)
                 return retryKeys

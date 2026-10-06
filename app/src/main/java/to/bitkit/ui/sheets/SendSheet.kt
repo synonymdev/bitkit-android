@@ -43,8 +43,11 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
@@ -58,6 +61,7 @@ import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.SendAddressScreen
 import to.bitkit.ui.screens.wallets.send.SendAmountScreen
 import to.bitkit.ui.screens.wallets.send.SendCoinSelectionScreen
+import to.bitkit.ui.screens.wallets.send.SendConfirmContent
 import to.bitkit.ui.screens.wallets.send.SendConfirmScreen
 import to.bitkit.ui.screens.wallets.send.SendContactSelectScreen
 import to.bitkit.ui.screens.wallets.send.SendContactSelectViewModel
@@ -100,15 +104,18 @@ fun SendSheet(
     hwSendViewModel: HwSendViewModel,
     startDestination: SendRoute = SendRoute.Recipient,
     hardwareWalletId: String? = null,
+    preparingRequest: PaykitPaymentRequest? = null,
 ) {
     val context = LocalContext.current
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
     val isOffline by remember { derivedStateOf { connectivityState != ConnectivityState.CONNECTED } }
     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+    val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     var routingCacheResetAttempted by rememberSaveable(startDestination) { mutableStateOf(false) }
 
     val shouldShowSyncOverlay = run {
+        if (preparingRequest != null) return@run false
         if (sendUiState.hardwareWalletId != null) return@run false
         if (!lightningState.nodeLifecycleState.isRunning()) return@run true
         val hasAnyChannels = lightningState.channels.isNotEmpty()
@@ -302,6 +309,20 @@ fun SendSheet(
                     }
                 }
                 composableWithDefaultTransitions<SendRoute.Confirm> {
+                    if (preparingRequest != null) {
+                        SendConfirmContent(
+                            uiState = SendUiState(),
+                            isNodeRunning = false,
+                            isLoading = false,
+                            showBiometrics = false,
+                            preparingRequest = preparingRequest,
+                            preparingContact = contacts.firstOrNull {
+                                PubkyPublicKeyFormat.matches(it.publicKey, preparingRequest.counterparty)
+                            } ?: PubkyProfile.placeholder(preparingRequest.counterparty),
+                            canGoBack = false,
+                        )
+                        return@composableWithDefaultTransitions
+                    }
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
 
@@ -593,7 +614,7 @@ fun SendSheet(
         }
 
         AnimatedVisibility(
-            visible = isOffline,
+            visible = isOffline && preparingRequest == null,
             enter = fadeIn(),
             exit = fadeOut(),
         ) {

@@ -54,6 +54,7 @@ import to.bitkit.models.satsToMsat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitPaymentRequestRecurrenceTerms
 import to.bitkit.services.PaykitReadLane
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.isBitkitPaymentRequest
 import to.bitkit.utils.AppError
@@ -503,7 +504,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         receivedContacts = null
                         RefreshCheckpoint(actionVersion, proofVersion)
                     } ?: return@refresh
-                    val snapshot = runSuspendCatching { fetchRequestSnapshot(expectedIdentity, mode) }
+                    val snapshot = runSuspendCatching {
+                        val priority = if (forceFresh) Priority.Ordered else Priority.Background
+                        fetchRequestSnapshot(expectedIdentity, mode, priority)
+                    }
                     operationMutex.withLock {
                         if (!isCurrentState(generation, expectedIdentity)) return@withLock
                         runSuspendCatching {
@@ -551,7 +555,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         return@discovery
                     }
                     val ticket = targetRefreshTicket.incrementAndGet()
-                    val context = targetContext(savedPublicKeys, expectedIdentity)
+                    val context = targetContext(savedPublicKeys, expectedIdentity, Priority.Background)
                     if (!force && context == cachedTargetContext) return@discovery
                     val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
                     val discovery = context?.let { eligibleTargets(it, previousTargets, PaykitReadLane.Bulk) }
@@ -594,7 +598,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 if (!isAvailable() || expectedIdentity == null) return@runSuspendCatching unavailable
                 val ticket = targetRefreshTicket.incrementAndGet()
                 val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
-                val discovery = targetContext(listOf(publicKey), expectedIdentity)
+                val discovery = targetContext(listOf(publicKey), expectedIdentity, Priority.Interactive)
                     ?.let { eligibleTargets(it, previousTargets) }
                     ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
                 val target = discovery.targets.firstOrNull()
@@ -641,7 +645,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         PubkyPublicKeyFormat.matches(it, target.publicKey)
                     }
                     val targets = selectedSavedKey?.let {
-                        targetContext(listOf(it), expectedIdentity)
+                        targetContext(listOf(it), expectedIdentity, Priority.Interactive)
                     }?.let { eligibleTargets(it).targets }.orEmpty()
                     if (target !in targets) throw PaykitPaymentRequestError.RequestUnavailable
                     val settings = settingsStore.data.first()
@@ -775,7 +779,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             PubkyPublicKeyFormat.matches(it, target.publicKey)
         }
         val targets = selectedSavedKey?.let { savedKey ->
-            targetContext(listOf(savedKey), expectedIdentity)?.let { eligibleTargets(it).targets }
+            targetContext(listOf(savedKey), expectedIdentity, Priority.Interactive)?.let { eligibleTargets(it).targets }
         }
             .orEmpty()
         val settings = settingsStore.data.first()
@@ -840,7 +844,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
         if (failedByDrain || !isCurrentState(generation, expectedIdentity)) return false
         return runSuspendCatching {
-            paykitSdkService.allPaymentRequests(expectedIdentity).any {
+            paykitSdkService.allPaymentRequests(expectedIdentity, Priority.Interactive).any {
                 PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
                     it.paymentRequestId == record.paymentRequestId &&
                     it.localRole == PaymentRequestLocalRole.PAYEE &&
@@ -1084,13 +1088,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun fetchRequestSnapshot(
         expectedIdentity: String?,
         mode: PaykitPaymentRequestRefreshMode,
+        priority: Priority = Priority.Ordered,
     ): RequestSnapshot {
         if (mode == PaykitPaymentRequestRefreshMode.FULL) processPendingMessages()
         if (mode != PaykitPaymentRequestRefreshMode.STORED) {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         }
-        val allRecords = paykitSdkService.allPaymentRequests(expectedIdentity)
-        val blockedPeers = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.BLOCKED }
+        val allRecords = paykitSdkService.allPaymentRequests(expectedIdentity, priority)
+        val blockedPeers = paykitSdkService.linkedPeers(priority).filter { it.state == LinkedPeerState.BLOCKED }
         return RequestSnapshot(allRecords, blockedPeers)
     }
 
@@ -1246,12 +1251,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun targetContext(
         savedPublicKeys: List<String>,
         expectedIdentity: String,
+        priority: Priority,
     ): PaykitPaymentRequestTargetContext? {
         val settings = settingsStore.data.first()
         val endpointIdentifiers = acceptedPaymentEndpointIdentifiers(settings)
         if (!settings.sharesPrivatePaykitEndpoints || endpointIdentifiers.isEmpty()) return null
         val savedKeys = savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized).distinct()
-        val identityStatus = paykitSdkService.identityStatus()
+        val identityStatus = paykitSdkService.identityStatus(priority)
         if (
             savedKeys.isEmpty() ||
             identityStatus?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE ||
@@ -1259,7 +1265,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         ) {
             return null
         }
-        val linkedPublicKeys = paykitSdkService.linkedPeers()
+        val linkedPublicKeys = paykitSdkService.linkedPeers(priority)
             .filter { it.state == LinkedPeerState.LINKED }
             .mapNotNull { PubkyPublicKeyFormat.normalized(it.counterparty) }
             .toSet()
@@ -1476,7 +1482,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 listOf(
                     OutboundPrivateCounterpartySendReport(
                         counterparty = counterparty,
-                        report = paykitSdkService.processOutboundPrivateMessages(counterparty),
+                        report = paykitSdkService.processOutboundPrivateMessages(counterparty, Priority.Interactive),
                         error = null,
                     ),
                 )

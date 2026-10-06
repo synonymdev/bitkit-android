@@ -107,6 +107,7 @@ import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitIssuerInterop
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -824,9 +825,12 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun processOutboundPrivateMessages(counterparty: String) = run {
+    suspend fun processOutboundPrivateMessages(counterparty: String) =
+        processOutboundPrivateMessages(counterparty, Priority.Ordered)
+
+    internal suspend fun processOutboundPrivateMessages(counterparty: String, priority: Priority) = run {
         isSetup.await()
-        operationLock.withLock {
+        operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.processOutboundPrivateMessages(counterparty) }
             }
@@ -844,9 +848,15 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun paymentRequests(): List<PaymentRequestRecord> = allPaymentRequests().filter(::isBitkitPaymentRequest)
 
-    suspend fun allPaymentRequests(expectedIdentity: String? = null): List<PaymentRequestRecord> {
+    suspend fun allPaymentRequests(expectedIdentity: String? = null): List<PaymentRequestRecord> =
+        allPaymentRequests(expectedIdentity, Priority.Ordered)
+
+    internal suspend fun allPaymentRequests(
+        expectedIdentity: String?,
+        priority: Priority,
+    ): List<PaymentRequestRecord> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(priority) {
             withPaykitKey { handle ->
                 if (expectedIdentity != null) {
                     val identity = completeSdkCall { handle.identityStatus() }?.publicKey
@@ -869,9 +879,11 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun identityStatus(): IdentityStatus? {
+    suspend fun identityStatus(): IdentityStatus? = identityStatus(Priority.Ordered)
+
+    internal suspend fun identityStatus(priority: Priority): IdentityStatus? {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(priority) {
             withPaykitKey { completeSdkCall { it.identityStatus() } }
         }
     }
@@ -1005,16 +1017,21 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun linkedPeers(): List<LinkedPeerRecord> {
+    suspend fun linkedPeers(): List<LinkedPeerRecord> = linkedPeers(Priority.Ordered)
+
+    internal suspend fun linkedPeers(priority: Priority): List<LinkedPeerRecord> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(priority) {
             withPaykitKey { completeSdkCall { it.linkedPeers() } }
         }
     }
 
-    suspend fun pendingOutboundPrivateCounterparties(): List<String> {
+    suspend fun pendingOutboundPrivateCounterparties(): List<String> =
+        pendingOutboundPrivateCounterparties(Priority.Ordered)
+
+    internal suspend fun pendingOutboundPrivateCounterparties(priority: Priority): List<String> {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(priority) {
             withPaykitKey { completeSdkCall { it.pendingOutboundPrivateCounterparties() } }
         }
     }

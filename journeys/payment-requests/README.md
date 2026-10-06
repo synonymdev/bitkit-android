@@ -92,3 +92,9 @@ subscription must have no end date so cancellation is available. The proposal re
 must explain that its payment details are unsupported and offer no Subscribe control.
 
 `automatic-presentation.xml` uses the same two-wallet setup and leaves the payer in the foreground. `confirmation-controls.xml` checks Android's fixed amount and confirmation footer on a compact screen with large text; it is not ported to iOS because the confirmation layout is different there.
+
+Incoming preparation uses the existing Send confirmation sheet with saved sender, amount and note.
+Its payment control stays disabled and loading until fresh resolution and wallet validation finish.
+Closing during preparation leaves the request pending and suppresses automatic reopening for the
+current identity's app session; Pay from the request list or details explicitly retries it.
+An unfunded wallet can verify loading followed by native rejection, not an enabled payment control.

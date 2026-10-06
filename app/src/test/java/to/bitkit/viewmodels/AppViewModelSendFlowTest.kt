@@ -1094,25 +1094,223 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         val request = paymentRequest()
         val bolt11 = "lnbcrt1newpendingrequest"
-        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
-            Result.success(
-                PublicPaykitPaymentResult.Opened(
-                    paymentRequest = bolt11,
-                    privatePaymentContext = privatePaymentContext(version = 8uL),
-                ),
-            ),
-        )
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        val decoded = CompletableDeferred<Scanner>()
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer { decoded.await() }
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         clearInvocations(paykitPaymentRequestRepo)
 
         pendingPaykitPaymentRequests.value = listOf(request)
         runCurrent()
 
+        assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+        val preparingSheet = sut.currentSheet.value
+        sut.onSheetVisible(preparingSheet)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
+        pendingPaykitPaymentRequests.value = listOf(request.copy(paymentRequestId = "later-request"), request)
+        runCurrent()
+        assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+
+        sut.currentSheet.test {
+            assertEquals(preparingSheet, awaitItem())
+            resolution.complete(
+                Result.success(
+                    PublicPaykitPaymentResult.Opened(
+                        paymentRequest = bolt11,
+                        privatePaymentContext = privatePaymentContext(version = 8uL),
+                    ),
+                ),
+            )
+            runCurrent()
+            assertTrue(sut.currentSheet.value === preparingSheet)
+            assertFalse(sut.sendUiState.value.isAmountInputValid)
+            sut.onSheetVisible(preparingSheet)
+            verify(paykitPaymentRequestRepo, never()).markPresented(any())
+            expectNoEvents()
+            decoded.complete(Scanner.Lightning(lightningInvoice(bolt11, 0u)))
+            runCurrent()
+            assertEquals(Sheet.Send(SendRoute.Confirm), awaitItem())
+            expectNoEvents()
+        }
+
+        assertNull((sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(request.id, sut.sendUiState.value.incomingPaymentRequestId)
         verify(privatePaykitRepo).beginPaymentRequest(request)
         verify(paykitPaymentRequestRepo, never()).refresh(any())
+        sut.onSheetVisible(preparingSheet)
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
+        sut.onSheetVisible(sut.currentSheet.value)
+        runCurrent()
+        verify(paykitPaymentRequestRepo).markPresented(request)
+    }
+
+    @Test
+    fun `closing preparation keeps request pending and manual reopen available`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1closedpreparation"
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
+        stubLightningScan(bolt11, 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        sut.hideSheet()
+        runCurrent()
+        resolution.complete(
+            Result.success(PublicPaykitPaymentResult.Opened(bolt11, privatePaymentContext(7uL))),
+        )
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        assertEquals(listOf(request), pendingPaykitPaymentRequests.value)
+        verify(coreService, never()).decode(bolt11)
+        verify(paykitPaymentRequestRepo, never()).markPresented(request)
+        sut.openIncomingPaymentRequest(request.id)
+        runCurrent()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+    }
+
+    @Test
+    fun `closing or changing identity during wallet preparation ignores late decode`() = test {
+        enablePaykitUi()
+        for (changeIdentity in listOf(false, true)) {
+            pubkyPublicKey.value = testPublicKey
+            sut.setIsAuthenticated(true)
+            runCurrent()
+            val request = paymentRequest().copy(paymentRequestId = "wallet-$changeIdentity")
+            val bolt11 = "lnbcrt1latewallet$changeIdentity"
+            val decoded = CompletableDeferred<Scanner>()
+            stubLightningScan(bolt11, 0u)
+            whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+                withContext(NonCancellable) { decoded.await() }
+            }
+            whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+                Result.success(PublicPaykitPaymentResult.Opened(bolt11, privatePaymentContext(7uL))),
+            )
+            balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+            pendingPaykitPaymentRequests.value = listOf(request)
+            runCurrent()
+            verify(coreService).decode(bolt11)
+            assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+
+            if (changeIdentity) pubkyPublicKey.value = null else sut.hideSheet()
+            runCurrent()
+            decoded.complete(Scanner.Lightning(lightningInvoice(bolt11, 0u)))
+            runCurrent()
+
+            assertNull(sut.currentSheet.value, "changeIdentity=$changeIdentity")
+            assertFalse(sut.sendUiState.value.isAmountInputValid)
+            verify(paykitPaymentRequestRepo, never()).markPresented(request)
+            pendingPaykitPaymentRequests.value = emptyList()
+            runCurrent()
+        }
+    }
+
+    @Test
+    fun `closing preparation advances the next request and identity change resets suppression`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val first = paymentRequest()
+        val second = first.copy(paymentRequestId = "next-request")
+        val firstResolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        val secondResolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(first)).doSuspendableAnswer { firstResolution.await() }
+        whenever(privatePaykitRepo.beginPaymentRequest(second)).doSuspendableAnswer { secondResolution.await() }
+        pendingPaykitPaymentRequests.value = listOf(first, second)
+        runCurrent()
+        sut.hideSheet()
+        firstResolution.complete(Result.success(PublicPaykitPaymentResult.NotOpened))
+        runCurrent()
+        assertEquals(second, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
+        pubkyPublicKey.value = null
+        runCurrent()
+        secondResolution.complete(Result.success(PublicPaykitPaymentResult.NotOpened))
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(first)
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
+        pendingPaykitPaymentRequests.value = emptyList()
+        sut.stopPaykitPaymentRequestPolling()
+        runCurrent()
+    }
+
+    @Test
+    fun `overlay postpones incoming confirmation until it closes`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        sut.setPaymentRequestOverlayVisible(true)
+        runCurrent()
+        val request = paymentRequest()
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+
+        sut.setPaymentRequestOverlayVisible(false)
+        runCurrent()
+        assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+        sut.setPaymentRequestOverlayVisible(true)
+        resolution.complete(Result.success(PublicPaykitPaymentResult.NotOpened))
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        verify(paykitPaymentRequestRepo, never()).markPresented(request)
+        pendingPaykitPaymentRequests.value = emptyList()
+        sut.stopPaykitPaymentRequestPolling()
+        runCurrent()
+    }
+
+    @Test
+    fun `preparing request metadata clears without completing presentation`() = test {
+        val invalidations: List<Pair<String, () -> Unit>> = listOf(
+            "background" to { sut.stopPaykitPaymentRequestPolling() },
+            "lock" to { sut.setIsAuthenticated(false) },
+            "sheet" to { sut.showPaymentRequests() },
+            "identity" to { pubkyPublicKey.value = null },
+            "pending" to { pendingPaykitPaymentRequests.value = emptyList() },
+            "overlay" to { sut.setPaymentRequestOverlayVisible(true) },
+        )
+        enablePaykitUi()
+        for ((id, invalidate) in invalidations) {
+            sut.startPaykitPaymentRequestPolling()
+            sut.setPaymentRequestOverlayVisible(false)
+            pubkyPublicKey.value = testPublicKey
+            sut.setIsAuthenticated(true)
+            val request = paymentRequest().copy(paymentRequestId = id)
+            val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+            whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
+            pendingPaykitPaymentRequests.value = listOf(request)
+            runCurrent()
+            assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest, id)
+
+            invalidate()
+            runCurrent()
+            assertNull((sut.currentSheet.value as? Sheet.Send)?.preparingRequest, id)
+            pendingPaykitPaymentRequests.value = emptyList()
+            resolution.complete(Result.success(PublicPaykitPaymentResult.NotOpened))
+            runCurrent()
+            sut.hideSheet()
+            sut.stopPaykitPaymentRequestPolling()
+            runCurrent()
+        }
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
     }
 
     @Test
@@ -1893,9 +2091,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.openIncomingPaymentRequest(request.id)
         advanceTimeBy(TRANSITION_SCREEN_MS)
         resolutionStarted.await()
+        runCurrent()
+        assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
         whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
         pendingPaykitPaymentRequests.value = emptyList()
         runCurrent()
+        assertNull((sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
         finishResolution.complete(Unit)
         runCurrent()
 
@@ -2175,8 +2376,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.onHomeResumed()
         automaticResolutionStarted.await()
+        runCurrent()
+        assertEquals(automaticRequest, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
         sut.showPaymentRequests()
         sut.openIncomingPaymentRequest(manualRequest.id)
+        runCurrent()
+        assertNull((sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
         resumeAutomaticResolution.complete(Unit)
         advanceTimeBy(TRANSITION_SCREEN_MS)
         runCurrent()
@@ -2409,6 +2614,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.currentSheet.first { it is Sheet.Send }
         sut.sendUiState.first { it.addressInput == replacementInvoice }
 
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertFalse(sut.sendUiState.value.isPaymentRequest)
         assertNull(activeContactPaymentContext())
         assertEquals(replacementInvoice, sut.sendUiState.value.addressInput)
@@ -2752,6 +2958,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.stopPaykitPaymentRequestPolling()
 
         assertFalse(isPresentingPaymentRequest())
+        assertNull((sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
     }
 
     @Test

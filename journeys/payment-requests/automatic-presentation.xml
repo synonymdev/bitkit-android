@@ -5,19 +5,28 @@
   <actions>
     <action>On the payer, leave Bitkit unlocked and in the foreground on Home</action>
     <action>On the requester, send the payer contact a Payment Request for 21,000 sats with the note "First request"</action>
-    <action>On the payer, wait for the next private-message sync and verify Payment Request confirmation (testTag "PaymentRequestConfirm") appears automatically with 21,000 sats and For shows "First request"</action>
+    <action>While the payer prepares the request, verify the existing Payment Request confirmation sheet (id "PaymentRequestConfirm") shows the requester's contact name, 21,000 sats and "First request", with the payment swipe control (id "GRAB") disabled and showing progress</action>
+    <action>Close the confirmation while preparation is still pending</action>
+    <action>Allow preparation and another private-message sync to finish; verify the request does not reopen automatically</action>
+    <action>Open Payment Requests, verify "First request" is still pending, and tap Pay on it</action>
+    <action>Verify the existing Payment Request confirmation sheet shows the same sender, amount and note with its payment control disabled and showing progress</action>
+    <action>Wait for fresh validation and wallet preparation to finish; verify that the same sheet remains open and its payment swipe control becomes available without dismissing and reopening the sheet</action>
     <action>Close the confirmation without paying</action>
     <action>On the payer, open Receive and leave its sheet open</action>
     <action>On the requester, send the payer contact another Payment Request for 5,000 sats with the note "Second request"</action>
     <action>Wait for the requester's send operation to finish and for the payer to synchronize its pending requests</action>
     <action>On the payer, verify Receive stays open without being replaced by confirmation</action>
+    <action>Verify no preparing payment sheet or confirmation covers Receive</action>
     <action>Close Receive</action>
-    <action>Verify Payment Request confirmation (testTag "PaymentRequestConfirm") appears automatically with 5,000 sats and For shows "Second request"</action>
+    <action>Verify Payment Request confirmation (id "PaymentRequestConfirm") appears automatically with 5,000 sats and For shows "Second request"</action>
     <action>Close the confirmation without paying</action>
     <action>Open Receive and close it again</action>
     <action>Verify Home remains visible and neither reviewed request reopens automatically</action>
+    <action>On the payer, open the Home menu (id "HeaderMenu") before the next request arrives</action>
     <action>On the requester, send a Payment Request above the payer's available balance with the note "Unaffordable request"</action>
-    <action>On the payer, verify an insufficient-balance toast appears once and no payment confirmation opens</action>
+    <action>Wait for the payer to synchronize the request and verify no preparing payment sheet or confirmation covers the open drawer</action>
+    <action>Close the drawer and verify the existing Payment Request confirmation sheet shows the request metadata with its payment control disabled and showing progress</action>
+    <action>On the payer, verify an insufficient-balance toast appears once and the preparing confirmation closes without enabling payment</action>
     <action>Allow another pending-request sync, then open Receive and close it; verify the unaffordable request does not automatically prepare again or repeat its toast</action>
     <action>Open Payment Requests and tap Pay on "Unaffordable request"; verify this explicit retry shows the insufficient-balance toast again</action>
   </actions>
