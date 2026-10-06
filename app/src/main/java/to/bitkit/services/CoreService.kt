@@ -1397,6 +1397,17 @@ class ActivityService(
         }
     }
 
+    /** Restore original attribution only when no contact has been saved for the accepted transaction. */
+    suspend fun restoreSentOnchainContact(txid: String, walletId: String, contact: String) =
+        ServiceQueue.CORE.background {
+            val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            if (existing.contact == null) {
+                upsertActivity(Activity.Onchain(existing.copy(contact = contact)))
+            }
+            check(requireNotNull(getOnchainActivityByTxId(txid, walletId)).contact != null)
+        }
+
     /** Called only after exact original-node transaction/prevout verification, to repair an existing placeholder. */
     suspend fun repairVerifiedSentOnchainFee(txid: String, walletId: String, fee: ULong, feeRate: ULong) =
         ServiceQueue.CORE.background {

@@ -63,6 +63,29 @@ class ActivityServiceTest : BaseUnitTest() {
         }
     }
 
+    @Test
+    fun `restored contact fills missing attribution and preserves a later edit`() = test {
+        ServiceQueue.CORE.background {
+            val getByTx = binding.getMethod("getActivityByTxId", String::class.java, String::class.java)
+            val upsert = binding.getMethod("upsertActivity", Activity::class.java)
+            for (existingContact in listOf(null, "later-contact")) {
+                var saved = activity().v1.copy(txType = PaymentType.SENT, contact = existingContact)
+                mockStatic(binding).use { native ->
+                    native.`when`<Any?> { getByTx.invoke(null, WALLET_ID, ACTIVITY_ID) }.thenAnswer { saved }
+                    native.`when`<Any?> { upsert.invoke(null, any(Activity::class.java)) }.thenAnswer {
+                        saved = (it.getArgument<Activity>(0) as Activity.Onchain).v1
+                        Unit
+                    }
+                    sut.restoreSentOnchainContact(ACTIVITY_ID, WALLET_ID, "original-contact")
+                    kotlin.test.assertEquals(existingContact ?: "original-contact", saved.contact)
+                    if (existingContact != null) {
+                        native.verify({ upsert.invoke(null, any(Activity::class.java)) }, never())
+                    }
+                }
+            }
+        }
+    }
+
     private fun activity() = Activity.Onchain(
         OnchainActivity.create(
             walletId = WALLET_ID,

@@ -1671,6 +1671,34 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restored accepted contact is applied before acknowledging and failures stay guarded`() = test {
+        val txid = "ab".repeat(32)
+        val contact = "pubky" + "y".repeat(52)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted, txid = txid, restoredFromBackup = true,
+            backupFollowup = to.bitkit.models.ActiveOnchainAttemptBackup.Followup(
+                "143", emptyList(), kotlinx.serialization.json.JsonPrimitive(contact), "123",
+            ),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        whenever(activityService.restoreSentOnchainContact(txid, attempt.walletId, contact))
+            .thenThrow(IllegalStateException("contact write failed"))
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        doReturn(Unit).whenever(activityService).restoreSentOnchainContact(txid, attempt.walletId, contact)
+        org.mockito.Mockito.clearInvocations(activityService)
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        inOrder(activityService, onchainSendAttemptStore) {
+            verify(activityService).restoreSentOnchainContact(txid, attempt.walletId, contact)
+            verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        }
+    }
+
+    @Test
     fun `successor activity fee never reuses original nonzero fee and missing exact fee stays guarded`() = test {
         val txid = "cd".repeat(32)
         val attempt = pendingSendAttempt().copy(

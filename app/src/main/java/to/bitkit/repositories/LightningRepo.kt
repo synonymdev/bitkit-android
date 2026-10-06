@@ -39,6 +39,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonPrimitive
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
@@ -1681,7 +1682,10 @@ class LightningRepo @Inject constructor(
         check(
             !attempt.restoredFromBackup || originalFollowup != null
         ) { "Original local follow-up context is unavailable" }
-        check(originalFollowup?.contact == null) { "Unsupported original contact follow-up" }
+        val originalContact = originalFollowup?.contact?.let {
+            require(it is JsonPrimitive && it.isString && it.content.isNotBlank()) { "Invalid original contact" }
+            it.content
+        }
         val txId = requireNotNull(attempt.txid) { "On-chain send has no transaction id" }
         val isSuccessor = attempt.candidateTxids.isNotEmpty() && !txId.equals(attempt.candidateTxids.first(), true)
         val fee = if (isSuccessor) {
@@ -1715,6 +1719,9 @@ class LightningRepo @Inject constructor(
             channelId = attempt.channelId,
             walletId = attempt.walletId,
         )
+        if (originalContact != null) {
+            coreService.activity.restoreSentOnchainContact(txId, attempt.walletId, originalContact)
+        }
         if (isSuccessor) {
             coreService.activity.repairVerifiedSentOnchainFee(txId, attempt.walletId, fee, attempt.winningFeeRateSatsPerVByte)
         }

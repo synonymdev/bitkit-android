@@ -310,8 +310,7 @@ class OnchainSendAttemptStore @Inject constructor(
             val current = loadWithRetainedAccepted(walletIndex)
             if (current?.attemptId == attemptId && current.hasPositiveEvidence) {
                 check(
-                    (!current.restoredFromBackup || current.backupFollowup != null) &&
-                        current.backupFollowup?.contact == null
+                    !current.restoredFromBackup || current.backupFollowup != null
                 ) {
                     "Original local follow-up context is unavailable"
                 }

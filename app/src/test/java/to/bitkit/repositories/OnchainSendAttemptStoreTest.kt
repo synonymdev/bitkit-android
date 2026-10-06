@@ -59,7 +59,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restored exact candidate observes without resend and unsupported contact cannot acknowledge`() = test {
+    fun `restored exact candidate with contact observes without resend and acknowledges`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
         val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
             .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
@@ -82,13 +82,13 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val observed = store.observeExactTransaction(requireNotNull(wire.txid))
         assertEquals(OnchainSendEvidence.Observed, observed?.evidence)
         assertEquals(wire.candidateTxids, observed?.candidateTxids)
-        assertFailsWith<IllegalStateException> { store.markLocalFollowupComplete(original.attemptId, 2) }
         val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         assertEquals(observed, reopened.current())
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
         val other = original.copy(attemptId = "00000000-0000-4000-8000-000000000009")
         assertFailsWith<IllegalStateException> { reopened.restoreActive(other) }
-        assertEquals(observed, reopened.current())
+        store.markLocalFollowupComplete(original.attemptId, 2)
+        assertEquals(observed?.copy(localFollowupComplete = true), reopened.current())
     }
 
     @Test
