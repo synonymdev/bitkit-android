@@ -59,6 +59,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @Suppress("LargeClass")
@@ -1620,6 +1621,28 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verify(trezorService).composeTransaction(params.capture())
         assertEquals(electrumServer, params.firstValue.wallet.electrumUrl)
+    }
+
+    @Test
+    fun `composeTransaction should use network default electrum server for another network`() = test {
+        settingsData.value = SettingsData(electrumServer = "ssl://custom.example:50002")
+        val otherNetwork = BitkitCoreNetwork.entries.first { it != Env.network.toCoreNetwork() }
+        whenever(trezorService.composeTransaction(any())).thenReturn(emptyList())
+        sut = createSut()
+
+        val result = sut.composeTransactionOffline(
+            extendedKey = "xpub",
+            outputs = listOf(ComposeOutput.Payment(address = TEST_ADDRESS, amountSats = 100uL)),
+            feeRates = listOf(1f),
+            network = otherNetwork,
+            accountType = null,
+            coinSelection = CoinSelection.BRANCH_AND_BOUND,
+        )
+
+        val params = argumentCaptor<ComposeParams>()
+        assertTrue(result.isSuccess)
+        verify(trezorService).composeTransaction(params.capture())
+        assertEquals(Env.electrumUrlForNetwork(otherNetwork), params.firstValue.wallet.electrumUrl)
     }
 
     @Test

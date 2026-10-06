@@ -10,6 +10,7 @@ import to.bitkit.ext.ensureDir
 import to.bitkit.ext.of
 import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.models.NodePeer
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
@@ -185,6 +186,19 @@ internal object Env {
             else -> "https://bitkit.stag0.blocktank.to/backups-ldk"
         }
 
+    /**
+     * Debug/E2E-only Electrum override for Trezor and hardware wallet flows, set via `TREZOR_ELECTRUM_URL`.
+     * Points them at the local regtest Electrum from bitkit-docker while the rest of the app keeps its
+     * configured server.
+     */
+    val trezorElectrumUrl: String?
+        get() = BuildConfig.TREZOR_ELECTRUM_URL.takeIf { it.isNotBlank() && (isDebug || isE2eTest) }
+
+    fun trezorElectrumUrlOrDefault(configured: String, network: BitkitCoreNetwork): String {
+        if (network != Env.network.toCoreNetwork()) return electrumUrlForNetwork(network)
+        return trezorElectrumUrl?.takeIf { network == BitkitCoreNetwork.REGTEST } ?: configured
+    }
+
     fun electrumUrlForNetwork(network: BitkitCoreNetwork): String {
         val isE2eLocal = isE2eTest && e2eBackend == "local"
         return when (network) {
@@ -192,7 +206,7 @@ internal object Env {
             BitkitCoreNetwork.TESTNET, BitkitCoreNetwork.TESTNET4, BitkitCoreNetwork.SIGNET ->
                 ElectrumServers.TESTNET
             BitkitCoreNetwork.REGTEST ->
-                if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+                trezorElectrumUrl ?: if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
         }
     }
 

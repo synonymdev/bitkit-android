@@ -457,7 +457,7 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.getTransactionHistory(
                 extendedKey = extendedKey,
-                electrumUrl = currentElectrumUrl(),
+                electrumUrl = currentElectrumUrl(network),
                 network = network,
                 scriptType = scriptType,
             )
@@ -476,7 +476,7 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.getAccountInfo(
                 extendedKey = extendedKey,
-                electrumUrl = currentElectrumUrl(),
+                electrumUrl = currentElectrumUrl(network),
                 network = network,
                 scriptType = scriptType,
             )
@@ -494,7 +494,7 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.getAddressInfo(
                 address = address,
-                electrumUrl = currentElectrumUrl(),
+                electrumUrl = currentElectrumUrl(network),
                 network = network,
             )
         }.onFailure { e ->
@@ -571,7 +571,7 @@ class TrezorRepo @Inject constructor(
         ComposeParams(
             wallet = WalletParams(
                 extendedKey = extendedKey,
-                electrumUrl = currentElectrumUrl(),
+                electrumUrl = currentElectrumUrl(network),
                 fingerprint = fingerprint,
                 network = network,
                 accountType = accountType,
@@ -599,12 +599,13 @@ class TrezorRepo @Inject constructor(
 
     suspend fun broadcastRawTx(
         serializedTx: String,
+        network: BitkitCoreNetwork,
     ): Result<String> = withContext(ioDispatcher) {
         runSuspendCatching {
             awaitSetup()
             trezorService.broadcastRawTx(
                 serializedTx = serializedTx,
-                electrumUrl = currentElectrumUrl(),
+                electrumUrl = currentElectrumUrl(network),
             )
         }.onFailure {
             Logger.error("Trezor broadcastRawTx failed", it, context = TAG)
@@ -1036,7 +1037,7 @@ class TrezorRepo @Inject constructor(
                 gapLimit = gapLimit,
             )
             trezorService.startWatcher(params, eventBridge)
-            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId'")
+            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId' on '$electrumUrl'")
         }.onFailure {
             Logger.error("Start watcher failed", it, context = TAG)
             _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
@@ -1324,7 +1325,11 @@ class TrezorRepo @Inject constructor(
 
     private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String = Env.electrumUrlForNetwork(network)
 
-    private suspend fun currentElectrumUrl(): String = settingsStore.data.first().electrumServer
+    private suspend fun currentElectrumUrl(network: BitkitCoreNetwork): String =
+        Env.trezorElectrumUrlOrDefault(
+            configured = settingsStore.data.first().electrumServer,
+            network = network,
+        )
 
     private suspend fun ensureConnected() {
         if (trezorService.isConnected()) return
