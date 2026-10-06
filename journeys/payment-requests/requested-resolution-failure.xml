@@ -14,6 +14,7 @@
     <action>Verify the incoming request row (testTag "PaymentRequestRow-&lt;payment-request-id&gt;") is visible</action>
     <action>Tap Pay (testTag "PaymentRequestPay-&lt;payment-request-id&gt;")</action>
     <action>Verify the existing confirmation sheet (id "PaymentRequestConfirm") shows the saved sender, amount and note, with its payment control loading and disabled (id "PaymentRequestPreparing")</action>
+    <action>Verify the same preparing confirmation stays open across resolution retries without dismissing and reopening</action>
     <action>Wait up to 35 seconds for the terminal error toast (testTag "PaymentRequestUnavailableToast")</action>
     <action>Verify progress (id "PaymentRequestPreparing") is no longer visible</action>
     <action>Verify the toast title is "Payment Request" and its description is "The payment request is no longer available."</action>
@@ -21,7 +22,7 @@
     <action>Verify the incoming request row (testTag "PaymentRequestRow-&lt;payment-request-id&gt;") remains visible for a later retry</action>
     <action>Open the incoming request row and tap Pay in its details (id "PaymentRequestDetailsPay")</action>
     <action>Verify the existing confirmation sheet (id "PaymentRequestConfirm") opens over the details, with its payment control loading and disabled (id "PaymentRequestPreparing")</action>
-    <action>Close the preparing sheet and verify the request details remain available with Pay enabled for a manual retry</action>
+    <action>Close the preparing confirmation between resolution retries and verify the underlying details remain available and the request does not immediately reopen or retry automatically</action>
     <action>Navigate to Dev settings and turn off Enable Paykit UI (id "PaykitUiToggle")</action>
     <action>Return to the wallet home screen and verify progress (id "PaymentRequestPreparing") is absent and no payment sheet opens</action>
   </actions>

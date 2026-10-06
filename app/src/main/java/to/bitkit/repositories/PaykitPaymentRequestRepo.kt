@@ -400,6 +400,25 @@ class PaykitPaymentRequestRepo @Inject constructor(
     fun pendingRequest(id: PaykitPaymentRequestId): PaykitPaymentRequest? =
         _pendingRequests.value.firstOrNull { it.id == id }
 
+    internal suspend fun isSubscriptionNotificationHandled(id: PaykitPaymentRequestId, identity: String): Boolean {
+        val generation = stateGeneration.get()
+        return withContext(ioDispatcher) {
+            operationMutex.withLock {
+                if (completedRefreshGeneration != generation || completedRefreshActionVersion != actionVersion ||
+                    !isCurrentState(generation, identity)
+                ) {
+                    return@withLock false
+                }
+                if (pendingRequest(id) != null) return@withLock false
+                id in dismissedSubscriptionPaymentIds || _paymentRequestHistory.value.any { it.id == id } ||
+                    _subscriptions.value.none {
+                        it.id == PaykitSubscriptionId(id.paymentRequestId, id.counterparty) &&
+                            it.isActive(subscriptionClock.now())
+                    }
+            }
+        }
+    }
+
     fun synchronizeSubscriptionNotifications(enabled: Boolean) {
         val identity = activeIdentity ?: return
         subscriptionNotificationScheduler.synchronize(
@@ -508,7 +527,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                             completedRefreshGeneration == generation && completedRefreshProofVersion == proofVersion &&
                             completedRefreshActionVersion == actionVersion
                         if (!forceFresh && hasFreshSnapshot && mode <= completedRefreshMode) return@operation null
-                        receivedContacts = null
+                        completedRefreshGeneration = -1L
                         RefreshCheckpoint(actionVersion, proofVersion)
                     } ?: return@refresh
                     val snapshot = runSuspendCatching {
@@ -517,18 +536,19 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                     operationMutex.withLock {
                         if (!isCurrentState(generation, expectedIdentity)) return@withLock
+                        val proofVersion = paymentProofStore.backupStateVersion.value
                         runSuspendCatching {
                             val records = snapshot.getOrThrow()
-                            if (checkpoint.actionVersion != actionVersion) {
+                            if (checkpoint != RefreshCheckpoint(actionVersion, proofVersion)) {
                                 synchronizeLocked(generation, expectedIdentity, PaykitPaymentRequestRefreshMode.STORED)
                             } else {
-                                applyRequestSnapshotLocked(records, generation, expectedIdentity)
+                                applyRequestSnapshotLocked(records, generation, expectedIdentity, proofVersion)
                             }
                         }.onFailure { discardExpiredRequestsLocked() }.getOrThrow()
                         if (isCurrentState(generation, expectedIdentity)) {
                             completedRefreshMode = mode
                             completedRefreshGeneration = generation
-                            completedRefreshProofVersion = checkpoint.proofVersion
+                            completedRefreshProofVersion = proofVersion
                             completedRefreshActionVersion = actionVersion
                             completedRefreshVersion.incrementAndGet()
                         }
@@ -1087,9 +1107,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
         expectedIdentity: String?,
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
     ) {
-        receivedContacts = null
+        val proofVersion = paymentProofStore.backupStateVersion.value
         val snapshot = fetchRequestSnapshot(expectedIdentity, mode)
-        applyRequestSnapshotLocked(snapshot, generation, expectedIdentity)
+        applyRequestSnapshotLocked(snapshot, generation, expectedIdentity, proofVersion)
     }
 
     private suspend fun fetchRequestSnapshot(
@@ -1112,6 +1132,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         snapshot: RequestSnapshot,
         generation: Long,
         expectedIdentity: String?,
+        proofVersion: Long,
     ) {
         val now = clock.now()
         val subscriptionNow = subscriptionClock.now()
@@ -1223,13 +1244,16 @@ class PaykitPaymentRequestRepo @Inject constructor(
         if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return
         pruneAcceptedOneTimeRequestIds(records, expectedIdentity, generation)
         if (!isCurrentState(generation, expectedIdentity)) return
-        receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
         val subscriptionStateChanged =
             subscriptionAcceptedAt != updatedSubscriptionAcceptedAt ||
                 dismissedSubscriptionPaymentIds != updatedDismissedPaymentIds
         subscriptionAcceptedAt = updatedSubscriptionAcceptedAt
         dismissedSubscriptionPaymentIds = updatedDismissedPaymentIds
         if (subscriptionStateChanged) persistSubscriptionState(expectedIdentity)
+        if (proofVersion != paymentProofStore.backupStateVersion.value) {
+            throw PaykitPaymentRequestError.RequestUnavailable
+        }
+        receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
         _pendingRequests.update { incoming }
         _paymentRequestHistory.update { history }
         _subscriptions.update { subscriptions }
@@ -1595,6 +1619,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private fun clearStateLocked() {
+        completedRefreshGeneration = -1L
         receivedContacts = null
         expirationJob?.cancel()
         expirationJob = null

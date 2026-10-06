@@ -22,7 +22,9 @@ import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -776,6 +778,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         sut.refresh().getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.isSubscriptionNotificationHandled(request.id, LOCAL_IDENTITY))
         verifyBlocking(presentationStore) {
             saveSubscriptionState(eq(LOCAL_IDENTITY), argThat { dismissedPaymentIds == setOf(request.id) })
         }
@@ -856,6 +859,10 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             sut.paymentRequestHistory.value.single().lifecycleState,
         )
         assertEquals(PaykitPaymentProofKind.Onchain, sut.paymentRequestHistory.value.single().paymentProofKind)
+        assertTrue(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+        val nextPeriodId = requestId.copy(billingPeriodStartsAt = "2027-02-01T08:00:00Z")
+        assertFalse(sut.isSubscriptionNotificationHandled(nextPeriodId, LOCAL_IDENTITY))
+        assertTrue(sut.pendingRequests.value.none { it.id == nextPeriodId })
     }
 
     @Test
@@ -1042,7 +1049,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
-    fun `in flight subscription payment is neither offered nor marked paid`() = test {
+    fun `in flight subscription reminder remains unhandled until the same period returns`() = test {
         val requestId = PaykitPaymentRequestId(
             paymentRequestId = PAYMENT_REQUEST_ID,
             counterparty = COUNTERPARTY,
@@ -1057,6 +1064,67 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertTrue(sut.paymentRequestHistory.value.isEmpty())
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+    }
+
+    @Test
+    fun `subscription reminder clears for missing or inactive subscriptions`() = test {
+        val requestId = PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY, "2027-01-01T08:00:00Z")
+        for (state in listOf(null, PaymentRequestLifecycleState.CANCELED, PaymentRequestLifecycleState.REJECTED)) {
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+                state?.let { listOf(paymentRequestRecord(state = it)) }.orEmpty(),
+            )
+
+            sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+
+            assertTrue(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY), state.toString())
+        }
+    }
+
+    @Test
+    fun `subscription reminder requires a successful snapshot for the current identity`() = test {
+        val requestId = PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY, "2027-01-01T08:00:00Z")
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertTrue(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, SECOND_IDENTITY))
+
+        whenever(settingsStore.data).thenReturn(flow { throw IllegalStateException("refresh failed") })
+        assertTrue(sut.refresh(PaykitPaymentRequestRefreshMode.STORED).isFailure)
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        val refreshStarted = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            refreshStarted.complete(Unit)
+            awaitCancellation()
+        }
+        val refresh = async { sut.refresh(PaykitPaymentRequestRefreshMode.STORED) }
+        refreshStarted.await()
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+        refresh.cancel()
+        refresh.join()
+        assertTrue(refresh.isCancelled)
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+
+        doReturn(emptyList<PaymentRequestRecord>()).whenever(paykitSdkService).allPaymentRequests(anyOrNull())
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(false))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+
+        whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        sut.clear()
+        sut.activate(LOCAL_IDENTITY)
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
     }
 
     @Test

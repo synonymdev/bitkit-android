@@ -68,6 +68,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
@@ -402,6 +403,52 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `refresh rereads proof changes before applying and rejects a changing reload`() = test {
+        val record = paymentRequestRecord()
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        val submitted = record.copy(state = PaymentRequestLifecycleState.PROOF_SUBMITTED)
+        for (changeDuringReload in listOf(false, true)) {
+            val reading = CompletableDeferred<Unit>()
+            val resume = CompletableDeferred<Unit>()
+            var reads = 0
+            whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
+                .thenReturn(mapOf(requestId to PaykitPaymentProofKind.Lightning))
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+                if (reads++ == 0) {
+                    reading.complete(Unit)
+                    resume.await()
+                    listOf(record)
+                } else {
+                    if (changeDuringReload) proofStateVersion.value += 1
+                    listOf(submitted)
+                }
+            }
+            clearInvocations(paykitSdkService)
+            val refresh = async { sut.refresh(PaykitPaymentRequestRefreshMode.STORED) }
+            reading.await()
+            whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
+                .thenReturn(emptyMap())
+            proofStateVersion.value += 1
+            resume.complete(Unit)
+
+            val result = refresh.await()
+
+            assertEquals(changeDuringReload, result.isFailure)
+            assertTrue(sut.pendingRequests.value.isEmpty())
+            if (!changeDuringReload) {
+                assertEquals(
+                    PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                    sut.paymentRequestHistory.value.single().lifecycleState,
+                )
+            }
+            verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
+            verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Ordered)
+            verify(paykitSdkService, never()).processPendingPrivateMessages()
+            verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
+        }
+    }
+
+    @Test
     fun `state change refresh rereads a peer blocked after the first snapshot`() = test {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
@@ -463,7 +510,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `shared app destinations stay out of request UI and clear on identity switch`() = test {
+    fun `shared app destinations survive refresh failure but clear on identity switch`() = test {
         val address = PaykitReceivedPaymentContactsTest.ADDRESS
         val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).let {
             it.copy(
@@ -489,6 +536,21 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertTrue(sut.paymentRequestHistory.value.isEmpty())
         verify(paykitSdkService).allPaymentRequests(PubkyPublicKeyFormat.normalized(LOCAL_IDENTITY))
+
+        val contacts = sut.receivedPaymentContacts
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).doSuspendableAnswer {
+            reading.complete(Unit)
+            resume.await()
+            throw PaykitPaymentRequestError.RequestUnavailable
+        }
+        val refresh = async { sut.refresh(PaykitPaymentRequestRefreshMode.INBOX) }
+        reading.await()
+        assertSame(contacts, sut.receivedPaymentContacts)
+        resume.complete(Unit)
+        assertTrue(refresh.await().isFailure)
+        assertSame(contacts, sut.receivedPaymentContacts)
 
         sut.activate(SECOND_IDENTITY)
         assertTrue(sut.receivedPaymentContacts.contactsForAddresses(listOf(address)).isEmpty())

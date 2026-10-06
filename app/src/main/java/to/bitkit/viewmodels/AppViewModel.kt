@@ -916,8 +916,24 @@ class AppViewModel @Inject constructor(
         }
         return result.onSuccess {
             activityRepo.backfillPaykitContacts()
+            clearHandledSubscriptionNotification()
             presentNextIncomingPaykitPaymentRequest()
         }
+    }
+
+    private suspend fun clearHandledSubscriptionNotification() {
+        val requestId = requestedPaymentRequestId.value ?: return
+        val identity = requestedPaymentRequestIdentity ?: return
+        val generation = paymentRequestPresentationGeneration
+        if (!paykitPaymentRequestRepo.isSubscriptionNotificationHandled(requestId, identity)) return
+        if (!requestedPaymentRequestTargetsCurrentIdentity()) return
+        if (generation != paymentRequestPresentationGeneration || requestedPaymentRequestId.value != requestId ||
+            requestedPaymentRequestIdentity != identity
+        ) {
+            return
+        }
+        invalidatePaymentRequestPresentation()
+        clearRequestedPaymentRequest()
     }
 
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
@@ -1091,14 +1107,15 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun presentNextIncomingPaykitPaymentRequest() {
-        if (isPresentingPaymentRequest || isPaymentRequestPresentationBlocked()) return
-        if (requestedPaymentRequestId.value == null) {
+        val preparation = paymentRequestPreparation.value
+        if (isPresentingPaymentRequest || isPaymentRequestPresentationBlocked(preparation)) return
+        if (preparation == null && requestedPaymentRequestId.value == null) {
             paykitPaymentRequestRepo.automaticSubscriptionProposals().firstOrNull()?.let {
                 showSheet(Sheet.Subscription(SubscriptionRoute.Review(it.id)))
                 return
             }
         }
-        val requests = paymentRequestsForPresentation() ?: return
+        val requests = paymentRequestsForPresentation(preparation) ?: return
         val generation = paymentRequestPresentationGeneration
         isPresentingPaymentRequest = true
         activePaymentRequestPresentationGeneration = generation
@@ -1123,6 +1140,11 @@ class AppViewModel @Inject constructor(
             presentNextIncomingPaykitPaymentRequest()
         }
     }
+
+    private fun paymentRequestsForPresentation(preparation: PaymentRequestPreparation?): List<PaykitPaymentRequest>? =
+        paymentRequestsForPresentation()
+            ?.filter { preparation == null || it.id == preparation.request.id }
+            ?.takeIf { it.isNotEmpty() }
 
     private fun paymentRequestsForPresentation(): List<PaykitPaymentRequest>? {
         val requestedId = requestedPaymentRequestId.value
@@ -1150,6 +1172,7 @@ class AppViewModel @Inject constructor(
                         requestedPaymentRequest = request
                         listOf(request)
                     } else {
+                        if (requestedPaymentRequestIdentity != null) return null
                         requestedPaymentRequest?.takeIf { it.id == requestedId }?.let {
                             if (paykitPaymentRequestRepo.isExpired(it)) {
                                 finishExpiredPaymentRequestPresentation(it)
@@ -1177,7 +1200,9 @@ class AppViewModel @Inject constructor(
         request: PaykitPaymentRequest,
         generation: Long,
     ): Boolean {
-        val preparation = paymentRequestIdentity?.takeIf {
+        val preparation = paymentRequestPreparation.value?.takeIf {
+            it.request == request && it.generation == generation && ownsPaymentRequestPreparation(it)
+        } ?: paymentRequestIdentity?.takeIf {
             request.billingPeriod == null && !paykitPaymentRequestRepo.isExpired(request) &&
                 PubkyPublicKeyFormat.matches(it, pubkyRepo.publicKey.value)
         }?.let {
@@ -1186,14 +1211,18 @@ class AppViewModel @Inject constructor(
         paymentRequestPreparation.update { preparation }
         try {
             if (preparation != null) {
-                showSheet(preparation.sheet)
-                sheetTransitionJob?.join()
+                if (currentSheet.value !== preparation.sheet) {
+                    showSheet(preparation.sheet)
+                    sheetTransitionJob?.join()
+                }
                 if (!ownsPaymentRequestPreparation(preparation)) return true
             }
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
             return finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
         } finally {
-            if (scheduledScan?.contactPaymentContext?.incomingPaymentRequest?.id != request.id) {
+            if (scheduledScan?.contactPaymentContext?.incomingPaymentRequest?.id != request.id &&
+                paymentRequestPresentationRetryJobs[request.id]?.isActive != true
+            ) {
                 finishPaymentRequestPreparation(preparation)
             }
         }
@@ -1217,7 +1246,7 @@ class AppViewModel @Inject constructor(
         }
         if (error != null) paykitPaymentRequestDiagnostics.logPresentationFailure(request.counterparty, error)
         if (!paykitPaymentRequestRepo.isPending(request)) {
-            if (requestedPaymentRequestId.value == request.id) {
+            if (requestedPaymentRequestId.value == request.id && requestedPaymentRequestIdentity == null) {
                 invalidatePaymentRequestPresentation()
                 clearRequestedPaymentRequest()
             }
@@ -1234,7 +1263,7 @@ class AppViewModel @Inject constructor(
                         ?: IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
                 )
             }
-            return false
+            return preparation != null && paymentRequestPresentationRetryJobs[request.id]?.isActive == true
         }
         openContactPayment(
             paymentRequest = result.paymentRequest,
@@ -1259,6 +1288,9 @@ class AppViewModel @Inject constructor(
             clearRequestedPaymentRequest()
         }
         clearPaymentRequestPresentationRetry(request.id)
+        if (paymentRequestPreparation.value?.request?.id == request.id) {
+            dismissedPreparingRequestIds.add(request.id)
+        }
         if (!isRequested) return
         finishPaymentRequestPreparation(paymentRequestPreparation.value)
         toast(
@@ -1380,6 +1412,7 @@ class AppViewModel @Inject constructor(
         paymentRequestPresentationRetryJobs.keys.filter { it !in requestIds }.forEach {
             paymentRequestPresentationRetryJobs.remove(it)?.cancel()
         }
+        if (requestedPaymentRequestIdentity != null) return
         val requestedRequest = requestedPaymentRequest
         if (requestedRequest != null && requestedRequest.id !in requestIds) {
             if (paykitPaymentRequestRepo.isExpired(requestedRequest)) {
