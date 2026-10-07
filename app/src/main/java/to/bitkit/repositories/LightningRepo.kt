@@ -1610,7 +1610,9 @@ class LightningRepo @Inject constructor(
             )
         }.getOrElse { error ->
             val winner = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull()
-            if (winner?.attemptId == attempt.attemptId && winner.hasPositiveEvidence) {
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
+                winner.hasPositiveEvidence
+            ) {
                 OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
             } else {
                 return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
@@ -1620,7 +1622,9 @@ class LightningRepo @Inject constructor(
             onchainSendAttemptStore.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex)
         }.getOrElse { error ->
             val winner = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull()
-            if (winner?.hasPositiveEvidence == true) {
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
+                winner.hasPositiveEvidence
+            ) {
                 winner
             } else {
                 if (outcome !is OnchainSendOutcome.Accepted || !outcome.txid.equals(prepared.receipt.txid, true)) {

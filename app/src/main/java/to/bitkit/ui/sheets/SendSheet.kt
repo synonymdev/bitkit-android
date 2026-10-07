@@ -171,7 +171,8 @@ fun SendSheet(
                                 isOnchain = true,
                             )
                         ) { popUpTo(navController.graph.id) { inclusive = true } }
-                        hwSendViewModel.completeBroadcast()
+                        // Proof persistence may have failed. Keep the exact result replayable on reopening
+                        // and retain the signed operation so another request cannot sign or broadcast.
                         return@collect
                     }
                     appViewModel.onSendSuccess(

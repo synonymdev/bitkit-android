@@ -624,6 +624,11 @@ class HwSendViewModelTest : BaseUnitTest() {
 
         assertEquals(originalId, sut.results.first().paymentRequestId)
         assertEquals("original-identity", sut.results.first().paymentIdentity)
+        // A failed proof write keeps the result: closing/reopening must replay its exact identity.
+        sut.cancel()
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+        assertEquals(originalId, sut.results.first().paymentRequestId)
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
         // Local proof work has not consumed the result yet: neither this request nor another may resend.
         sut.signAndBroadcast(original)
         sut.signAndBroadcast(original.copy(paymentRequestId = originalId.copy(paymentRequestId = "different-request")))

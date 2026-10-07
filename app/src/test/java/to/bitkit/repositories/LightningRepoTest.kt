@@ -1670,6 +1670,44 @@ class LightningRepoTest : BaseUnitTest() {
         verify(onchainSendAttemptStore, never()).releaseBeforeDispatch(any(), any())
     }
 
+    @Test
+    fun `direct send fallback cannot use a later attempt winner`() = test {
+        assertDirectSendFallbackIdentity(pendingSendAttempt().copy(attemptId = "later-attempt"), false)
+    }
+
+    @Test
+    fun `direct send fallback cannot use another wallet winner`() = test {
+        assertDirectSendFallbackIdentity(pendingSendAttempt().copy(walletId = "another-wallet"), false)
+    }
+
+    @Test
+    fun `direct send fallback retains its exact observed winner`() = test {
+        assertDirectSendFallbackIdentity(pendingSendAttempt(), true)
+    }
+
+    private suspend fun assertDirectSendFallbackIdentity(winnerIdentity: OnchainSendAttempt, matches: Boolean) {
+        val original = pendingSendAttempt()
+        val repo = prepareGuardedSend(original)
+        val originalTxid = "ab".repeat(32)
+        val winnerTxid = "cd".repeat(32)
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Unknown(originalTxid)))
+        whenever(onchainSendAttemptStore.current()).thenReturn(null).thenReturn(
+            winnerIdentity.copy(evidence = OnchainSendEvidence.Observed, txid = winnerTxid),
+        )
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenThrow(IllegalStateException("original outcome raced with durable observation"))
+        val broadcasts = mutableListOf<String>()
+        val result = repo.sendOnChain("address", 1_000uL, isTransfer = true, onBroadcast = { broadcasts += it })
+        if (matches) {
+            assertEquals(OnchainSendOutcome.Accepted(winnerTxid), result.getOrThrow())
+            assertEquals(listOf(winnerTxid), broadcasts)
+        } else {
+            assertIs<OnchainSendPendingError>(result.exceptionOrNull())
+            assertTrue(broadcasts.isEmpty())
+        }
+    }
+
     private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
         OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
     ) { outcome }
