@@ -696,7 +696,8 @@ class PrivatePaykitRepo @Inject constructor(
                 pubkyService.currentPublicKey() ?: return@runSuspendCatching null
                 json.encodeToString(
                     PrivatePaykitBackup(
-                        sdkState = paykitSdkService.exportBackupState(),
+                        // This snapshot can be required before broadcast; it must not wait for payment to finish.
+                        sdkState = paykitSdkService.exportBackupState(Priority.Interactive),
                         consumedPrivatePaymentListVersions = ensureState().contacts
                             .mapNotNull { (publicKey, contactState) ->
                                 contactState.consumedPrivatePaymentListVersion?.let { publicKey to it }

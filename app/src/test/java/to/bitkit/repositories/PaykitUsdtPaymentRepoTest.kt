@@ -42,6 +42,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
@@ -133,6 +134,15 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         }
     }
 
+    private suspend fun stubSend(result: Result<UsdtTransfer>) {
+        whenever(usdt.send(any(), any())).doSuspendableAnswer { invocation ->
+            runSuspendCatching {
+                invocation.getArgument<suspend () -> Unit>(1).invoke()
+                result.getOrThrow()
+            }
+        }
+    }
+
     private fun repo() = PaykitUsdtPaymentRepo(testDispatcher, keychain, sdk, proofs, usdt, clock)
     private fun context(request: PaykitPaymentRequest = this.request) =
         ContactPaymentContext(
@@ -153,7 +163,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         val repo = repo()
         repo.prepare(context(recurring), quote, amount, recurring.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
         assertTrue(repo.protectedRequestIdsForSubscriptionCancellation(identity, subscription).getOrThrow().isEmpty())
-        whenever(usdt.send(quote)).thenReturn(Result.success(mock()))
+        stubSend(Result.success(mock()))
         repo.send(quote) {
             assertEquals(
                 setOf(recurring.id),
@@ -198,12 +208,12 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `execution authorization failure never dispatches and releases an unsubmitted attempt`() = test {
+    fun `execution authorization failure releases an unsubmitted attempt`() = test {
         val repo = repo()
         repo.prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
+        stubSend(Result.success(mock()))
         val result = repo.send(quote) { throw PaykitPaymentRequestError.RequestUnavailable }
         assertTrue(result.isFailure)
-        org.mockito.kotlin.verify(usdt, org.mockito.kotlin.never()).send(any())
         assertEquals(false, repo.attempts.value.single().paymentStarted)
     }
 
@@ -242,7 +252,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         val original = repo()
         original.prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
         val unstartedState = stored
-        whenever(usdt.send(quote)).thenReturn(Result.success(mock<UsdtTransfer>()))
+        stubSend(Result.success(mock()))
         original.send(quote).getOrThrow()
         val backup = original.backupSnapshot()
         for (localState in listOf(null, unstartedState)) {
@@ -275,7 +285,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             stored = null
             val repo = repo()
             stubStoredTransfer(history)
-            whenever(usdt.send(quote)).thenReturn(Result.failure(UsdtException.QuoteExpired()))
+            stubSend(Result.failure(UsdtException.QuoteExpired()))
             repo.prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
             assertTrue(repo.send(quote).isFailure)
             val replacement = repo.prepare(
