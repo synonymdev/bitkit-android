@@ -462,6 +462,7 @@ private fun DepositDetail(
             modifier = Modifier.testTag("UsdtDepositRefund")
         )
     }
+    UsdtSupportActions(detail.supportDetails, enabled = !busy)
 }
 
 @Composable
