@@ -511,6 +511,38 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
     }
 
+    suspend fun clearHardwareOnchainCandidateBeforeDispatch(
+        requestId: PaykitPaymentRequestId,
+        walletId: String,
+        txid: String,
+        identity: String?,
+        address: String,
+        amountSats: ULong,
+        hasAttemptedBroadcast: Boolean,
+    ): Boolean = withContext(ioDispatcher) {
+        if (hasAttemptedBroadcast || walletId == WalletScope.default || !txid.isHex(HASH_BYTE_COUNT)) {
+            return@withContext false
+        }
+        val originalIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return@withContext false
+        operationMutex.withLock {
+            runSuspendCatching {
+                if (!PubkyPublicKeyFormat.matches(currentIdentity(), originalIdentity)) return@runSuspendCatching false
+                val proofs = loadProofs()
+                val original = proofs.singleOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, originalIdentity) && it.requestId == requestId &&
+                        it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
+                        it.paymentStarted && it.onchainAddress == address && it.onchainAmountSats == amountSats &&
+                        it.paymentIdentifier.equals(txid, true) && it.proofData == null &&
+                        !it.onchainAcceptanceVerified
+                } ?: return@runSuspendCatching false
+                // Only a definite first queued dispatch denial permits the existing preparation cleanup.
+                persist(proofs.map { if (it == original) it.copy(paymentIdentifier = null) else it })
+                true
+            }.onFailure { Logger.warn("Failed to clear denied hardware candidate", it, context = TAG) }
+                .getOrDefault(false)
+        }
+    }
+
     suspend fun completeHardwareOnchainPayment(
         requestId: PaykitPaymentRequestId,
         walletId: String,

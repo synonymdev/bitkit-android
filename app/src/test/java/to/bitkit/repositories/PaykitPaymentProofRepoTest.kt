@@ -1442,6 +1442,35 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `first queued expiry clears only the exact unsubmitted hardware candidate`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val txid = "ab".repeat(32)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        assertTrue(repo.retainHardwareOnchainCandidate(request.id, walletId, txid, LOCAL_IDENTITY,
+            ONCHAIN_ADDRESS, request.amountSats))
+        val retained = storedProofs.single()
+        suspend fun clear(prior: Boolean = false, candidate: String = txid, address: String = ONCHAIN_ADDRESS) =
+            repo.clearHardwareOnchainCandidateBeforeDispatch(request.id, walletId, candidate, LOCAL_IDENTITY,
+                address, request.amountSats, prior)
+        assertFalse(clear(prior = true))
+        assertFalse(clear(candidate = "cd".repeat(32)))
+        assertFalse(clear(address = "other-address"))
+        for (accepted in listOf(retained.copy(onchainAcceptanceVerified = true), retained.copy(proofData = txid))) {
+            storedProofs = listOf(accepted)
+            assertFalse(clear())
+            assertEquals(listOf(accepted), storedProofs)
+        }
+        storedProofs = listOf(retained)
+        assertTrue(clear())
+        assertNull(storedProofs.single().paymentIdentifier)
+        assertTrue(repo.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false))
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `prebroadcast hardware candidate survives repository reopen without claiming acceptance`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val walletId = "original-hardware-wallet"

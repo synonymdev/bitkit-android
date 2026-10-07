@@ -66,6 +66,8 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(coreService.activity).thenReturn(activityService)
         whenever { proofRepo.retainHardwareOnchainCandidate(any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any()) }
             .thenReturn(true)
+        whenever { proofRepo.clearHardwareOnchainCandidateBeforeDispatch(any(), any(), any(),
+            org.mockito.kotlin.anyOrNull(), any(), any(), any()) }.thenReturn(false)
         whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
         sut = HwSendViewModel(
             context = context,
@@ -491,6 +493,47 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isSigning)
         sut.cancel()
         assertFalse(sut.uiState.value.hasPendingBroadcast)
+    }
+
+    @Test
+    fun `first queued Shop expiry clears exact retained candidate before releasing preparation`() = test {
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        val requestId = PaykitPaymentRequestId("request", "counterparty")
+        val original = request().copy(paymentRequestId = requestId, paymentIdentity = "original-identity",
+            paymentDeadlineAt = deadline)
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
+            .thenReturn(Result.failure(AppError(ServiceError.PaymentDeadlineExpired())))
+        var cleared = false
+        whenever(proofRepo.clearHardwareOnchainCandidateBeforeDispatch(requestId, WALLET_ID,
+            "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e",
+            "original-identity", ADDRESS, AMOUNT_SATS, false)).doSuspendableAnswer {
+            cleared = true
+            true
+        }
+        var expired: Boolean? = null
+        sut.signAndBroadcast(original, onPaymentDeadlineExpired = {
+            assertTrue(cleared)
+            expired = it
+        })
+        advanceUntilIdle()
+        assertEquals(false, expired)
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+    }
+
+    @Test
+    fun `failed queued Shop candidate rollback preserves uncertainty`() = test {
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
+            .thenReturn(Result.failure(AppError(ServiceError.PaymentDeadlineExpired())))
+        var expired: Boolean? = null
+        sut.signAndBroadcast(request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity", paymentDeadlineAt = deadline),
+            onPaymentDeadlineExpired = { expired = it })
+        advanceUntilIdle()
+        assertEquals(true, expired)
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
     }
 
     @Test

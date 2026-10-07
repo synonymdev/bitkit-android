@@ -182,9 +182,17 @@ class HwSendViewModel @Inject constructor(
             hwWalletRepo.broadcastFunding(payment.signedTx, payment.request.paymentDeadlineAt)
         }.getOrElse { error ->
             if (generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }) {
-                pendingBroadcast = payment
-                _uiState.update { it.copy(isBroadcastUnresolved = payment.hasAttemptedBroadcast) }
-                onPaymentDeadlineExpired(payment.hasAttemptedBroadcast)
+                val request = payment.request
+                val cleared = request.paymentRequestId?.let { requestId ->
+                    !payment.hasAttemptedBroadcast && paykitPaymentProofRepo.clearHardwareOnchainCandidateBeforeDispatch(
+                        requestId, request.walletId, SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                        request.paymentIdentity, request.address, request.amountSats, payment.hasAttemptedBroadcast,
+                    )
+                } ?: !payment.hasAttemptedBroadcast
+                val unresolved = payment.hasAttemptedBroadcast || !cleared
+                pendingBroadcast = payment.copy(hasAttemptedBroadcast = unresolved)
+                _uiState.update { it.copy(isBroadcastUnresolved = unresolved) }
+                onPaymentDeadlineExpired(unresolved)
                 return null
             }
             throw error
