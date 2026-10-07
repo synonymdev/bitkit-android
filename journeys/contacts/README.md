@@ -47,3 +47,16 @@ selected retry contacts should be sent to or read from in that drain. Repeat dur
 with one withdrawal failing: OFF remains immediate, cleanup remains pending on failure, and no new
 publication starts. Record action-to-result time separately from SDK lock and network waits; these
 fault-injection checks do not establish staging latency or a guaranteed completion deadline.
+
+## Background preparation
+
+With contact preparation or a private-message retry in progress, background the app. Let an active
+SDK operation finish; scheduled contact work must pause between operations and retain pending
+contacts. Foreground the app and verify preparation and delivery resume without adding the
+contacts again. A direct payment or withdrawal is not a background retry and must retain its
+normal completion behavior.
+
+Repeat with a controlled SDK operation held in progress: background the app, then release the
+operation and verify that it completes without cancellation and the next contact waits. Delete the
+profile while work is paused, then resume; no work for the deleted identity should restart.
+Controlled operation blocking requires an instrumented fixture, not the standard journey runner.

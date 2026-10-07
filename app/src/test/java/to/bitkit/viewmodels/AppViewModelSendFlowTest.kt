@@ -710,16 +710,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `foreground polling starts identity republish once and restarts after stopping`() = test {
+        clearInvocations(privatePaykitRepo)
         try {
             sut.startPaykitPaymentRequestPolling()
             runCurrent()
             verify(pubkyRepo).republishIdentityIfNeeded()
+            verify(privatePaykitRepo).setContactPreparationActive(true)
 
             sut.startPaykitPaymentRequestPolling()
             runCurrent()
             verify(pubkyRepo).republishIdentityIfNeeded()
 
             sut.stopPaykitPaymentRequestPolling()
+            verify(privatePaykitRepo).setContactPreparationActive(false)
             sut.startPaykitPaymentRequestPolling()
             runCurrent()
             verify(pubkyRepo, times(2)).republishIdentityIfNeeded()

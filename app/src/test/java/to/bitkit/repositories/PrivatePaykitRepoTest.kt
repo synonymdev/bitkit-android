@@ -150,6 +150,12 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.pendingOutboundPrivateCounterparties(any())).doSuspendableAnswer {
             paykitSdkService.pendingOutboundPrivateCounterparties()
         }
+        whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {
+            paykitSdkService.processOutboundPrivateMessages(it.getArgument(0))
+        }
+        whenever(paykitSdkService.receivePrivateMessages(any(), any())).doSuspendableAnswer {
+            paykitSdkService.receivePrivateMessages(it.getArgument(0))
+        }
         whenever { paykitSdkService.clearPrivatePaymentLists(any()) }.thenAnswer {
             privateListDeliveryReport(clearedCounterparties = it.getArgument(0))
         }
@@ -394,6 +400,83 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         advanceTimeBy(1_000)
         runCurrent()
         verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `scheduled preparation waits for foreground and retains selected contacts`() = test {
+        sut.setContactPreparationActive(false)
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService, never()).linkedPeers(any())
+        verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
+
+        sut.setContactPreparationActive(true)
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY, priority = Priority.Background)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `backgrounding finishes active preparation before pausing the next peer`() = test {
+        val completion = CompletableDeferred<Unit>()
+        var finished = false
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
+            completion.await()
+            finished = true
+            LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKED, 1uL, null)
+        }
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY, priority = Priority.Background)
+
+        sut.setContactPreparationActive(false)
+        completion.complete(Unit)
+        runCurrent()
+        assertTrue(finished)
+        verify(paykitSdkService, never()).ensureLinkWithPeer(eq(OTHER_CONTACT_KEY), any(), any())
+
+        sut.setContactPreparationActive(true)
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(OTHER_CONTACT_KEY, priority = Priority.Background)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `pending retries pause in background and resume with background transport priority`() = test {
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        sut.setContactPreparationActive(false)
+        clearInvocations(paykitSdkService)
+        advanceTimeBy(120_000)
+        runCurrent()
+        verify(paykitSdkService, never()).linkedPeers(any())
+
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(listOf(CONTACT_KEY))
+        sut.setContactPreparationActive(true)
+        runCurrent()
+        verify(paykitSdkService).processOutboundPrivateMessages(CONTACT_KEY, Priority.Background)
+        verify(paykitSdkService).receivePrivateMessages(CONTACT_KEY, Priority.Background)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `profile deletion invalidates paused preparation and retries`() = test {
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        sut.setContactPreparationActive(false)
+        sut.scheduleSavedContactPreparation(listOf(OTHER_CONTACT_KEY)).getOrThrow()
+        advanceTimeBy(2_000)
+        runCurrent()
+        sut.beginProfileDeletion()
+        clearInvocations(paykitSdkService)
+
+        sut.setContactPreparationActive(true)
+        advanceTimeBy(120_000)
+        runCurrent()
+        verify(paykitSdkService, never()).linkedPeers(any())
+        verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
         sut.closeAndClear()
     }
 
@@ -2197,7 +2280,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         publicPaykitRepo = publicPaykitRepo,
         coreService = coreService,
         clock = clock,
-    )
+    ).also { it.setContactPreparationActive(true) }
 
     private fun resolution(
         vararg endpoints: PaykitResolvedPaymentEndpoint,

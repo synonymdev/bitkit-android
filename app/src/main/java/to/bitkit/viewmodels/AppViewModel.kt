@@ -972,6 +972,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun startPaykitPaymentRequestPolling() {
+        privatePaykitRepo.setContactPreparationActive(true)
         isPaymentRequestPollingStopped = false
         if (paykitPaymentRequestPollingJob?.isActive == true) return
 
@@ -1073,6 +1074,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun stopPaykitPaymentRequestPolling() {
+        privatePaykitRepo.setContactPreparationActive(false)
         isPaymentRequestPollingStopped = true
         paykitSessionRestoreRetryJob?.cancel()
         paykitSessionRestoreRetryJob = null
