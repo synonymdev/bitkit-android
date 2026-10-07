@@ -174,6 +174,7 @@ data class SettingsData(
     val publicPaykitCleanupPending: Boolean = false,
     val publicPaykitLightningEnabled: Boolean = true,
     val publicPaykitOnchainEnabled: Boolean = true,
+    val publicPaykitUsdtEnabled: Boolean = true,
     val publicPaykitBolt11: String = "",
     val publicPaykitBolt11PaymentHash: String = "",
     val publicPaykitBolt11ExpiresAtMillis: Long = 0,

@@ -320,6 +320,11 @@ androidComponents {
         val buildConfigFields = requireNotNull(variant.buildConfigFields) {
             "buildFeatures.buildConfig must stay enabled for '${variant.name}'."
         }
+        buildConfigFields.put("USDT_BUNDLER_URL", localProp("USDT_BUNDLER_URL").orElse("").stringField())
+        buildConfigFields.put("USDT_BRIDGES_URL", localProp("USDT_BRIDGES_URL").orElse("").stringField())
+        buildConfigFields.put("USDT_DEPOSITS_URL", localProp("USDT_DEPOSITS_URL").orElse("").stringField())
+        buildConfigFields.put("USDT_BRIDGE_NETWORKS", localProp("USDT_BRIDGE_NETWORKS").orElse("").stringField())
+        buildConfigFields.put("USDT_RPC_URL", localProp("USDT_RPC_URL").orElse("").stringField())
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
         buildConfigFields.put("E2E_LOCAL_HOST", e2eLocalHostEnv.stringField())
@@ -516,10 +521,17 @@ dependencies {
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
-    implementation(libs.bitkit.core)
+    val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
+    if (localBitkitCoreAar != null) {
+        debugImplementation(files(localBitkitCoreAar))
+        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.23.1")
+        releaseImplementation(libs.bitkit.core)
+    } else {
+        implementation(libs.bitkit.core)
+    }
     implementation(libs.paykit)
     implementation(libs.vss.client)
-    nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
+    if (localBitkitCoreAar == null) nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.paykit.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.vss.client.nativeDebugSymbolsArtifact())

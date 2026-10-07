@@ -71,8 +71,8 @@ class PaymentRequestPresentationTest {
     ) = PaykitPaymentRequest(
         paymentRequestId = "request-id",
         counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-        amountValue = "0.000025",
-        amountSats = 2_500uL,
+        amount = to.bitkit.models.PaykitAmount(to.bitkit.models.PaykitAsset.BTC, 2_500uL),
+        paymentReference = "fixture-reference",
         expiresAt = null,
         acceptedPaymentEndpointIdentifiers = listOf("lightning-bolt11"),
         direction = direction,

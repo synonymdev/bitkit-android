@@ -100,71 +100,77 @@ private fun RowScope.Content(
     hideBalance: Boolean,
     titleTrailing: @Composable RowScope.() -> Unit = {},
 ) {
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .then(modifier)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text13Up(
-                text = title,
-                color = Colors.White64,
-                maxLines = 1,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            titleTrailing()
-        }
-        VerticalSpacer(8.dp)
-
-        converted?.let { converted ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+    WalletBalanceContent(
+        title = title,
+        icon = {
+            if (converted != null) {
                 Icon(
                     painter = icon,
                     contentDescription = title,
                     tint = Color.Unspecified,
-                    modifier = Modifier
-                        .padding(end = 4.dp)
-                        .size(24.dp)
+                    modifier = Modifier.padding(end = 4.dp).size(24.dp)
                 )
-
-                if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                    val btcComponents = converted.bitcoinDisplay(displayUnit)
-                    AnimatedContent(
-                        targetState = hideBalance,
-                        transitionSpec = { BalanceAnimations.walletBalanceTransition },
-                        label = "bitcoinBalanceAnimation"
-                    ) { isHidden ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else btcComponents.value)
-                        }
+            }
+        },
+        titleTrailing = titleTrailing,
+        modifier = modifier,
+    ) {
+        converted?.let { converted ->
+            if (primaryDisplay == PrimaryDisplay.BITCOIN) {
+                val btcComponents = converted.bitcoinDisplay(displayUnit)
+                AnimatedContent(
+                    targetState = hideBalance,
+                    transitionSpec = { BalanceAnimations.walletBalanceTransition },
+                    label = "bitcoinBalanceAnimation"
+                ) { isHidden ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else btcComponents.value)
                     }
-                } else {
-                    AnimatedContent(
-                        targetState = hideBalance,
-                        transitionSpec = { BalanceAnimations.walletBalanceTransition },
-                        label = "fiatBalanceAnimation"
-                    ) { isHidden ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            if (converted.isSymbolSuffix) {
-                                BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else converted.formatted)
-                                BodyMSB(text = converted.symbol)
-                            } else {
-                                BodyMSB(text = converted.symbol)
-                                BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else converted.formatted)
-                            }
+                }
+            } else {
+                AnimatedContent(
+                    targetState = hideBalance,
+                    transitionSpec = { BalanceAnimations.walletBalanceTransition },
+                    label = "fiatBalanceAnimation"
+                ) { isHidden ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (converted.isSymbolSuffix) {
+                            BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else converted.formatted)
+                            BodyMSB(text = converted.symbol)
+                        } else {
+                            BodyMSB(text = converted.symbol)
+                            BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else converted.formatted)
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun RowScope.WalletBalanceContent(
+    title: String,
+    icon: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    titleTrailing: @Composable RowScope.() -> Unit = {},
+    amount: @Composable () -> Unit,
+) {
+    Column(modifier = Modifier.weight(1f).then(modifier)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text13Up(text = title, color = Colors.White64, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            titleTrailing()
+        }
+        VerticalSpacer(8.dp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            icon()
+            amount()
         }
     }
 }

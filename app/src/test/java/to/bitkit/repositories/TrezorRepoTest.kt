@@ -168,6 +168,9 @@ class TrezorRepoTest : BaseUnitTest() {
         path: String,
     ) = TrezorPublicKeyResponse(
         xpub = xpub,
+        xpubSegwit = null,
+        descriptor = null,
+        displayablePublicKey = xpub,
         path = path,
         publicKey = "pubkey",
         chainCode = "chaincode",

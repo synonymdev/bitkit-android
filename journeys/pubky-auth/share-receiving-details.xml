@@ -1,0 +1,13 @@
+<journey name="review Earn receiving details">
+  <description>Use an onboarded wallet with a Pubky identity and configured USDT. Use a local test auth request; cancel before Authorize so no receiving details or session are exported.</description>
+  <actions>
+    <action>Open the existing watch-only setup fixture with x-bitkit-claim=usdt-address-v1</action>
+    <action>Verify the Earn USDT introduction, then tap Approve</action>
+    <action>Verify only USDT Arbitrum details, the existing address and balance/history disclosure are shown</action>
+    <action>Expand the address and copy it; verify it matches the wallet receive address</action>
+    <action>Cancel and verify no Bitcoin account was created</action>
+    <action>Repeat with x-bitkit-claim=payment-details-v1; verify Bitcoin and USDT appear together, then cancel</action>
+    <action>Repeat with x-bitkit-claim=watch-only-account-v1; verify only Bitcoin is requested, then cancel</action>
+    <action>With USDT unavailable, verify USDT authorization is disabled and Retry reloads the address</action>
+  </actions>
+</journey>

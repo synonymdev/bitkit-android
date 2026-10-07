@@ -47,6 +47,7 @@ class WipeWalletUseCase @Inject constructor(
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
     private val paykitSdkService: PaykitSdkService,
+    private val usdtRepo: to.bitkit.repositories.UsdtRepo,
 ) {
     private val wipeMutex = Mutex()
 
@@ -97,7 +98,7 @@ class WipeWalletUseCase @Inject constructor(
         step("clear migration data") { migrationService.cleanupAfterMigration() }
         step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }
         step("wipe Pubky local state") { pubkyRepo.wipeLocalState() }
-        val keychainWiped = step("wipe keychain") { keychain.wipe() }
+        val keychainWiped = step("wipe USDT and keychain") { usdtRepo.wipe { keychain.wipe() } }
         step("delete FCM token") { firebaseMessaging.deleteToken() }
         step("wipe core data") { coreService.wipeData() }
         step("clear database") { db.clearAllTables() }

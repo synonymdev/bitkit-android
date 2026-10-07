@@ -12,7 +12,7 @@
     <action>Tap Create (testTag "SubscriptionCreate")</action>
     <action>Verify the create sheet (testTag "CreateSubscription") appears with Choose Recipient disabled</action>
     <action>Tap the amount pencil, enter "5000" on the keypad, and tap Continue</action>
-    <action>Verify the amount reads 5,000 sats</action>
+    <action>Verify the amount reads 5,000 sats and the accepted methods show only enabled Savings or Spending options, with no USDT</action>
     <action>Type "Journey Sub" into the subscription name field (testTag "SubscriptionName")</action>
     <action>Enter 600 ASCII letters in the description field (testTag "SubscriptionDescription")</action>
     <action>Verify the frequency selector has "Monthly" selected</action>

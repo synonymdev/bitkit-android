@@ -85,6 +85,7 @@ class PrivatePaykitRepo @Inject constructor(
     private val walletRepo: WalletRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val paymentRequestRepo: PaykitPaymentRequestRepo,
+    private val usdtRepo: UsdtRepo,
     private val coreService: CoreService,
     private val clock: Clock,
 ) {
@@ -870,6 +871,7 @@ class PrivatePaykitRepo @Inject constructor(
                     paymentListVersion = paymentListVersion,
                     previousPaymentListVersion = consumedVersion.takeIf { paymentListVersion != null },
                 ),
+                endpoints = privatePayable,
             )
         }
 
@@ -1633,6 +1635,9 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             val settings = settingsStore.data.first()
             val endpoints = mutableListOf<Endpoint>()
+            if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings)) {
+                endpoints += usdtRepo.paymentEndpoint().getOrThrow()
+            }
             if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
                 val reservedAddress = addressReservationRepo.currentOrRotatedAddress(
                     publicKey,

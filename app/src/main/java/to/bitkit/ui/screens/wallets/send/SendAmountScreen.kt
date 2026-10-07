@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -26,6 +27,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
+import com.synonym.bitkitcore.usdtFormatAmount
 import to.bitkit.R
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
@@ -38,6 +40,7 @@ import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
@@ -45,7 +48,9 @@ import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadActionButton
+import to.bitkit.ui.components.NumberPadAmountText
 import to.bitkit.ui.components.NumberPadTextField
+import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.Text13Up
@@ -56,6 +61,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.NumberPadInputHandler
 import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputUiState
 import to.bitkit.viewmodels.AmountInputViewModel
@@ -98,14 +104,19 @@ fun SendAmountScreen(
     }
     val currentMaxExceededMessage by rememberUpdatedState(maxExceededMessage)
 
-    LaunchedEffect(Unit) {
-        if (uiState.amount > 0u) {
+    val pendingRequests = app?.pendingPaymentRequests?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(pendingRequests, uiState.paykitUsesUsdt) {
+        app?.refreshPaykitRequestAmount()
+    }
+
+    LaunchedEffect(uiState.paykitUsesUsdt, uiState.payMethod, uiState.amount.takeIf { uiState.isPaymentRequest }) {
+        if (!uiState.paykitUsesUsdt && uiState.amount > 0u) {
             amountInputViewModel.setSats(uiState.amount.toLong(), currencies)
         }
     }
 
     LaunchedEffect(amountInputUiState.sats) {
-        currentOnEvent(SendEvent.AmountChange(amountInputUiState.sats.toULong()))
+        if (!uiState.paykitUsesUsdt) currentOnEvent(SendEvent.AmountChange(amountInputUiState.sats.toULong()))
     }
 
     LaunchedEffect(Unit) {
@@ -179,7 +190,7 @@ fun SendAmountContent(
         val titleRes = when (uiState.lnurl) {
             is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_title
             is LnurlParams.LnurlPay -> R.string.wallet__lnurl_p_title
-            else -> R.string.wallet__send_amount
+            else -> if (uiState.paykitUsesUsdt) R.string.usdt__amount else R.string.wallet__send_amount
         }
 
         SendContactTopBar(
@@ -188,8 +199,8 @@ fun SendAmountContent(
             onBack = onBack,
         )
 
-        when (nodeLifecycleState) {
-            is NodeLifecycleState.Running -> {
+        when {
+            nodeLifecycleState is NodeLifecycleState.Running || uiState.paykitUsesUsdt -> {
                 SendAmountNodeRunning(
                     amountInputViewModel = amountInputViewModel,
                     uiState = uiState,
@@ -224,6 +235,9 @@ private fun SendAmountNodeRunning(
     onClickMax: (Long) -> Unit,
     onContinue: () -> Unit,
 ) {
+    val app = appViewModel
+    val usdtWallet = app?.usdtWallet?.collectAsStateWithLifecycle()?.value
+    val hideBalance = to.bitkit.ui.settingsViewModel?.hideBalance?.collectAsStateWithLifecycle()?.value == true
     BoxWithConstraints {
         val maxHeight = this.maxHeight
         val isLnurlWithdraw = uiState.lnurl is LnurlParams.LnurlWithdraw
@@ -253,14 +267,28 @@ private fun SendAmountNodeRunning(
         ) {
             VerticalSpacer(16.dp)
 
-            NumberPadTextField(
-                viewModel = amountInputViewModel,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("SendNumberField")
-            )
+            if (uiState.paykitUsesUsdt) {
+                NumberPadAmountText(
+                    value = uiState.paykitAmount.ifEmpty { "0" },
+                    symbol = "₮",
+                    modifier = Modifier.testTag("SendNumberField")
+                )
+            } else {
+                NumberPadTextField(
+                    viewModel = amountInputViewModel,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("SendNumberField")
+                )
+            }
 
             FillHeight(min = 12.dp)
+            if (uiState.paykitRateUnavailable) {
+                to.bitkit.ui.components.BodyS(
+                    stringResource(R.string.wallet__payment_request_rate_unavailable),
+                    color = Colors.White64
+                )
+            }
 
             val textAvailable = when {
                 uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
@@ -276,7 +304,9 @@ private fun SendAmountNodeRunning(
             ) {
                 Column(
                     modifier = Modifier
-                        .clickableAlpha { onClickMax(availableAmount) }
+                        .clickableAlpha(
+                            enabled = !uiState.isPaymentRequest && !uiState.paykitUsesUsdt
+                        ) { onClickMax(availableAmount) }
                         .testTag("AvailableAmount")
                 ) {
                     Text13Up(
@@ -285,16 +315,25 @@ private fun SendAmountNodeRunning(
                         modifier = Modifier.testTag("available_balance")
                     )
                     VerticalSpacer(4.dp)
-                    MoneySSB(sats = availableAmount, showSymbol = true)
+                    if (uiState.paykitUsesUsdt) {
+                        val balance = if (hideBalance) {
+                            to.bitkit.ui.shared.UiConstants.HIDE_BALANCE_SHORT
+                        } else {
+                            usdtWallet?.balance?.let(::usdtFormatAmount) ?: "—"
+                        }
+                        BodySSB("$balance USDT")
+                    } else {
+                        MoneySSB(sats = availableAmount, showSymbol = true)
+                    }
                 }
 
                 FillWidth()
 
                 val isLnurl = uiState.lnurl != null
-                if (!isLnurl) {
+                if (!isLnurl || uiState.usdtRecipient != null) {
                     PaymentMethodButton(uiState = uiState, onClick = onClickPayMethod)
                 }
-                if (uiState.lnurl is LnurlParams.LnurlPay) {
+                if (!uiState.isPaymentRequest && !uiState.paykitUsesUsdt && uiState.lnurl is LnurlParams.LnurlPay) {
                     val max = minOf(
                         uiState.lnurl.data.maxSendableSat().toLong(),
                         availableAmount,
@@ -308,23 +347,39 @@ private fun SendAmountNodeRunning(
                     )
                 }
                 HorizontalSpacer(8.dp)
-                UnitButton(
-                    onClick = { amountInputViewModel.switchUnit(currencies) },
-                    modifier = Modifier
-                        .height(28.dp)
-                        .testTag("SendNumberPadUnit")
-                )
+                if (!uiState.paykitUsesUsdt) {
+                    UnitButton(
+                        onClick = { amountInputViewModel.switchUnit(currencies) },
+                        modifier = Modifier
+                            .height(28.dp)
+                            .testTag("SendNumberPadUnit")
+                    )
+                }
             }
 
             HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
-            NumberPad(
-                viewModel = amountInputViewModel,
-                currencies = currencies,
-                availableHeight = maxHeight,
-                modifier = Modifier
-                    .testTag("SendAmountNumberPad")
-            )
+            if (uiState.paykitUsesUsdt) {
+                NumberPad(
+                    type = NumberPadType.DECIMAL,
+                    enabled = !uiState.isPaymentRequest,
+                    onPress = {
+                        app?.onUsdtAmountChange(
+                            NumberPadInputHandler.handleInput(it, uiState.paykitAmount, maxLength = 21, maxDecimals = 6)
+                        )
+                    },
+                    onDeleteLongPress = { app?.onUsdtAmountChange("") }
+                )
+            } else {
+                NumberPad(
+                    enabled = !uiState.isPaymentRequest,
+                    viewModel = amountInputViewModel,
+                    currencies = currencies,
+                    availableHeight = maxHeight,
+                    modifier = Modifier
+                        .testTag("SendAmountNumberPad")
+                )
+            }
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
@@ -347,21 +402,19 @@ private fun PaymentMethodButton(
     val isHardware = uiState.hardwareWalletId != null
     val testId = when {
         uiState.canSwitchFundingSource -> "switch"
+        uiState.paykitUsesUsdt -> "usdt"
         isHardware -> "trezor"
         uiState.payMethod == SendMethod.ONCHAIN -> "savings"
         else -> "spending"
     }
     NumberPadActionButton(
         text = when {
+            uiState.paykitUsesUsdt -> "USDT"
             isHardware -> uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
             uiState.payMethod == SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
             else -> stringResource(R.string.wallet__spending__title)
         },
-        color = when {
-            isHardware -> Colors.Blue
-            uiState.payMethod == SendMethod.ONCHAIN -> Colors.Brand
-            else -> Colors.Purple
-        },
+        color = paymentMethodColor(uiState),
         icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
         onClick = onClick,
         enabled = uiState.canSwitchFundingSource,
@@ -371,6 +424,13 @@ private fun PaymentMethodButton(
             .height(28.dp)
             .testTag("AssetButton-$testId")
     )
+}
+
+private fun paymentMethodColor(uiState: SendUiState): Color = when {
+    uiState.paykitUsesUsdt -> Colors.Green
+    uiState.hardwareWalletId != null -> Colors.Blue
+    uiState.payMethod == SendMethod.ONCHAIN -> Colors.Brand
+    else -> Colors.Purple
 }
 
 @Preview(showSystemUi = true)

@@ -3,6 +3,12 @@ package to.bitkit.models
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
+import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.MethodId
 import to.bitkit.utils.AppError
 import java.net.URI
 import java.net.URLDecoder
@@ -21,13 +27,47 @@ value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
     enum class Item(val wireValue: String) {
         PAYKIT_ACCESS_V1("paykit-access-v1"),
         WATCH_ONLY_ACCOUNT_V1("watch-only-account-v1"),
+        USDT_ADDRESS_V1("usdt-address-v1"),
+        PAYMENT_DETAILS_V1("payment-details-v1"),
     }
 
     val wireValue: String get() = items.joinToString(".") { it.wireValue }
-    val includesWatchOnlyAccount: Boolean get() = Item.WATCH_ONLY_ACCOUNT_V1 in items
+    val includesWatchOnlyAccount: Boolean
+        get() = Item.WATCH_ONLY_ACCOUNT_V1 in items || Item.PAYMENT_DETAILS_V1 in items
     val includesPaykitAccess: Boolean get() = Item.PAYKIT_ACCESS_V1 in items
 
+    val sharesBitcoin: Boolean get() = includesWatchOnlyAccount
+    val sharesUsdt: Boolean get() = Item.USDT_ADDRESS_V1 in items || Item.PAYMENT_DETAILS_V1 in items
+    val sharesReceivingDetails: Boolean get() = sharesBitcoin || sharesUsdt
+
+    fun unsignedPayload(bitcoin: PreparedWatchOnlyAccountClaim?, usdt: Endpoint?): ByteArray {
+        if (sharesBitcoin && bitcoin == null) throw PubkyAuthRequestError.InvalidPaymentDetails
+        if (!sharesUsdt) return bitcoin?.payload ?: byteArrayOf()
+        if (usdt == null || usdt.methodId != MethodId.UsdtArbitrum ||
+            PaykitUsdt.address(usdt.rawPayload) != usdt.value
+        ) {
+            throw PubkyAuthRequestError.InvalidPaymentDetails
+        }
+        return buildJsonObject {
+            put(MethodId.UsdtArbitrum.rawValue, Json.parseToJsonElement(usdt.rawPayload).jsonObject)
+            if (sharesBitcoin) {
+                val account = checkNotNull(bitcoin).account
+                put(
+                    "bitcoin_account",
+                    buildJsonObject {
+                        put("account_index", account.accountIndex)
+                        put("address_type", account.addressType)
+                        put("xpub", account.xpub)
+                    }
+                )
+            }
+        }.toString().encodeToByteArray()
+    }
+
     companion object {
+        val USDT_ADDRESS_V1 = PubkyAuthClaim(Item.USDT_ADDRESS_V1)
+        val PAYMENT_DETAILS_V1 = PubkyAuthClaim(Item.PAYMENT_DETAILS_V1)
+
         /** Query parameter used for Bitkit-specific Pubky auth claims. */
         const val QUERY_PARAMETER = "x-bitkit-claim"
 
@@ -44,6 +84,8 @@ value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
                 Item.entries.firstOrNull { it.wireValue == token } ?: return null
             }
             if (items.distinct().size != items.size) return null
+            val hasStandaloneClaim = items.any { it == Item.USDT_ADDRESS_V1 || it == Item.PAYMENT_DETAILS_V1 }
+            if (items.size != 1 && hasStandaloneClaim) return null
             return PubkyAuthClaim(items.toImmutableList())
         }
     }
@@ -51,6 +93,7 @@ value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
 
 sealed class PubkyAuthRequestError(cause: Throwable? = null) : AppError(cause = cause) {
     class InvalidUrl(cause: Throwable) : PubkyAuthRequestError(cause)
+    data object InvalidPaymentDetails : PubkyAuthRequestError()
     data object RequesterChanged : PubkyAuthRequestError()
     data object MissingBitkitClaim : PubkyAuthRequestError()
     data object DuplicateBitkitClaim : PubkyAuthRequestError()

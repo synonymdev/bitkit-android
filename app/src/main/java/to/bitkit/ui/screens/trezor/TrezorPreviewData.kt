@@ -121,6 +121,9 @@ internal object TrezorPreviewData {
 
     val samplePublicKeyResponse = TrezorPublicKeyResponse(
         xpub = SAMPLE_XPUB,
+        xpubSegwit = null,
+        descriptor = null,
+        displayablePublicKey = SAMPLE_XPUB,
         path = "m/84'/0'/0'",
         publicKey = SAMPLE_PUBKEY,
         chainCode = SAMPLE_CHAIN_CODE,

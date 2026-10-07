@@ -404,7 +404,7 @@ fun ReceiveQrScreen(
                                     } else {
                                         { onClickEditInvoice(tab) }
                                     },
-                                    tab = tab,
+                                    accentColor = tab.accentColor,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -510,13 +510,14 @@ internal fun shouldAutoSwitchToAuto(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReceiveQrView(
+fun ReceiveQrView(
     uri: String,
     copyText: String,
-    qrLogoPainter: Painter,
-    onClickEditInvoice: () -> Unit,
-    tab: ReceiveTab,
+    qrLogoPainter: Painter?,
+    onClickEditInvoice: (() -> Unit)?,
+    accentColor: Color,
     modifier: Modifier = Modifier,
+    shareContent: String = copyText,
 ) {
     val context = LocalContext.current
     val qrButtonTooltipState = rememberTooltipState()
@@ -542,23 +543,25 @@ private fun ReceiveQrView(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            PrimaryButton(
-                text = stringResource(R.string.common__edit),
-                size = ButtonSize.Small,
-                onClick = onClickEditInvoice,
-                fullWidth = false,
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_pencil_simple),
-                        contentDescription = null,
-                        tint = tab.accentColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("SpecifyInvoiceButton")
-            )
+            if (onClickEditInvoice != null) {
+                PrimaryButton(
+                    text = stringResource(R.string.common__edit),
+                    size = ButtonSize.Small,
+                    onClick = onClickEditInvoice,
+                    fullWidth = false,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pencil_simple),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("SpecifyInvoiceButton")
+                )
+            }
             Box(modifier = Modifier.weight(1f)) {
                 Tooltip(
                     text = stringResource(R.string.wallet__receive_copied),
@@ -576,7 +579,7 @@ private fun ReceiveQrView(
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
                                 contentDescription = null,
-                                tint = tab.accentColor,
+                                tint = accentColor,
                                 modifier = Modifier.size(18.dp)
                             )
                         },
@@ -590,15 +593,15 @@ private fun ReceiveQrView(
                 size = ButtonSize.Small,
                 onClick = {
                     qrBitmap?.let { bitmap ->
-                        shareQrCode(context, bitmap, copyText)
-                    } ?: shareText(context, copyText)
+                        shareQrCode(context, bitmap, shareContent)
+                    } ?: shareText(context, shareContent)
                 },
                 fullWidth = false,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
                         contentDescription = null,
-                        tint = tab.accentColor,
+                        tint = accentColor,
                         modifier = Modifier.size(18.dp)
                     )
                 },
@@ -791,11 +794,11 @@ enum class CopyAddressType { ONCHAIN, LIGHTNING }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CopyAddressCard(
+fun CopyAddressCard(
     title: String,
     address: String,
     type: CopyAddressType,
-    onClickEditInvoice: () -> Unit,
+    onClickEditInvoice: (() -> Unit)?,
     body: String? = null,
     testTag: String? = null,
     accentColor: Color? = null,
@@ -825,45 +828,49 @@ private fun CopyAddressCard(
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            PrimaryButton(
-                text = stringResource(R.string.common__edit),
-                size = ButtonSize.Small,
-                onClick = onClickEditInvoice,
-                fullWidth = false,
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_pencil_simple),
-                        contentDescription = null,
-                        tint = buttonAccentColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("SpecifyInvoiceButton")
-            )
-            Tooltip(
-                text = stringResource(R.string.wallet__receive_copied),
-                tooltipState = tooltipState,
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    PrimaryButton(
-                        text = stringResource(R.string.common__copy),
-                        size = ButtonSize.Small,
-                        onClick = {
-                            context.setClipboardText(address)
-                            coroutineScope.launch { tooltipState.show() }
-                        },
-                        fullWidth = false,
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_copy),
-                                contentDescription = null,
-                                tint = buttonAccentColor,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
-                    )
+            if (onClickEditInvoice != null) {
+                PrimaryButton(
+                    text = stringResource(R.string.common__edit),
+                    size = ButtonSize.Small,
+                    onClick = onClickEditInvoice,
+                    fullWidth = false,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pencil_simple),
+                            contentDescription = null,
+                            tint = buttonAccentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("SpecifyInvoiceButton")
+                )
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                Tooltip(
+                    text = stringResource(R.string.wallet__receive_copied),
+                    tooltipState = tooltipState
+                ) {
+                    Box {
+                        PrimaryButton(
+                            text = stringResource(R.string.common__copy),
+                            size = ButtonSize.Small,
+                            onClick = {
+                                context.setClipboardText(address)
+                                coroutineScope.launch { tooltipState.show() }
+                            },
+                            fullWidth = true,
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_copy),
+                                    contentDescription = null,
+                                    tint = buttonAccentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                        )
+                    }
                 }
             }
             PrimaryButton(

@@ -365,3 +365,17 @@ private fun PreviewEmptyWithFooter() {
         )
     }
 }
+
+fun activityGroupTitleResource(timestamp: ULong): Int {
+    val today = Instant.now().atZone(ZoneId.systemDefault()).truncatedTo(ChronoUnit.DAYS)
+    val week = today.with(TemporalAdjusters.previousOrSame(WeekFields.of(Locale.getDefault()).firstDayOfWeek))
+    val date = Instant.ofEpochSecond(timestamp.toLong())
+    return when {
+        date >= today.toInstant() -> R.string.wallet__activity_group_today
+        date >= today.minusDays(1).toInstant() -> R.string.wallet__activity_group_yesterday
+        date >= week.toInstant() -> R.string.wallet__activity_group_week
+        date >= today.withDayOfMonth(1).toInstant() -> R.string.wallet__activity_group_month
+        date >= today.withDayOfYear(1).toInstant() -> R.string.wallet__activity_group_year
+        else -> R.string.wallet__activity_group_earlier
+    }
+}

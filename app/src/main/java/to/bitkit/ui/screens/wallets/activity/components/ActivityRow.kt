@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -104,15 +105,7 @@ fun ActivityRow(
         }
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickableAlpha { onClick(item) }
-            .background(color = Colors.Gray6, shape = Shapes.medium)
-            .padding(16.dp)
-            .testTag(testTag)
-    ) {
+    ActivityRowSurface(onClick = { onClick(item) }, modifier = Modifier.testTag(testTag)) {
         ActivityIcon(
             activity = item,
             size = 40.dp,
@@ -294,7 +287,7 @@ private fun AmountView(
 }
 
 @Composable
-private fun AmountViewContent(
+fun AmountViewContent(
     title: String,
     titlePrefix: String,
     subtitle: String,
@@ -377,4 +370,18 @@ private fun Preview(@PreviewParameter(ActivityItemsPreviewProvider::class) item:
             testTag = "Activity-",
         )
     }
+}
+
+@Composable
+fun ActivityRowSurface(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+        modifier = modifier.fillMaxWidth().clickableAlpha(onClick = onClick)
+            .background(Colors.Gray6, Shapes.medium).padding(16.dp)
+    )
 }

@@ -221,6 +221,13 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | BuyIntroScreen.kt | Buy Bitcoin › Buy Bitcoin |
 
+## ui/screens/wallets/usdt
+
+| Android | Figma |
+| - | - |
+| UsdtDepositReceiveScreen.kt | `todo` |
+| UsdtWalletScreen.kt | `todo` |
+
 ## ui/screens/wallets/withdraw
 
 | Android | Figma |

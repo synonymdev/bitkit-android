@@ -20,6 +20,8 @@ import kotlinx.collections.immutable.persistentListOf
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.USD_SYMBOL
@@ -35,9 +37,9 @@ import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AmountInputViewModel
+import kotlin.test.assertEquals
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
-import kotlin.test.assertEquals
 
 @ComposeUi
 class CreatePaymentRequestScreenTest {
@@ -99,7 +101,11 @@ class CreatePaymentRequestScreenTest {
 
         composeTestRule.onNodeWithTag("PaymentRequestAmountUnit").performClick()
 
-        composeTestRule.onAllNodesWithText(BITCOIN_SYMBOL, substring = true, useUnmergedTree = true).assertCountEquals(1)
+        composeTestRule.onAllNodesWithText(
+            BITCOIN_SYMBOL,
+            substring = true,
+            useUnmergedTree = true
+        ).assertCountEquals(1)
     }
 
     @Test
@@ -214,7 +220,7 @@ class CreatePaymentRequestScreenTest {
     }
 
     private val draft = PaykitPaymentRequestDraft(
-        amountSats = 25_000uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
         note = "Dinner",
         expiresAt = Instant.parse("2027-01-15T09:00:00Z"),
     )
@@ -226,8 +232,8 @@ class CreatePaymentRequestScreenTest {
     private val request = PaykitPaymentRequest(
         paymentRequestId = "payment-request",
         counterparty = target.publicKey,
-        amountValue = "0.00025",
-        amountSats = draft.amountSats,
+        amount = draft.amount,
+        paymentReference = "reference",
         note = draft.note,
         createdAt = Instant.parse("2027-01-15T08:00:00Z"),
         expiresAt = Instant.DISTANT_FUTURE,

@@ -43,15 +43,16 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitUsdtReceipt
 import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
+import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
@@ -59,14 +60,11 @@ import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.ZigzagDivider
-import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.uiDateText
-import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
 import kotlin.time.ExperimentalTime
 
@@ -77,6 +75,7 @@ fun IncomingPaymentRequestDetailsScreen(
     onBack: () -> Unit,
 ) {
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
+    val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val requestedPaymentRequestId by appViewModel.requestedPaymentRequestId.collectAsStateWithLifecycle()
@@ -89,6 +88,7 @@ fun IncomingPaymentRequestDetailsScreen(
 
     IncomingPaymentRequestDetailsContent(
         request = request,
+        receipt = receipts.lastOrNull { it.requestId == id },
         contact = contact,
         isPending = isPending,
         isPreparing = requestedPaymentRequestId == id,
@@ -101,6 +101,7 @@ fun IncomingPaymentRequestDetailsScreen(
 @Composable
 internal fun IncomingPaymentRequestDetailsContent(
     request: PaykitPaymentRequest?,
+    receipt: PaykitUsdtReceipt? = null,
     contact: PubkyProfile?,
     isPending: Boolean,
     isPreparing: Boolean,
@@ -143,28 +144,18 @@ internal fun IncomingPaymentRequestDetailsContent(
                 .padding(horizontal = 16.dp),
         ) {
             VerticalSpacer(16.dp)
-            rememberMoneyText(
-                sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-                reversed = true,
-                showSymbol = true,
-            )?.let {
-                Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
-            }
-            rememberMoneyText(
-                sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-            )?.let {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Display(
-                        text = request.detailsAmountText(it).withAccent(accentColor = Colors.White64),
-                        modifier = Modifier.testTag("PaymentRequestDetailsAmount")
-                    )
-                    FillWidth()
-                    if (request.hasPaymentEvidence) {
-                        PaymentRequestDetailsIcon(request)
-                    } else {
-                        PubkyContactAvatar(profile = contact, size = 48.dp)
-                    }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                PaykitAmountDisplay(request.amount, prefix = request.detailsAmountPrefix())
+                FillWidth()
+                if (request.hasPaymentEvidence) {
+                    PaymentRequestDetailsIcon(request)
+                } else {
+                    PubkyContactAvatar(profile = contact, size = 48.dp)
                 }
+            }
+            receipt?.let {
+                VerticalSpacer(8.dp)
+                BodyM(text = paykitUsdtReceiptText(it), color = Colors.White64)
             }
             BodyM(
                 text = paymentRequestStatus(request, isPending = isPending),
