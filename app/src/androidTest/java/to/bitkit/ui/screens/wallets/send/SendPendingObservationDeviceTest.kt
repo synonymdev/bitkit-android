@@ -106,8 +106,6 @@ class SendPendingObservationDeviceTest {
                 settingsStore,
                 pubkyRepo,
                 contactPaymentSettingsRepo,
-                publicPaykitRepo,
-                privatePaykitRepo,
                 widgetsStore,
                 widgetsRepo,
             )
