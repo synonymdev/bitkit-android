@@ -1767,6 +1767,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `unsent hardware release preserves previously consumed boundary`() = test {
+        sut.consumePrivatePaymentList(CONTACT_KEY, PrivatePaykitPaymentContext(emptyMap(), 6uL)).getOrThrow()
+        sut.consumePrivatePaymentList(CONTACT_KEY, PrivatePaykitPaymentContext(emptyMap(), 7uL)).getOrThrow()
+        sut.releasePrivatePaymentListVersion(CONTACT_KEY, 7uL, 6uL).getOrThrow()
+        assertEquals(6uL, cacheData.value.contacts.getValue(CONTACT_KEY).consumedPrivatePaymentListVersion)
+    }
+
+    @Test
     fun `releasePrivatePaymentList makes matching version reusable without clearing newer consumption`() = test {
         val releasedContext = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 7uL)
         val newerContext = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 8uL)

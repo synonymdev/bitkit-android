@@ -5837,6 +5837,7 @@ class AppViewModel @Inject constructor(
                 requireNotNull(incomingPaymentRequest), address, walletId ?: WalletScope.default,
                 contactPaymentContext.privatePaymentContext?.paymentListVersion,
                 signedTx,
+                contactPaymentContext.privatePaymentContext?.previousPaymentListVersion,
             ).onFailure {
                 synchronized(contactPaymentContextLock) {
                     if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null

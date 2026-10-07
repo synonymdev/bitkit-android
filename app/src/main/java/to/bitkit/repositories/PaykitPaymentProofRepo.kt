@@ -91,6 +91,7 @@ data class PendingPaykitPaymentProof(
     val hardwareFeeRate: ULong? = null,
     val hardwareTotalSpent: ULong? = null,
     val privatePaymentListVersion: ULong? = null,
+    val previousPrivatePaymentListVersion: ULong? = null,
 )
 
 data class PaykitOnchainPaymentProofResolution(
@@ -235,6 +236,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         walletId: String = WalletScope.default,
         privatePaymentListVersion: ULong? = null,
         signedTx: HwFundingSignedTx? = null,
+        previousPrivatePaymentListVersion: ULong? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
@@ -262,6 +264,9 @@ class PaykitPaymentProofRepo @Inject constructor(
                     onchainAmountSats = request.amountSats,
                     onchainWalletId = walletId,
                     privatePaymentListVersion = privatePaymentListVersion,
+                    previousPrivatePaymentListVersion = previousPrivatePaymentListVersion.takeIf {
+                        privatePaymentListVersion != null
+                    },
                     paymentIdentifier = signedTxid,
                     hardwareSignedTransaction = signedTx?.serializedTx,
                     hardwareMiningFeeSats = signedTx?.miningFeeSats,
@@ -775,7 +780,11 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     private suspend fun releaseDeniedPrivateConsumption(proof: PendingPaykitPaymentProof) {
         val version = proof.privatePaymentListVersion ?: return
-        privatePaykitRepo.get().releasePrivatePaymentListVersion(proof.requestId.counterparty, version).getOrThrow()
+        privatePaykitRepo.get().releasePrivatePaymentListVersion(
+            proof.requestId.counterparty,
+            version,
+            proof.previousPrivatePaymentListVersion,
+        ).getOrThrow()
     }
 
     private suspend fun finishDeniedHardwarePreparations(proofs: List<PendingPaykitPaymentProof>) {

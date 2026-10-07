@@ -439,11 +439,16 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun releasePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,
-    ): Result<Unit> = releasePrivatePaymentListVersion(publicKey, context.paymentListVersion)
+    ): Result<Unit> = releasePrivatePaymentListVersion(
+        publicKey,
+        context.paymentListVersion,
+        context.previousPaymentListVersion,
+    )
 
     suspend fun releasePrivatePaymentListVersion(
         publicKey: String,
         paymentListVersion: ULong?,
+        previousPaymentListVersion: ULong? = null,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             val normalizedKey = normalizedPublicKey(publicKey) ?: throw PrivatePaykitError.InvalidPublicKey
@@ -452,7 +457,10 @@ class PrivatePaykitRepo @Inject constructor(
             val consumedVersion = contactState.consumedPrivatePaymentListVersion
             if (consumedVersion != paymentListVersion) return@runSuspendCatching
 
-            contactState.consumedPrivatePaymentListVersion = null
+            if (previousPaymentListVersion != null && previousPaymentListVersion >= paymentListVersion) {
+                throw PaykitPaymentRequestError.RequestUnavailable
+            }
+            contactState.consumedPrivatePaymentListVersion = previousPaymentListVersion
             try {
                 persistState(markWalletBackup = true)
             } catch (error: Throwable) {
@@ -731,6 +739,7 @@ class PrivatePaykitRepo @Inject constructor(
                     paymentAppsByEndpoint = privatePayable.distinctBy { it.methodId }
                         .associate { it.methodId.rawValue to requireNotNull(it.appId) },
                     paymentListVersion = paymentListVersion,
+                    previousPaymentListVersion = consumedVersion.takeIf { paymentListVersion != null },
                 ),
             )
         }

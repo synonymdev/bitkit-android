@@ -477,7 +477,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paykitPaymentProofRepo.associateLightningPayment(any(), any(), any(), eq("bitkit"))
         }.thenReturn(Result.success(Unit))
         whenever {
-            paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
+            paykitPaymentProofRepo.markOnchainPaymentStarted(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+            )
         }.thenReturn(Result.success(Unit))
         whenever { activityRepo.setContact(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.scheduleSavedContactPreparation(any<Collection<String>>()) }
@@ -7350,7 +7357,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
         )
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
     }
 
     @Test
@@ -7812,7 +7826,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
     }
 
     @Test
@@ -7840,7 +7861,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
     }
 
     @Test
@@ -8254,7 +8282,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
     }
 
     @Test

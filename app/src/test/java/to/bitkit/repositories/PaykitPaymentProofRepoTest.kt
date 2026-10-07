@@ -1540,7 +1540,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
         // Snapshot at the authorization boundary, before any broadcast callback can save a receipt.
-        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId, 7uL, signedTx = signed).getOrThrow()
+        repo.markOnchainPaymentStarted(
+            request,
+            ONCHAIN_ADDRESS,
+            walletId,
+            7uL,
+            signedTx = signed,
+            previousPrivatePaymentListVersion = 6uL,
+        ).getOrThrow()
         assertEquals(false, storedProofs.single().hardwareDispatchAttempted)
         val encoded = Json.encodeToString(repo.backupSnapshot())
         storedProofs = emptyList()
@@ -1595,7 +1602,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(storedProofs.single().onchainAcceptanceVerified)
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
         assertEquals(7uL, storedProofs.single().privatePaymentListVersion)
-        whenever(privatePaykitRepo.releasePrivatePaymentListVersion(request.id.counterparty, 7uL))
+        assertEquals(6uL, storedProofs.single().previousPrivatePaymentListVersion)
+        whenever(privatePaykitRepo.releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL))
             .thenReturn(
                 Result.failure(IllegalStateException("private state storage")),
                 Result.success(Unit),
@@ -1613,7 +1621,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paymentProofRepo().failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false)
         )
         assertTrue(storedProofs.isEmpty())
-        verify(privatePaykitRepo, times(3)).releasePrivatePaymentListVersion(request.id.counterparty, 7uL)
+        verify(privatePaykitRepo, times(3)).releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL)
         reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(encoded))
         assertTrue(
             reopened.retainHardwareOnchainCandidate(

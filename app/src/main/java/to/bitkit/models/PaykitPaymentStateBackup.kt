@@ -60,7 +60,15 @@ data class PaykitPaymentStateBackup(
         val hardwareTotalSpent: ULong? = null,
         val hardwareDispatchAttempted: Boolean? = null,
         val privatePaymentListVersion: ULong? = null,
+        val previousPrivatePaymentListVersion: ULong? = null,
     ) {
+        init {
+            require(
+                previousPrivatePaymentListVersion == null ||
+                    (privatePaymentListVersion != null && previousPrivatePaymentListVersion < privatePaymentListVersion)
+            ) { "Invalid private payment-list boundary" }
+        }
+
         constructor(proof: PendingPaykitPaymentProof) : this(
             identity = proof.identity,
             requestId = proof.requestId,
@@ -81,7 +89,8 @@ data class PaykitPaymentStateBackup(
             hardwareFeeRate = proof.hardwareFeeRate,
             hardwareTotalSpent = proof.hardwareTotalSpent,
             hardwareDispatchAttempted = proof.hardwareDispatchAttempted,
-            privatePaymentListVersion = proof.privatePaymentListVersion
+            privatePaymentListVersion = proof.privatePaymentListVersion,
+            previousPrivatePaymentListVersion = proof.previousPrivatePaymentListVersion
         )
 
         fun restored() = PendingPaykitPaymentProof(
@@ -104,7 +113,8 @@ data class PaykitPaymentStateBackup(
             hardwareFeeRate = hardwareFeeRate,
             hardwareTotalSpent = hardwareTotalSpent,
             hardwareDispatchAttempted = hardwareDispatchAttempted,
-            privatePaymentListVersion = privatePaymentListVersion
+            privatePaymentListVersion = privatePaymentListVersion,
+            previousPrivatePaymentListVersion = previousPrivatePaymentListVersion
         )
     }
 }
