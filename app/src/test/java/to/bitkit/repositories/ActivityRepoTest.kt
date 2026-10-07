@@ -619,6 +619,17 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed contact assignment preserves manual detachment`() = test {
+        val activity = createOnchainActivity(id = "detached", txId = "detached-tx")
+        whenever(coreService.activity.getActivity("detached-tx", WalletScope.default)).thenReturn(activity)
+        whenever(coreService.activity.update(eq(activity.v1.id), any()))
+            .thenThrow(RuntimeException("Core write failed"))
+        val result = sut.setContact("new-contact", "detached-tx", syncLdkPayments = false)
+        assertTrue(result.isFailure)
+        verify(cacheStore, never()).setActivityContactDetached(any(), any(), eq(false))
+    }
+
+    @Test
     fun `setContact propagates contact to replacement transaction`() = test {
         val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val replacedTxId = "replaced_tx_id"

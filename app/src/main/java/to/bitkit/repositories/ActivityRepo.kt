@@ -531,10 +531,10 @@ class ActivityRepo @Inject constructor(
                 return@runCatching
             }
 
-            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = false)
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(normalizedKey, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = false)
             updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt, walletId)
         }.onFailure {
             Logger.error("Failed to set contact for payment '$forPaymentId'", it, context = TAG)

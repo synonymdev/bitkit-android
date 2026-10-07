@@ -260,6 +260,34 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoring same accepted operation preserves progressed fee and completion`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val wire = requireNotNull(
+            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
+                .paykitPaymentState?.activeOnchainAttempt,
+        )
+        val accepted = wire.copy(status = "accepted", followup = wire.followup?.copy(contact = null))
+            .restored("regtest", wire.wallet.binding, "wallet0", 0)
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        store.restoreActive(accepted)
+        store.retainWinningFee(accepted.attemptId, 0, requireNotNull(accepted.txid), 777u)
+        val progressed = store.current()
+        store.restoreActive(accepted)
+        assertEquals(progressed, store.current())
+        assertFailsWith<IllegalStateException> { store.restoreActive(accepted.copy(address = "different-recipient")) }
+        assertFailsWith<IllegalStateException> { store.restoreActive(accepted.copy(payerIdentity = "different-payer")) }
+        store.markLocalFollowupComplete(accepted.attemptId, 0)
+        val completed = store.current()
+        store.restoreActive(accepted)
+        assertEquals(completed, store.current())
+    }
+
+    @Test
     fun `restored supported accepted context resets acknowledgement and finishes idempotently`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
         val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }

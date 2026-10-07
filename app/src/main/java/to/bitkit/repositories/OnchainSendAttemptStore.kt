@@ -411,7 +411,37 @@ class OnchainSendAttemptStore @Inject constructor(
     suspend fun restoreActive(attempt: OnchainSendAttempt) = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
             val existing = loadWithRetainedAccepted(attempt.walletIndex)
-            check(existing == null || !existing.blocksNextSend || existing == attempt) {
+            if (existing?.attemptId == attempt.attemptId) {
+                // A restore retry may replay an older receipt after fee/activity persistence progressed.
+                // Normalize only progress fields; recipient, payer, inputs and original context must match.
+                val sameOperation = existing.copy(
+                    evidence = attempt.evidence,
+                    txid = attempt.txid,
+                    refusalReason = attempt.refusalReason,
+                    localFollowupComplete = attempt.localFollowupComplete,
+                    candidateTxids = attempt.candidateTxids,
+                    candidateFeeRates = attempt.candidateFeeRates,
+                    backupFollowup = existing.backupFollowup?.copy(feeSats = attempt.backupFollowup?.feeSats.orEmpty()),
+                    restoredFromBackup = attempt.restoredFromBackup,
+                    preparationPending = attempt.preparationPending,
+                ) == attempt
+                check(sameOperation && existing.candidateTxids.containsAll(attempt.candidateTxids)) {
+                    "Cannot change a restored on-chain operation's original context"
+                }
+                persist(
+                    if (existing.restoredFromBackup) {
+                        existing
+                    } else {
+                        existing.copy(
+                            restoredFromBackup = attempt.restoredFromBackup,
+                            localFollowupComplete = false,
+                            preparationPending = false,
+                        )
+                    }
+                )
+                return@withLock
+            }
+            check(existing == null || !existing.blocksNextSend) {
                 "Cannot replace an existing active on-chain operation"
             }
             persist(attempt.copy(localFollowupComplete = false, preparationPending = false))
