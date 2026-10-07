@@ -185,6 +185,33 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hardware observation refuses outgoing transactions with other recipient terms`() = test {
+        val txid = "ab".repeat(32)
+        val address = "original-shop-address"
+        val amount = 25000uL
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val detail = mock<TransactionDetail> {
+            on { this.txid }.thenReturn(txid)
+            on { sent }.thenReturn(26000uL)
+            on { fee }.thenReturn(1000uL)
+            on { feeRate }.thenReturn(2.0)
+        }
+        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+            .thenReturn(Result.success(detail))
+        val sut = createRepo()
+        listOf(
+            emptyList(),
+            listOf(com.synonym.bitkitcore.TxDetailOutput(amount, "script", "different-recipient", false)),
+            listOf(com.synonym.bitkitcore.TxDetailOutput(amount - 1uL, "script", address, false)),
+        ).forEach { outputs ->
+            whenever(detail.outputs).thenReturn(outputs)
+            assertFalse(sut.observeExactTransaction(HARDWARE_WALLET_ID, txid, address, amount).getOrThrow())
+        }
+        verify(activityRepo, never()).completeObservedHardwarePayment(any(), any(), any(), any(), any(), any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
+    }
+
+    @Test
     fun `observed hardware Shop activity failure retries original transaction without broadcast`() = test {
         val txid = "ab".repeat(32)
         val address = "bcrt1-original-shop-address"
@@ -195,6 +222,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             on { sent }.thenReturn(26000uL)
             on { fee }.thenReturn(1000uL)
             on { feeRate }.thenReturn(2.0)
+            on { outputs }.thenReturn(listOf(com.synonym.bitkitcore.TxDetailOutput(amount, "script", address, false)))
         }
         whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
             .thenReturn(Result.success(detail))

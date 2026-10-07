@@ -905,7 +905,14 @@ class HwWalletRepo @Inject constructor(
             }
             if (originalAddress != null || originalAmountSats != null) {
                 val address = requireNotNull(originalAddress).also { require(it.isNotBlank()) }
-                val amount = requireNotNull(originalAmountSats)
+                val amount = requireNotNull(originalAmountSats).also { require(it > 0uL) }
+                val recipientOutputs = detail.outputs.filter { it.address == address }
+                if (recipientOutputs.isEmpty()) return@runSuspendCatching false
+                val recipientAmount = recipientOutputs.fold(0uL) { total, output ->
+                    require(output.value <= ULong.MAX_VALUE - total) { "Observed recipient amount overflow" }
+                    total + output.value
+                }
+                if (recipientAmount != amount) return@runSuspendCatching false
                 val fee = requireNotNull(detail.fee)
                 val rate = requireNotNull(detail.feeRate).also { require(it.isFinite() && it >= 0.0) }
                 activityRepo.completeObservedHardwarePayment(walletId, txid, address, amount, fee, ceil(rate).toULong())
