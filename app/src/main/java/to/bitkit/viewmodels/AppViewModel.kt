@@ -857,8 +857,22 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private val _resolvedHardwarePayment = MutableStateFlow<PaykitOnchainPaymentProofResolution?>(null)
-    val resolvedHardwarePayment = _resolvedHardwarePayment.asStateFlow()
+    private val _resolvedHardwarePayments = MutableStateFlow<
+        ImmutableMap<Pair<String, String>, PaykitOnchainPaymentProofResolution>
+    >(persistentMapOf())
+    val resolvedHardwarePayments = _resolvedHardwarePayments.asStateFlow()
+
+    fun resolvedHardwarePaymentFor(walletId: String, transactionId: String): PaykitOnchainPaymentProofResolution? =
+        _resolvedHardwarePayments.value[walletId to transactionId.lowercase()]?.takeIf {
+            PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, it.identity)
+        }
+
+    fun consumeResolvedHardwarePayment(resolution: PaykitOnchainPaymentProofResolution) {
+        val key = resolution.walletId to resolution.transactionId.lowercase()
+        _resolvedHardwarePayments.update { current ->
+            if (current[key] == resolution) (current - key).toImmutableMap() else current
+        }
+    }
 
     private fun observePaykitOnchainPaymentResolution() {
         viewModelScope.launch {
@@ -870,7 +884,11 @@ class AppViewModel @Inject constructor(
 
     private fun handlePaykitOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
         if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, resolution.identity)) return
-        if (resolution.walletId != WalletScope.default) _resolvedHardwarePayment.value = resolution
+        if (resolution.walletId != WalletScope.default) {
+            _resolvedHardwarePayments.update {
+                (it + ((resolution.walletId to resolution.transactionId.lowercase()) to resolution)).toImmutableMap()
+            }
+        }
         paykitPaymentProofRepo.consumeOnchainPaymentResolution(resolution)
         val resolvesCurrentPayment = uncertainOnchainPaymentRequestId == resolution.requestId
         if (!resolvesCurrentPayment) {

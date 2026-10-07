@@ -8308,6 +8308,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `closed hardware sheet retains earlier completion when multiple proofs resolve`() = test {
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        val request = paymentRequest()
+        val first = PaykitOnchainPaymentProofResolution(
+            testPublicKey, request.id, "ab".repeat(32), "hardware-first", request.amountSats,
+        )
+        val second = first.copy(transactionId = "cd".repeat(32), walletId = "hardware-second")
+        onchainPaymentResolutions.value = listOf(first, second)
+        runCurrent()
+        assertEquals(first, sut.resolvedHardwarePaymentFor(first.walletId, first.transactionId))
+        assertEquals(second, sut.resolvedHardwarePaymentFor(second.walletId, second.transactionId))
+        sut.consumeResolvedHardwarePayment(first.copy(transactionId = "ef".repeat(32)))
+        assertEquals(first, sut.resolvedHardwarePaymentFor(first.walletId, first.transactionId))
+        sut.consumeResolvedHardwarePayment(first)
+        assertNull(sut.resolvedHardwarePaymentFor(first.walletId, first.transactionId))
+        assertEquals(second, sut.resolvedHardwarePaymentFor(second.walletId, second.transactionId))
+        pubkyPublicKey.value = null
+        assertNull(sut.resolvedHardwarePaymentFor(second.walletId, second.transactionId))
+        pubkyPublicKey.value = testPublicKey
+        assertEquals(second, sut.resolvedHardwarePaymentFor(second.walletId, second.transactionId))
+    }
+
+    @Test
     fun `pending hardware proof resolution uses original wallet and amount without another payment`() = test {
         pubkyPublicKey.value = testPublicKey
         val request = paymentRequest()

@@ -157,19 +157,26 @@ fun SendSheet(
         ) {
             val navController = rememberNavController()
             LaunchedEffect(appViewModel, hwSendViewModel) {
-                appViewModel.resolvedHardwarePayment.collect { resolution ->
-                    if (resolution != null) {
-                        hwSendViewModel.completeReconciledBroadcast(resolution.walletId, resolution.transactionId)
+                appViewModel.resolvedHardwarePayments.collect { resolutions ->
+                    resolutions.values.forEach { resolution ->
+                        if (appViewModel.resolvedHardwarePaymentFor(resolution.walletId, resolution.transactionId) == resolution &&
+                            hwSendViewModel.completeReconciledBroadcast(resolution.walletId, resolution.transactionId)
+                        ) {
+                            appViewModel.consumeResolvedHardwarePayment(resolution)
+                        }
                     }
                 }
             }
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
-                    val resolved = appViewModel.resolvedHardwarePayment.value
+                    val resolved = appViewModel.resolvedHardwarePaymentFor(result.walletId, result.txId)
                     if (resolved != null && hwSendViewModel.completeReconciledBroadcast(
                             resolved.walletId, resolved.transactionId
                         )
-                    ) return@collect
+                    ) {
+                        appViewModel.consumeResolvedHardwarePayment(resolved)
+                        return@collect
+                    }
                     val proofComplete = appViewModel.completeHardwareContactPayment(
                         result.txId, result.walletId, result.paymentRequestId, result.paymentIdentity,
                     )
