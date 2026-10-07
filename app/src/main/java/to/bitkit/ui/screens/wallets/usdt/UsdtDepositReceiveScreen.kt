@@ -1,19 +1,22 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,8 +27,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -35,31 +40,34 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.synonym.bitkitcore.UsdtDepositDetail
 import com.synonym.bitkitcore.UsdtDepositNetwork
-import com.synonym.bitkitcore.UsdtException
 import com.synonym.bitkitcore.usdtFormatAmount
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.repositories.UsdtWalletState
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.NumberPad
-import to.bitkit.ui.components.NumberPadActionButton
-import to.bitkit.ui.components.NumberPadAmountText
-import to.bitkit.ui.components.NumberPadType
+import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SendCell
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.ActivityRowSurface
+import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
+import to.bitkit.ui.screens.wallets.receive.ReceiveTab
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.NumberPadInputHandler
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.time.Duration.Companion.seconds
@@ -68,14 +76,18 @@ import kotlin.time.Duration.Companion.seconds
 @Composable
 internal fun ColumnScope.UsdtDepositReceiveScreen(
     viewModel: UsdtViewModel,
+    tabs: ImmutableList<ReceiveTab>,
+    onSelectTab: (ReceiveTab) -> Unit,
     onBack: () -> Unit,
     onBlockingChange: (Boolean) -> Unit,
+    onContacts: (() -> Unit)? = null,
     deposits: UsdtDepositViewModel = hiltViewModel(),
 ) {
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val walletUi by viewModel.state.collectAsStateWithLifecycle()
     val state by deposits.state.collectAsStateWithLifecycle()
+    var page by remember { mutableStateOf(ReceivePage.ADDRESS) }
     var amount by remember { mutableStateOf("") }
     var refundAddress by remember(state.detail?.deposit?.id) { mutableStateOf("") }
     var approved by remember { mutableStateOf<RefundApproval?>(null) }
@@ -87,7 +99,20 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
         if (authentication) {
             authentication = false
             approved = null
-        } else if (!deposits.back()) onBack()
+        } else if (!deposits.back()) {
+            when (page) {
+                ReceivePage.FEES -> {
+                    deposits.selectNetwork(state.network)
+                    page = ReceivePage.AMOUNT
+                }
+                ReceivePage.AMOUNT -> {
+                    if (state.network != null && state.address == null) deposits.selectNetwork(null)
+                    page = ReceivePage.ADDRESS
+                }
+                ReceivePage.NETWORKS -> page = ReceivePage.ADDRESS
+                ReceivePage.ADDRESS -> onBack()
+            }
+        }
     }
     val refund = {
         approved?.let { deposits.refund(it.id, it.offset, it.address, it.network) }
@@ -101,6 +126,8 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
     DepositPolling(pendingId, lifecycle, { confirmation || authentication || approved != null }) {
         deposits.detail(it)
     }
+    LaunchedEffect(state.address) { if (state.address != null) page = ReceivePage.FEES }
+    UsdtRefreshEffect(viewModel, receiving = true, onReceived = { !state.busy && !authentication && !confirmation })
     BackHandler(onBack = back)
     if (authentication) {
         UsdtAuthentication(
@@ -117,31 +144,77 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
     } else {
         SheetTopBar(
             titleText = stringResource(
-                if (state.history) R.string.usdt__deposit_history else R.string.usdt__receive_title
+                if (state.history) {
+                    R.string.usdt__deposit_history
+                } else {
+                    when (page) {
+                        ReceivePage.ADDRESS -> R.string.usdt__receive_title
+                        ReceivePage.NETWORKS -> R.string.usdt__receive_network_title
+                        ReceivePage.AMOUNT -> R.string.usdt__receive_amount_title
+                        ReceivePage.FEES -> R.string.usdt__receive_fees_title
+                    }
+                }
             ),
-            onBack = back,
+            onBack = back.takeIf { state.history || page != ReceivePage.ADDRESS },
+            action = if (page == ReceivePage.ADDRESS && !state.history && onContacts != null) {
+                {
+                    IconButton(onClick = onContacts) {
+                        Icon(
+                            painterResource(R.drawable.ic_users),
+                            stringResource(R.string.wallet__payment_request_choose_recipient)
+                        )
+                    }
+                }
+            } else {
+                null
+            },
         )
         VerticalSpacer(16.dp)
+        if (page == ReceivePage.ADDRESS && !state.history) {
+            CustomTabRowWithSpacing(
+                tabs = tabs,
+                currentTabIndex = tabs.indexOf(ReceiveTab.USDT),
+                onTabChange = onSelectTab
+            )
+            VerticalSpacer(16.dp)
+        }
         walletUi.error?.let { BodyS(stringResource(it), color = Colors.Brand) }
         Content(
+            page = page,
+            onPage = { page = it },
             wallet = wallet,
             receiveError = walletUi.refreshError,
             state = state,
             amount = amount,
             refundAddress = refundAddress,
             hideBalance = settings.hideBalance,
-            onNetwork = deposits::selectNetwork,
+            onNetwork = {
+                if (state.network != it) {
+                    amount = ""
+                    deposits.selectNetwork(it)
+                }
+                page = if (it == null || state.address != null && state.network == it) {
+                    ReceivePage.ADDRESS
+                } else {
+                    ReceivePage.AMOUNT
+                }
+            },
             onAmount = {
                 if (amount != it) deposits.clearAmountError()
                 amount = it
             },
             onRefundAddress = { refundAddress = it },
-            onCreate = { deposits.prepare(amount) },
+            onCreate = {
+                if (state.network == null) page = ReceivePage.ADDRESS else deposits.prepare(amount)
+            },
             onHistory = { deposits.history() },
             onMore = { state.nextOffset?.let { deposits.history(it) } },
             onDetail = { scope.launch { deposits.detail(it) } },
             onRefund = { if (!deposits.state.value.busy) confirmation = true },
-            onRefresh = { deposits.selectNetwork(state.network) },
+            onRefresh = {
+                deposits.selectNetwork(state.network)
+                page = ReceivePage.AMOUNT
+            },
         )
     }
     if (confirmation) {
@@ -224,6 +297,8 @@ private fun RefundDialog(network: String, address: String, onCancel: () -> Unit,
 
 @Composable
 private fun ColumnScope.Content(
+    page: ReceivePage,
+    onPage: (ReceivePage) -> Unit,
     wallet: UsdtWalletState,
     receiveError: Int?,
     state: DepositUiState,
@@ -244,39 +319,50 @@ private fun ColumnScope.Content(
         DepositHistory(state, refundAddress, hideBalance, onRefundAddress, onRefund, onMore, onDetail, onHistory)
         return
     }
-    NetworkSelector(state, onNetwork, onHistory)
-    if (state.network == null) {
-        state.error?.let { BodyS(stringResource(it), color = Colors.White64) }
-        UsdtReceiveContent(wallet.address, wallet.receiveUri, error = receiveError)
-    } else if (state.address != null) {
-        val address = state.address
-        UsdtReceiveContent(
-            address.address,
-            address.uri,
-            null,
-            R.string.usdt__deposit_notice
-        ) {
-            DepositField(R.string.usdt__deposit_estimate, address.estimatedReceived.usdtText(false))
-            DepositField(
-                R.string.usdt__deposit_cost,
+    when (page) {
+        ReceivePage.NETWORKS -> NetworkSelector(state, onNetwork, onHistory)
+        ReceivePage.AMOUNT -> UsdtReceiveAmountContent(
+            amount,
+            state.network == null,
+            state.busy,
+            state.error,
+            state.amountLimits,
+            onAmount,
+            onCreate
+        )
+        ReceivePage.FEES -> state.address?.let { address ->
+            UsdtAmountHeader(usdtFormatAmount(address.amount), state.network?.label ?: "Arbitrum One")
+            VerticalSpacer(24.dp)
+            BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64)
+            VerticalSpacer(24.dp)
+            EstimateRow(
+                stringResource(R.string.usdt__receive_fee),
                 if (address.amount >= address.estimatedReceived) {
-                    (address.amount - address.estimatedReceived).usdtText(false)
+                    usdtFormatAmount(
+                        address.amount - address.estimatedReceived
+                    )
                 } else {
                     "—"
                 }
             )
-            BodyS(stringResource(R.string.usdt__deposit_estimate_note), color = Colors.White64)
-            VerticalSpacer(16.dp)
-            DepositField(
-                R.string.usdt__deposit_limits,
-                (address.minUsdCents?.usdCents() ?: "—") + " – " + (address.maxUsdCents?.usdCents() ?: "—")
-            )
-            BodyS(stringResource(R.string.usdt__deposit_limits_note), color = Colors.White64)
-            SecondaryButton(stringResource(R.string.usdt__deposit_refresh), onClick = onRefresh)
-            VerticalSpacer(16.dp)
+            EstimateRow(stringResource(R.string.usdt__receive_estimate), usdtFormatAmount(address.estimatedReceived))
+            FillHeight()
+            PrimaryButton(stringResource(R.string.common__continue), onClick = {
+                onPage(ReceivePage.ADDRESS)
+            }, modifier = Modifier.testTag("UsdtReceiveFeesContinue"))
         }
-    } else {
-        DepositAmount(amount, state.busy, state.error, state.amountLimits, onAmount, onCreate)
+        ReceivePage.ADDRESS -> {
+            val atomic = runCatching { PaykitAmount.parse(PaykitAsset.USDT, amount).atomic }.getOrNull()
+            val uri = if (atomic == null) wallet.receiveUri else wallet.receiveUri + "&uint256=$atomic"
+            UsdtReceiveContent(
+                address = state.address?.address ?: wallet.address,
+                uri = state.address?.uri ?: uri,
+                error = receiveError,
+                network = state.network?.label ?: "Arbitrum One",
+                onEdit = onRefresh,
+                onNetwork = { onPage(ReceivePage.NETWORKS) },
+            )
+        }
     }
 }
 
@@ -334,88 +420,73 @@ private fun ColumnScope.DepositHistory(
     )
 }
 
+private enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
+
 @Composable
-private fun NetworkSelector(
+private fun ColumnScope.NetworkSelector(
     state: DepositUiState,
     onNetwork: (UsdtDepositNetwork?) -> Unit,
     onHistory: () -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-        var menu by remember { mutableStateOf(false) }
-        Box {
-            NumberPadActionButton(
-                state.network?.label ?: "Arbitrum One",
-                onClick = { menu = true },
-                enabled = !state.busy,
-                color = Colors.Green,
-                modifier = Modifier.testTag("UsdtReceiveNetwork")
-            )
-            DropdownMenu(
-                expanded = menu,
-                onDismissRequest = { menu = false },
-                containerColor = Colors.Gray6,
-            ) {
-                DropdownMenuItem(text = { BodySSB("Arbitrum One") }, onClick = {
-                    menu = false
-                    onNetwork(null)
-                })
-                state.networks.forEach { network ->
-                    DropdownMenuItem(
-                        text = { BodySSB(network.label) },
-                        onClick = {
-                            menu = false
-                            onNetwork(network)
-                        }
-                    )
-                }
-            }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
+    ) {
+        NetworkRow("Arbitrum One", state.network == null, onClick = { onNetwork(null) }, isDefault = true)
+        state.networks.forEach { item ->
+            NetworkRow(item.label, state.network == item, onClick = { onNetwork(item) })
         }
+        BodyS(
+            stringResource(R.string.usdt__receive_network_note),
+            color = Colors.White64,
+            modifier = Modifier.padding(vertical = 16.dp)
+        )
+        UsdtCoinIllustration(modifier = Modifier.align(Alignment.CenterHorizontally))
         if (Env.usdtDepositsUrl != null) {
-            TextButton(
+            TertiaryButton(
+                stringResource(R.string.usdt__deposit_history),
                 onClick = onHistory,
-                enabled = !state.busy
-            ) { BodySSB(stringResource(R.string.usdt__activity), color = Colors.Green) }
+                modifier = Modifier.testTag("UsdtDepositHistory")
+            )
         }
+        state.error?.let { BodyS(stringResource(it), color = Colors.White64) }
     }
-    VerticalSpacer(16.dp)
 }
 
 @Composable
-private fun ColumnScope.DepositAmount(
-    amount: String,
-    busy: Boolean,
-    error: Int?,
-    limits: UsdtException.DepositAmountOutOfRange?,
-    onAmount: (String) -> Unit,
-    onCreate: () -> Unit,
-) {
-    Caption13Up(stringResource(R.string.usdt__deposit_amount))
-    VerticalSpacer(12.dp)
-    NumberPadAmountText(amount.ifEmpty { "0" }, "₮")
-    FillHeight()
-    val message = when {
-        limits != null && (limits.minUsdCents != null || limits.maxUsdCents != null) ->
-            stringResource(R.string.usdt__deposit_limits) + ": " +
-                (limits.minUsdCents?.usdCents() ?: "—") + " – " + (limits.maxUsdCents?.usdCents() ?: "—")
-        error != null -> stringResource(error)
-        else -> stringResource(R.string.usdt__deposit_fee_note)
+private fun NetworkRow(title: String, selected: Boolean, onClick: () -> Unit, isDefault: Boolean = false) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth().background(
+            Colors.Gray6,
+            RoundedCornerShape(16.dp)
+        ).clickableAlpha(onClick = onClick).padding(16.dp).testTag("UsdtNetwork-$title")
+    ) {
+        Image(painterResource(R.drawable.tether), null, modifier = Modifier.size(40.dp))
+        BodyMSB(title)
+        if (isDefault) BodyS(stringResource(R.string.common__default), color = Colors.White64)
+        FillWidth()
+        if (selected) {
+            Icon(
+                painterResource(R.drawable.ic_check),
+                null,
+                tint = Colors.Usdt,
+                modifier = Modifier.size(24.dp)
+            )
+        }
     }
-    BodyS(message, color = if (error == null) Colors.White64 else Colors.Brand)
-    VerticalSpacer(16.dp)
-    HorizontalDivider()
-    NumberPad(
-        type = NumberPadType.DECIMAL,
-        enabled = !busy,
-        onDeleteLongPress = { onAmount("") },
-        onPress = { onAmount(NumberPadInputHandler.handleInput(it, amount, maxLength = 21, maxDecimals = 6)) },
-    )
-    PrimaryButton(
-        stringResource(R.string.usdt__deposit_create),
-        onClick = onCreate,
-        enabled = !busy && amount.isNotEmpty(),
-        isLoading = busy,
-        modifier = Modifier.testTag("UsdtDepositCreate")
-    )
+}
+
+@Composable
+private fun EstimateRow(title: String, value: String) {
+    SendCell(caption = title, dividerSpacing = 24.dp) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            BodyMSB("± $", color = Colors.White64)
+            BodyMSB(value)
+        }
+    }
+    VerticalSpacer(24.dp)
 }
 
 @Composable
@@ -508,7 +579,7 @@ private fun ULong?.usdtText(hidden: Boolean) = (
         } ?: "—"
     }
     ) + " USDT"
-private fun String.usdCents(locale: Locale = Locale.getDefault()): String = toULongOrNull()?.let {
+internal fun String.usdCents(locale: Locale = Locale.getDefault()): String = toULongOrNull()?.let {
     val whole = NumberFormat.getIntegerInstance(locale).format((it / 100u).toLong())
     "$$whole.${(it % 100u).toString().padStart(2, '0')}"
 } ?: "—"

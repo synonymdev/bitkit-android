@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
@@ -58,6 +59,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NodeLifecycleState
@@ -79,6 +81,7 @@ import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
+import to.bitkit.ui.screens.wallets.usdt.UsdtDepositReceiveScreen
 import to.bitkit.ui.shared.effects.SetMaxBrightness
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -101,6 +104,7 @@ fun ReceiveQrScreen(
     onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
+    onBlockingChange: (Boolean) -> Unit = {},
     hardwareWalletId: String? = null,
     /** Vendor name shown on the hardware tab, e.g. "Trezor" or "Jade". */
     hardwareTabLabel: String? = null,
@@ -142,6 +146,7 @@ fun ReceiveQrScreen(
                 add(ReceiveTab.AUTO)
             }
             add(ReceiveTab.SPENDING)
+            if (Env.isUsdtEnabled && cjitInvoice == null) add(ReceiveTab.USDT)
         }.toImmutableList()
     }
     val defaultTab = remember(visibleTabs, initialTab) {
@@ -214,7 +219,9 @@ fun ReceiveQrScreen(
     }
 
     LaunchedEffect(canCreateLightningInvoice, cjitInvoice, initialTab) {
-        if (initialTab == ReceiveTab.HARDWARE) return@LaunchedEffect
+        if (initialTab == ReceiveTab.HARDWARE || initialTab == ReceiveTab.USDT || selectedTab == ReceiveTab.USDT) {
+            return@LaunchedEffect
+        }
         if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
             selectedTab = ReceiveTab.SAVINGS
             lazyListState.scrollToItem(visibleTabs.indexOf(ReceiveTab.SAVINGS).coerceAtLeast(0))
@@ -225,7 +232,7 @@ fun ReceiveQrScreen(
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .collect { index ->
-                if (index < visibleTabs.size && index > -1) {
+                if (selectedTab != ReceiveTab.USDT && index < visibleTabs.size && index > -1) {
                     val tab = visibleTabs[index]
                     selectedTab = tab
                 }
@@ -276,6 +283,28 @@ fun ReceiveQrScreen(
         !canCreateLightningInvoice &&
             lightningState.nodeLifecycleState.isRunning() &&
             cjitInvoice.isNullOrEmpty()
+    }
+
+    fun selectReceiveTab(tab: ReceiveTab) {
+        selectedTab = tab
+        hasUserSelectedTab = true
+        scope.launch { lazyListState.scrollToItem(visibleTabs.indexOf(tab)) }
+    }
+
+    if (selectedTab == ReceiveTab.USDT) {
+        Column(
+            modifier = modifier.fillMaxSize().gradientBackground().navigationBarsPadding().padding(horizontal = 16.dp)
+        ) {
+            UsdtDepositReceiveScreen(
+                viewModel = hiltViewModel(),
+                tabs = visibleTabs,
+                onSelectTab = ::selectReceiveTab,
+                onBack = { selectReceiveTab(ReceiveTab.SAVINGS) },
+                onBlockingChange = onBlockingChange,
+                onContacts = onClickPaymentRequestContacts.takeIf { showPaymentRequestContacts },
+            )
+        }
+        return
     }
 
     Column(
@@ -741,6 +770,7 @@ private fun ReceiveDetailsView(
                     }
                 }
 
+                ReceiveTab.USDT -> Unit
                 ReceiveTab.HARDWARE -> {
                     hardwareAddress?.let { address ->
                         CopyAddressCard(

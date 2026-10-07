@@ -8,6 +8,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -15,6 +16,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.UsdtTransfer
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -35,6 +37,26 @@ import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.ActivityListViewModel
 
+private fun UsdtTransfer.matchesActivityFilter(
+    tab: ActivityTab,
+    noTagFilter: Boolean,
+    search: String,
+    start: Long?,
+    end: Long?,
+): Boolean {
+    val tabMatches = when (tab) {
+        ActivityTab.ALL -> true
+        ActivityTab.SENT -> !isIncoming
+        ActivityTab.RECEIVED -> isIncoming
+        ActivityTab.OTHER -> false
+    }
+    val searchMatches = search.isEmpty() || recipient.contains(search, ignoreCase = true) ||
+        txHash?.contains(search, ignoreCase = true) == true || "USDT".contains(search, ignoreCase = true)
+    return tabMatches && noTagFilter && searchMatches &&
+        (start?.let { timestamp >= (it / 1000).toULong() } != false) &&
+        (end?.let { timestamp <= (it / 1000).toULong() } != false)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AllActivityScreen(
@@ -51,11 +73,19 @@ fun AllActivityScreen(
     val startDate by viewModel.startDate.collectAsStateWithLifecycle()
 
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
+    val endDate by viewModel.endDate.collectAsStateWithLifecycle()
+    val usdt by app.usdtWallet.collectAsStateWithLifecycle()
+    val usdtItems = remember(usdt.transfers, selectedTab, searchText, selectedTags, startDate, endDate) {
+        usdt.transfers.filter {
+            it.matchesActivityFilter(selectedTab, selectedTags.isEmpty(), searchText, startDate, endDate)
+        }.toImmutableList()
+    }
     val tabs = activityTabs
     val currentTabIndex = tabs.indexOf(selectedTab)
 
     AllActivityScreenContent(
         filteredActivities = filteredActivities,
+        usdtItems = usdtItems,
         hardwareIds = hardwareIds,
         searchText = searchText,
         onSearchTextChange = { viewModel.setSearchText(it) },
@@ -79,6 +109,7 @@ private fun AllActivityScreenContent(
     filteredActivities: ImmutableList<Activity>?,
     searchText: String,
     hardwareIds: ImmutableSet<String> = persistentSetOf(),
+    usdtItems: ImmutableList<UsdtTransfer> = persistentListOf(),
     onSearchTextChange: (String) -> Unit,
     hasTagFilter: Boolean,
     selectedTags: ImmutableSet<String>,
@@ -130,6 +161,7 @@ private fun AllActivityScreenContent(
         ) { topPadding ->
             ActivityListGrouped(
                 items = filteredActivities,
+                usdtItems = usdtItems,
                 onActivityItemClick = onActivityItemClick,
                 onEmptyActivityRowClick = onEmptyActivityRowClick,
                 hardwareIds = hardwareIds,

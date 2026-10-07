@@ -51,7 +51,6 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
@@ -145,8 +144,11 @@ internal fun IncomingPaymentRequestDetailsContent(
         ) {
             VerticalSpacer(16.dp)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                PaykitAmountDisplay(request.amount, prefix = request.detailsAmountPrefix())
-                FillWidth()
+                PaykitAmountDisplay(
+                    request.amount,
+                    prefix = request.detailsAmountPrefix(),
+                    modifier = Modifier.weight(1f)
+                )
                 if (request.hasPaymentEvidence) {
                     PaymentRequestDetailsIcon(request)
                 } else {

@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -15,13 +16,14 @@ import to.bitkit.ui.theme.Colors
 fun SendCell(
     caption: String,
     modifier: Modifier = Modifier,
+    dividerSpacing: Dp = 16.dp,
     content: @Composable () -> Unit,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Caption13Up(text = caption, color = Colors.White64)
         VerticalSpacer(8.dp)
         content()
-        VerticalSpacer(16.dp)
+        VerticalSpacer(dividerSpacing)
         HorizontalDivider(modifier = Modifier.fillMaxWidth())
     }
 }

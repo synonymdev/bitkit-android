@@ -487,8 +487,11 @@ fun ContentView(
         val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
         val hwSendViewModel = hiltViewModel<HwSendViewModel>()
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
-        val canDismissSheet = currentSheet !is Sheet.Send ||
-            (hwSendUiState.canLeave && !appViewModel.isPaykitUsdtBusy)
+        var receiveBlocking by remember(currentSheet) { mutableStateOf(false) }
+        val canDismissSheet = !receiveBlocking && (
+            currentSheet !is Sheet.Send ||
+                (hwSendUiState.canLeave && !appViewModel.isPaykitUsdtBusy)
+            )
         val isAcceptingSubscription by appViewModel.isAcceptingSubscription.collectAsStateWithLifecycle()
         val isRetryingInitialSubscriptionPayment by
             appViewModel.isRetryingInitialSubscriptionPayment.collectAsStateWithLifecycle()
@@ -554,6 +557,8 @@ fun ContentView(
                                 ReceiveSheet(
                                     appViewModel = appViewModel,
                                     startRoute = sheet.route,
+                                    initialTab = sheet.initialTab,
+                                    onBlockingChange = { receiveBlocking = it },
                                     hardwareWalletId = sheet.hardwareWalletId,
                                     walletState = walletState,
                                     isOffline = connectivityState != ConnectivityState.CONNECTED,
@@ -1214,6 +1219,11 @@ private fun NavGraphBuilder.home(
                 onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
             )
         }
+    }
+    composableWithDefaultTransitions<Routes.UsdtActivity> { entry ->
+        UsdtWalletScreen(onBack = {
+            navController.popBackStack()
+        }, initialTransferId = entry.toRoute<Routes.UsdtActivity>().transferId)
     }
     deepLinkableComposable<Routes.UsdtWallet> {
         UsdtWalletScreen(onBack = { navController.popBackStack() })
@@ -2235,6 +2245,9 @@ sealed interface Routes {
 
     @Serializable
     data object UsdtWallet : Routes.DeepLinkable
+
+    @Serializable
+    data class UsdtActivity(val transferId: String) : Routes.InternalOnly
 
     @Serializable
     data object Settings : Routes.DeepLinkable

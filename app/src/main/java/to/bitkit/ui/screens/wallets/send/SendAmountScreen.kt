@@ -270,7 +270,7 @@ private fun SendAmountNodeRunning(
             if (uiState.paykitUsesUsdt) {
                 NumberPadAmountText(
                     value = uiState.paykitAmount.ifEmpty { "0" },
-                    symbol = "₮",
+                    symbol = "$",
                     modifier = Modifier.testTag("SendNumberField")
                 )
             } else {
@@ -427,7 +427,7 @@ private fun PaymentMethodButton(
 }
 
 private fun paymentMethodColor(uiState: SendUiState): Color = when {
-    uiState.paykitUsesUsdt -> Colors.Green
+    uiState.paykitUsesUsdt -> Colors.Usdt
     uiState.hardwareWalletId != null -> Colors.Blue
     uiState.payMethod == SendMethod.ONCHAIN -> Colors.Brand
     else -> Colors.Purple

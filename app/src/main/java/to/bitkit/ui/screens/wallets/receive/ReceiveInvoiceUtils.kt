@@ -43,6 +43,7 @@ fun getInvoiceForTab(
                 ?: bolt11.takeIf { isNodeRunning && canCreateLightningInvoice }.orEmpty()
         }
 
+        ReceiveTab.USDT -> ""
         ReceiveTab.HARDWARE -> hardwareAddress.takeIf(String::isNotBlank)?.let { address ->
             Bip21Utils.buildBip21Url(
                 bitcoinAddress = address,
@@ -107,6 +108,7 @@ fun getQrLogoResource(tab: ReceiveTab): Int {
         ReceiveTab.SAVINGS -> R.drawable.ic_btc_circle
         ReceiveTab.AUTO -> R.drawable.ic_unified_circle
         ReceiveTab.SPENDING -> R.drawable.ic_ln_circle
+        ReceiveTab.USDT -> R.drawable.tether_circle
         ReceiveTab.HARDWARE -> R.drawable.ic_btc_circle_blue
     }
 }

@@ -1,21 +1,27 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -28,7 +34,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -57,17 +66,17 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillWidth
-import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceContent
+import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
-import to.bitkit.ui.screens.wallets.activity.components.EmptyActivityRow
 import to.bitkit.ui.screens.wallets.activity.components.activityGroupTitleResource
+import to.bitkit.ui.screens.wallets.receive.ReceiveTab
 import to.bitkit.ui.screens.wallets.send.SendPinCheckScreen
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
@@ -84,28 +93,29 @@ fun UsdtWalletCard(onClick: () -> Unit, viewModel: UsdtViewModel = hiltViewModel
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     UsdtRefreshEffect(viewModel, pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING })
-    VerticalSpacer(16.dp)
-    Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+    VerticalSpacer(24.dp)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+    ) {
         WalletBalanceContent(
             title = "USDT",
             icon = {
-                CircularIcon(
-                    icon = painterResource(R.drawable.ic_coins),
-                    iconColor = Colors.Green,
-                    backgroundColor = Colors.Green16,
-                    size = 24.dp,
-                    modifier = Modifier.padding(end = 4.dp)
+                Image(
+                    painterResource(R.drawable.tether_circle),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
                 )
             },
             modifier = Modifier.clickableAlpha(onClick = onClick).padding(vertical = 4.dp)
-                .padding(end = 8.dp).testTag("UsdtWallet"),
+                .testTag("UsdtWallet"),
         ) {
             BodyMSB(
                 if (settings.hideBalance) {
                     UiConstants.HIDE_BALANCE_SHORT
                 } else {
                     wallet.balance?.let {
-                        usdtFormatAmount(it)
+                        usdtOverviewAmount(it)
                     } ?: "—"
                 }
             )
@@ -118,7 +128,12 @@ fun UsdtWalletCard(onClick: () -> Unit, viewModel: UsdtViewModel = hiltViewModel
 @Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UsdtWalletScreen(onBack: () -> Unit, viewModel: UsdtViewModel = hiltViewModel()) {
+fun UsdtWalletScreen(
+    onBack: () -> Unit,
+    initialTransferId: String? = null,
+    viewModel: UsdtViewModel = hiltViewModel()
+) {
+    val app = appViewModel
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -128,13 +143,12 @@ fun UsdtWalletScreen(onBack: () -> Unit, viewModel: UsdtViewModel = hiltViewMode
         viewModel.isSendPresented = sending
         onDispose { viewModel.isSendPresented = false }
     }
-    var selectedTransferId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedTransferId by rememberSaveable(initialTransferId) { mutableStateOf(initialTransferId) }
     var recipient by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     var destination by remember { mutableStateOf(UsdtDestination.ARBITRUM) }
-    var depositBlocking by remember { mutableStateOf(false) }
-    val dismissalBlocked = state.busy || state.authenticationRequired || depositBlocking
+    val dismissalBlocked = state.busy || state.authenticationRequired
     val dismiss = {
         if (!dismissalBlocked) {
             viewModel.edit()
@@ -155,7 +169,7 @@ fun UsdtWalletScreen(onBack: () -> Unit, viewModel: UsdtViewModel = hiltViewMode
         }
     }
     BackHandler(enabled = page == UsdtPage.WALLET) {
-        if (selectedTransferId != null) selectedTransferId = null else onBack()
+        if (selectedTransferId != null && initialTransferId == null) selectedTransferId = null else onBack()
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle, state.submitted) {
@@ -170,14 +184,14 @@ fun UsdtWalletScreen(onBack: () -> Unit, viewModel: UsdtViewModel = hiltViewMode
     UsdtRefreshEffect(
         viewModel,
         pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING },
-        receiving = page == UsdtPage.RECEIVE,
     ) {
-        if (page == UsdtPage.RECEIVE && !depositBlocking) page = UsdtPage.WALLET
         page == UsdtPage.WALLET
     }
     val selectedTransfer = wallet.transfers.firstOrNull { it.id == selectedTransferId }
     if (selectedTransfer != null) {
-        UsdtActivityDetail(selectedTransfer, settings.hideBalance) { selectedTransferId = null }
+        UsdtActivityDetail(selectedTransfer, settings.hideBalance) {
+            if (initialTransferId == null) selectedTransferId = null else onBack()
+        }
     } else {
         UsdtWalletContent(
             wallet = wallet,
@@ -185,7 +199,7 @@ fun UsdtWalletScreen(onBack: () -> Unit, viewModel: UsdtViewModel = hiltViewMode
             hideBalance = settings.hideBalance,
             onReceive = {
                 viewModel.edit()
-                page = UsdtPage.RECEIVE
+                app?.showSheet(Sheet.Receive(initialTab = ReceiveTab.USDT))
             },
             onSend = {
                 recipient = ""
@@ -229,11 +243,7 @@ fun UsdtWalletScreen(onBack: () -> Unit, viewModel: UsdtViewModel = hiltViewMode
                         onCancel = viewModel::cancelAuthentication,
                         onVerified = viewModel::authenticationVerified,
                     )
-                    page == UsdtPage.RECEIVE -> UsdtDepositReceiveScreen(
-                        viewModel = viewModel,
-                        onBack = back,
-                        onBlockingChange = { depositBlocking = it }
-                    )
+
                     else -> UsdtPaymentContent(
                         wallet = wallet, state = state, page = page, recipient = recipient, amount = amount,
                         destination = destination,
@@ -289,64 +299,77 @@ private fun UsdtWalletContent(
     onActivityClick: (UsdtTransfer) -> Unit = {},
 ) {
     val settings = settingsViewModel
+    val app = appViewModel
     val allowSwipe by settings?.enableSwipeToHideBalance?.collectAsStateWithLifecycle() ?: remember {
         mutableStateOf(false)
     }
-    Column(modifier = Modifier.fillMaxSize()) {
-        AppTopBar(titleText = "USDT", onBackClick = onBack, actions = { DrawerNavIcon() })
-        LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-            item {
-                VerticalSpacer(16.dp)
-                UsdtAmountHeader(
-                    amount = wallet.balance?.let { usdtFormatAmount(it) } ?: "—",
-                    network = "Arbitrum One",
-                    hideBalance = hideBalance,
-                    onToggleHide = if (allowSwipe) ({ settings?.setHideBalance(!hideBalance) }) else null,
-                    modifier = Modifier.testTag("UsdtBalance")
-                )
-                VerticalSpacer(32.dp)
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SecondaryButton(
-                        text = stringResource(R.string.usdt__receive),
-                        onClick = onReceive,
-                        icon = { Icon(painterResource(R.drawable.ic_received), null, tint = Colors.Green) },
-                        modifier = Modifier.weight(1f).testTag("UsdtReceive")
+    Box(modifier = Modifier.fillMaxSize()) {
+        UsdtCoinIllustration(
+            modifier = Modifier.align(Alignment.TopEnd)
+                .offset(x = 81.dp, y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 4.dp)
+                .scale(scaleX = -1f, scaleY = 1f)
+        )
+        Column {
+            AppTopBar(
+                titleText = "USDT",
+                onBackClick = onBack,
+                icon = R.drawable.tether_circle,
+                actions = { DrawerNavIcon() }
+            )
+            LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+                item {
+                    VerticalSpacer(16.dp)
+                    UsdtAmountHeader(
+                        amount = wallet.balance?.let { usdtFormatAmount(it) } ?: "—",
+                        network = "Arbitrum One",
+                        hideBalance = hideBalance,
+                        onToggleHide = if (allowSwipe) ({ settings?.setHideBalance(!hideBalance) }) else null,
+                        modifier = Modifier.testTag("UsdtBalance")
                     )
-                    PrimaryButton(
-                        text = stringResource(R.string.usdt__send),
-                        onClick = onSend,
-                        icon = { Icon(painterResource(R.drawable.ic_sent), null, tint = Colors.Green) },
-                        modifier = Modifier.weight(1f).testTag("UsdtSend")
-                    )
+                    VerticalSpacer(32.dp)
+                    error?.let {
+                        BodyS(stringResource(it), color = Colors.Brand)
+                        VerticalSpacer(16.dp)
+                    }
                 }
-                VerticalSpacer(32.dp)
-                error?.let {
-                    BodyS(stringResource(it), color = Colors.Brand)
+                itemsIndexed(wallet.transfers, key = { _, transfer -> transfer.id }) { index, transfer ->
+                    val heading = activityGroupTitleResource(transfer.timestamp)
+                    if (index == 0 || activityGroupTitleResource(wallet.transfers[index - 1].timestamp) != heading) {
+                        Caption13Up(
+                            stringResource(heading),
+                            color = Colors.White64,
+                            modifier = Modifier.padding(top = if (index == 0) 0.dp else 16.dp, bottom = 16.dp)
+                        )
+                    }
+                    UsdtActivityRow(transfer, hideBalance, onClick = { onActivityClick(transfer) })
                     VerticalSpacer(16.dp)
                 }
-                if (wallet.transfers.isEmpty()) {
-                    Caption13Up(stringResource(R.string.usdt__activity), color = Colors.White64)
-                    VerticalSpacer(16.dp)
-                    EmptyActivityRow(onClick = onReceive)
+                item {
+                    if (!wallet.historyComplete) {
+                        BodyS(
+                            stringResource(R.string.usdt__history_sync),
+                            color = Colors.White64
+                        )
+                    }
+                    VerticalSpacer(120.dp)
                 }
-            }
-            itemsIndexed(wallet.transfers, key = { _, transfer -> transfer.id }) { index, transfer ->
-                val heading = activityGroupTitleResource(transfer.timestamp)
-                if (index == 0 || activityGroupTitleResource(wallet.transfers[index - 1].timestamp) != heading) {
-                    Caption13Up(
-                        stringResource(heading),
-                        color = Colors.White64,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                UsdtActivityRow(transfer, hideBalance, onClick = { onActivityClick(transfer) })
-                VerticalSpacer(16.dp)
-            }
-            item {
-                if (!wallet.historyComplete) BodyS(stringResource(R.string.usdt__history_sync), color = Colors.White64)
-                VerticalSpacer(120.dp)
             }
         }
+        TabBar(onSendClick = onSend, onReceiveClick = onReceive, onScanClick = {
+            app?.showScannerSheet(showBackButton = false)
+        })
+    }
+}
+
+@Composable
+internal fun UsdtCoinIllustration(modifier: Modifier = Modifier) {
+    Box(contentAlignment = Alignment.Center, modifier = modifier.size(256.dp)) {
+        Image(
+            painterResource(R.drawable.tether_coin),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.requiredSize(width = 304.76.dp, height = 228.57.dp)
+        )
     }
 }
 
@@ -363,7 +386,7 @@ internal val UsdtDestination.label: String get() = when (this) {
 }
 
 @Composable
-private fun UsdtRefreshEffect(
+internal fun UsdtRefreshEffect(
     viewModel: UsdtViewModel,
     pending: Boolean = false,
     receiving: Boolean = false,
@@ -378,12 +401,13 @@ private fun UsdtRefreshEffect(
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             launch {
                 viewModel.receivedTxs.collect { transfer ->
-                    if (handleReceived()) {
+                    if ((isReceiving || app?.currentSheet?.value == null) && handleReceived()) {
                         app?.showTransactionSheet(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.ONCHAIN,
                                 direction = NewTransactionSheetDirection.RECEIVED,
                                 usdtAmount = transfer.amount,
+                                usdtTransferId = transfer.id,
                             )
                         )
                     }
@@ -410,7 +434,6 @@ internal fun UsdtAuthentication(useBiometrics: Boolean, onCancel: () -> Unit, on
 
 internal enum class UsdtPage {
     WALLET,
-    RECEIVE,
     RECIPIENT,
     MANUAL,
     AMOUNT,

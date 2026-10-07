@@ -279,7 +279,7 @@ private fun PaymentRequestAssetSelector(
             NumberPadActionButton(
                 text = option.code.uppercase(),
                 outlined = asset != option,
-                color = if (option == PaykitAsset.BTC) Colors.Brand else Colors.Green,
+                color = if (option == PaykitAsset.BTC) Colors.Brand else Colors.Usdt,
                 modifier = Modifier.testTag("PaymentRequestAsset${option.name}"),
                 onClick = {
                     if (option != asset) {
@@ -363,8 +363,7 @@ internal fun PaymentRequestDetailsContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            PaykitAmountDisplay(initialDraft.amount)
-            FillWidth()
+            PaykitAmountDisplay(initialDraft.amount, modifier = Modifier.weight(1f))
             IconButton(
                 onClick = { onEditAmount(updatedDraft()) },
                 modifier = Modifier
@@ -404,7 +403,7 @@ internal fun PaymentRequestDetailsContent(
                 val endpoints = methods.map { it.rawValue }
                 val selected = endpoints.all { it in selectedMethods }
                 val (label, color, id) = when (methods.first()) {
-                    MethodId.UsdtArbitrum -> Triple("USDT", Colors.Green, "usdt")
+                    MethodId.UsdtArbitrum -> Triple("USDT", Colors.Usdt, "usdt")
                     MethodId.Bolt11, MethodId.Lnurl -> Triple(
                         stringResource(R.string.lightning__spending),
                         Colors.Purple,

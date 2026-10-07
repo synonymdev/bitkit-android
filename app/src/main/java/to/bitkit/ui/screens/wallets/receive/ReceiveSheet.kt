@@ -68,6 +68,8 @@ fun ReceiveSheet(
     walletState: WalletState,
     isOffline: Boolean,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
+    initialTab: ReceiveTab? = null,
+    onBlockingChange: (Boolean) -> Unit = {},
     hardwareWalletId: String? = null,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     paymentRequestAmountViewModel: AmountInputViewModel = hiltViewModel(key = "PaymentRequestAmount"),
@@ -174,7 +176,8 @@ fun ReceiveSheet(
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
-                        initialTab = invoiceEditState.initialTab(hardwareWalletId),
+                        initialTab = invoiceEditState.initialTab(hardwareWalletId) ?: initialTab,
+                        onBlockingChange = onBlockingChange,
                         hardwareWalletId = selectedHardwareWalletId,
                         hardwareTabLabel = hardwareWallets.firstOrNull { it.id == selectedHardwareWalletId }
                             ?.let { stringResource(it.vendor.modelNameRes()) },
