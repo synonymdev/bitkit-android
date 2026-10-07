@@ -641,8 +641,28 @@ class BackupRepo @Inject constructor(
 
         val watchOnlyAccountSnapshot = watchOnlyAccountStore.backupSnapshot()
         val walletIndex = backupWalletIndex()
-        val proofs = paykitPaymentProofRepo.get().backupSnapshot()
-        val active = onchainSendAttemptStore.backupSnapshot(walletIndex)?.let { attempt ->
+        val (snapshotAttempt, snapshotProofs) = onchainSendAttemptStore.backupSnapshot(walletIndex) {
+            paykitPaymentProofRepo.get().backupSnapshot()
+        }
+        // No native submission is possible until a signed receipt is durably retained. Do not
+        // export this process-local preparation or its exact empty started proof as a sent guard.
+        val preparation = snapshotAttempt?.takeIf {
+            it.preparationPending && !it.restoredFromBackup && it.requestId != null &&
+                it.evidence == OnchainSendEvidence.Pending && it.txid == null &&
+                it.originalInputs == null && it.candidateTxids.isEmpty()
+        }
+        val emptyProof = preparation?.let { attempt ->
+            snapshotProofs.singleOrNull {
+                it.requestId == attempt.requestId && it.identity == attempt.payerIdentity &&
+                    it.kind == PaykitPaymentProofKind.Onchain.type && it.paymentStarted &&
+                    (it.onchainWalletId == null || it.onchainWalletId == attempt.walletId) &&
+                    it.onchainAddress == attempt.address && it.onchainAmountSats == attempt.amountSats &&
+                    it.paymentIdentifier == null && it.proofData == null && !it.onchainAcceptanceVerified
+            }
+        }
+        check(preparation == null || emptyProof != null) { "Cannot snapshot unmatched Shop preparation" }
+        val proofs = if (emptyProof == null) snapshotProofs else snapshotProofs - emptyProof
+        val active = snapshotAttempt?.takeIf { preparation == null }?.let { attempt ->
             val wire = ActiveOnchainAttemptBackup.from(
                 attempt,
                 Env.network.name.lowercase(),

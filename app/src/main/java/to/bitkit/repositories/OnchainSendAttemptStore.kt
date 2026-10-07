@@ -15,6 +15,7 @@ import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.WalletScope
 import to.bitkit.services.LightningService
@@ -394,6 +395,17 @@ class OnchainSendAttemptStore @Inject constructor(
 
     suspend fun backupSnapshot(walletIndex: Int): OnchainSendAttempt? = withContext(ioDispatcher) {
         mutex.withLock { loadWithRetainedAccepted(walletIndex)?.takeIf { it.blocksNextSend } }
+    }
+
+    // Admission and receipt retention take this mutex before the proof mutex. Capture both
+    // under the same ordering so a pre-dispatch backup cannot mix an empty guard with a sent proof.
+    suspend fun backupSnapshot(
+        walletIndex: Int,
+        captureProofs: suspend () -> List<PaykitPaymentStateBackup.Proof>,
+    ): Pair<OnchainSendAttempt?, List<PaykitPaymentStateBackup.Proof>> = withContext(ioDispatcher) {
+        mutex.withLock {
+            loadWithRetainedAccepted(walletIndex)?.takeIf { it.blocksNextSend } to captureProofs()
+        }
     }
 
     suspend fun restoreActive(attempt: OnchainSendAttempt) = withContext(ioDispatcher + NonCancellable) {

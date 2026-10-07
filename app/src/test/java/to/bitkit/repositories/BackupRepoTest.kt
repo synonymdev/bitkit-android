@@ -119,6 +119,10 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(db.configDao().getAll()).thenReturn(MutableStateFlow(listOf(to.bitkit.data.entities.ConfigEntity())))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
         whenever(onchainSendAttemptStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(onchainSendAttemptStore.backupSnapshot(eq(0), any())).doSuspendableAnswer {
+            val capture = it.getArgument<suspend () -> List<to.bitkit.models.PaykitPaymentStateBackup.Proof>>(1)
+            onchainSendAttemptStore.backupSnapshot(0) to capture()
+        }
         whenever { transferDao.upsert(any<List<TransferEntity>>()) }.thenReturn(Unit)
         whenever { cacheStore.updateBackupStatus(any(), any()) }.thenReturn(Unit)
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
@@ -220,6 +224,29 @@ class BackupRepoTest : BaseUnitTest() {
         stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire.copy(status = "unknown")))
         sut.performFullRestoreFromLatestBackup().getOrThrow()
         verify(lightningRepo, times(1)).completeAcceptedOrdinaryFollowup(any())
+    }
+
+    @Test
+    fun `wallet backup excludes never prepared Shop admission and only its empty proof`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        val attempt = wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0).copy(
+            evidence = OnchainSendEvidence.Pending, txid = null, originalInputs = null,
+            candidateTxids = emptyList(), candidateFeeRates = emptyMap(),
+            preparationPending = true, restoredFromBackup = false,
+        )
+        val original = state.pendingProofs.single().copy(paymentIdentifier = null)
+        val unrelated = original.copy(paymentAppId = "unrelated-app", identity = "other-payer")
+        whenever(onchainSendAttemptStore.backupSnapshot(0)).thenReturn(attempt)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        whenever(paykitPaymentProofRepo.backupSnapshot()).thenReturn(listOf(original, unrelated))
+        val data = argumentCaptor<ByteArray>()
+        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.WALLET.name), data.capture()) }
+        val exported = json.decodeFromString<WalletBackupV1>(data.firstValue.decodeToString())
+        assertNull(exported.paykitPaymentState?.activeOnchainAttempt)
+        assertEquals(listOf(unrelated), exported.paykitPaymentState?.pendingProofs)
     }
 
     @Test

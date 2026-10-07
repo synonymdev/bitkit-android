@@ -4,6 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
@@ -22,6 +23,35 @@ import kotlin.test.assertTrue
 @OptIn(kotlin.time.ExperimentalTime::class)
 class OnchainSendAttemptStoreTest : BaseUnitTest() {
     private val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+
+    @Test
+    fun `backup proof capture blocks receipt retention until the snapshot is complete`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val attempt = store.admitForTest()
+        val captureEntered = CompletableDeferred<Unit>()
+        val finishCapture = CompletableDeferred<Unit>()
+        val snapshot = async {
+            store.backupSnapshot(0) {
+                captureEntered.complete(Unit)
+                finishCapture.await()
+                emptyList()
+            }
+        }
+        captureEntered.await()
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+        )
+        val retain = async { store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false) }
+        runCurrent()
+        assertEquals(false, retain.isCompleted)
+        finishCapture.complete(Unit)
+        assertNull(snapshot.await().first?.txid)
+        assertEquals(receipt.txid, retain.await().txid)
+    }
 
     @Test
     fun `expired first Shop submission retains empty guard until original proof cleanup succeeds`() = test {
