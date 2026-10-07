@@ -1034,7 +1034,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.refresh().getOrThrow()
 
-        assertEquals(listOf("incoming", "deadline-PROPOSED"), sut.pendingRequests.value.map { it.paymentRequestId })
+        assertEquals(listOf("incoming"), sut.pendingRequests.value.map { it.paymentRequestId })
         assertEquals(
             setOf(
                 "incoming", "accepted", "rejected", "expired", "outgoing", "unsupported",

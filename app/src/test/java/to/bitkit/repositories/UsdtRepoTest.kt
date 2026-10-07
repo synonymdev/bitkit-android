@@ -124,6 +124,36 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `send authorizes after queued wallet work and never dispatches expired terms`() = test {
+        val release = CompletableDeferred<Unit>()
+        whenever(service.depositNetworks()).doSuspendableAnswer {
+            release.await()
+            emptyList()
+        }
+        val repo = UsdtRepo(service, testDispatcher)
+        val preceding = launch { UsdtDepositRepo(repo).depositNetworks().getOrThrow() }
+        runCurrent()
+        val quote: UsdtQuote = mock()
+        var authorized = false
+        var expired = false
+        val send = launch {
+            val result = repo.send(quote) {
+                authorized = true
+                if (expired) throw PaykitPaymentRequestError.RequestExpired
+            }
+            assertEquals(PaykitPaymentRequestError.RequestExpired, result.exceptionOrNull())
+        }
+        runCurrent()
+        assertEquals(false, authorized)
+        expired = true
+        release.complete(Unit)
+        preceding.join()
+        send.join()
+        assertTrue(authorized)
+        verify(service, never()).send(quote)
+    }
+
+    @Test
     fun `pending submission stays successful when subsequent history is unreadable`() = test {
         val quote: UsdtQuote = mock()
         whenever(service.wallet()).thenReturn(wallet)

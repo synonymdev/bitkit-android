@@ -175,9 +175,10 @@ class UsdtRepo @Inject constructor(
         }
     }
 
-    suspend fun send(quote: UsdtQuote) = withContext(ioDispatcher) {
+    suspend fun send(quote: UsdtQuote, beforeSend: suspend () -> Unit = {}) = withContext(ioDispatcher) {
         mutex.withLock {
             runSuspendCatching {
+                beforeSend()
                 service.send(quote).also { transfer ->
                     _state.update {
                         it.copy(

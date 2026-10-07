@@ -9451,17 +9451,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
-        whenever(lightningRepo.fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(request.amountSats), null))
+        whenever(lightningRepo.fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(request.amount.atomic), null))
             .doSuspendableAnswer {
                 whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
                     .thenReturn(Result.failure(PaykitPaymentRequestError.RequestExpired))
-                Result.success(lightningInvoice("lnbcrt1deadline", request.amountSats))
+                Result.success(lightningInvoice("lnbcrt1deadline", request.amount.atomic))
             }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
                 address = lnurl.uri,
-                amount = request.amountSats,
+                amount = request.amount.atomic,
                 payMethod = SendMethod.LIGHTNING,
                 lnurl = LnurlParams.LnurlPay(lnurl),
                 isPaymentRequest = true,
@@ -10798,7 +10798,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
         verify(lightningRepo, never()).sendOnChain(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any()
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
+            anyOrNull(), any(), any(), any(), any(), anyOrNull()
         )
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())

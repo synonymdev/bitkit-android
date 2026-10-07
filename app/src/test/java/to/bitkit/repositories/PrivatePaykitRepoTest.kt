@@ -2407,7 +2407,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `backupSnapshot and restoreBackup use SDK backup state`() = test {
         val backup = "sdk-backup"
-        whenever(paykitSdkService.exportBackupState()).thenReturn(backup)
+        whenever(paykitSdkService.exportBackupState(Priority.Interactive)).thenReturn(backup)
         sut.consumePrivatePaymentList(
             CONTACT_KEY,
             PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 7uL),

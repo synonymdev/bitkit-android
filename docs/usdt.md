@@ -1,5 +1,7 @@
 # USDT configuration
 
+Normal builds use published bitkit-core `0.8.0-rc1`, including its matching native libraries and generated bindings.
+
 USDT uses Arbitrum One regardless of the Bitcoin network setting. Gradle reads `USDT_RPC_URL` and `USDT_BUNDLER_URL` from local properties/environment configuration. Both must point to the controlled service's credential-free HTTPS chain and bundler routes. Missing endpoints hide the wallet entry.
 
 Optional `USDT_DEPOSITS_URL` enables wallet-signed Orchestra deposits. Provider keys remain on the service. Source support covers Ethereum, Tron, Solana, Polygon, Base and BNB Smart Chain, subject to explicit service enablement and live route availability. Each source requires funded acceptance before release. Users approve a source-network refund address when requesting an eligible refund; unconverted Tron refunds require provider support. History and addresses recover under the same provider partner account. Linked order amounts are batch totals. Outbound USDT0 destinations are enabled with `USDT_BRIDGE_NETWORKS`, a comma-separated subset of `ethereum,polygon,plasma,stable`, matching the service configuration. Empty configuration offers Arbitrum only. Paykit always uses direct Arbitrum payments.

@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import org.junit.Test
 import org.mockito.Mockito
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -70,7 +71,7 @@ class UsdtViewModelTest : BaseUnitTest() {
             assertEquals(quote.recipient, request?.recipient)
             assertEquals(1_500_000uL, request?.amount)
             verify(repo, never()).quote(any(), any(), any(), any())
-            verify(repo, never()).send(any())
+            verify(repo, never()).send(any(), any())
             assertNull(viewModel.state.value.error)
         } finally { parser.close() }
     }
@@ -81,17 +82,17 @@ class UsdtViewModelTest : BaseUnitTest() {
         viewModel.quote(quote.recipient, "1", quote.destination).join()
         viewModel.confirm().join()
         assertTrue(viewModel.state.value.authenticationRequired)
-        verify(repo, never()).send(any())
+        verify(repo, never()).send(any(), any())
 
         viewModel.cancelAuthentication()
         viewModel.authenticationVerified()
-        verify(repo, never()).send(any())
+        verify(repo, never()).send(any(), any())
 
         viewModel.confirm().join()
         viewModel.authenticationVerified()
         viewModel.authenticationVerified()
         viewModel.confirm().join()
-        verify(repo, times(1)).send(quote)
+        verify(repo, times(1)).send(eq(quote), any())
         assertTrue(viewModel.state.value.submitted)
         assertTrue(viewModel.state.value.busy)
         viewModel.waitForTransfer()
@@ -102,7 +103,7 @@ class UsdtViewModelTest : BaseUnitTest() {
     fun `failed submission clears the quote and never reports success`() = test {
         val viewModel = createViewModel()
         settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
-        whenever(repo.send(quote)).thenReturn(Result.failure(UsdtException.QuoteExpired()))
+        whenever(repo.send(eq(quote), any())).thenReturn(Result.failure(UsdtException.QuoteExpired()))
         viewModel.quote(quote.recipient, "1", quote.destination).join()
         viewModel.confirm().join()
         assertFalse(viewModel.state.value.authenticationRequired)
@@ -111,7 +112,7 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertNull(viewModel.state.value.quote)
         assertEquals(R.string.usdt__error_expired, viewModel.state.value.error)
         viewModel.confirm().join()
-        verify(repo, times(1)).send(quote)
+        verify(repo, times(1)).send(eq(quote), any())
     }
 
     @Test
@@ -124,7 +125,7 @@ class UsdtViewModelTest : BaseUnitTest() {
         viewModel.confirm().join()
         assertEquals(SanityWarning.VALUE_OVER_100_USD, viewModel.state.value.warning)
         assertFalse(viewModel.state.value.authenticationRequired)
-        verify(repo, never()).send(any())
+        verify(repo, never()).send(any(), any())
         viewModel.acceptWarning()
         assertNull(viewModel.state.value.warning)
         assertTrue(viewModel.state.value.authenticationRequired)
@@ -146,7 +147,7 @@ class UsdtViewModelTest : BaseUnitTest() {
         viewModel.quote(replacement.recipient, "2", replacement.destination).join()
         delayed.emit(SettingsData(isPinEnabled = false))
         confirmation.join()
-        verify(repo, never()).send(any())
+        verify(repo, never()).send(any(), any())
         assertEquals("replacement", viewModel.state.value.quote?.id)
     }
 
@@ -166,13 +167,13 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertEquals(R.string.usdt__error_storage, viewModel.state.value.error)
         assertFalse(viewModel.state.value.busy)
         assertFalse(viewModel.state.value.authenticationRequired)
-        verify(repo, never()).send(any())
+        verify(repo, never()).send(any(), any())
 
         failing = false
         viewModel.confirm().join()
         assertNull(viewModel.state.value.error)
         assertTrue(viewModel.state.value.authenticationRequired)
-        verify(repo, never()).send(any())
+        verify(repo, never()).send(any(), any())
         collector.cancel()
     }
 
@@ -212,7 +213,7 @@ class UsdtViewModelTest : BaseUnitTest() {
         whenever(repo.state).thenReturn(MutableStateFlow(UsdtWalletState()))
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(quote))
-        whenever(repo.send(quote)).thenReturn(Result.success(mock<UsdtTransfer>()))
+        whenever(repo.send(eq(quote), any())).thenReturn(Result.success(mock<UsdtTransfer>()))
         whenever(repo.refresh(false)).thenReturn(Result.success(Unit))
         whenever(repo.waitForTransfer(quote.id)).thenReturn(Result.success(Unit))
         return UsdtViewModel(repo, settingsStore)

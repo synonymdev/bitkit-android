@@ -215,8 +215,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         runSuspendCatching {
             setPaymentStarted(quote.id, true).getOrThrow()
             val result = runSuspendCatching {
-                beforeSend()
-                usdt.send(quote).getOrThrow()
+                usdt.send(quote, beforeSend).getOrThrow()
             }
             if (result.isFailure) {
                 val history = storedTransfer(quote.id)

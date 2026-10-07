@@ -1116,7 +1116,10 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
         sut.refresh().getOrThrow()
 
-        assertTrue(sut.pendingRequests.value.all { !it.payment(PaykitAsset.BTC, clock.now()).isValid(clock.now()) })
+        assertTrue(sut.pendingRequests.value.all { it.isPaymentDeadlineExpired(clock.now()) })
+        val unpaid = requireNotNull(sut.subscriptions.value.single { it.isPayer }.paymentDueOnAcceptance(clock.now()))
+        assertTrue(unpaid.isPaymentDeadlineExpired(clock.now()))
+        assertTrue(!unpaid.payment(PaykitAsset.BTC, clock.now()).isValid(clock.now()))
         assertEquals(2, sut.subscriptions.value.size)
         sut.subscriptions.value.forEach { subscription ->
             assertEquals(1, subscription.paidPeriods.size)

@@ -1228,16 +1228,16 @@ class PaykitSdkService @Inject constructor(
             },
         )
 
-    suspend fun exportBackupState(): String {
+    internal suspend fun exportBackupState(priority: Priority = Priority.Background): String {
         isSetup.await()
         val generation = runtimeGeneration
         return operationLock.withoutLock {
             var backup: String?
             do {
-                isPaymentSubmissionActive.first { !it }
-                backup = operationLock.withLock(Priority.Background) {
+                if (priority == Priority.Background) isPaymentSubmissionActive.first { !it }
+                backup = operationLock.withLock(priority) {
                     check(runtimeGeneration == generation) { "Paykit runtime changed before backup export" }
-                    if (isPaymentSubmissionActive.value) return@withLock null
+                    if (priority == Priority.Background && isPaymentSubmissionActive.value) return@withLock null
                     withPaykitKey { completeSdkCall { it.exportBackupString() } }
                 }
             } while (backup == null)
