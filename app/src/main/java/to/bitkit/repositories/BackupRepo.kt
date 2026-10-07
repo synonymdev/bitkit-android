@@ -422,7 +422,7 @@ class BackupRepo @Inject constructor(
         scope.launch {
             failedBackupRequired -= category
             cacheStore.updateBackupStatus(category) {
-                it.copy(required = currentTimeMillis())
+                it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
             }
             Logger.verbose("Marked backup required for: '$category'", context = TAG)
         }
@@ -506,10 +506,11 @@ class BackupRepo @Inject constructor(
     suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
         Logger.debug("Backup starting for: '$category'", context = TAG)
 
-        val backupRequired = currentTimeMillis()
+        var backupRequired = currentTimeMillis()
         runningBackups += category
         failedBackupRequired -= category
         cacheStore.updateBackupStatus(category) {
+            backupRequired = maxOf(backupRequired, it.required, it.synced + 1)
             it.copy(running = true, required = backupRequired)
         }
 
@@ -526,7 +527,7 @@ class BackupRepo @Inject constructor(
                 cacheStore.updateBackupStatus(category) {
                     it.copy(
                         running = false,
-                        synced = currentTimeMillis(),
+                        synced = backupRequired,
                     )
                 }
                 Logger.info("Backup succeeded for: '$category'", context = TAG)
@@ -644,25 +645,15 @@ class BackupRepo @Inject constructor(
         val (snapshotAttempt, snapshotProofs) = onchainSendAttemptStore.backupSnapshot(walletIndex) {
             paykitPaymentProofRepo.get().backupSnapshot()
         }
-        // No native submission is possible until a signed receipt is durably retained. Do not
-        // export this process-local preparation or its exact empty started proof as a sent guard.
-        val preparation = snapshotAttempt?.takeIf {
+        // A private preparation may already have consumed a payment-list version. Defer the
+        // entire wallet snapshot until its receipt is retained; never omit only the guard/proof.
+        check(snapshotAttempt?.let {
             it.preparationPending && !it.restoredFromBackup && it.requestId != null &&
                 it.evidence == OnchainSendEvidence.Pending && it.txid == null &&
                 it.originalInputs == null && it.candidateTxids.isEmpty()
-        }
-        val emptyProof = preparation?.let { attempt ->
-            snapshotProofs.singleOrNull {
-                it.requestId == attempt.requestId && it.identity == attempt.payerIdentity &&
-                    it.kind == PaykitPaymentProofKind.Onchain.type && it.paymentStarted &&
-                    (it.onchainWalletId == null || it.onchainWalletId == attempt.walletId) &&
-                    it.onchainAddress == attempt.address && it.onchainAmountSats == attempt.amountSats &&
-                    it.paymentIdentifier == null && it.proofData == null && !it.onchainAcceptanceVerified
-            }
-        }
-        check(preparation == null || emptyProof != null) { "Cannot snapshot unmatched Shop preparation" }
-        val proofs = if (emptyProof == null) snapshotProofs else snapshotProofs - emptyProof
-        val active = snapshotAttempt?.takeIf { preparation == null }?.let { attempt ->
+        } != true) { "Waiting for signed Shop receipt before wallet backup" }
+        val proofs = snapshotProofs
+        val active = snapshotAttempt?.let { attempt ->
             val wire = ActiveOnchainAttemptBackup.from(
                 attempt,
                 Env.network.name.lowercase(),

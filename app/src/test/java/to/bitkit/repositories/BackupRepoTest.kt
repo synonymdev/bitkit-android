@@ -227,7 +227,7 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wallet backup excludes never prepared Shop admission and only its empty proof`() = test {
+    fun `wallet backup defers the entire never prepared Shop snapshot`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
@@ -241,12 +241,8 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(onchainSendAttemptStore.backupSnapshot(0)).thenReturn(attempt)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
         whenever(paykitPaymentProofRepo.backupSnapshot()).thenReturn(listOf(original, unrelated))
-        val data = argumentCaptor<ByteArray>()
-        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
-        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.WALLET.name), data.capture()) }
-        val exported = json.decodeFromString<WalletBackupV1>(data.firstValue.decodeToString())
-        assertNull(exported.paykitPaymentState?.activeOnchainAttempt)
-        assertEquals(listOf(unrelated), exported.paykitPaymentState?.pendingProofs)
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
     }
 
     @Test
@@ -512,6 +508,56 @@ class BackupRepoTest : BaseUnitTest() {
             runCurrent()
 
             verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `successful upload leaves a newer required snapshot queued`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
+        val backupStatuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.SETTINGS to BackupItemStatus(
+                    synced = 1_000,
+                    required = 2_000,
+                ),
+            )
+        )
+        var uploadAttempts = 0
+        whenever { vssBackupClient.putObject(eq(BackupCategory.SETTINGS.name), any()) }
+            .doSuspendableAnswer {
+                uploadAttempts += 1
+                if (uploadAttempts == 1) {
+                    backupStatuses.update { statuses ->
+                        val status = statuses.getValue(BackupCategory.SETTINGS)
+                        statuses + (BackupCategory.SETTINGS to status.copy(required = 4_000))
+                    }
+                    whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(5_000))
+                    Result.success(VssItem(key = BackupCategory.SETTINGS.name, value = byteArrayOf(), version = 1))
+                } else {
+                    Result.success(
+                        VssItem(
+                            key = BackupCategory.SETTINGS.name,
+                            value = byteArrayOf(),
+                            version = 1,
+                        )
+                    )
+                }
+            }
+        val allowWalletClear = CompletableDeferred<Unit>().apply { complete(Unit) }
+        stubBackupStatuses(backupStatuses, allowWalletClear) {}
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.SETTINGS.name), any())
         } finally {
             sut.stopObservingBackups()
         }
