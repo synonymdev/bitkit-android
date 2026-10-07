@@ -1667,7 +1667,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         })
         advanceUntilIdle()
         assertFalse(send.uiState.value.isSigning)
-        assertFalse(send.uiState.value.isBroadcastUnresolved)
+        assertTrue(send.uiState.value.isBroadcastUnresolved)
         assertTrue(storedProofs.single().paymentStarted)
         assertEquals("605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e", storedProofs.single().paymentIdentifier)
 
@@ -1675,6 +1675,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.failOnchainPayment(request)
         repo.cancelPreparation(request)
         send.cancel()
+        assertTrue(send.uiState.value.hasPendingBroadcast)
         assertTrue(storedProofs.single().paymentStarted)
         assertNull(storedProofs.single().proofData)
         assertEquals(PaykitPaymentRequestError.OperationInProgress,

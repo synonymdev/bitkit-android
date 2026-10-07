@@ -388,7 +388,10 @@ class HwSendViewModel @Inject constructor(
     }
 
     private suspend fun handleFailure(error: Throwable, walletId: String) {
-        _uiState.update { it.copy(isBroadcastUnresolved = false) }
+        val retainedShopPayment = pendingBroadcast?.let {
+            it.request.paymentRequestId != null && it.hasAttemptedBroadcast
+        } == true
+        _uiState.update { it.copy(isBroadcastUnresolved = retainedShopPayment) }
         when {
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)

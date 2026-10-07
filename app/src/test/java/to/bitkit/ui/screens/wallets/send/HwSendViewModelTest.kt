@@ -312,6 +312,32 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Shop broadcast connectivity failure retains original signed payment across cancel`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException("connection failed")),
+            Result.success(fixture.broadcast),
+        )
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        sut.cancel()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+        assertEquals(original.paymentRequestId, sut.results.first().paymentRequestId)
+        assertEquals(original.paymentIdentity, sut.results.first().paymentIdentity)
+    }
+
+    @Test
     fun `broadcast connectivity failure unblocks navigation`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
