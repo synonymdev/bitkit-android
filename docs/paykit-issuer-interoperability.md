@@ -9,8 +9,8 @@ This contract records Bitkit behavior. Paykit protocol or SDK policy remains own
 
 An actionable request must satisfy all of these requirements:
 
-- The amount asset is exactly lowercase `btc`.
-- The amount is a positive decimal Bitcoin value with at most eight significant fractional digits and no more than `18,446,744,073,709,551` satoshis.
+- Without conversion terms, the amount asset is exactly lowercase `btc`, with a positive decimal Bitcoin value and at most eight significant fractional digits.
+- With fixed conversion terms, the amount may use another denomination; Bitkit multiplies it by the issuer's BTC rate. The payable amount must not exceed `18,446,744,073,709,551` satoshis.
 - The request is one-time: the local role is payer, its actionable lifecycle state is proposed or accepted, and recurrence is absent.
 - The proposal expiration is absent or is a valid ISO 8601 timestamp. It must be in the future while the request is proposed; it does not prevent payment after acceptance.
 - `paymentDeadline` is absent or uses the absolute `At` form with a valid UTC ISO 8601 timestamp ending in `Z` that has not passed. The deadline is inclusive: payment is allowed at the exact deadline instant.
@@ -21,6 +21,25 @@ Bitkit filters `acceptedPaymentEndpointIdentifiers` in issuer order, removes dup
 Bitkit enforces absolute one-time payment deadlines during payment preparation and before submission, including retries. Requests whose valid absolute deadline has passed remain visible in history but are unavailable for payment. This is separate from proposal expiration, which controls acceptance.
 
 Malformed deadlines and relative deadline forms are not actionable. Recurring requests are outside this one-time contract.
+
+### Fixed pricing
+
+An exact asset-and-rail rate (such as `btc-bitcoin` or `btc-regtest`) takes precedence
+over a `btc` rate, including when the requested asset is already BTC. Only an unpriced
+same-asset endpoint defaults to parity. Cross-asset endpoints without a matching rate
+are excluded. Amounts and rates use positive decimal strings without signs or exponents;
+Bitkit accepts at most 80 characters and 38 significant digits per operand and rejects
+unrepresentable arithmetic instead of approximating it.
+
+On-chain amounts round upward once to satoshis. Lightning amounts round upward once
+to millisatoshis and must then be exactly representable in whole satoshis. The existing
+send sheet uses one amount across its available rails: requests with differing BTC
+amounts across those rails, per-period quotes, and conversion-based subscriptions are
+unsupported. Normal unpriced BTC requests are unchanged.
+
+Bitkit displays the payable BTC amount and its own market-rate fiat estimate, not the
+original denomination as a fiat estimate. Original request terms remain unchanged in Paykit.
+The quoted amount is also used for invoice matching and payment validation.
 
 ### Endpoint identifiers
 

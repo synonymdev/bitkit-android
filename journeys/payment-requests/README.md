@@ -4,6 +4,11 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 [`docs/paykit-issuer-interoperability.md`](../../docs/paykit-issuer-interoperability.md) and
 [`app/src/test/resources/paykit-issuer-interoperability.json`](../../app/src/test/resources/paykit-issuer-interoperability.json).
 
+`fixed-price-bitcoin.xml` verifies a USD-denominated request settled in BTC and an explicit
+same-asset rail price. The confirmation amount uses the issuer's fixed rate; the displayed fiat
+estimate uses Bitkit's own market rate. The flow stops before broadcasting. Differing rail prices,
+fractional-satoshi Lightning payments, and dynamic quotes remain unsupported.
+
 ## Setup
 
 Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save and link the fixture issuer as a contact, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. Its App ID is `paykit-server`; Bitkit uses `bitkit`.
