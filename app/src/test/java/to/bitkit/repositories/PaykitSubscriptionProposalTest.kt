@@ -8,19 +8,29 @@ import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitPaymentRequestRecurrenceTerms
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 
 class PaykitSubscriptionProposalTest {
     @Test
-    fun `transport limit includes envelope endpoints and public icon`() {
+    fun `transport limit includes app ids endpoints and public icon`() {
+        val emptyWire = """
+            {"version":1,"kind":"paykit.payment_request","app_id":"bitkit",
+            "event_id":"00000000-0000-0000-0000-000000000000","payment_request_id":"00000000-0000-0000-0000-000000000000",
+            "request":{"amount":{"value":"0.001","asset":"btc"},"payment_reference":"bitkit-00000000-0000-0000-0000-000000000000",
+            "proposal_expires_at":"2027-01-22T08:00:00.000Z",
+            "recurrence":{"every":1,"unit":"month","starts_at":"2027-01-15T08:00:00.000Z","anchor":"2027-01-15T08:00:00.000Z","ends_at":null},
+            "accepted_payment_endpoint_identifiers":["btc-regtest-p2wpkh","btc-lightning-bolt11","btc-lightning-lnurl"],"required_app_id":"bitkit",
+            "metadata":{"note":"Support","subscription":{"benefits":[],"description":"",
+            "icon_uri":"pubky://${"x".repeat(122)}","version":1}}}}
+        """.trimIndent().lines().joinToString("")
+        assertEquals(840, emptyWire.encodeToByteArray().size)
         val empty = terms("", PaykitSubscriptionProposal.reservedIconUri)
-        val available = PaykitSubscriptionProposal.MAX_MESSAGE_BYTES - PaykitSubscriptionProposal.encodedSize(empty)
-        assertTrue(available > 0)
-        val full = terms("a".repeat(available), PaykitSubscriptionProposal.reservedIconUri)
+        assertEquals(emptyWire.encodeToByteArray().size, PaykitSubscriptionProposal.encodedSize(empty))
+        val full = terms("a".repeat(160), PaykitSubscriptionProposal.reservedIconUri)
         assertEquals(1000, PaykitSubscriptionProposal.encodedSize(full))
         PaykitSubscriptionProposal.validate(full)
+        val oversized = terms("a".repeat(161), PaykitSubscriptionProposal.reservedIconUri)
+        assertEquals(1001, PaykitSubscriptionProposal.encodedSize(oversized))
         assertFailsWith<PaykitPaymentRequestError.SubscriptionTooLong> {
-            val oversized = terms("a".repeat(available + 1), PaykitSubscriptionProposal.reservedIconUri)
             PaykitSubscriptionProposal.validate(oversized)
         }
     }
@@ -43,7 +53,11 @@ class PaykitSubscriptionProposalTest {
             startsAt = "2027-01-15T08:00:00.000Z",
             anchor = "2027-01-15T08:00:00.000Z",
         ),
-        acceptedPaymentEndpointIdentifiers = listOf("bitcoin:regtest", "lightning:bolt11", "lightning:lnurl"),
+        acceptedPaymentEndpointIdentifiers = listOf(
+            "btc-regtest-p2wpkh",
+            "btc-lightning-bolt11",
+            "btc-lightning-lnurl",
+        ),
         metadataJson = buildJsonObject {
             put("note", "Support")
             put(

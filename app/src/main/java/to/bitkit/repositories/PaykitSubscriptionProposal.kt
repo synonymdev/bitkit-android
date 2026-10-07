@@ -26,6 +26,7 @@ internal object PaykitSubscriptionProposal {
         val wire = buildJsonObject {
             put("version", 1)
             put("kind", "paykit.payment_request")
+            put("app_id", "bitkit")
             put("event_id", uuid)
             put("payment_request_id", uuid)
             putJsonObject("request") {
@@ -45,6 +46,7 @@ internal object PaykitSubscriptionProposal {
                 putJsonArray("accepted_payment_endpoint_identifiers") {
                     terms.acceptedPaymentEndpointIdentifiers.forEach { add(JsonPrimitive(it)) }
                 }
+                put("required_app_id", "bitkit")
                 put("metadata", Json.parseToJsonElement(terms.metadataJson))
             }
         }

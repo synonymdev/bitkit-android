@@ -38,6 +38,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.SendUiState
+import kotlin.time.Instant
 
 private const val SEND_SIGN_VISUAL_TOP_RATIO = 0.54f
 
@@ -49,6 +50,10 @@ fun HwSendSignScreen(
     viewModel: HwSendViewModel,
     prepareContactPayment: suspend () -> Boolean,
     authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
+    onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit,
+    onPaymentSubmissionChange: (Boolean) -> Unit,
+    onBroadcastAttemptChange: (Boolean) -> Unit,
+    paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -62,15 +67,32 @@ fun HwSendSignScreen(
         amountSats = sendUiState.amount,
         satsPerVByte = satsPerVByte,
         tags = sendUiState.selectedTags,
+        paymentDeadlineAt = paymentDeadlineAt,
+        paymentRequestId = sendUiState.incomingPaymentRequestId,
     )
 
     val onBackRequest: () -> Unit = { if (uiState.canLeave) onBack() }
+    val signAndBroadcast: () -> Unit = {
+        viewModel.signAndBroadcast(
+            request,
+            prepareContactPayment,
+            authorizeContactPayment,
+            onPaymentDeadlineExpired,
+            onBroadcastAttemptChange,
+        )
+    }
 
     LaunchedEffect(walletId) {
         viewModel.warmUp(walletId)
     }
+    LaunchedEffect(uiState.isSigning) {
+        onPaymentSubmissionChange(uiState.isSigning)
+    }
     DisposableEffect(viewModel) {
-        onDispose(viewModel::cancel)
+        onDispose {
+            viewModel.cancel()
+            onPaymentSubmissionChange(false)
+        }
     }
     // Without this the sheet's NavHost pops the route itself, ignoring the guard and skipping onBack
     BackHandler(onBack = onBackRequest)
@@ -82,21 +104,14 @@ fun HwSendSignScreen(
         hasPendingBroadcast = uiState.hasPendingBroadcast,
         vendor = vendor,
         onBack = onBackRequest,
-        onOpenConnect = {
-            viewModel.signAndBroadcast(request, prepareContactPayment, authorizeContactPayment)
-        },
+        onOpenConnect = signAndBroadcast,
     )
 
     if (uiState.isPassphraseRequired) {
         HwPassphrasePromptSheet(
             isVerifying = uiState.isVerifyingPassphrase,
             onSubmit = { passphrase ->
-                viewModel.submitPassphrase(
-                    request,
-                    passphrase,
-                    prepareContactPayment,
-                    authorizeContactPayment,
-                )
+                viewModel.submitPassphrase(walletId, passphrase, signAndBroadcast)
             },
             onDismiss = viewModel::dismissPassphrase,
         )

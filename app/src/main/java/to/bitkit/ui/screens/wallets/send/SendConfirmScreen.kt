@@ -46,6 +46,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +68,7 @@ import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
@@ -211,12 +213,15 @@ fun SendConfirmScreen(
 }
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 internal fun SendConfirmContent(
     uiState: SendUiState,
     isNodeRunning: Boolean,
     isLoading: Boolean,
     showBiometrics: Boolean,
     modifier: Modifier = Modifier,
+    preparingRequest: PaykitPaymentRequest? = null,
+    preparingContact: PubkyProfile? = null,
     canGoBack: Boolean = true,
     initialShowDetails: Boolean = false,
     onBack: () -> Unit = {},
@@ -227,9 +232,12 @@ internal fun SendConfirmContent(
     onBiometricsSuccess: () -> Unit = {},
     onBiometricsFailure: () -> Unit = {},
 ) {
+    val isPreparing = preparingRequest != null
+    val isAutomaticPaymentLoading = uiState.shouldAutomaticallyPay &&
+        (uiState.initialSubscriptionPaymentAutoStartPending || isLoading)
     Box(
         modifier = modifier.testTag(
-            if (uiState.isPaymentRequest) "PaymentRequestConfirm" else "SendConfirm",
+            if (isPreparing || uiState.isPaymentRequest) "PaymentRequestConfirm" else "SendConfirm",
         )
     ) {
         Column(
@@ -242,26 +250,29 @@ internal fun SendConfirmContent(
 
             SendContactTopBar(
                 titleText = when {
+                    isPreparing -> stringResource(R.string.wallet__payment_request)
                     uiState.isInitialSubscriptionPayment -> stringResource(R.string.subscriptions__review_and_subscribe)
                     uiState.isSubscriptionPayment -> stringResource(R.string.subscriptions__subscription)
                     uiState.isPaymentRequest -> stringResource(R.string.wallet__payment_request)
                     isLnurlPay -> stringResource(R.string.wallet__lnurl_p_title)
                     else -> stringResource(R.string.wallet__send_review)
                 },
-                contact = uiState.contactPaymentProfile,
+                contact = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
                 onBack = onBack.takeIf { canGoBack },
             )
 
             Spacer(Modifier.height(16.dp))
 
-            if (uiState.shouldAutomaticallyPay && (uiState.initialSubscriptionPaymentAutoStartPending || isLoading)) {
+            if (!isPreparing && isAutomaticPaymentLoading) {
                 FillHeight()
                 GradientCircularProgressIndicator(modifier = Modifier.size(32.dp).align(Alignment.CenterHorizontally))
                 FillHeight()
-            } else if (isNodeRunning) {
+            } else if (isPreparing || isNodeRunning) {
                 ContentRunning(
                     uiState = uiState,
                     isLoading = isLoading,
+                    preparingRequest = preparingRequest,
+                    preparingContact = preparingContact,
                     initialShowDetails = initialShowDetails,
                     onEvent = onEvent,
                     onClickAddTag = onClickAddTag,
@@ -278,14 +289,14 @@ internal fun SendConfirmContent(
             }
         }
 
-        if (showBiometrics) {
+        if (showBiometrics && !isPreparing) {
             BiometricsView(
                 onSuccess = onBiometricsSuccess,
                 onFailure = onBiometricsFailure,
             )
         }
 
-        uiState.showSanityWarningDialog?.let { dialog ->
+        uiState.showSanityWarningDialog?.takeUnless { isPreparing }?.let { dialog ->
             AppAlertDialog(
                 title = stringResource(R.string.common__are_you_sure),
                 text = stringResource(dialog.message),
@@ -314,6 +325,8 @@ private fun ContentRunning(
     uiState: SendUiState,
     isLoading: Boolean,
     modifier: Modifier = Modifier,
+    preparingRequest: PaykitPaymentRequest? = null,
+    preparingContact: PubkyProfile? = null,
     initialShowDetails: Boolean = false,
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
@@ -322,12 +335,14 @@ private fun ContentRunning(
 ) {
     var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
-    val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
+    val isPreparing = preparingRequest != null
+    val isLnurlPay = !isPreparing && uiState.lnurl is LnurlParams.LnurlPay
     val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
-    val accentColor = when (uiState.payMethod) {
-        SendMethod.ONCHAIN -> Colors.Brand
-        SendMethod.LIGHTNING -> Colors.Purple
+    val accentColor = when {
+        isPreparing -> Colors.Brand
+        uiState.payMethod == SendMethod.LIGHTNING -> Colors.Purple
+        else -> Colors.Brand
     }
 
     Column(
@@ -336,9 +351,9 @@ private fun ContentRunning(
             .fillMaxSize()
     ) {
         BalanceHeaderView(
-            sats = uiState.amount.toLong(),
+            sats = (preparingRequest?.amountSats ?: uiState.amount).toLong(),
             useSwipeToHide = false,
-            onClick = { onEvent(SendEvent.BackToAmount) },
+            onClick = { onEvent(SendEvent.BackToAmount) }.takeUnless { isPreparing },
             testTag = "ReviewAmount",
             modifier = Modifier
                 .fillMaxWidth()
@@ -357,11 +372,11 @@ private fun ContentRunning(
                     .verticalScroll(rememberScrollState())
                     .heightIn(min = maxHeight)
             ) {
-                VerticalSpacer(if (uiState.isOneOffPaymentRequest && !isLnurlPay) 24.dp else 44.dp)
+                VerticalSpacer(if (isPreparing || uiState.isOneOffPaymentRequest && !isLnurlPay) 24.dp else 44.dp)
 
                 if (isLnurlPay) {
                     LnurlPayDetails(uiState = uiState, onEvent = onEvent)
-                } else if (showDetails) {
+                } else if (showDetails && !isPreparing) {
                     when (uiState.payMethod) {
                         SendMethod.ONCHAIN -> {
                             OnChainDetails(
@@ -387,8 +402,12 @@ private fun ContentRunning(
                         }
                     }
                 } else {
-                    if (uiState.isOneOffPaymentRequest) {
-                        PaymentRequestSummary(uiState = uiState, iconColor = accentColor)
+                    if (isPreparing || uiState.isOneOffPaymentRequest) {
+                        PaymentRequestSummary(
+                            profile = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
+                            note = if (isPreparing) preparingRequest.note else uiState.oneOffPaymentRequestNote,
+                            iconColor = accentColor,
+                        )
                         VerticalSpacer(16.dp)
                     }
                     Image(
@@ -406,7 +425,7 @@ private fun ContentRunning(
             }
         }
 
-        if (!isLnurlPay) {
+        if (!isLnurlPay && !isPreparing) {
             PrimaryButton(
                 text = stringResource(
                     if (showDetails) R.string.common__hide_details else R.string.common__show_details
@@ -443,20 +462,25 @@ private fun ContentRunning(
 
         SwipeToConfirm(
             text = stringResource(
-                if (uiState.isInitialSubscriptionPayment) {
+                if (!isPreparing && uiState.isInitialSubscriptionPayment) {
                     R.string.subscriptions__swipe_to_subscribe_and_pay
                 } else {
                     R.string.wallet__send_swipe
                 }
             ),
             color = accentColor,
-            enabled = uiState.isAmountInputValid &&
+            enabled = !isPreparing && uiState.isAmountInputValid &&
                 !uiState.isFundingSourceLoading &&
                 !isHardwareFeeLoading,
-            loading = isLoading,
-            confirmed = isLoading,
+            loading = isPreparing || isLoading,
+            confirmed = !isPreparing && isLoading,
             progress = swipeProgress,
             onConfirm = onSwipeToConfirm,
+            modifier = if (isPreparing) {
+                Modifier.semantics { disabled() }.testTag("PaymentRequestPreparing")
+            } else {
+                Modifier
+            }
         )
         VerticalSpacer(16.dp)
     }
@@ -840,12 +864,12 @@ private fun ContactRecipient(
 
 @Composable
 private fun PaymentRequestSummary(
-    uiState: SendUiState,
+    profile: PubkyProfile?,
+    note: String?,
     iconColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    val profile = uiState.contactPaymentProfile ?: return
-    val note = uiState.oneOffPaymentRequestNote
+    if (profile == null) return
     val noteColor = if (note != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
 
     Row(

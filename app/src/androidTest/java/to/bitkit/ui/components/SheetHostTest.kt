@@ -89,6 +89,45 @@ class SheetHostTest {
     }
 
     @Test
+    fun dismissingSheetPresentsQueuedSheet() {
+        val sheet = mutableStateOf<Sheet?>(Sheet.Receive())
+        val request = Sheet.Send()
+        var dismissCount = 0
+        var presentationCount = 0
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SheetHost(
+                    shouldExpand = sheet.value != null,
+                    visibilityKey = sheet.value,
+                    onDismiss = {
+                        dismissCount++
+                        sheet.value = null
+                        sheet.value = request
+                    },
+                    onVisible = { presentationCount++ },
+                    sheets = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp)
+                                .testTag(if (sheet.value === request) "PaymentRequestSheet" else "ReceiveSheet")
+                        )
+                    },
+                    content = { Box(Modifier.fillMaxSize()) },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("ReceiveSheet").assertIsDisplayed()
+
+        pressBack()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("PaymentRequestSheet").assertIsDisplayed()
+        assertEquals(1, dismissCount)
+        assertEquals(2, presentationCount)
+    }
+
+    @Test
     fun programmaticHideDoesNotInvokeDismissalCallback() {
         val shouldExpand = mutableStateOf(true)
         val visibilityKey = mutableStateOf<Any?>("subscription")

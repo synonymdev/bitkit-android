@@ -11,14 +11,16 @@ An actionable request must satisfy all of these requirements:
 
 - The amount asset is exactly lowercase `btc`.
 - The amount is a positive decimal Bitcoin value with at most eight significant fractional digits and no more than `18,446,744,073,709,551` satoshis.
-- The request is a one-time proposal: the local role is payer, lifecycle state is proposed, and recurrence is absent.
-- The proposal expiration is absent or is a valid future ISO 8601 timestamp.
-- `paymentDeadline` is absent. Bitkit does not yet enforce actual-payment deadlines.
+- The request is one-time: the local role is payer, its actionable lifecycle state is proposed or accepted, and recurrence is absent.
+- The proposal expiration is absent or is a valid ISO 8601 timestamp. It must be in the future while the request is proposed; it does not prevent payment after acceptance.
+- `paymentDeadline` is absent or uses the absolute `At` form with a valid UTC ISO 8601 timestamp ending in `Z` that has not passed. The deadline is inclusive: payment is allowed at the exact deadline instant.
 - `acceptedPaymentEndpointIdentifiers` retains at least one identifier supported on the wallet's current network.
 
 Bitkit filters `acceptedPaymentEndpointIdentifiers` in issuer order, removes duplicates after their first occurrence, and drops unknown or wrong-network identifiers. The request remains actionable when at least one identifier survives.
 
-Requests with a payment deadline remain visible in history but are unavailable for payment. This restriction is separate from proposal expiration, which controls acceptance.
+Bitkit enforces absolute one-time payment deadlines during payment preparation and before submission, including retries. Requests whose valid absolute deadline has passed remain visible in history but are unavailable for payment. This is separate from proposal expiration, which controls acceptance.
+
+Malformed deadlines and relative deadline forms are not actionable. Recurring requests are outside this one-time contract.
 
 ### Endpoint identifiers
 
@@ -74,7 +76,7 @@ After this shape check, Bitkit validates that the value is usable: an on-chain a
 
 ## Delivery prerequisites
 
-The issuer and wallet must be linked Paykit peers on the same receiver path before Bitkit polls the request. The issuer must advertise a usable endpoint for at least one identifier retained from the request. A request that fails the request gate is not presented; a request whose endpoint cannot be resolved is deferred until usable payment details arrive.
+The issuer and wallet identities must be linked Paykit peers before Bitkit polls the request. Requests may require a specific payment App; Bitkit uses the SDK's request-specific resolver and preserves the selected App in its proof. The issuer can include exact `paymentEndpoints` in the Payment Request or supply current endpoints resolved for the requested App. At least one endpoint must be usable for an identifier retained from the request; embedded endpoints do not require separate advertisement. A request that fails the request gate is not presented; a request whose endpoint cannot be resolved is deferred until usable payment details arrive.
 
 ## Contract fixtures
 

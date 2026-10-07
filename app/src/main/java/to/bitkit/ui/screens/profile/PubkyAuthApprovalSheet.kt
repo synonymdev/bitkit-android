@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -38,6 +40,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.models.PubkyAuthClaim
+import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyProfile
 import to.bitkit.ui.appViewModel
@@ -265,7 +268,7 @@ private fun approvalBackAction(
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
 ): (() -> Unit)? = when (approvalState) {
-    ApprovalState.Authorize if bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1 -> onBackToWatchOnly
+    ApprovalState.Authorize if bitkitClaim?.includesWatchOnlyAccount == true -> onBackToWatchOnly
     ApprovalState.Authorize, ApprovalState.Authenticating, ApprovalState.Authorizing -> onCancel
     ApprovalState.Success -> onDismiss
     else -> null
@@ -384,7 +387,7 @@ private fun ColumnScope.AuthorizingContent(
 private fun ColumnScope.ApprovalDetails(
     uiState: PubkyAuthApprovalUiState,
 ) {
-    Column(modifier = Modifier.weight(1f)) {
+    Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
         VerticalSpacer(26.dp)
 
         if (uiState.homeserverPublicKey != null) {
@@ -410,7 +413,11 @@ private fun ColumnScope.ApprovalDetails(
         if (uiState.permissions.isNotEmpty()) {
             PermissionsSection(permissions = uiState.permissions)
         }
-        FillHeight(min = 32.dp)
+        if (uiState.bitkitClaim?.includesPaykitAccess == true) {
+            VerticalSpacer(16.dp)
+            PaykitAccessSection()
+        }
+        VerticalSpacer(32.dp)
 
         TrustWarning()
         VerticalSpacer(16.dp)
@@ -429,6 +436,15 @@ private fun ColumnScope.ApprovalDetails(
             }
         } ?: uiState.profile?.let { ProfileCard(it) }
         VerticalSpacer(16.dp)
+    }
+}
+
+@Composable
+private fun PaykitAccessSection() {
+    Column(modifier = Modifier.testTag("PubkyAuthPaykitAccess")) {
+        BodyMSB(text = stringResource(R.string.profile__auth_approval_paykit_access_title))
+        VerticalSpacer(8.dp)
+        BodyM(text = stringResource(R.string.profile__auth_approval_paykit_access_description), color = Colors.White64)
     }
 }
 
@@ -592,7 +608,7 @@ private fun WatchOnlyConsentPreview() {
                 uiState = PubkyAuthApprovalUiState(
                     state = ApprovalState.WatchOnlyConsent,
                     serviceName = "paykit",
-                    bitkitClaim = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1,
+                    bitkitClaim = PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
                 ),
                 isCurrentRequest = true,
                 onAuthorize = {},
@@ -619,7 +635,7 @@ private fun AuthorizePreview() {
                         PubkyAuthPermission(path = "/pub/pubky.app/", accessLevel = "rw"),
                         PubkyAuthPermission(path = "/pub/paykit/v0/", accessLevel = "rw"),
                     ),
-                    bitkitClaim = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1,
+                    bitkitClaim = PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
                     profile = PubkyProfile(
                         publicKey = "pk8e3qm5f4kgczagxhertyuiop1gxag",
                         name = "Satoshi Nakamoto",

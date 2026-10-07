@@ -168,13 +168,11 @@ enum class PaykitSubscriptionRole { Payer, Payee }
 data class PaykitSubscriptionId(
     val paymentRequestId: String,
     val counterparty: String,
-    val counterpartyReceiverPath: String,
 )
 
 data class PaykitSubscription(
     val paymentRequestId: String,
     val counterparty: String,
-    val counterpartyReceiverPath: String,
     val amountValue: String,
     val amountSats: ULong,
     val note: String?,
@@ -191,7 +189,7 @@ data class PaykitSubscription(
     val hasPaymentDeadline: Boolean = false,
 ) {
     val id: PaykitSubscriptionId
-        get() = PaykitSubscriptionId(paymentRequestId, counterparty, counterpartyReceiverPath)
+        get() = PaykitSubscriptionId(paymentRequestId, counterparty)
 
     val isPayer: Boolean
         get() = role == PaykitSubscriptionRole.Payer
@@ -244,7 +242,6 @@ data class PaykitSubscription(
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
                 counterparty = counterparty,
-                counterpartyReceiverPath = counterpartyReceiverPath,
                 amountValue = amountValue,
                 amountSats = amountSats,
                 note = note,
@@ -272,7 +269,6 @@ data class PaykitSubscription(
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
                 counterparty = counterparty,
-                counterpartyReceiverPath = counterpartyReceiverPath,
                 amountValue = amountValue,
                 amountSats = amountSats,
                 note = note,
@@ -336,7 +332,6 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
     return PaykitSubscription(
         paymentRequestId = paymentRequestId,
         counterparty = counterparty,
-        counterpartyReceiverPath = counterpartyReceiverPath,
         amountValue = requestTerms.amount.value,
         amountSats = amountSats,
         note = requestTerms.metadata.note()?.take(256),

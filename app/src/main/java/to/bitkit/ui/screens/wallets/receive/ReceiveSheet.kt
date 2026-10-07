@@ -111,8 +111,7 @@ fun ReceiveSheet(
         mutableStateOf(
             (startRoute as? ReceiveRoute.PaymentRequestAmount)?.let {
                 val publicKey = it.publicKey ?: return@let null
-                val receiverPath = it.receiverPath ?: return@let null
-                PaykitPaymentRequestTarget(publicKey, receiverPath)
+                PaykitPaymentRequestTarget(publicKey)
             }
         )
     }
@@ -198,7 +197,7 @@ fun ReceiveSheet(
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestAmount> { backStackEntry ->
                     val route = backStackEntry.toRoute<ReceiveRoute.PaymentRequestAmount>()
                     val routeTarget = route.publicKey?.let { publicKey ->
-                        route.receiverPath?.let { receiverPath -> PaykitPaymentRequestTarget(publicKey, receiverPath) }
+                        PaykitPaymentRequestTarget(publicKey)
                     }
                     val contact = (routeTarget ?: selectedPaymentRequestTarget)?.let { target ->
                         paymentRequestContacts.firstOrNull {
@@ -544,7 +543,6 @@ sealed interface ReceiveRoute {
     @Serializable
     data class PaymentRequestAmount(
         val publicKey: String? = null,
-        val receiverPath: String? = null,
     ) : InternalOnly
 
     @Serializable

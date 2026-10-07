@@ -16,7 +16,7 @@ import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
+import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -25,7 +25,7 @@ class AddContactViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val publicPaykitRepo: PublicPaykitRepo = mock()
-    private val refreshContactPaykitReceivers = mock<RefreshContactPaykitReceiversUseCase>()
+    private val refreshContactPaykitLink = mock<RefreshContactPaykitLinkUseCase>()
 
     @Test
     fun `self add failure should show dedicated error`() = test {
@@ -58,14 +58,14 @@ class AddContactViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.contacts__add_error_existing)).thenReturn("existing contact")
         whenever(pubkyRepo.fetchContactProfile(any()))
             .thenReturn(Result.failure(PubkyContactError.AlreadyExists))
-        whenever { refreshContactPaykitReceivers(TEST_PUBLIC_KEY) }.thenReturn(Result.success(Unit))
+        whenever { refreshContactPaykitLink(TEST_PUBLIC_KEY) }.thenReturn(Result.success(Unit))
 
         val sut = createSut()
         advanceUntilIdle()
 
         assertEquals("existing contact", sut.uiState.value.error)
         assertNull(sut.uiState.value.fetchedProfile)
-        verify(refreshContactPaykitReceivers).invoke(TEST_PUBLIC_KEY)
+        verify(refreshContactPaykitLink).invoke(TEST_PUBLIC_KEY)
     }
 
     @Test
@@ -103,7 +103,7 @@ class AddContactViewModelTest : BaseUnitTest() {
             context = context,
             pubkyRepo = pubkyRepo,
             publicPaykitRepo = publicPaykitRepo,
-            refreshContactPaykitReceivers = refreshContactPaykitReceivers,
+            refreshContactPaykitLink = refreshContactPaykitLink,
             savedStateHandle = SavedStateHandle(mapOf("publicKey" to publicKey)),
         )
     }

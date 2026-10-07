@@ -1,27 +1,44 @@
 package to.bitkit.services
 
 import com.synonym.paykit.PaykitException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.cancellation.CancellationException
 
 internal class PaykitSdkOperationLock {
-    private val mutex = Mutex()
+    companion object {
+        /** Maximum interactive overtakes before the oldest background operation gets a turn. */
+        private const val MAX_INTERACTIVE_BYPASSES = 3
+    }
+
+    enum class Priority {
+        /** FIFO barrier for identity changes, cleanup, and operations not classified for reordering. */
+        Ordered,
+        Interactive,
+        Background,
+    }
+
     private val stateLock = Any()
+    private var isLocked = false
+    private val waiters = ArrayDeque<Waiter>()
+    private var interactiveBypasses = 0
     private var generation = 0L
     private var isWiping = false
 
-    suspend fun <T> withLock(operation: suspend () -> T): T {
+    suspend fun <T> withLock(priority: Priority = Priority.Ordered, operation: suspend () -> T): T {
         if (ownsWipe()) return operation()
         val admittedGeneration = admit()
-        return mutex.withLock {
+        acquire(priority)
+        return try {
             currentCoroutineContext().ensureActive()
             checkAdmitted(admittedGeneration)
             operation()
+        } finally {
+            release()
         }
     }
 
@@ -33,7 +50,11 @@ internal class PaykitSdkOperationLock {
     suspend fun <T> withoutLock(operation: suspend () -> T): T {
         if (ownsWipe()) return operation()
         val admittedGeneration = admit()
-        return operation().also { checkAdmitted(admittedGeneration) }
+        currentCoroutineContext().ensureActive()
+        return operation().also {
+            currentCoroutineContext().ensureActive()
+            checkAdmitted(admittedGeneration)
+        }
     }
 
     suspend fun <T> withWalletWipe(operation: suspend () -> T): T {
@@ -43,12 +64,51 @@ internal class PaykitSdkOperationLock {
             generation++
         }
         return try {
-            mutex.withLock {
+            acquire(Priority.Ordered)
+            try {
                 withContext(WipeContext(this, generation)) { operation() }
+            } finally {
+                release()
             }
         } finally {
             synchronized(stateLock) { isWiping = false }
         }
+    }
+
+    private suspend fun acquire(priority: Priority) {
+        val waiter = synchronized(stateLock) {
+            if (!isLocked) {
+                isLocked = true
+                return
+            }
+            Waiter(priority, CompletableDeferred()).also(waiters::addLast)
+        }
+        try {
+            waiter.ready.await()
+        } catch (error: CancellationException) {
+            if (synchronized(stateLock) { !waiters.remove(waiter) }) release()
+            throw error
+        }
+    }
+
+    private fun release() {
+        val next = synchronized(stateLock) {
+            if (waiters.isEmpty()) {
+                isLocked = false
+                interactiveBypasses = 0
+                return
+            }
+            val interactiveIndex = waiters.takeWhile { it.priority != Priority.Ordered }
+                .indexOfFirst { it.priority == Priority.Interactive }
+            val index = if (interactiveBypasses < MAX_INTERACTIVE_BYPASSES && interactiveIndex > 0) {
+                interactiveIndex
+            } else {
+                0
+            }
+            interactiveBypasses = if (index == 0) 0 else interactiveBypasses + 1
+            waiters.removeAt(index)
+        }
+        next.ready.complete(Unit)
     }
 
     private suspend fun ownsWipe(): Boolean {
@@ -76,6 +136,8 @@ internal class PaykitSdkOperationLock {
         code = "wallet_wipe_in_progress",
         context = "Paykit operation interrupted by wallet wipe",
     )
+
+    private class Waiter(val priority: Priority, val ready: CompletableDeferred<Unit>)
 
     private class WipeContext(
         val owner: PaykitSdkOperationLock,

@@ -1111,7 +1111,7 @@ class TransferViewModelTest : BaseUnitTest() {
         // totalInput 100000 - feeSat 99000 - normalFee 500 = 500 dust (< Defaults.dustLimit)
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(500uL))
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         var fundingPaidEmitted = false
         backgroundScope.launch {
             sut.transferEffects.collect { effect ->
@@ -1147,6 +1147,7 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            paymentDeadlineAt = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(blocktankRepo, times(1)).createOrder(eq(order.clientBalanceSat), eq(order.lspBalanceSat), any())
@@ -1164,7 +1165,7 @@ class TransferViewModelTest : BaseUnitTest() {
         }.thenReturn(Result.success(selected))
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(2_830uL))
-        stubSendOnChainSuccess()
+        stubSendOnChain()
 
         quoteOrder(order)
 
@@ -1185,6 +1186,7 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            paymentDeadlineAt = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1198,6 +1200,7 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            paymentDeadlineAt = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
     }
@@ -1215,21 +1218,7 @@ class TransferViewModelTest : BaseUnitTest() {
         // 100000 - 98000 - 1000 = 1000, above dust → fixed send; drain would still cover order.
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        whenever(
-            lightningRepo.sendOnChain(
-                any(),
-                any(),
-                any(),
-                anyOrNull(),
-                anyOrNull(),
-                any(),
-                anyOrNull(),
-                any(),
-                any(),
-                any(),
-                any(),
-            ),
-        ).thenReturn(Result.failure(AppError("Coin selection failed")))
+        stubSendOnChain(Result.failure(AppError("Coin selection failed")))
 
         quoteOrder(order)
 
@@ -1250,6 +1239,7 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            paymentDeadlineAt = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1263,6 +1253,7 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            paymentDeadlineAt = anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -1276,7 +1267,7 @@ class TransferViewModelTest : BaseUnitTest() {
         stubSpendableBalances(110_000uL)
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         prepareConfirm()
 
         sut.onTransferToSpendingConfirm()
@@ -1306,21 +1297,7 @@ class TransferViewModelTest : BaseUnitTest() {
         }.thenReturn(Result.success(listOf(stubUtxo(110_000u))))
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        whenever(
-            lightningRepo.sendOnChain(
-                any(),
-                any(),
-                any(),
-                anyOrNull(),
-                anyOrNull(),
-                any(),
-                anyOrNull(),
-                any(),
-                any(),
-                any(),
-                any(),
-            ),
-        ).thenReturn(Result.failure(AppError("Coin selection failed")), Result.success(TXID))
+        stubSendOnChain(Result.failure(AppError("Coin selection failed")), Result.success(TXID))
         quoteOrder(order)
 
         prepareConfirm()
@@ -1342,7 +1319,7 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         stubFeesChangedStrings()
         val toasts = collectToasts()
         quoteOrder(estimate)
@@ -1374,7 +1351,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = spendingOrder(feeSat = 98_000uL)
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         val toasts = collectToasts()
         quoteOrder(order)
         prepareConfirm()
@@ -1393,7 +1370,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = spendingOrder(feeSat = 98_000uL)
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 2_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         val toasts = collectToasts()
         quoteOrder(order)
         prepareConfirm()
@@ -1414,7 +1391,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = spendingOrder(feeSat = 98_000uL)
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         stubFeesChangedStrings()
         val toasts = collectToasts()
         quoteOrder(order)
@@ -1450,7 +1427,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val creation = CompletableDeferred<Result<IBtOrder>>()
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         stubFeesChangedStrings()
         val toasts = collectToasts()
         quoteOrder(order)
@@ -1484,7 +1461,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(currencyRepo.convertSatsToFiat(eq(1_500L), anyOrNull())).thenReturn(Result.success(increase))
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         stubFeesChangedStrings()
         val toasts = collectToasts()
         quoteOrder(order)
@@ -1547,7 +1524,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val laterRates = FeeRates(fast = 50u, mid = 30u, slow = 10u)
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         stubFeesChangedStrings()
         whenever { lightningRepo.getFeeRates() }.thenReturn(Result.success(heldRates))
         val toasts = collectToasts()
@@ -1576,6 +1553,7 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            paymentDeadlineAt = anyOrNull(),
         )
     }
 
@@ -1588,7 +1566,7 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         stubSpendableBalances(spendable = 98_500uL)
         stubSingleUtxoFunding(miningFee = 500uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         stubFeesChangedStrings()
         val toasts = collectToasts()
         quoteOrder(estimate)
@@ -1614,7 +1592,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = spendingOrder(feeSat = 98_000uL)
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         val toasts = collectToasts()
         quoteOrder(order)
         prepareConfirm()
@@ -1650,7 +1628,7 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         val toasts = collectToasts()
         quoteOrder(estimate)
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(createdOrder))
@@ -1680,7 +1658,7 @@ class TransferViewModelTest : BaseUnitTest() {
         }.thenReturn(Result.success(listOf(stubUtxo(110_000uL))))
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         quoteOrder(estimate)
         whenever(blocktankRepo.createOrder(any(), any(), any()))
             .thenReturn(Result.success(firstOrder), Result.success(nextOrder))
@@ -1708,7 +1686,7 @@ class TransferViewModelTest : BaseUnitTest() {
         stubSpendableBalances(spendable = 110_000uL)
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         quoteOrder(paidOrder)
 
         prepareConfirm()
@@ -1728,7 +1706,7 @@ class TransferViewModelTest : BaseUnitTest() {
     fun `onTransferToSpendingConfirm stays on the confirm step when the order cannot be created`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
         stubSpendableBalances(spendable = 110_000u)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         quoteOrder(order)
@@ -1757,6 +1735,7 @@ class TransferViewModelTest : BaseUnitTest() {
             any(),
             any(),
             any(),
+            anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -1770,21 +1749,7 @@ class TransferViewModelTest : BaseUnitTest() {
         }.thenReturn(Result.success(listOf(stubUtxo(110_000u))))
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        whenever(
-            lightningRepo.sendOnChain(
-                any(),
-                any(),
-                any(),
-                anyOrNull(),
-                anyOrNull(),
-                any(),
-                anyOrNull(),
-                any(),
-                any(),
-                any(),
-                any(),
-            ),
-        ).thenReturn(Result.failure(AppError("Coin selection failed")))
+        stubSendOnChain(Result.failure(AppError("Coin selection failed")))
         quoteOrder(order)
         prepareConfirm()
         sut.onTransferToSpendingConfirm()
@@ -1903,7 +1868,7 @@ class TransferViewModelTest : BaseUnitTest() {
         stubSpendableBalances(spendable = ON_CHAIN_BALANCE)
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         quoteOrder(paidOrder)
         whenever(blocktankRepo.createOrder(any(), any(), any()))
             .thenReturn(Result.success(paidOrder), Result.success(nextOrder))
@@ -1929,6 +1894,7 @@ class TransferViewModelTest : BaseUnitTest() {
             any(),
             any(),
             any(),
+            anyOrNull(),
         )
         verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
     }
@@ -2153,7 +2119,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         assertEquals(PASSPHRASE_MISMATCH, toasts.single().description)
         verify(hwWalletRepo, never()).signFunding(any(), any())
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -2214,7 +2180,7 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo).ensureConnected(HARDWARE_WALLET_ID)
         verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
         verify(hwWalletRepo, never()).signFunding(any(), any())
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -2238,7 +2204,7 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo).disconnectStaleSession(HARDWARE_WALLET_ID)
         verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
         verify(hwWalletRepo, never()).signFunding(any(), any())
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
@@ -2541,7 +2507,7 @@ class TransferViewModelTest : BaseUnitTest() {
         assertEquals(CONNECTION_ISSUE_TITLE, toasts.single().title)
         assertEquals(CONNECTION_ISSUE_DESCRIPTION, toasts.single().description)
         verify(hwWalletRepo, never()).signFunding(any(), any())
-        verify(hwWalletRepo, never()).broadcastFunding(any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
@@ -3245,6 +3211,7 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            paymentDeadlineAt = anyOrNull(),
         )
     }
 
@@ -3269,7 +3236,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = spendingOrder(feeSat = 98_000uL)
         stubSpendableBalances(spendable = 110_000uL)
         stubSingleUtxoFunding(miningFee = 1_000uL)
-        stubSendOnChainSuccess()
+        stubSendOnChain()
         stubFeesChangedStrings()
         val toasts = collectToasts()
         quoteOrder(order)
@@ -3379,8 +3346,11 @@ class TransferViewModelTest : BaseUnitTest() {
         valueSats = valueSats,
     )
 
-    private suspend fun stubSendOnChainSuccess() {
-        whenever(
+    private suspend fun stubSendOnChain(
+        result: Result<String> = Result.success(TXID),
+        nextResult: Result<String>? = null,
+    ) {
+        val stubbing = whenever(
             lightningRepo.sendOnChain(
                 any(),
                 any(),
@@ -3393,8 +3363,10 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 any(),
+                anyOrNull(),
             ),
-        ).thenReturn(Result.success(TXID))
+        ).thenReturn(result)
+        nextResult?.let { stubbing.thenReturn(it) }
     }
 
     private companion object {

@@ -77,6 +77,7 @@ import kotlin.math.ceil
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * Production hardware-wallet business layer. Tracks paired devices of every vendor as
@@ -867,9 +868,13 @@ class HwWalletRepo @Inject constructor(
     /** Broadcasts a signed funding payment without requiring the hardware device. */
     suspend fun broadcastFunding(
         signedTx: HwFundingSignedTx,
+        paymentDeadlineAt: Instant? = null,
     ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrThrow()
+            val txId = trezorRepo.broadcastRawTx(
+                serializedTx = signedTx.serializedTx,
+                paymentDeadlineAt = paymentDeadlineAt,
+            ).getOrThrow()
             HwFundingBroadcastResult(
                 txId = txId,
                 miningFeeSats = signedTx.miningFeeSats,

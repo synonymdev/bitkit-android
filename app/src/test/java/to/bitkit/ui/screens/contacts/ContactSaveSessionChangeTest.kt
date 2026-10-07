@@ -3,9 +3,9 @@ package to.bitkit.ui.screens.contacts
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import coil3.ImageLoader
-import com.synonym.paykit.ContactProfileResolution
-import com.synonym.paykit.ContactProfileSource
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.ProfileResolution
+import com.synonym.paykit.ProfileSource
 import com.synonym.paykit.PublicationStatus
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CompletableDeferred
@@ -108,8 +108,8 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
             sdkIdentity = null
             Unit
         }
-        whenever { pubkyService.saveContact(any(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
-            .doSuspendableAnswer { fakeSdkSave(it.getArgument(0), it.getArgument(4), it.getArgument(5)) }
+        whenever { pubkyService.saveContact(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { fakeSdkSave(it.getArgument(0), it.getArgument(3), it.getArgument(4)) }
         whenever { pubkyService.resolveContactProfile(CONTACT, true, PaykitReadLane.Bulk, null) }
             .doSuspendableAnswer { awaitCancellation() }
         whenever(paykitPaymentRequestRepo.eligibleTargets).thenReturn(MutableStateFlow(emptyList()))
@@ -331,7 +331,6 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
 
     private fun contactRecord(label: String?, name: String? = null) = ContactRecord(
         publicKey = CONTACT,
-        receiverPaths = listOf("bitkit/wallet"),
         label = label,
         profile = name?.let {
             PubkyProfile(
@@ -348,7 +347,6 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
         createdAt = "2026-01-01T00:00:00Z",
         updatedAt = "2026-01-01T00:00:00Z",
         publicContactMarkerStatus = PublicationStatus.NOT_PUBLISHED,
-        publicContactMarkerReceiverPath = null,
         publicContactPublishedAt = null,
         publicContactRemovedAt = null,
         publicContactLastError = null,
@@ -358,9 +356,9 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
 
     private fun ownerResolution(owner: String) = pubkyResolution(owner, "Owner")
 
-    private fun pubkyResolution(publicKey: String, name: String) = ContactProfileResolution(
+    private fun pubkyResolution(publicKey: String, name: String) = ProfileResolution(
         publicKey = publicKey,
-        source = ContactProfileSource.PUBKY_PROFILE,
+        source = ProfileSource.PUBKY_PROFILE,
         displayName = name,
         imageUri = null,
         paykitProfile = null,

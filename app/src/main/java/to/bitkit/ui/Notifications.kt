@@ -30,7 +30,6 @@ const val EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE = "paykit_subscription_payment_d
 const val EXTRA_PAYKIT_PAYER_IDENTITY = "paykit_payer_identity"
 const val EXTRA_PAYKIT_PAYMENT_REQUEST_ID = "paykit_payment_request_id"
 const val EXTRA_PAYKIT_COUNTERPARTY = "paykit_counterparty"
-const val EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH = "paykit_counterparty_receiver_path"
 const val EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT = "paykit_billing_period_starts_at"
 
 val Context.CHANNEL_MAIN get() = getString(R.string.app_notifications_channel_id)

@@ -113,6 +113,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 @Singleton
 @Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
@@ -1373,10 +1374,17 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong? = null,
         onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> = payInvoice(bolt11, sats, null, onBeforeSend)
+
+    suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         waitForUsableChannels()
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
-        runCatching { lightningService.send(bolt11, sats) }.also {
+        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt) }.also {
             syncState()
         }
     }
@@ -1470,6 +1478,7 @@ class LightningRepo @Inject constructor(
         tags: List<String> = emptyList(),
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
+        paymentDeadlineAt: Instant? = null,
     ): Result<Txid> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
@@ -1495,7 +1504,7 @@ class LightningRepo @Inject constructor(
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
         beforeSendAttempt()
-        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
+        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount, paymentDeadlineAt)
         onBroadcast(txId)
 
         val preActivityMetadata = PreActivityMetadata(

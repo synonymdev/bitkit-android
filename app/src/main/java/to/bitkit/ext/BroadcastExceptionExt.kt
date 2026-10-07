@@ -7,3 +7,7 @@ fun Throwable.isBroadcastConnectivityFailure(): Boolean =
     generateSequence(this) { it.cause }.any {
         it is TimeoutCancellationException || it is BroadcastException.ElectrumException
     }
+
+fun Throwable.isDefiniteHardwarePreBroadcastFailure(): Boolean = generateSequence(this) { it.cause }.any {
+    it is BroadcastException.InvalidHex || it is BroadcastException.InvalidTransaction
+}

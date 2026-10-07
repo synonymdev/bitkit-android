@@ -6,25 +6,33 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PublicationStatus
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPublicContactPaymentResolution
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
@@ -48,6 +56,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     private val clock = mock<Clock>()
 
     private val publicKey = MutableStateFlow<String?>("pubkyself")
+    private val isRestoringSession = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
     private val settingsFlow = MutableStateFlow(SettingsData())
 
@@ -58,9 +67,11 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         sut = createRepo()
         settingsFlow.value = SettingsData()
         publicKey.value = "pubkyself"
+        isRestoringSession.value = false
         walletState.value = WalletState()
 
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
+        whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MILLIS))
@@ -76,6 +87,17 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @After
     fun tearDown() {
         PublicPaykitRepo.lightningRouteHintsValidator = null
+    }
+
+    @Test
+    fun `private capability follows sharing preference`() = test {
+        for (enabled in listOf(false, true)) {
+            settingsFlow.value = settingsFlow.value.copy(sharesPrivatePaykitEndpoints = enabled)
+            sut.syncPaykitApp().getOrThrow()
+        }
+        val capabilities = argumentCaptor<Boolean>()
+        verifyBlocking(paykitSdkService, times(2)) { syncPaykitApp(capabilities.capture(), eq(Priority.Ordered)) }
+        assertEquals(listOf(false, true), capabilities.allValues)
     }
 
     @Test
@@ -95,6 +117,33 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             listOf(MethodId.Bolt11, MethodId.P2tr),
             captor.firstValue.map { it.methodId },
         )
+    }
+
+    @Test
+    fun `syncCurrentPublishedEndpoints waits only for session restoration and remains cancellable`() = test {
+        isRestoringSession.value = true
+        publicKey.value = null
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        settingsFlow.value = SettingsData(publicPaykitLightningEnabled = false, publicPaykitOnchainEnabled = true)
+
+        val cancelledPublication = async { sut.syncCurrentPublishedEndpoints() }
+        assertFalse(cancelledPublication.isCompleted)
+        cancelledPublication.cancelAndJoin()
+        assertTrue(cancelledPublication.isCancelled)
+        verifyNoInteractions(paykitSdkService)
+
+        val publication = async { sut.syncCurrentPublishedEndpoints() }
+        assertFalse(publication.isCompleted)
+        verifyNoInteractions(paykitSdkService)
+        publicKey.value = "pubkyself"
+        isRestoringSession.value = false
+
+        publication.await().getOrThrow()
+        verifyBlocking(paykitSdkService) { syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Ordered) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+        verifyBlocking(pubkyRepo, never()) { currentPublicKey() }
+        verifyBlocking(pubkyRepo, never()) { awaitInitialization() }
+        verifyBlocking(pubkyRepo, never()) { initialize() }
     }
 
     @Test
@@ -120,49 +169,59 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncPublishedEndpoints does not publish endpoints when receiver marker publish fails`() = test {
+    fun `syncPublishedEndpoints does not publish endpoints when app registration fails`() = test {
         settingsFlow.value = SettingsData(
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
         walletState.value = WalletState(onchainAddress = "bc1ptest")
-        val markerError = RuntimeException("marker failed")
-        whenever { paykitSdkService.syncLocalReceiverMarker(isDiscoverable = true) }
-            .thenThrow(markerError)
+        val appError = RuntimeException("app registration failed")
+        whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Ordered) }
+            .thenThrow(appError)
 
         val error = sut.syncPublishedEndpoints(publish = true).exceptionOrNull()
 
-        assertEquals(markerError, error)
+        assertEquals(appError, error)
         verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
     }
 
     @Test
     fun `syncPublishedEndpoints remove clears SDK public endpoints and metadata`() = test {
-        settingsFlow.value = SettingsData(
-            publicPaykitBolt11 = "lnbc1old",
-            publicPaykitBolt11PaymentHash = "010203",
-            publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
-            publicPaykitCleanupPending = true,
-        )
+        for (priority in listOf(Priority.Ordered, Priority.Interactive)) {
+            clearInvocations(paykitSdkService)
+            settingsFlow.value = SettingsData(
+                publicPaykitBolt11 = "lnbc1old",
+                publicPaykitBolt11PaymentHash = "010203",
+                publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+                publicPaykitCleanupPending = true,
+            )
 
-        val result = sut.syncPublishedEndpoints(publish = false)
+            val result = if (priority == Priority.Ordered) {
+                sut.syncPublishedEndpoints(publish = false)
+            } else {
+                sut.syncPublishedEndpoints(publish = false, appSyncPriority = priority)
+            }
 
-        assertTrue(result.isSuccess)
-        assertEquals("", settingsFlow.value.publicPaykitBolt11)
-        assertEquals(false, settingsFlow.value.publicPaykitCleanupPending)
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(emptyList()) }
+            assertTrue(result.isSuccess)
+            assertEquals("", settingsFlow.value.publicPaykitBolt11)
+            assertEquals(false, settingsFlow.value.publicPaykitCleanupPending)
+            inOrder(paykitSdkService) {
+                verify(paykitSdkService).syncPublicEndpoints(emptyList())
+                verify(paykitSdkService).syncPaykitApp(privatePaymentsEnabled = false, priority = priority)
+            }
+        }
     }
 
     @Test
-    fun `syncPublishedEndpoints remove keeps cleanup pending when receiver marker removal fails`() = test {
+    fun `syncPublishedEndpoints remove keeps cleanup pending when app capability update fails`() = test {
         settingsFlow.value = SettingsData(publicPaykitCleanupPending = true)
-        val markerError = RuntimeException("marker failed")
-        whenever { paykitSdkService.syncLocalReceiverMarker(isDiscoverable = false) }
-            .thenThrow(markerError)
+        val appError = RuntimeException("app registration failed")
+        whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Ordered) }
+            .thenThrow(appError)
 
         val error = sut.syncPublishedEndpoints(publish = false).exceptionOrNull()
 
-        assertEquals(markerError, error)
+        assertEquals(appError, error)
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
         verifyBlocking(paykitSdkService) { syncPublicEndpoints(emptyList()) }
     }
@@ -170,14 +229,22 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `syncPublishedEndpoints remove preserves both cleanup failures`() = test {
         val endpointError = RuntimeException("endpoint failed")
-        val markerError = RuntimeException("marker failed")
+        val appError = RuntimeException("app registration failed")
         whenever { paykitSdkService.syncPublicEndpoints(emptyList()) }.thenThrow(endpointError)
-        whenever { paykitSdkService.syncLocalReceiverMarker(isDiscoverable = false) }.thenThrow(markerError)
+        whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Interactive) }
+            .thenThrow(appError)
 
-        val error = sut.syncPublishedEndpoints(publish = false).exceptionOrNull()
+        val error = sut.syncPublishedEndpoints(
+            publish = false,
+            appSyncPriority = Priority.Interactive,
+        ).exceptionOrNull()
 
         assertEquals(endpointError, error)
-        assertEquals(listOf(markerError), error?.suppressedExceptions)
+        assertEquals(listOf(appError), error?.suppressedExceptions)
+        inOrder(paykitSdkService) {
+            verify(paykitSdkService).syncPublicEndpoints(emptyList())
+            verify(paykitSdkService).syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Interactive)
+        }
     }
 
     @Test
@@ -214,7 +281,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `beginPayment opens SDK resolved public endpoint`() = test {
         whenever {
-            paykitSdkService.resolvePublicContactPayment("pubkycontact", PaykitReceiverPaths.WALLET)
+            paykitSdkService.resolvePublicContactPayment("pubkycontact")
         }.thenReturn(
             resolution(
                 resolvedEndpoint(
@@ -229,6 +296,27 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         val result = sut.beginPayment("pubkycontact").getOrThrow()
 
         assertEquals(PublicPaykitPaymentResult.Opened(PUBLIC_BOLT11), result)
+    }
+
+    @Test
+    fun `beginPayment retains payable alternatives regardless of app order`() = test {
+        val unavailableInvoice = "lnbcrt1unavailable"
+        val endpoints = listOf(
+            resolvedEndpoint(MethodId.Bolt11, unavailableInvoice),
+            resolvedEndpoint(MethodId.Bolt11, PUBLIC_BOLT11).copy(appId = "another-wallet"),
+        )
+        whenever(coreService.decode(unavailableInvoice)).thenThrow(IllegalArgumentException("Invalid invoice"))
+        whenever(coreService.decode(PUBLIC_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PUBLIC_BOLT11, byteArrayOf(4, 5, 6))))
+
+        for (ordered in listOf(endpoints, endpoints.reversed())) {
+            whenever { paykitSdkService.resolvePublicContactPayment("pubkycontact") }
+                .thenReturn(resolution(*ordered.toTypedArray()))
+
+            val result = sut.beginPayment("pubkycontact").getOrThrow()
+
+            assertEquals(PublicPaykitPaymentResult.Opened(PUBLIC_BOLT11), result)
+        }
     }
 
     @Test
@@ -282,6 +370,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         value: String,
     ): PaykitResolvedPaymentEndpoint {
         return PaykitResolvedPaymentEndpoint(
+            appId = "bitkit",
             identifier = methodId.rawValue,
             payload = PublicPaykitRepo.serializePayload(value),
         )
