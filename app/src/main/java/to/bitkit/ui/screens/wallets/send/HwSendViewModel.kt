@@ -266,6 +266,13 @@ class HwSendViewModel @Inject constructor(
         viewModelScope.launch { hwWalletRepo.disconnectStaleSession(walletId) }
     }
 
+    fun completeReconciledBroadcast(walletId: String?, txid: String?): Boolean {
+        val result = pendingResult.value ?: return false
+        if (result.walletId != walletId || !result.txId.equals(txid, ignoreCase = true)) return false
+        completeBroadcast()
+        return true
+    }
+
     fun completeBroadcast() {
         pendingBroadcast = null
         signingWalletId = null

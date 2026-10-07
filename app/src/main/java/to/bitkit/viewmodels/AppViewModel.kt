@@ -857,6 +857,9 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private val _resolvedHardwarePayment = MutableStateFlow<PaykitOnchainPaymentProofResolution?>(null)
+    val resolvedHardwarePayment = _resolvedHardwarePayment.asStateFlow()
+
     private fun observePaykitOnchainPaymentResolution() {
         viewModelScope.launch {
             paykitPaymentProofRepo.onchainPaymentResolutions.collect { resolutions ->
@@ -867,6 +870,7 @@ class AppViewModel @Inject constructor(
 
     private fun handlePaykitOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
         if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, resolution.identity)) return
+        if (resolution.walletId != WalletScope.default) _resolvedHardwarePayment.value = resolution
         paykitPaymentProofRepo.consumeOnchainPaymentResolution(resolution)
         val resolvesCurrentPayment = uncertainOnchainPaymentRequestId == resolution.requestId
         if (!resolvesCurrentPayment) {

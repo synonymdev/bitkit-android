@@ -156,8 +156,20 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
+            LaunchedEffect(appViewModel, hwSendViewModel) {
+                appViewModel.resolvedHardwarePayment.collect { resolution ->
+                    if (resolution != null) {
+                        hwSendViewModel.completeReconciledBroadcast(resolution.walletId, resolution.transactionId)
+                    }
+                }
+            }
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
+                    val resolved = appViewModel.resolvedHardwarePayment.value
+                    if (resolved != null && hwSendViewModel.completeReconciledBroadcast(
+                            resolved.walletId, resolved.transactionId
+                        )
+                    ) return@collect
                     val proofComplete = appViewModel.completeHardwareContactPayment(
                         result.txId, result.walletId, result.paymentRequestId, result.paymentIdentity,
                     )
@@ -204,6 +216,8 @@ fun SendSheet(
                         is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
+                            val details = appViewModel.successSendUiState.value
+                            hwSendViewModel.completeReconciledBroadcast(details.activityWalletId, details.paymentHashOrTxId)
                             appViewModel.clearClipboardForAutoRead()
                             navController.navigateTo(SendRoute.Success) {
                                 popUpTo(navController.graph.id) { inclusive = true }

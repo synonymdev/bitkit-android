@@ -680,6 +680,20 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `matching asynchronous completion consumes retained result and permits the next hardware send`() = test {
+        val fixture = stubSuccessfulPayment()
+        sut.signAndBroadcast(request().copy(paymentRequestId = PaykitPaymentRequestId("original", "counterparty")))
+        advanceUntilIdle()
+        assertFalse(sut.completeReconciledBroadcast("other-wallet", fixture.broadcast.txId))
+        assertFalse(sut.completeReconciledBroadcast(WALLET_ID, "other-tx"))
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+        assertTrue(sut.completeReconciledBroadcast(WALLET_ID, fixture.broadcast.txId))
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
     fun `core completed hardware result retains original request and never rebroadcasts while proof is pending`() = test {
         val fixture = stubSuccessfulPayment()
         val originalId = PaykitPaymentRequestId("original-request", "counterparty", "receiver")
