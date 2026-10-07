@@ -485,6 +485,32 @@ class PaykitPaymentProofRepo @Inject constructor(
         return true
     }
 
+    suspend fun retainHardwareOnchainCandidate(
+        requestId: PaykitPaymentRequestId,
+        walletId: String,
+        txid: String,
+        identity: String?,
+        address: String,
+        amountSats: ULong,
+    ): Boolean = withContext(ioDispatcher) {
+        if (walletId == WalletScope.default || !txid.isHex(HASH_BYTE_COUNT)) return@withContext false
+        val originalIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return@withContext false
+        operationMutex.withLock {
+            if (!PubkyPublicKeyFormat.matches(currentIdentity(), originalIdentity)) return@withLock false
+            val proofs = loadProofs()
+            val original = proofs.singleOrNull {
+                PubkyPublicKeyFormat.matches(it.identity, originalIdentity) && it.requestId == requestId &&
+                    it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
+                    it.paymentStarted && it.onchainAddress == address && it.onchainAmountSats == amountSats &&
+                    it.proofData == null && !it.onchainAcceptanceVerified &&
+                    (it.paymentIdentifier == null || it.paymentIdentifier.equals(txid, true))
+            } ?: return@withLock false
+            // Lookup identity only: never acceptance, a Sent activity, or a delivered proof.
+            persist(proofs.map { if (it == original) it.copy(paymentIdentifier = txid.lowercase()) else it })
+            true
+        }
+    }
+
     suspend fun completeHardwareOnchainPayment(
         requestId: PaykitPaymentRequestId,
         walletId: String,

@@ -1442,6 +1442,31 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `prebroadcast hardware candidate survives repository reopen without claiming acceptance`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val txid = "ab".repeat(32)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        assertFalse(repo.retainHardwareOnchainCandidate(request.id, walletId, txid, LOCAL_IDENTITY, "other-address", request.amountSats))
+        assertFalse(repo.retainHardwareOnchainCandidate(request.id, walletId, txid, LOCAL_IDENTITY, ONCHAIN_ADDRESS, request.amountSats + 1uL))
+        assertTrue(repo.retainHardwareOnchainCandidate(request.id, walletId, txid, LOCAL_IDENTITY, ONCHAIN_ADDRESS, request.amountSats))
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        assertNull(storedProofs.single().proofData)
+        assertFalse(storedProofs.single().onchainAcceptanceVerified)
+        assertFalse(repo.retainHardwareOnchainCandidate(request.id, walletId, "cd".repeat(32), LOCAL_IDENTITY, ONCHAIN_ADDRESS, request.amountSats))
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats)).thenReturn(Result.success(true))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(paymentRequestRecord())
+        paymentProofRepo().reconcile()
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), eq(MethodId.P2wpkh.rawValue),
+            eq("""{"data":"$txid","type":"bitcoin-onchain-txid"}"""), isNull())
+        assertTrue(storedProofs.isEmpty())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+    }
+
+    @Test
     fun `hardware core txid remains pending until fresh exact observation then resumes original proof`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val txid = "ab".repeat(32)
@@ -1551,7 +1576,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(context.getString(any())).thenReturn("message")
         val connected = mock<HwConnectedDevice>()
         val funding = HwFundingTransaction("psbt", 1000uL, 2.0f, 2000uL, 2uL)
-        val signed = HwFundingSignedTx("signed-fixture-tx", 1000uL, 2uL, 2000uL)
+        val signed = HwFundingSignedTx(requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex")).bufferedReader().readText().trim(), 1000uL, 2uL, 2000uL)
         whenever(hwWalletRepo.needsPassphrase(walletId)).thenReturn(false)
         whenever(hwWalletRepo.reconnectTimeout(walletId)).thenReturn(30.seconds)
         whenever(hwWalletRepo.ensureConnected(walletId)).thenReturn(Result.success(connected))
@@ -1560,7 +1585,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(hwWalletRepo.signFunding(walletId, funding)).thenReturn(Result.success(signed))
         whenever(hwWalletRepo.broadcastFunding(signed))
             .thenReturn(Result.failure(BroadcastException.ElectrumException("response lost after dispatch")))
-        val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock())
+        val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock(), repo)
         send.signAndBroadcast(HwSendRequest(walletId, ONCHAIN_ADDRESS, request.amountSats, 2uL, emptyList(),
             request.id, LOCAL_IDENTITY), prepareContactPayment = {
             repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
@@ -1570,7 +1595,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(send.uiState.value.isSigning)
         assertFalse(send.uiState.value.isBroadcastUnresolved)
         assertTrue(storedProofs.single().paymentStarted)
-        assertNull(storedProofs.single().paymentIdentifier)
+        assertEquals("605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e", storedProofs.single().paymentIdentifier)
 
         // Both generic failure and preparation cancellation must preserve an already dispatched Shop payment.
         repo.failOnchainPayment(request)

@@ -36,6 +36,8 @@ import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitPaymentProofRepo
+import to.bitkit.utils.SignedTransactionId
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.HwErrorPresenter
@@ -53,6 +55,7 @@ class HwSendViewModel @Inject constructor(
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val coreService: CoreService,
     private val activityRepo: ActivityRepo,
+    private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
     private val clock: Clock = Clock.System,
 ) : ViewModel() {
     private companion object {
@@ -165,6 +168,14 @@ class HwSendViewModel @Inject constructor(
         payment: PendingHwSendBroadcast,
         onPaymentDeadlineExpired: suspend (Boolean) -> Unit,
     ): HwFundingBroadcastResult? {
+        payment.request.paymentRequestId?.let { requestId ->
+            val request = payment.request
+            val retained = paykitPaymentProofRepo.retainHardwareOnchainCandidate(
+                requestId, request.walletId, SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                request.paymentIdentity, request.address, request.amountSats,
+            )
+            if (!retained) return null
+        }
         _uiState.update { it.copy(isBroadcastUnresolved = true) }
         pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)
         return withTimeout(BROADCAST_TIMEOUT) {

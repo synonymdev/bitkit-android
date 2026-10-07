@@ -32,6 +32,7 @@ import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
@@ -55,6 +56,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     private val coreService = mock<CoreService>()
     private val activityService = mock<ActivityService>()
     private val activityRepo = mock<ActivityRepo>()
+    private val proofRepo = mock<PaykitPaymentProofRepo>()
 
     private lateinit var sut: HwSendViewModel
     private var now = Instant.parse("2026-10-06T11:59:59Z")
@@ -62,6 +64,8 @@ class HwSendViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(coreService.activity).thenReturn(activityService)
+        whenever { proofRepo.retainHardwareOnchainCandidate(any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any()) }
+            .thenReturn(true)
         whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
         sut = HwSendViewModel(
             context = context,
@@ -69,6 +73,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             preActivityMetadataRepo = preActivityMetadataRepo,
             coreService = coreService,
             activityRepo = activityRepo,
+            paykitPaymentProofRepo = proofRepo,
             clock = object : Clock {
                 override fun now() = now
             },
@@ -85,7 +90,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             satsPerVByte = 2uL,
         )
         val signedTx = HwFundingSignedTx(
-            serializedTx = "rawtx",
+            serializedTx = signedFixtureHex(),
             miningFeeSats = funding.miningFeeSats,
             feeRate = 2uL,
             totalSpent = funding.totalSpent,
@@ -594,7 +599,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             satsPerVByte = SATS_PER_VBYTE,
         )
         val signedTx = HwFundingSignedTx(
-            serializedTx = "rawtx",
+            serializedTx = signedFixtureHex(),
             miningFeeSats = funding.miningFeeSats,
             feeRate = SATS_PER_VBYTE,
             totalSpent = funding.totalSpent,
@@ -612,6 +617,23 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(Result.success(signedTx))
         whenever(hwWalletRepo.broadcastFunding(signedTx)).thenReturn(Result.success(broadcast))
         return PaymentFixture(funding, signedTx, broadcast)
+    }
+
+    @Test
+    fun `hardware Shop never broadcasts when candidate persistence fails`() = test {
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity")
+        whenever { proofRepo.retainHardwareOnchainCandidate(any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any()) }
+            .thenReturn(false)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
+        verify(proofRepo).retainHardwareOnchainCandidate(
+            requireNotNull(original.paymentRequestId), WALLET_ID,
+            "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e",
+            original.paymentIdentity, ADDRESS, AMOUNT_SATS,
+        )
     }
 
     @Test
@@ -660,6 +682,9 @@ class HwSendViewModelTest : BaseUnitTest() {
             fixture.broadcast.feeRate, false, null, WALLET_ID,
         )
     }
+
+    private fun signedFixtureHex() = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
+        .bufferedReader().readText().trim()
 
     private fun request() = HwSendRequest(
         walletId = WALLET_ID,
