@@ -9112,7 +9112,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setSendState(
             SendUiState(
                 hardwareWalletId = "hardware-wallet",
-                amount = request.amountSats,
+                amount = request.amount.atomic,
                 incomingPaymentRequestId = request.id,
             )
         )
