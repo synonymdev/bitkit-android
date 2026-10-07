@@ -353,6 +353,30 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `publication failure retains pending link retries`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        var linkPrepared = false
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).thenAnswer {
+            linkPrepared = true
+            LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKING, 1uL, null)
+        }
+        whenever(paykitSdkService.identityStatus()).doSuspendableAnswer {
+            if (linkPrepared) throw PaykitException.Transport("offline", "Unavailable homeserver")
+            IdentityStatus(OWN_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+
+        try {
+            assertTrue(sut.prepareSavedContacts(listOf(CONTACT_KEY)).isFailure)
+            advanceTimeBy(1_000)
+            runCurrent()
+            verify(paykitSdkService, times(2)).ensureLinkWithPeer(CONTACT_KEY)
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
     fun `repeated refreshes preserve pending link retry backoff`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))

@@ -821,45 +821,66 @@ class PrivatePaykitRepo @Inject constructor(
                 retryUnavailableLinks = requireImmediatePublication,
             )
 
-            publicationMutex.withLock {
-                val status = paykitSdkService.identityStatus()
-                if (!isCurrentPublication(generation, identity, requireImmediatePublication, status)) return@withLock
-                if (!canPublishPrivateEndpoints(status)) {
-                    if (requireImmediatePublication) throw PrivatePaykitError.PrivateUnavailable
-                    return@withLock
-                }
+            runSuspendCatching {
+                publicationMutex.withLock {
+                    val status = paykitSdkService.identityStatus()
+                    if (!isCurrentPublication(generation, identity, requireImmediatePublication, status)) {
+                        return@withLock
+                    }
+                    if (!canPublishPrivateEndpoints(status)) {
+                        if (requireImmediatePublication) throw PrivatePaykitError.PrivateUnavailable
+                        return@withLock
+                    }
 
-                val publication = preparePrivatePaymentListReservations(
-                    preparation.publicKeys,
-                    reason,
-                    forceRefreshLightning,
-                    generation,
-                )
-                if (!isCurrentPublication(generation, identity, requireImmediatePublication)) return@withLock
-                if (publication.updates.isEmpty()) {
-                    schedulePendingPrivateMessageDrainRetries(reason, preparation.linkRetryKeys)
-                    if (requireImmediatePublication) publication.firstError?.let { throw it }
-                    return@withLock
-                }
-
-                val report = paykitSdkService.syncPrivatePaymentListsWithReservations(
-                    updates = publication.updates,
-                    clearUnlistedLinkedPeers = false,
-                )
-                val deliveryError = applyPrivatePaymentListDeliveryReport(report, reason)
-                val firstError = publication.firstError ?: deliveryError
-                val retryKeys = (preparation.linkRetryKeys + privatePaymentListDeliveryRetryKeys(report)).distinct()
-                schedulePendingPrivateMessageDrainRetries(reason, retryKeys)
-
-                if (firstError != null) {
-                    if (requireImmediatePublication) throw firstError
-                    Logger.warn(
-                        "Deferred private Paykit endpoint publish during '$reason'",
-                        firstError,
-                        context = TAG,
+                    val publication = preparePrivatePaymentListReservations(
+                        preparation.publicKeys,
+                        reason,
+                        forceRefreshLightning,
+                        generation,
                     )
+                    if (!isCurrentPublication(generation, identity, requireImmediatePublication)) return@withLock
+                    if (publication.updates.isEmpty()) {
+                        schedulePendingPrivateMessageDrainRetries(reason, preparation.linkRetryKeys)
+                        if (requireImmediatePublication) publication.firstError?.let { throw it }
+                        return@withLock
+                    }
+
+                    val report = paykitSdkService.syncPrivatePaymentListsWithReservations(
+                        updates = publication.updates,
+                        clearUnlistedLinkedPeers = false,
+                    )
+                    val deliveryError = applyPrivatePaymentListDeliveryReport(report, reason)
+                    val firstError = publication.firstError ?: deliveryError
+                    val retryKeys = (preparation.linkRetryKeys + privatePaymentListDeliveryRetryKeys(report)).distinct()
+                    schedulePendingPrivateMessageDrainRetries(reason, retryKeys)
+
+                    if (firstError != null) {
+                        if (requireImmediatePublication) throw firstError
+                        Logger.warn(
+                            "Deferred private Paykit endpoint publish during '$reason'",
+                            firstError,
+                            context = TAG,
+                        )
+                    }
                 }
-            }
+            }.onFailure {
+                schedulePreparedLinkRetries(preparation.linkRetryKeys, reason, generation, identity)
+            }.getOrThrow()
+        }
+    }
+
+    private suspend fun schedulePreparedLinkRetries(
+        keys: Collection<String>,
+        reason: String,
+        generation: Int,
+        identity: String,
+    ) {
+        if (keys.isEmpty()) return
+        val cleanupPending = isContactSharingCleanupPending()
+        val currentIdentity = pubkyService.currentPublicKey()
+        currentCoroutineContext().ensureActive()
+        if (generation == preparationGeneration && currentIdentity == identity && !cleanupPending) {
+            schedulePendingPrivateMessageDrainRetries(reason, keys.filter { it in knownSavedContactKeys })
         }
     }
 
