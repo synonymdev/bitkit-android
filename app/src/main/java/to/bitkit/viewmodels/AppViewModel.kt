@@ -4617,6 +4617,7 @@ class AppViewModel @Inject constructor(
             original.attemptId,
             original.walletId,
             feeRateSatsPerVByte,
+            paymentDeadlineAt = request?.paymentDeadlineAt,
         ) { attempt ->
             check(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
@@ -4639,6 +4640,7 @@ class AppViewModel @Inject constructor(
                         )
                         .firstOrNull { it.id == attempt.requestId }
                         ?: throw PaykitPaymentRequestError.RequestUnavailable
+                check(currentRequest.paymentDeadlineAt == request.paymentDeadlineAt)
                 paykitPaymentRequestRepo.ensurePaymentAllowed(currentRequest).getOrThrow()
                 paykitPaymentProofRepo.authorizeOnchainRecovery(attempt).getOrThrow()
             }

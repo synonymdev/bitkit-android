@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -37,7 +38,7 @@ class PreparedOnchainSend(
 /** Recovery always uses the original actual recipient amount and exact inputs, including an initial Max send. */
 interface OnchainPreparedSender {
     suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend
-    suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong): PreparedOnchainSend
+    suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant? = null): PreparedOnchainSend
 }
 
 /** Thin boundary for the additive native prepare API, implemented in LightningService once matching bindings exist. */
@@ -48,6 +49,7 @@ interface OnchainPreparationProtocol {
         feeRateSatsPerVByte: ULong,
         inputs: List<OnchainSendInput>?,
         walletIndex: Int,
+        paymentDeadlineAt: Instant? = null,
     ): PreparedOnchainSend
 
     suspend fun prepareMax(
@@ -55,6 +57,7 @@ interface OnchainPreparationProtocol {
         retainReserves: Boolean,
         feeRateSatsPerVByte: ULong,
         walletIndex: Int,
+        paymentDeadlineAt: Instant? = null,
     ): PreparedOnchainSend
 }
 
@@ -81,7 +84,7 @@ class OnchainPreparedSenderAdapter(
         return prepared
     }
 
-    override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong): PreparedOnchainSend {
+    override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?): PreparedOnchainSend {
         val inputs = requireNotNull(attempt.originalInputs)
         require(inputs.isNotEmpty() && inputs.distinct().size == inputs.size)
         return native.prepareFixed(
@@ -90,6 +93,7 @@ class OnchainPreparedSenderAdapter(
             feeRateSatsPerVByte,
             inputs,
             attempt.walletIndex,
+            paymentDeadlineAt,
         )
     }
 }
@@ -127,6 +131,7 @@ class OnchainSendCoordinator(
         attemptId: String,
         walletId: String,
         feeRateSatsPerVByte: ULong,
+        paymentDeadlineAt: Instant? = null,
         authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
     ): Result<OnchainSendOutcome> = withContext(ioDispatcher) {
         val result = runSuspendCatching {
@@ -144,7 +149,7 @@ class OnchainSendCoordinator(
                     throw OnchainSendBlockedError(attempt)
                 }
                 require(OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte))
-                val prepared = sender.prepareRecovery(attempt, feeRateSatsPerVByte)
+                val prepared = sender.prepareRecovery(attempt, feeRateSatsPerVByte, paymentDeadlineAt)
                 val retained = store.retainPreparedReceipt(
                     attempt.attemptId,
                     attempt.walletIndex,

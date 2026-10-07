@@ -1646,7 +1646,7 @@ class LightningRepo @Inject constructor(
 
                 override suspend fun prepareRecovery(
                     attempt: OnchainSendAttempt,
-                    feeRateSatsPerVByte: ULong,
+                    feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?,
                 ): PreparedOnchainSend {
                     val inputs = requireNotNull(attempt.originalInputs)
                     val outputs = lightningService.listSpendableOutputs().getOrThrow()
@@ -1661,6 +1661,7 @@ class LightningRepo @Inject constructor(
                         selected,
                         false,
                         attempt.walletIndex,
+                        paymentDeadlineAt,
                     )
                 }
             },
@@ -1672,9 +1673,10 @@ class LightningRepo @Inject constructor(
         attemptId: String,
         walletId: String,
         feeRateSatsPerVByte: ULong,
+        paymentDeadlineAt: Instant? = null,
         authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("retryOriginalOnchainSend") {
-        val result = recoveryCoordinator.retryOriginal(attemptId, walletId, feeRateSatsPerVByte, authorizeOriginal)
+        val result = recoveryCoordinator.retryOriginal(attemptId, walletId, feeRateSatsPerVByte, paymentDeadlineAt, authorizeOriginal)
         if (result.getOrNull() is OnchainSendOutcome.Accepted) {
             runSuspendCatching {
                 onchainSendAttemptStore.current()?.takeIf { it.hasPositiveEvidence }?.let {
