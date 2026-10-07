@@ -13,6 +13,19 @@ import kotlin.test.assertTrue
 class PubkyAuthRequestTest {
 
     @Test
+    fun `optional USDT omission preserves delegated Paykit authority`() {
+        val claim = requireNotNull(PubkyAuthClaim.fromWireValue("paykit-access-v1.usdt-address-v1"))
+        val payload = PubkyAuthClaimCodec.encode(claim, "{}".encodeToByteArray(), 3uL, ByteArray(32) { 11 })
+        val actual = kotlinx.serialization.json.Json.parseToJsonElement(payload.decodeToString())
+        val expected = kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"paykit_access":{"key_generation":3,"secret":"CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws"}}"""
+        )
+        assertEquals(expected, actual)
+        assertTrue(claim.sharesUsdt)
+        assertFalse(claim.sharesBitcoin)
+    }
+
+    @Test
     fun `parse preserves each companion selection and received item order`() {
         val expected = mapOf(
             "watch-only-account-v1" to listOf(Item.WATCH_ONLY_ACCOUNT_V1),

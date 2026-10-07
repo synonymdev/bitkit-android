@@ -6,8 +6,11 @@
     <action>Verify only USDT Arbitrum details, the existing address and balance/history disclosure are shown</action>
     <action>Expand the address and copy it; verify it matches the wallet receive address</action>
     <action>Cancel and verify no Bitcoin account was created</action>
-    <action>Repeat with x-bitkit-claim=payment-details-v1; verify Bitcoin and USDT appear together, then cancel</action>
+    <action>Repeat with x-bitkit-claim=watch-only-account-v1.usdt-address-v1; verify Bitcoin and USDT appear together, then cancel</action>
     <action>Repeat with x-bitkit-claim=watch-only-account-v1; verify only Bitcoin is requested, then cancel</action>
-    <action>With USDT unavailable, verify USDT authorization is disabled and Retry reloads the address</action>
+    <action>With USDT unavailable, verify sharing is off and authorization remains enabled; turn USDT sharing on and verify authorization is disabled until Retry loads the address</action>
+    <action>Open the setup fixture with x-bitkit-claim=paykit-access-v1.watch-only-account-v1.usdt-address-v1</action>
+    <action>Continue to authorization; verify the Bitcoin account, Paykit access, and optional USDT sharing toggle are shown</action>
+    <action>Turn off PubkyAuthShareUsdt; verify authorization remains enabled, then cancel</action>
   </actions>
 </journey>

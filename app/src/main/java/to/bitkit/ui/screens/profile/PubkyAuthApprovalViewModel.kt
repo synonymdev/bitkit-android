@@ -100,13 +100,26 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         }
     }
 
+    fun setShareUsdt(enabled: Boolean) {
+        if (_uiState.value.state != ApprovalState.Authorize) return
+        _uiState.update { it.copy(shareUsdt = enabled) }
+    }
+
     fun loadUsdtAddress(authUrl: String) {
         if (_uiState.value.authUrl != authUrl || _uiState.value.bitkitClaim?.sharesUsdt != true) return
         _uiState.update { it.copy(usdtAddress = null, usdtUnavailable = false) }
         viewModelScope.launch {
             val address = usdtRepo.paymentEndpoint().getOrNull()?.value
             _uiState.update {
-                if (it.authUrl == authUrl) it.copy(usdtAddress = address, usdtUnavailable = address == null) else it
+                if (it.authUrl == authUrl) {
+                    it.copy(
+                        usdtAddress = address,
+                        usdtUnavailable = address == null,
+                        shareUsdt = it.shareUsdt && address != null,
+                    )
+                } else {
+                    it
+                }
             }
         }
     }
@@ -276,7 +289,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     }
 
     private suspend fun validatedUsdtEndpoint(request: PubkyAuthRequest): Endpoint? {
-        if (request.bitkitClaim?.sharesUsdt != true) return null
+        if (request.bitkitClaim?.sharesUsdt != true || !_uiState.value.shareUsdt) return null
         return usdtRepo.paymentEndpoint().getOrThrow().also {
             if (it.value != _uiState.value.usdtAddress) throw PubkyAuthRequestError.InvalidPaymentDetails
         }
@@ -376,8 +389,9 @@ data class PubkyAuthApprovalUiState(
     val profile: PubkyProfile? = null,
     val usdtAddress: String? = null,
     val usdtUnavailable: Boolean = false,
+    val shareUsdt: Boolean = true,
 ) {
-    val canAuthorize: Boolean get() = bitkitClaim?.sharesUsdt != true || usdtAddress != null
+    val canAuthorize: Boolean get() = bitkitClaim?.sharesUsdt != true || !shareUsdt || usdtAddress != null
 }
 
 sealed interface ApprovalState {

@@ -63,6 +63,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -106,6 +107,7 @@ fun PubkyAuthApprovalSheet(
                 if (uiState.authUrl == authUrl) viewModel.returnToWatchOnlyConsent(authUrl)
             },
             onRetryUsdt = { viewModel.loadUsdtAddress(authUrl) },
+            onShareUsdt = viewModel::setShareUsdt,
             onCancel = { viewModel.dismiss() },
             onDismiss = { viewModel.dismiss() },
         )
@@ -221,6 +223,7 @@ private fun Content(
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
     onRetryUsdt: () -> Unit = {},
+    onShareUsdt: (Boolean) -> Unit = {},
 ) {
     val approvalState = if (isCurrentRequest) uiState.state else ApprovalState.Loading
     val headerTitle = approvalHeaderTitle(approvalState)
@@ -252,6 +255,7 @@ private fun Content(
                 uiState = uiState,
                 onAuthorize = onAuthorize,
                 onRetryUsdt = onRetryUsdt,
+                onShareUsdt = onShareUsdt,
                 onCancel = onCancel,
             )
             ApprovalState.Authenticating, ApprovalState.Authorizing -> AuthorizingContent(
@@ -315,21 +319,24 @@ private fun ColumnScope.WatchOnlyConsentContent(
 
         Display(
             text = stringResource(
-                when (claim) {
-                    PubkyAuthClaim.USDT_ADDRESS_V1 -> R.string.profile__auth_approval_usdt_intro_title
-                    PubkyAuthClaim.PAYMENT_DETAILS_V1 -> R.string.profile__auth_approval_payment_details_intro_title
+                when {
+                    claim?.sharesUsdt == true && !claim.sharesBitcoin ->
+                        R.string.profile__auth_approval_usdt_intro_title
+                    claim?.sharesUsdt == true && claim.sharesBitcoin ->
+                        R.string.profile__auth_approval_payment_details_intro_title
                     else -> R.string.profile__auth_approval_watch_only_intro_title
                 }
             ).withAccent(
-                accentColor = if (claim == PubkyAuthClaim.USDT_ADDRESS_V1) Colors.Green else Colors.Blue
+                accentColor = if (claim?.sharesUsdt == true && !claim.sharesBitcoin) Colors.Green else Colors.Blue
             ),
         )
         VerticalSpacer(8.dp)
         BodyM(
             text = stringResource(
-                when (claim) {
-                    PubkyAuthClaim.USDT_ADDRESS_V1 -> R.string.profile__auth_approval_usdt_intro_description
-                    PubkyAuthClaim.PAYMENT_DETAILS_V1 ->
+                when {
+                    claim?.sharesUsdt == true && !claim.sharesBitcoin ->
+                        R.string.profile__auth_approval_usdt_intro_description
+                    claim?.sharesUsdt == true && claim.sharesBitcoin ->
                         R.string.profile__auth_approval_payment_details_intro_description
                     else -> R.string.profile__auth_approval_watch_only_intro_description
                 }
@@ -375,10 +382,11 @@ private fun ColumnScope.LoadingContent() {
 private fun ColumnScope.AuthorizeContent(
     uiState: PubkyAuthApprovalUiState,
     onRetryUsdt: () -> Unit,
+    onShareUsdt: (Boolean) -> Unit,
     onAuthorize: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    ApprovalDetails(uiState = uiState, onRetryUsdt = onRetryUsdt)
+    ApprovalDetails(uiState = uiState, onRetryUsdt = onRetryUsdt, onShareUsdt = onShareUsdt)
 
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         SecondaryButton(
@@ -422,6 +430,7 @@ private fun ColumnScope.AuthorizingContent(
 private fun ColumnScope.ApprovalDetails(
     uiState: PubkyAuthApprovalUiState,
     onRetryUsdt: (() -> Unit)? = null,
+    onShareUsdt: ((Boolean) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.weight(1f)) {
         Column(
@@ -442,7 +451,7 @@ private fun ColumnScope.ApprovalDetails(
                     VerticalSpacer(32.dp)
                 }
                 if (uiState.bitkitClaim?.sharesReceivingDetails == true) {
-                    PaymentDetailsSection(uiState, onRetryUsdt)
+                    PaymentDetailsSection(uiState, onRetryUsdt, onShareUsdt)
                     VerticalSpacer(24.dp)
                 }
                 if (uiState.permissions.isNotEmpty()) {
@@ -508,12 +517,12 @@ private fun ColumnScope.SuccessContent(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
             )
 
-            uiState.bitkitClaim?.takeIf { it.sharesReceivingDetails }?.let { claim ->
+            uiState.bitkitClaim?.takeIf { it.sharesBitcoin || (it.sharesUsdt && uiState.shareUsdt) }?.let { claim ->
                 BodyM(
                     text = stringResource(
-                        when (claim) {
-                            PubkyAuthClaim.USDT_ADDRESS_V1 -> R.string.profile__auth_approval_shared_usdt
-                            PubkyAuthClaim.PAYMENT_DETAILS_V1 -> R.string.profile__auth_approval_shared_both
+                        when {
+                            !claim.sharesBitcoin -> R.string.profile__auth_approval_shared_usdt
+                            claim.sharesUsdt && uiState.shareUsdt -> R.string.profile__auth_approval_shared_both
                             else -> R.string.profile__auth_approval_shared_bitcoin
                         }
                     ),
@@ -544,7 +553,11 @@ private fun ColumnScope.SuccessContent(
 }
 
 @Composable
-private fun PaymentDetailsSection(uiState: PubkyAuthApprovalUiState, onRetryUsdt: (() -> Unit)?) {
+private fun PaymentDetailsSection(
+    uiState: PubkyAuthApprovalUiState,
+    onRetryUsdt: (() -> Unit)?,
+    onShareUsdt: ((Boolean) -> Unit)?,
+) {
     Text13Up(text = stringResource(R.string.profile__auth_approval_payment_details), color = Colors.White64)
     VerticalSpacer(12.dp)
     if (uiState.bitkitClaim?.sharesBitcoin == true) {
@@ -557,7 +570,13 @@ private fun PaymentDetailsSection(uiState: PubkyAuthApprovalUiState, onRetryUsdt
     }
     if (uiState.bitkitClaim?.sharesUsdt == true) {
         Column(modifier = Modifier.testTag("PubkyAuthUsdtDetails")) {
-            BodySSB(text = "USDT · Arbitrum One", color = Colors.Green)
+            SettingsSwitchRow(
+                title = stringResource(R.string.profile__auth_approval_share_usdt_optional),
+                isChecked = uiState.shareUsdt,
+                onClick = { onShareUsdt?.invoke(!uiState.shareUsdt) },
+                enabled = onShareUsdt != null,
+                switchTestTag = "PubkyAuthShareUsdt",
+            )
             VerticalSpacer(8.dp)
             uiState.usdtAddress?.let { address ->
                 var expanded by remember(address) { mutableStateOf(false) }

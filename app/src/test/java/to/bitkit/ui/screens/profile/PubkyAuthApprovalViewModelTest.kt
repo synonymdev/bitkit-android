@@ -884,7 +884,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
                 .thenReturn(UsdtPaymentRequest(address, null, null))
             val endpoint = PaykitUsdt.endpoint(address)
             whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(endpoint))
-            for (claim in listOf(PubkyAuthClaim.USDT_ADDRESS_V1, PubkyAuthClaim.PAYMENT_DETAILS_V1)) {
+            for (claim in listOf(PubkyAuthClaim.USDT_ADDRESS_V1, PubkyAuthClaim.BITCOIN_AND_USDT)) {
                 clearInvocations(watchOnlyAccountRepo)
                 val url = "pubkyauth://signin_grant?x-bitkit-claim=${claim.wireValue}"
                 whenever(
@@ -938,7 +938,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `unavailable receiving address blocks approval and can be retried`() = test {
+    fun `unavailable optional address can be skipped or retried`() = test {
         val url = "pubkyauth://signin_grant?x-bitkit-claim=usdt-address-v1"
         whenever(
             pubkyRepo.parseAuthUrl(url)
@@ -952,11 +952,11 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         sut.load(url)
         advanceUntilIdle()
         sut.approveWatchOnlyConsent(url)
-        assertFalse(sut.uiState.value.canAuthorize)
+        assertTrue(sut.uiState.value.canAuthorize)
+        assertFalse(sut.uiState.value.shareUsdt)
         assertTrue(sut.uiState.value.usdtUnavailable)
-        sut.requestAuthorize(url)
-        advanceUntilIdle()
-        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        sut.setShareUsdt(true)
+        assertFalse(sut.uiState.value.canAuthorize)
         val endpoint = to.bitkit.repositories.Endpoint(
             methodId = to.bitkit.repositories.MethodId.UsdtArbitrum,
             value = "reviewed-address",

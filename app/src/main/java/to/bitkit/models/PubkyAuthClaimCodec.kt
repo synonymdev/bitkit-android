@@ -1,6 +1,12 @@
 package to.bitkit.models
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import java.nio.ByteBuffer
+import java.util.Base64
 
 object PubkyAuthClaimCodec {
     /** Size of the versioned account metadata and serialized extended public key. */
@@ -14,7 +20,7 @@ object PubkyAuthClaimCodec {
 
     fun validateAccountPayload(claim: PubkyAuthClaim, accountPayload: ByteArray) {
         if (claim.sharesUsdt) {
-            require(!claim.includesPaykitAccess && accountPayload.isNotEmpty()) { "Invalid payment-details claim" }
+            require(accountPayload.isNotEmpty()) { "Invalid payment-details claim" }
             return
         }
         if (!claim.includesWatchOnlyAccount) {
@@ -40,6 +46,14 @@ object PubkyAuthClaimCodec {
         }
         require(generation != null && generation > 0uL) { "Invalid Paykit key generation" }
         require(secret?.size == 32) { "Invalid Paykit identity secret length" }
+        if (claim.sharesUsdt) {
+            val payload = Json.parseToJsonElement(accountPayload.decodeToString()).jsonObject.toMutableMap()
+            payload["paykit_access"] = buildJsonObject {
+                put("key_generation", Json.parseToJsonElement(generation.toString()))
+                put("secret", Base64.getUrlEncoder().withoutPadding().encodeToString(secret))
+            }
+            return JsonObject(payload).toString().encodeToByteArray()
+        }
         val prefix = if (claim.includesWatchOnlyAccount) accountPayload else byteArrayOf(1)
         val length = if (claim.includesWatchOnlyAccount) COMBINED_PAYLOAD_LENGTH else PAYKIT_PAYLOAD_LENGTH
         return ByteBuffer.allocate(length)

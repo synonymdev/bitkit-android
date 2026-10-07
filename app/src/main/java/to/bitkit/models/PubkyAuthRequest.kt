@@ -28,28 +28,30 @@ value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
         PAYKIT_ACCESS_V1("paykit-access-v1"),
         WATCH_ONLY_ACCOUNT_V1("watch-only-account-v1"),
         USDT_ADDRESS_V1("usdt-address-v1"),
-        PAYMENT_DETAILS_V1("payment-details-v1"),
     }
 
     val wireValue: String get() = items.joinToString(".") { it.wireValue }
     val includesWatchOnlyAccount: Boolean
-        get() = Item.WATCH_ONLY_ACCOUNT_V1 in items || Item.PAYMENT_DETAILS_V1 in items
+        get() = Item.WATCH_ONLY_ACCOUNT_V1 in items
     val includesPaykitAccess: Boolean get() = Item.PAYKIT_ACCESS_V1 in items
 
     val sharesBitcoin: Boolean get() = includesWatchOnlyAccount
-    val sharesUsdt: Boolean get() = Item.USDT_ADDRESS_V1 in items || Item.PAYMENT_DETAILS_V1 in items
+    val sharesUsdt: Boolean get() = Item.USDT_ADDRESS_V1 in items
     val sharesReceivingDetails: Boolean get() = sharesBitcoin || sharesUsdt
 
     fun unsignedPayload(bitcoin: PreparedWatchOnlyAccountClaim?, usdt: Endpoint?): ByteArray {
         if (sharesBitcoin && bitcoin == null) throw PubkyAuthRequestError.InvalidPaymentDetails
         if (!sharesUsdt) return bitcoin?.payload ?: byteArrayOf()
-        if (usdt == null || usdt.methodId != MethodId.UsdtArbitrum ||
-            PaykitUsdt.address(usdt.rawPayload) != usdt.value
+        if (
+            usdt != null && (
+                usdt.methodId != MethodId.UsdtArbitrum ||
+                    PaykitUsdt.address(usdt.rawPayload) != usdt.value
+                )
         ) {
             throw PubkyAuthRequestError.InvalidPaymentDetails
         }
         return buildJsonObject {
-            put(MethodId.UsdtArbitrum.rawValue, Json.parseToJsonElement(usdt.rawPayload).jsonObject)
+            usdt?.let { put(MethodId.UsdtArbitrum.rawValue, Json.parseToJsonElement(it.rawPayload).jsonObject) }
             if (sharesBitcoin) {
                 val account = checkNotNull(bitcoin).account
                 put(
@@ -66,7 +68,7 @@ value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
 
     companion object {
         val USDT_ADDRESS_V1 = PubkyAuthClaim(Item.USDT_ADDRESS_V1)
-        val PAYMENT_DETAILS_V1 = PubkyAuthClaim(Item.PAYMENT_DETAILS_V1)
+        val BITCOIN_AND_USDT = PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1, Item.USDT_ADDRESS_V1)
 
         /** Query parameter used for Bitkit-specific Pubky auth claims. */
         const val QUERY_PARAMETER = "x-bitkit-claim"
@@ -84,8 +86,6 @@ value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
                 Item.entries.firstOrNull { it.wireValue == token } ?: return null
             }
             if (items.distinct().size != items.size) return null
-            val hasStandaloneClaim = items.any { it == Item.USDT_ADDRESS_V1 || it == Item.PAYMENT_DETAILS_V1 }
-            if (items.size != 1 && hasStandaloneClaim) return null
             return PubkyAuthClaim(items.toImmutableList())
         }
     }
