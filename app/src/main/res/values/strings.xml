@@ -659,7 +659,7 @@
     <string name="profile__auth_approval_paykit_access_description">Read and manage your private Paykit data, and send Paykit messages on your behalf. Your Pubky identity secret and wallet spending keys are not shared.</string>
     <string name="profile__auth_approval_paykit_access_title">Paykit access</string>
     <string name="profile__auth_approval_payment_details">PAYMENT DETAILS TO SHARE</string>
-    <string name="profile__auth_approval_payment_details_intro_description">Share a separate Bitcoin account and your existing USDT address to receive earnings. Sharing these details does not let the service spend your funds.</string>
+    <string name="profile__auth_approval_payment_details_intro_description">Share a separate Bitcoin account to receive earnings. You can also share your existing USDT address. Sharing these details does not let the service spend your funds.</string>
     <string name="profile__auth_approval_payment_details_intro_title">&lt;accent&gt;EARN BITCOIN\nAND USDT&lt;/accent&gt;\nFROM YOUR CONTENT</string>
     <string name="profile__auth_approval_permissions">Requested permissions</string>
     <string name="profile__auth_approval_requester">Requester ID: %1$s</string>
@@ -676,7 +676,7 @@
     <string name="profile__auth_approval_usdt_intro_title">&lt;accent&gt;EARN USDT&lt;/accent&gt;\nFROM YOUR\nCONTENT</string>
     <string name="profile__auth_approval_usdt_loading">Loading USDT address…</string>
     <string name="profile__auth_approval_usdt_privacy">This is your existing USDT account. The service can see its balance and transaction history, but cannot spend your funds.</string>
-    <string name="profile__auth_approval_usdt_unavailable">Your USDT address is unavailable. Try again before authorizing.</string>
+    <string name="profile__auth_approval_usdt_unavailable">Your USDT address is unavailable. You can retry or continue without sharing it.</string>
     <string name="profile__auth_approval_watch_only_account_default_name">%1$s server</string>
     <string name="profile__auth_approval_watch_only_intro_approve">Approve</string>
     <string name="profile__auth_approval_watch_only_intro_description">To earn, you need to share a watch-only Bitcoin account with Paykit. It can view sales activity, but cannot spend funds.</string>
@@ -1700,4 +1700,5 @@
     <string name="usdt__bridge_refunded_description">USDT was returned to your wallet. See details for the refunded amount.</string>
     <string name="usdt__destination_tx">Destination transaction</string>
     <string name="usdt__refund_tx">Refund transaction</string>
+    <string name="profile__auth_approval_share_usdt_optional">Share USDT address (optional)</string>
 </resources>
