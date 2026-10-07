@@ -320,10 +320,11 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `queued passive messages yield to foreground app sync while ordered drains remain barriers`() = runTest {
+    fun `queued background work yields to foreground app sync while ordered work remains a barrier`() = runTest {
         val operations = listOf<suspend PaykitSdkService.(Priority) -> Any?>(
             { processPendingPrivateMessages(it) },
             { receivePrivateMessagesFromLinkedPeers(it) },
+            { ensureLinkWithPeer(RING_PUBKY, priority = it) },
         )
         for (operation in operations) {
             val priorities = listOf(Priority.Background, Priority.Ordered)
@@ -345,6 +346,10 @@ class PaykitSdkServiceTest {
                     events += "messages"
                     emptyList<PrivateStreamCounterpartyIntakeReport>()
                 }
+                whenever { sdk.ensureLinkWithPeer(RING_PUBKY, 1u) }.thenAnswer {
+                    events += "messages"
+                    LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKING, 1uL, null)
+                }
                 whenever { sdk.identityStatus() }
                     .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
                 whenever { sdk.publishPaykitApp(any(), any()) }.thenAnswer {
@@ -356,11 +361,7 @@ class PaykitSdkServiceTest {
                 runCurrent()
                 val messages = async { service.operation(messagePriority) }
                 val publication = async {
-                    if (appPriority == Priority.Ordered) {
-                        service.syncPaykitApp(privatePaymentsEnabled = false)
-                    } else {
-                        service.syncPaykitApp(privatePaymentsEnabled = false, priority = appPriority)
-                    }
+                    service.syncPaykitApp(privatePaymentsEnabled = false, priority = appPriority)
                 }
                 runCurrent()
                 assertTrue(events.isEmpty())

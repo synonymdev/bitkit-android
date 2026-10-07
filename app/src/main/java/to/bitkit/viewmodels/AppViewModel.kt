@@ -787,7 +787,7 @@ class AppViewModel @Inject constructor(
             paykitPaymentRequestRepo.activate(state.publicKey)
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
             paymentRequestIdentity = state.publicKey
-            refreshPrivateOnlyPaykitApp("contact sync")
+            if (identityChanged) refreshPrivateOnlyPaykitApp("contact sync")
             if (!state.contactsLoaded) return
 
             val removedKeys = lastPrivatePaykitContactKeys - state.contactKeys

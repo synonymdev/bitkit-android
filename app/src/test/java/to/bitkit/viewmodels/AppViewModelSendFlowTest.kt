@@ -9396,7 +9396,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         val prepared = CompletableDeferred<Unit>()
         whenever(privatePaykitRepo.awaitContactPreparation()).doSuspendableAnswer { prepared.await() }
-        clearInvocations(paykitPaymentRequestRepo)
+        clearInvocations(paykitPaymentRequestRepo, publicPaykitRepo)
         pubkyContactsLoadVersion.value = 1L
         runCurrent()
         assertFalse(prepared.isCompleted)
@@ -9406,6 +9406,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).scheduleSavedContactPreparation(any<Collection<String>>())
         verify(privatePaykitRepo).pruneUnsavedContactState(any<Collection<String>>())
         verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
+        verify(publicPaykitRepo, never()).syncPaykitApp()
     }
 
     @Test

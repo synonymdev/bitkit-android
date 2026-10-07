@@ -108,6 +108,7 @@ class PrivatePaykitRepo @Inject constructor(
     private val knownSavedContactKeys = mutableSetOf<String>()
     private val pendingPreparationKeys = mutableSetOf<String>()
     private var activePreparationKeys = emptySet<String>()
+    private val activeLinkPreparationKeys = mutableSetOf<String>()
     private var preparationJob: Job? = null
     private var preparationGeneration = 0
     private var isDeletingProfile = false
@@ -241,6 +242,7 @@ class PrivatePaykitRepo @Inject constructor(
         pendingPreparationKeys.clear()
         activePreparationKeys = emptySet()
         pendingForceRefreshLightning = false
+        activeLinkPreparationKeys.clear()
         clearPendingMessageDrainRetries()
     }
 
@@ -934,7 +936,7 @@ class PrivatePaykitRepo @Inject constructor(
                     if (peerStates[publicKey] == LinkedPeerState.LINKED) {
                         LinkedPeerState.LINKED
                     } else {
-                        paykitSdkService.ensureLinkWithPeer(publicKey).state
+                        advanceLinkIfIdle(publicKey)
                     }
                 }.onSuccess {
                     unavailableLinkRetryAt.remove(publicKey)
@@ -956,6 +958,20 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
         return PrivateLinkPreparation(preparedKeys, linkRetryKeys)
+    }
+
+    private suspend fun advanceLinkIfIdle(
+        publicKey: String,
+        priority: Priority = Priority.Ordered,
+    ): LinkedPeerState? {
+        currentCoroutineContext().ensureActive()
+        if (!activeLinkPreparationKeys.add(publicKey)) return null
+        val generation = preparationGeneration
+        return try {
+            paykitSdkService.ensureLinkWithPeer(publicKey, priority = priority).state
+        } finally {
+            if (generation == preparationGeneration) activeLinkPreparationKeys.remove(publicKey)
+        }
     }
 
     private suspend fun canPreparePrivateLink(
@@ -1095,9 +1111,7 @@ class PrivatePaykitRepo @Inject constructor(
                 if (!includeUnsavedPeers && retryKey !in knownSavedContactKeys) return@forEach
                 if (unavailableLinkRetryAt[retryKey]?.let { it > clock.now() } == true) return@forEach
                 runSuspendCatching {
-                    paykitSdkService.ensureLinkWithPeer(
-                        counterparty = retryKey,
-                    )
+                    advanceLinkIfIdle(retryKey, priority)
                 }.onFailure {
                     Logger.warn(
                         "Failed to advance private Paykit link for '${redacted(retryKey)}' during '$reason'",

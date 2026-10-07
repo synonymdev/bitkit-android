@@ -819,12 +819,13 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun ensureLinkWithPeer(
+    internal suspend fun ensureLinkWithPeer(
         counterparty: String,
         maxAdvanceSteps: UInt = 1u,
+        priority: Priority = Priority.Ordered,
     ) = run {
         isSetup.await()
-        operationLock.withLock {
+        operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.ensureLinkWithPeer(counterparty, maxAdvanceSteps) }
             }
