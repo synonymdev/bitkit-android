@@ -5,6 +5,8 @@
     Proposal expiry is the acceptance deadline, not the actual-payment deadline. Absolute payment deadlines
     are inclusive UTC timestamps and may include fractional seconds. Recurring PeriodStart deadlines remain
     unsupported. Record each request id and the issuer's UTC deadline without changing the device clock.
+    Lost broadcast responses require the separate hardware recovery manual test in this suite's README;
+    running this journey does not verify that fault-injection scenario.
   </description>
   <actions>
     <action>Have the issuer send a one-time request with a future absolute payment deadline containing fractional seconds and a shorter proposal expiry</action>
@@ -18,7 +20,6 @@
     <action>Verify no new Lightning payment is dispatched and the expired request cannot be paid again</action>
     <action>Repeat with a new on-chain request, waiting past its payment deadline during fee confirmation or PIN entry, and verify no transaction is submitted</action>
     <action>Repeat with a hardware wallet, waiting past its payment deadline during signing, and verify an expired-payment error is shown without broadcasting</action>
-    <action>For a hardware payment whose earlier broadcast outcome is uncertain, let its deadline pass before retrying and verify the pending proof and signed transaction remain available for reconciliation</action>
     <action>Have the issuer send a request whose absolute payment deadline is already past and verify no Pay action is offered</action>
     <action>Keep proof delivery unavailable for a payment sent before its deadline, restore delivery after the deadline, and verify reconciliation still delivers its proof without sending another payment</action>
     <action>Restart Bitkit and verify completed and expired request history remains visible</action>

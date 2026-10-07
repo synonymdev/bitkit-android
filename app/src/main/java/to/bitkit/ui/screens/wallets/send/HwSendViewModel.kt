@@ -279,7 +279,7 @@ class HwSendViewModel @Inject constructor(
                 )
                 runSuspendCatching { persistResult(pending.request, result) }
                     .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
-                pendingResult.value = HwSendResult(walletId, transactionId, pending.request.amountSats)
+                pendingResult.update { HwSendResult(walletId, transactionId, pending.request.amountSats) }
             } finally {
                 if (signingAttempt == attempt) {
                     _uiState.update { it.copy(isSigning = false, isConnectingDevice = false) }
