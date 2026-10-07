@@ -36,6 +36,7 @@ import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.utils.SignedTransactionId
 import to.bitkit.services.CoreService
@@ -123,6 +124,9 @@ class HwSendViewModel @Inject constructor(
                                 )
                             }
                         }
+                    }
+                    if (pending == null && paykitPaymentProofRepo.hasRetainedHardwareOnchainPayment(request.walletId)) {
+                        throw PaykitPaymentRequestError.OperationInProgress
                     }
                     if (pending == null && hwWalletRepo.needsPassphrase(request.walletId)) {
                         _uiState.update { it.copy(isPassphraseRequired = true) }

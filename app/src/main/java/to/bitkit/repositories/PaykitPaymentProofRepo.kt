@@ -584,6 +584,17 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
     }
 
+    suspend fun hasRetainedHardwareOnchainPayment(walletId: String): Boolean = withContext(ioDispatcher) {
+        operationMutex.withLock {
+            loadProofs().any {
+                it.onchainWalletId == walletId && walletId != WalletScope.default &&
+                    it.kind == PaykitPaymentProofKind.Onchain && it.paymentStarted &&
+                    !it.onchainAcceptanceVerified && it.proofData == null &&
+                    it.retainedSignedHardwareReceipt() != null
+            }
+        }
+    }
+
     suspend fun retainedHardwareOnchainPayment(
         requestId: PaykitPaymentRequestId,
         walletId: String,
@@ -725,7 +736,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     suspend fun failOnchainPayment(request: PaykitPaymentRequest) {
-        removeRequestProofs(request) {
+        removeRequestProofs(request, releasePrivateBoundary = true) {
             it.kind == PaykitPaymentProofKind.Onchain &&
                 it.onchainWalletId == WalletScope.default &&
                 it.paymentStarted &&
@@ -1142,6 +1153,7 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     private suspend fun removeRequestProofs(
         request: PaykitPaymentRequest,
+        releasePrivateBoundary: Boolean = false,
         predicate: (PendingPaykitPaymentProof) -> Boolean,
     ) = withContext(ioDispatcher) {
         runSuspendCatching {
@@ -1158,7 +1170,12 @@ class PaykitPaymentProofRepo @Inject constructor(
                         PubkyPublicKeyFormat.matches(it.identity, targetIdentity) &&
                         predicate(it)
                 }
-                if (remaining != proofs) persist(remaining)
+                if (remaining != proofs) {
+                    if (releasePrivateBoundary) {
+                        for (proof in proofs - remaining.toSet()) releaseDeniedPrivateConsumption(proof)
+                    }
+                    persist(remaining)
+                }
             }
         }.onFailure { Logger.warn("Failed to clear a pending Paykit payment proof", it, context = TAG) }
     }

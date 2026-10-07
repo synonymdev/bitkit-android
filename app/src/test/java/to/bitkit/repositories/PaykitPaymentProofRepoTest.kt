@@ -690,6 +690,25 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `definite software failure retains proof until private boundary release succeeds`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(
+            request, ONCHAIN_ADDRESS,
+            privatePaymentListVersion = 7uL, previousPrivatePaymentListVersion = 6uL,
+        ).getOrThrow()
+        val original = storedProofs.single()
+        whenever(privatePaykitRepo.releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL))
+            .thenReturn(Result.failure(IllegalStateException("storage")), Result.success(Unit))
+        repo.failOnchainPayment(request)
+        assertEquals(listOf(original), storedProofs)
+        repo.failOnchainPayment(request)
+        assertTrue(storedProofs.isEmpty())
+        verify(privatePaykitRepo, times(2)).releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL)
+    }
+
+    @Test
     fun `onchain failure clears started proof without a live identity`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val repo = paymentProofRepo()

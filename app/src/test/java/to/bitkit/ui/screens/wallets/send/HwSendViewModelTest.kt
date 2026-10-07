@@ -64,6 +64,8 @@ class HwSendViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(coreService.activity).thenReturn(activityService)
+        whenever { proofRepo.hasRetainedHardwareOnchainPayment(any()) }.thenReturn(false)
+
         whenever {
             proofRepo.retainHardwareOnchainCandidate(
                 any(),
@@ -731,6 +733,33 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(Result.success(signedTx))
         whenever(hwWalletRepo.broadcastFunding(signedTx)).thenReturn(Result.success(broadcast))
         return PaymentFixture(funding, signedTx, broadcast)
+    }
+
+    @Test
+    fun `retained hardware receipt blocks ordinary and foreign request signing after restart`() = test {
+        stubSuccessfulPayment()
+        whenever(context.getString(org.mockito.kotlin.any())).thenReturn("payment blocked")
+        whenever { proofRepo.hasRetainedHardwareOnchainPayment(WALLET_ID) }.thenReturn(true)
+        for (next in listOf(request(), request().copy(
+            paymentRequestId = PaykitPaymentRequestId("foreign-request", "foreign-counterparty"),
+            paymentIdentity = "original-identity"
+        ))) {
+        sut = HwSendViewModel(
+            context = context,
+            hwWalletRepo = hwWalletRepo,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            coreService = coreService,
+            activityRepo = activityRepo,
+            paykitPaymentProofRepo = proofRepo,
+            clock = object : Clock {
+                override fun now() = now
+            },
+        )
+            sut.signAndBroadcast(next)
+            advanceUntilIdle()
+        }
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
