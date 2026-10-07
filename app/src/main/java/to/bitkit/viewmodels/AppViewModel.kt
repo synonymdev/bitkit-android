@@ -4476,7 +4476,11 @@ class AppViewModel @Inject constructor(
             paymentDeadlineAt = incomingPaymentRequest?.paymentDeadlineAt,
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
-                    markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
+                    markOnchainPaymentStarted(
+                        incomingPaymentRequest,
+                        address,
+                        contactPaymentContext = contactPaymentContext,
+                    ).getOrThrow()
                     paymentProofStarted = true
                     paykitPaymentProofRepo.verifyOriginalOnchainPayer(
                         preparedPaymentProofRequest,
@@ -4847,7 +4851,10 @@ class AppViewModel @Inject constructor(
     }
 
     @Suppress("ReturnCount")
-    private suspend fun prepareContactPayment(contactPaymentContext: ContactPaymentContext?): Boolean {
+    private suspend fun prepareContactPayment(
+        contactPaymentContext: ContactPaymentContext?,
+        beforePrivateConsumption: suspend () -> Result<Unit> = { Result.success(Unit) },
+    ): Boolean {
         if (isPreparedContactPayment(contactPaymentContext)) return true
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return false
 
@@ -4856,6 +4863,11 @@ class AppViewModel @Inject constructor(
                 handlePaymentPreparationFailure(it, contactPaymentContext)
                 return false
             }
+        }
+        beforePrivateConsumption().onFailure {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return false
         }
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
             handlePaymentPreparationFailure(it, contactPaymentContext)
@@ -4927,8 +4939,15 @@ class AppViewModel @Inject constructor(
         request: PaykitPaymentRequest?,
         address: String,
         walletId: String = WalletScope.default,
-    ): Result<Unit> = request?.let { paykitPaymentProofRepo.markOnchainPaymentStarted(it, address, walletId) }
-        ?: Result.success(Unit)
+        contactPaymentContext: ContactPaymentContext? = null,
+    ): Result<Unit> = request?.let {
+        val privateContext = contactPaymentContext?.privatePaymentContext
+        paykitPaymentProofRepo.markOnchainPaymentStarted(
+            it, address, walletId,
+            privatePaymentListVersion = privateContext?.paymentListVersion,
+            previousPrivatePaymentListVersion = privateContext?.previousPaymentListVersion,
+        )
+    } ?: Result.success(Unit)
 
     private suspend fun cancelPaymentProofPreparation(request: PaykitPaymentRequest?) {
         request?.let { paykitPaymentProofRepo.cancelPreparation(it) }
@@ -5828,25 +5847,33 @@ class AppViewModel @Inject constructor(
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return false
         }
-        if (!prepareContactPayment(contactPaymentContext)) {
+        var proofStarted = false
+        if (!prepareContactPayment(contactPaymentContext) {
+                if (preparedPaymentProofRequest == null) {
+                    Result.success(Unit)
+                } else {
+                    // Persist the signed original receipt and cleanup boundary before consuming its endpoint.
+                    paykitPaymentProofRepo.markOnchainPaymentStarted(
+                        requireNotNull(incomingPaymentRequest),
+                        address,
+                        walletId ?: WalletScope.default,
+                        contactPaymentContext.privatePaymentContext?.paymentListVersion,
+                        signedTx,
+                        contactPaymentContext.privatePaymentContext?.previousPaymentListVersion,
+                    ).onSuccess { proofStarted = true }
+                }
+            }
+        ) {
+            if (proofStarted && incomingPaymentRequest != null && identity != null) {
+                paykitPaymentProofRepo.failHardwareOnchainPaymentBeforeDispatch(
+                    incomingPaymentRequest,
+                    walletId ?: WalletScope.default,
+                    identity,
+                    hasAttemptedBroadcast = false,
+                )
+            }
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false
-        }
-        if (preparedPaymentProofRequest != null) {
-            paykitPaymentProofRepo.markOnchainPaymentStarted(
-                requireNotNull(incomingPaymentRequest), address, walletId ?: WalletScope.default,
-                contactPaymentContext.privatePaymentContext?.paymentListVersion,
-                signedTx,
-                contactPaymentContext.privatePaymentContext?.previousPaymentListVersion,
-            ).onFailure {
-                synchronized(contactPaymentContextLock) {
-                    if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
-                }
-                releasePrivatePaymentListIfNeeded(contactPaymentContext)
-                cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                handlePaymentPreparationFailure(it, contactPaymentContext)
-                return false
-            }
         }
         return incomingPaymentRequest == null || PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
     }

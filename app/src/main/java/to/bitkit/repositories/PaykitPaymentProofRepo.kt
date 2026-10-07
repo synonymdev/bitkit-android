@@ -771,6 +771,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                                 )
                     }
                     if (!safe) return@withLock false
+                    for (proof in original) releaseDeniedPrivateConsumption(proof)
                     if (original.isNotEmpty()) persist(proofs - original.toSet())
                     true
                 }

@@ -243,7 +243,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             address = ONCHAIN_ADDRESS, amountSats = request.amountSats, isMaxAmount = false,
             feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
             payerIdentity = LOCAL_IDENTITY,
-            beforeSendAttempt = { repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow() },
+            beforeSendAttempt = {
+                repo.markOnchainPaymentStarted(
+                    request,
+                    ONCHAIN_ADDRESS,
+                    privatePaymentListVersion = 7uL,
+                    previousPrivatePaymentListVersion = 6uL,
+                ).getOrThrow()
+            },
         )
         assertTrue(admitted.preparationPending)
         assertTrue(storedProofs.single().paymentStarted)
@@ -259,6 +266,11 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(admitted, reopened.current())
         assertEquals("ab".repeat(32), storedProofs.single().paymentIdentifier)
         storedProofs = listOf(startedProof)
+        whenever(privatePaykitRepo.releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL))
+            .thenReturn(Result.failure(IllegalStateException("private boundary storage failed")), Result.success(Unit))
+        repo.reconcile()
+        assertEquals(admitted, reopened.current())
+        assertEquals(listOf(startedProof), storedProofs)
         shouldFailProofRemoval = true
         repo.reconcile()
         assertEquals(admitted, reopened.current())
@@ -266,6 +278,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.reconcile()
         assertNull(reopened.current())
         assertTrue(storedProofs.isEmpty())
+        verify(privatePaykitRepo, times(3)).releasePrivatePaymentListVersion(request.id.counterparty, 7uL, 6uL)
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
         assertFalse(storedProofs.single().paymentStarted)
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())

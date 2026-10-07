@@ -7861,13 +7861,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
-            any(),
-            any(),
-            any(),
-            anyOrNull(),
-            anyOrNull(),
-            anyOrNull(),
+        verify(paykitPaymentProofRepo).markOnchainPaymentStarted(
+            request,
+            "bcrt1qpaymentrequest",
+            "hardware-wallet",
+            7uL,
+            hardwareSignedReceipt(),
+        )
+        verify(paykitPaymentProofRepo).failHardwareOnchainPaymentBeforeDispatch(
+            request,
+            "hardware-wallet",
+            testPublicKey,
+            hasAttemptedBroadcast = false,
         )
     }
 
@@ -7887,7 +7892,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 7uL,
                 hardwareSignedReceipt(),
             )
-        ).thenReturn(Result.failure(IllegalStateException("proof start failed")))
+        ).doSuspendableAnswer {
+            verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
+            Result.failure(IllegalStateException("proof start failed"))
+        }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -8747,7 +8755,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         whenever(
-            paykitPaymentProofRepo.markOnchainPaymentStarted(request, address, WalletScope.default),
+            paykitPaymentProofRepo.markOnchainPaymentStarted(request, address, WalletScope.default, 7uL),
         ).doSuspendableAnswer {
             whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
                 .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
