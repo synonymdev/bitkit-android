@@ -10,6 +10,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
@@ -30,6 +31,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
@@ -526,13 +528,14 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `expiry before rebroadcast preserves uncertainty without repeating authorization`() = test {
+    fun `confirmed payment resolves an expired hardware retry without rebroadcasting`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
         val deadline = Instant.parse("2026-10-06T12:00:00Z")
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
             .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
-        val request = request().copy(paymentDeadlineAt = deadline)
+        val requestId = PaykitPaymentRequestId("request", "counterparty")
+        val request = request().copy(paymentDeadlineAt = deadline, paymentRequestId = requestId)
         var authorizations = 0
         var expiredPriorAttempt: Boolean? = null
         val authorize: suspend (Boolean) -> Boolean = {
@@ -556,7 +559,73 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.isBroadcastUnresolved)
         assertTrue(sut.uiState.value.hasPendingBroadcast)
         assertFalse(sut.uiState.value.isSigning)
+        assertFalse(sut.uiState.value.canLeave)
+
+        sut.resolveBroadcast(WALLET_ID, requestId, fixture.broadcast.txId)
+        advanceUntilIdle()
+
+        assertEquals(HwSendResult(WALLET_ID, fixture.broadcast.txId, AMOUNT_SATS), sut.results.first())
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid = fixture.broadcast.txId,
+            address = ADDRESS,
+            amount = AMOUNT_SATS,
+            fee = fixture.signedTx.miningFeeSats,
+            feeRate = fixture.signedTx.feeRate,
+            isTransfer = false,
+            channelId = null,
+            walletId = WALLET_ID,
+        )
+        sut.completeBroadcast()
+        assertTrue(sut.uiState.value.canLeave)
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
         verify(hwWalletRepo).broadcastFunding(fixture.signedTx, deadline)
+    }
+
+    @Test
+    fun `payment resolution ignores a different request or wallet and stops an active retry`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
+        val requestId = PaykitPaymentRequestId("request", "counterparty")
+        val request = request().copy(paymentRequestId = requestId)
+        sut.signAndBroadcast(request)
+        advanceUntilIdle()
+
+        val authorization = CompletableDeferred<Boolean>()
+        sut.signAndBroadcast(request, authorizeContactPayment = { authorization.await() })
+        runCurrent()
+        sut.resolveBroadcast("other-wallet", requestId, fixture.broadcast.txId)
+        sut.resolveBroadcast(WALLET_ID, requestId.copy(paymentRequestId = "other-request"), fixture.broadcast.txId)
+        runCurrent()
+        verify(activityRepo, never()).notifyPaymentActivityChanged()
+        assertTrue(sut.uiState.value.isSigning)
+
+        sut.resolveBroadcast(WALLET_ID, requestId, fixture.broadcast.txId)
+        advanceUntilIdle()
+        authorization.complete(true)
+        advanceUntilIdle()
+
+        assertEquals(HwSendResult(WALLET_ID, fixture.broadcast.txId, AMOUNT_SATS), sut.results.first())
+        verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
+        sut.completeBroadcast()
+        assertTrue(sut.uiState.value.canLeave)
+    }
+
+    @Test
+    fun `payment resolution cannot complete a hardware send before broadcast was attempted`() = test {
+        stubSuccessfulPayment()
+        val requestId = PaykitPaymentRequestId("request", "counterparty")
+        sut.signAndBroadcast(request().copy(paymentRequestId = requestId), authorizeContactPayment = { false })
+        advanceUntilIdle()
+
+        sut.resolveBroadcast(WALLET_ID, requestId, "txid")
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, never()).broadcastFunding(any(), any())
+        verify(activityRepo, never()).notifyPaymentActivityChanged()
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
     }
 
     @Test

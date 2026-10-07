@@ -67,6 +67,7 @@ fun HwSendSignScreen(
         satsPerVByte = satsPerVByte,
         tags = sendUiState.selectedTags,
         paymentDeadlineAt = paymentDeadlineAt,
+        paymentRequestId = sendUiState.incomingPaymentRequestId,
     )
 
     val onBackRequest: () -> Unit = { if (uiState.canLeave) onBack() }

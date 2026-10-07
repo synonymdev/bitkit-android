@@ -866,6 +866,13 @@ class AppViewModel @Inject constructor(
     private fun handlePaykitOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
         if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, resolution.identity)) return
         paykitPaymentProofRepo.consumeOnchainPaymentResolution(resolution)
+        val sendState = _sendUiState.value
+        if (_currentSheet.value is Sheet.Send && sendState.hardwareWalletId != null &&
+            sendState.incomingPaymentRequestId == resolution.requestId
+        ) {
+            _sendUiState.update { it.copy(resolvedHardwarePaymentTxId = resolution.transactionId) }
+            return
+        }
         val resolvesCurrentPayment = uncertainOnchainPaymentRequestId == resolution.requestId
         if (!resolvesCurrentPayment) {
             synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
@@ -1493,6 +1500,7 @@ class AppViewModel @Inject constructor(
         dismissActiveRequest: Boolean,
         preserveRequestedPaymentRequest: Boolean,
     ) {
+        _sendUiState.update { it.copy(resolvedHardwarePaymentTxId = null) }
         dismissedPreparingRequestIds.clear()
         invalidatePaymentRequestPresentation(dismissActiveRequest)
         clearPaymentRequestPresentationRetries()
@@ -5661,6 +5669,9 @@ class AppViewModel @Inject constructor(
     }
 
     fun completeHardwareContactPayment(txId: String) {
+        _sendUiState.update {
+            if (it.resolvedHardwarePaymentTxId == txId) it.copy(resolvedHardwarePaymentTxId = null) else it
+        }
         val context = synchronized(contactPaymentContextLock) {
             preparedContactPaymentContext
         }
@@ -6412,6 +6423,7 @@ data class SendUiState(
     val isPaymentRequest: Boolean = false,
     val paymentRequestNote: String? = null,
     val hardwareWalletId: String? = null,
+    val resolvedHardwarePaymentTxId: String? = null,
     val hardwareWalletName: String? = null,
     val hardwareAvailableSats: ULong = 0uL,
     val isSubscriptionPayment: Boolean = false,

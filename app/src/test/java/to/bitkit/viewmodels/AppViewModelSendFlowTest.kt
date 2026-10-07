@@ -8602,6 +8602,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hardware resolution survives collector reattachment until completion`() = test {
+        val request = paymentRequest()
+        val transactionId = "ef".repeat(32)
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        setSendState(
+            SendUiState(
+                hardwareWalletId = "hardware-wallet",
+                amount = request.amountSats,
+                incomingPaymentRequestId = request.id,
+            )
+        )
+        sut.showSheet(Sheet.Send(SendRoute.HardwareSign))
+
+        onchainPaymentResolutions.value = listOf(
+            PaykitOnchainPaymentProofResolution("other-identity", request.id, transactionId),
+        )
+        runCurrent()
+        assertNull(sut.sendUiState.value.resolvedHardwarePaymentTxId)
+        verify(paykitPaymentProofRepo, never()).consumeOnchainPaymentResolution(any())
+
+        onchainPaymentResolutions.value = listOf(
+            PaykitOnchainPaymentProofResolution(
+                testPublicKey,
+                request.id.copy(paymentRequestId = "other-request"),
+                transactionId,
+            ),
+        )
+        runCurrent()
+        assertNull(sut.sendUiState.value.resolvedHardwarePaymentTxId)
+
+        onchainPaymentResolutions.value = listOf(
+            PaykitOnchainPaymentProofResolution(testPublicKey, request.id, transactionId),
+        )
+        runCurrent()
+        repeat(2) {
+            sut.sendUiState.test {
+                assertEquals(transactionId, awaitItem().resolvedHardwarePaymentTxId)
+            }
+        }
+        sut.completeHardwareContactPayment("other-transaction")
+        assertEquals(transactionId, sut.sendUiState.value.resolvedHardwarePaymentTxId)
+        sut.completeHardwareContactPayment(transactionId)
+        assertNull(sut.sendUiState.value.resolvedHardwarePaymentTxId)
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
+        verify(paykitPaymentProofRepo, never()).cancelPreparation(any())
+    }
+
+    @Test
     fun `cold onchain proof resolution restores contact correlation without opening success`() = test {
         val request = paymentRequest()
         val transactionId = "ef".repeat(32)

@@ -154,6 +154,12 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
+            LaunchedEffect(hwSendViewModel, sendUiState.resolvedHardwarePaymentTxId) {
+                val transactionId = sendUiState.resolvedHardwarePaymentTxId ?: return@LaunchedEffect
+                val walletId = sendUiState.hardwareWalletId ?: return@LaunchedEffect
+                val requestId = sendUiState.incomingPaymentRequestId ?: return@LaunchedEffect
+                hwSendViewModel.resolveBroadcast(walletId, requestId, transactionId)
+            }
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
                     appViewModel.completeHardwareContactPayment(result.txId)

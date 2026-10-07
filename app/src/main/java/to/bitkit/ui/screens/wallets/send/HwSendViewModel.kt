@@ -10,6 +10,8 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +36,7 @@ import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -119,7 +122,9 @@ class HwSendViewModel @Inject constructor(
                     if (!authorizeBroadcast(payment, authorizeContactPayment, onPaymentDeadlineExpired)) {
                         return@runCatching
                     }
+                    currentCoroutineContext().ensureActive()
                     val result = broadcast(payment, onPaymentDeadlineExpired) ?: return@runCatching
+                    currentCoroutineContext().ensureActive()
                     runSuspendCatching { persistResult(request, result) }
                         .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
                     pendingResult.update { HwSendResult(request.walletId, result.txId, request.amountSats) }
@@ -252,6 +257,35 @@ class HwSendViewModel @Inject constructor(
                 hasPendingBroadcast = false,
                 isBroadcastUnresolved = false,
             )
+        }
+    }
+
+    fun resolveBroadcast(walletId: String, requestId: PaykitPaymentRequestId, transactionId: String) {
+        val pending = pendingBroadcast ?: return
+        if (!pending.hasAttemptedBroadcast || pendingResult.value != null) return
+        if (pending.request.walletId != walletId || pending.request.paymentRequestId != requestId) return
+
+        // Reconciliation has confirmed payment. Stop retries and use the normal completion path.
+        signingJob?.cancel()
+        val attempt = ++signingAttempt
+        _uiState.update { it.copy(isSigning = true) }
+        signingJob = viewModelScope.launch {
+            try {
+                val result = HwFundingBroadcastResult(
+                    txId = transactionId,
+                    miningFeeSats = pending.signedTx.miningFeeSats,
+                    feeRate = pending.signedTx.feeRate,
+                    totalSpent = pending.signedTx.totalSpent,
+                )
+                runSuspendCatching { persistResult(pending.request, result) }
+                    .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+                pendingResult.value = HwSendResult(walletId, transactionId, pending.request.amountSats)
+            } finally {
+                if (signingAttempt == attempt) {
+                    _uiState.update { it.copy(isSigning = false, isConnectingDevice = false) }
+                    signingJob = null
+                }
+            }
         }
     }
 
@@ -423,6 +457,7 @@ data class HwSendRequest(
     val satsPerVByte: ULong,
     val tags: List<String>,
     val paymentDeadlineAt: Instant? = null,
+    val paymentRequestId: PaykitPaymentRequestId? = null,
 )
 
 private data class PendingHwSendBroadcast(
