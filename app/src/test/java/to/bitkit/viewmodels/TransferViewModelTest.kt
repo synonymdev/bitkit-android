@@ -1331,6 +1331,48 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `accepted confirmation rejects changed original client balance`() = test {
+        assertChangedFundingTermsRejected("balance")
+    }
+
+    @Test
+    fun `accepted confirmation rejects changed original service fee`() = test {
+        assertChangedFundingTermsRejected("fee")
+    }
+
+    @Test
+    fun `accepted confirmation rejects changed original funding address`() = test {
+        assertChangedFundingTermsRejected("address")
+    }
+
+    private suspend fun TestScope.assertChangedFundingTermsRejected(changedTerm: String) {
+        val originalOrder = spendingOrder(feeSat = 98_000uL)
+        val original = OnchainTransferContext(
+            99_000uL,
+            125_000uL,
+            originalOrderClientBalanceSats = originalOrder.clientBalanceSat,
+            originalOrderFeeSats = originalOrder.feeSat,
+        )
+        val attempt = acceptedFundingAttempt(originalOrder, original).let {
+            if (changedTerm == "address") it.copy(address = "different-original-address") else it
+        }
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        val changed = when (changedTerm) {
+            "balance" -> originalOrder.copy(clientBalanceSat = originalOrder.clientBalanceSat + 1uL)
+            "fee" -> originalOrder.copy(feeSat = originalOrder.feeSat + 1uL)
+            else -> originalOrder
+        }
+        quoteOrder(changed)
+        prepareConfirm()
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        verify(transferRepo, never()).persistAcceptedFunding(any(), any(), anyOrNull())
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        verifySendOnChain(sats = changed.feeSat, count = 0)
+        assertFalse(sut.spendingUiState.value.isConfirmPaying)
+    }
+
+    @Test
     fun `accepted transfer resumes after transfer storage failure without another send`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
         val original = OnchainTransferContext(99_000uL, 125_000uL)
@@ -1451,7 +1493,10 @@ class TransferViewModelTest : BaseUnitTest() {
         address = order.payment?.onchain?.address.orEmpty(), amountSats = order.feeSat,
         isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
         channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Accepted, txid = TXID,
-        transferContext = original,
+        transferContext = original?.copy(
+            originalOrderClientBalanceSats = original.originalOrderClientBalanceSats ?: order.clientBalanceSat,
+            originalOrderFeeSats = original.originalOrderFeeSats ?: order.feeSat,
+        ),
     )
 
     @Test

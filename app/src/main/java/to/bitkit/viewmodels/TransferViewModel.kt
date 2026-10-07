@@ -386,12 +386,22 @@ class TransferViewModel @Inject constructor(
             val txid = previous.txid
             if (previous.hasPositiveEvidence && txid != null) {
                 if (!previous.localFollowupComplete) {
+                    val original = requireNotNull(previous.transferContext) {
+                        "Original funding context is unavailable"
+                    }
+                    check(order.payment?.onchain?.address == previous.address) {
+                        "Original funding order address changed"
+                    }
+                    check(
+                        order.clientBalanceSat == original.originalOrderClientBalanceSats &&
+                            order.feeSat == original.originalOrderFeeSats
+                    ) { "Original funding order terms changed or are unavailable" }
                     withContext(NonCancellable) {
                         fundPaidOrder(
                             order = order,
                             txId = txid,
-                            txTotalSats = previous.transferContext?.txTotalSats,
-                            preTransferOnchainSats = previous.transferContext?.preTransferOnchainSats,
+                            txTotalSats = original.txTotalSats,
+                            preTransferOnchainSats = original.preTransferOnchainSats,
                             requireTransferPersisted = true,
                         )
                         runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(order.id, txid) }

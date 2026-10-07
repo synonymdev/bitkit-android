@@ -144,6 +144,11 @@ class OnchainSendAttemptStore @Inject constructor(
         mutex.withLock { loadWithRetainedAccepted(lightningService.currentWalletIndex) }
     }
 
+    /** Read only restart-safe evidence, excluding a positive result retained after a failed write. */
+    suspend fun currentDurable(): OnchainSendAttempt? = withContext(ioDispatcher) {
+        mutex.withLock { load(lightningService.currentWalletIndex) }
+    }
+
     @Suppress("LongParameterList")
     suspend fun admit(
         walletId: String,

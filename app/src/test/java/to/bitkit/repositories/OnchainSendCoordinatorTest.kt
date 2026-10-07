@@ -72,6 +72,30 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `accepted retry without durable acceptance stays pending after restart`() = test {
+        val f = Fixture()
+        val original = f.unresolved()
+        val sender = object : OnchainPreparedSender {
+            override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend = error("unused")
+            override suspend fun prepareRecovery(
+                attempt: OnchainSendAttempt,
+                feeRateSatsPerVByte: ULong,
+                paymentDeadlineAt: Instant?,
+            ) = PreparedOnchainSend(f.receipt(nextTxid)) {
+                f.failWrite = true
+                OnchainSendOutcome.Accepted(nextTxid)
+            }
+        }
+        val result = OnchainSendCoordinator(f.store, sender, testDispatcher)
+            .retryOriginal(original.attemptId, original.walletId, 2uL) {}
+        assertTrue(result.exceptionOrNull() is OnchainSendPendingError)
+        val restarted = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service, kotlin.time.Clock.System)
+        assertTrue(restarted.current()?.blocksNextSend == true)
+        assertTrue(restarted.current()?.hasPositiveEvidence == false)
+        assertEquals(listOf(firstTxid, nextTxid), restarted.current()?.candidateTxids)
+    }
+
+    @Test
     fun `retry retains deadline through authorization and rejects expired queued broadcast`() = test {
         for (expired in listOf(false, true)) {
             val f = Fixture()
