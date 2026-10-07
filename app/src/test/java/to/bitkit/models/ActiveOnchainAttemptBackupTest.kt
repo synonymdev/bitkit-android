@@ -73,6 +73,20 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unsigned active preparation cannot restore a permanent wallet guard`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt).copy(
+            originalInputs = null,
+            candidateTxids = emptyList(),
+            candidateFeeRates = emptyMap(),
+            txid = null,
+            status = "pending",
+        )
+        assertFailsWith<IllegalArgumentException> {
+            wire.restored("regtest", binding, "wallet0", 0)
+        }
+    }
+
+    @Test
     fun `same golden bytes preserve original proof and remap only validated guard`() {
         val state = requireNotNull(golden().paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
@@ -132,7 +146,7 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     }
 
     @Test
-    fun `unprepared zero fee guard stays pending and accepted restore resets local ack`() {
+    fun `unprepared zero fee guard is rejected and accepted restore resets local ack`() {
         val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
         val pending = wire.copy(
             status = "pending",
@@ -141,10 +155,9 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
             candidateTxids = emptyList(),
             feeRateSatsPerVByte = "0"
         )
-        val restored = pending.restored("regtest", binding, "wallet0", 0)
-        assertEquals(OnchainSendEvidence.Pending, restored.evidence)
-        assertNull(restored.originalInputs)
-        assertFalse(restored.localFollowupComplete)
+        assertFailsWith<IllegalArgumentException> {
+            pending.restored("regtest", binding, "wallet0", 0)
+        }
         assertFailsWith<IllegalArgumentException> {
             wire.copy(
                 feeRateSatsPerVByte = "0"

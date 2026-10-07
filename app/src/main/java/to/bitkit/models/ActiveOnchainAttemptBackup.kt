@@ -78,13 +78,9 @@ data class ActiveOnchainAttemptBackup(
             require(input.txid.matches(HEX) && unsigned(input.vout) <= UInt.MAX_VALUE.toULong())
             OnchainSendInput(input.txid, unsigned(input.vout).toUInt())
         }
-        if (inputs == null) {
-            require(candidateTxids.isEmpty() && txid == null && status == "pending")
-        } else {
-            require(inputs.isNotEmpty() && inputs.distinct().size == inputs.size)
-            require(unsigned(feeRateSatsPerVByte) > 0uL)
-            require(candidateTxids.isNotEmpty() && txid in candidateTxids)
-        }
+        require(!inputs.isNullOrEmpty() && inputs.distinct().size == inputs.size)
+        require(unsigned(feeRateSatsPerVByte) > 0uL)
+        require(candidateTxids.isNotEmpty() && txid in candidateTxids)
         val evidence = when (status) {
             "pending" -> OnchainSendEvidence.Pending
             "accepted" -> OnchainSendEvidence.Accepted.also { require(txid != null && txid in candidateTxids) }

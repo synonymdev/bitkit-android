@@ -2010,6 +2010,12 @@ class LightningRepoTest : BaseUnitTest() {
         val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
 
         assertIs<OnchainSendPendingError>(repo.sendOnChain("address", 1_000uL).exceptionOrNull())
+        val retained = requireNotNull(store.current())
+        assertIs<OnchainSendPendingError>(
+            repo.retryOriginalOnchainSend(retained.attemptId, retained.walletId, 2uL) {
+                error("A retained accepted result must not authorize another payment")
+            }.exceptionOrNull()
+        )
         val reopened = OnchainSendAttemptStore(
             testDispatcher,
             keychain,

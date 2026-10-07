@@ -1708,7 +1708,8 @@ class LightningRepo @Inject constructor(
         authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("retryOriginalOnchainSend") {
         val result = recoveryCoordinator.retryOriginal(attemptId, walletId, feeRateSatsPerVByte, paymentDeadlineAt, authorizeOriginal)
-        if (result.getOrNull() is OnchainSendOutcome.Accepted) {
+        val accepted = result.getOrNull() as? OnchainSendOutcome.Accepted
+        if (accepted != null) {
             runSuspendCatching {
                 onchainSendAttemptStore.current()?.takeIf { it.hasPositiveEvidence }?.let {
                     finishOnchainSendLocally(
@@ -1716,6 +1717,15 @@ class LightningRepo @Inject constructor(
                     )
                 }
             }.onFailure { Logger.warn("Failed to finish recovered on-chain send locally", it, context = TAG) }
+            runSuspendCatching {
+                val durable = requireNotNull(onchainSendAttemptStore.currentDurable())
+                check(durable.attemptId == attemptId && durable.walletId == walletId &&
+                    durable.hasPositiveEvidence && durable.txid.equals(accepted.txid, true)) {
+                    "Recovered on-chain outcome is not durable"
+                }
+            }.getOrElse {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(it, accepted.txid))
+            }
         }
         result
     }
