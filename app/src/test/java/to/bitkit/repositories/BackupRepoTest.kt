@@ -229,6 +229,27 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wallet backup captures transfer completed before locked attempt snapshot`() = test {
+        val transfer = TransferEntity(
+            id = "original-transfer", type = to.bitkit.models.TransferType.TO_SPENDING,
+            amountSats = 1000, fundingTxId = "ab".repeat(32), createdAt = 1,
+        )
+        var savedTransfers = emptyList<TransferEntity>()
+        whenever(transferDao.getAll()).thenAnswer { savedTransfers }
+        whenever(onchainSendAttemptStore.backupSnapshot(eq(0), any())).doSuspendableAnswer {
+            // Accepted follow-up commits its transfer and completes the guard before this lock is acquired.
+            savedTransfers = listOf(transfer)
+            val capture = it.getArgument<suspend () -> List<PaykitPaymentStateBackup.Proof>>(1)
+            null to capture()
+        }
+        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+        val data = argumentCaptor<ByteArray>()
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.WALLET.name), data.capture()) }
+        val payload = json.decodeFromString<WalletBackupV1>(data.firstValue.decodeToString())
+        assertEquals(listOf(transfer), payload.transfers)
+    }
+
+    @Test
     fun `wallet backup rejects private consumption changed during proof capture`() = test {
         val version = MutableStateFlow(0L)
         whenever(privatePaykitRepo.backupStateVersion).thenReturn(version)

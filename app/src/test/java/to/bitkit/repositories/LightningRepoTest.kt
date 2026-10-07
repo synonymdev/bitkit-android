@@ -1617,7 +1617,7 @@ class LightningRepoTest : BaseUnitTest() {
             isTransfer = true,
             channelId = "test_channel_id",
         )
-        assertEquals(OnchainSendOutcome.Accepted("testPaymentId"), acceptedDespiteStorageFailure.getOrThrow())
+        assertIs<OnchainSendPendingError>(acceptedDespiteStorageFailure.exceptionOrNull())
     }
 
     @Test

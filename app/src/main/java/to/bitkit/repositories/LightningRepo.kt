@@ -1633,10 +1633,9 @@ class LightningRepo @Inject constructor(
             ) {
                 winner
             } else {
-                if (outcome !is OnchainSendOutcome.Accepted || !outcome.txid.equals(prepared.receipt.txid, true)) {
-                    return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
-                }
-                attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = outcome.txid)
+                // Native acceptance is not durable local completion. Preserve the signed receipt
+                // and Pending until the exact winner can be persisted or independently observed.
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
             }
         }
         val winningOutcome = if (recorded.hasPositiveEvidence) {

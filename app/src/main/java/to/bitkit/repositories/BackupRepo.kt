@@ -38,6 +38,7 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.backup.VssStoreIdProvider
+import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.hwWalletNames
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
@@ -636,7 +637,7 @@ class BackupRepo @Inject constructor(
         check(!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
             "Wallet backup restore is incomplete"
         }
-        val transfers = db.transferDao().getAll()
+        lateinit var transfers: List<TransferEntity>
         val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot().getOrThrow()
         val privateRepo = privatePaykitRepo.get()
         val privateVersion = privateRepo.backupStateVersion.value
@@ -646,6 +647,9 @@ class BackupRepo @Inject constructor(
         val watchOnlyAccountSnapshot = watchOnlyAccountStore.backupSnapshot()
         val walletIndex = backupWalletIndex()
         val (snapshotAttempt, snapshotProofs) = onchainSendAttemptStore.backupSnapshot(walletIndex) {
+            // Follow-up writes its transfer before completing the guarded attempt. Capture the
+            // transfer under that same attempt lock so a backup cannot omit both.
+            transfers = db.transferDao().getAll()
             paykitPaymentProofRepo.get().backupSnapshot()
         }
         // A private preparation may already have consumed a payment-list version. Defer the
