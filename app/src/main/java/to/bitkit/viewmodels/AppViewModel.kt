@@ -4589,6 +4589,7 @@ class AppViewModel @Inject constructor(
         }
         releasePrivatePaymentListIfNeeded(contactPaymentContext)
         cancelPaymentProofPreparation(preparedPaymentProofRequest)
+        if (error is OnchainSendNotDispatchedError) paykitPaymentProofRepo.reconcile()
         Logger.error("Error sending onchain payment", error, context = TAG)
         if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
             setSendEffect(SendEffect.NavigateToError(error.toSendFailureDetails(context, _sendUiState.value.address)))

@@ -24,6 +24,101 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     private val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
 
     @Test
+    fun `expired first Shop submission retains empty guard until original proof cleanup succeeds`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val service = mock<LightningService>()
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        val attempt = store.admit(
+            walletId = "wallet0", requestId = PaykitPaymentRequestId("request", "payer"),
+            orderId = "order", address = "bcrt1qrecipient", amountSats = 1000uL,
+            isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), beforeSendAttempt = {}, payerIdentity = "payer",
+        )
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+        )
+        store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
+        assertFailsWith<OnchainSendNotDispatchedError> {
+            store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
+                throw to.bitkit.utils.ServiceError.PaymentDeadlineExpired()
+            }
+        }
+        store.releaseBeforeDispatch(attempt.attemptId, 0)
+        val pending = requireNotNull(store.current())
+        assertTrue(pending.preparationPending)
+        assertEquals(attempt.requestId, pending.requestId)
+        assertEquals(attempt.payerIdentity, pending.payerIdentity)
+        assertTrue(pending.candidateTxids.isEmpty())
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        assertEquals(false, reopened.releaseInterruptedShopPreparation { false })
+        assertEquals(pending, reopened.current())
+        assertEquals(true, reopened.releaseInterruptedShopPreparation {
+            assertEquals(pending, it)
+            true
+        })
+        assertNull(reopened.current())
+    }
+
+    @Test
+    fun `first submission deadline failure clears only never dispatched receipt`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val attempt = store.admitForTest()
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+        )
+        store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
+        assertFailsWith<OnchainSendNotDispatchedError> {
+            store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
+                throw to.bitkit.utils.ServiceError.PaymentDeadlineExpired()
+            }
+        }
+        store.releaseBeforeDispatch(attempt.attemptId, 0)
+        assertNull(store.current())
+        store.admitForTest()
+    }
+
+    @Test
+    fun `deadline on later submission or reopened guard never releases original candidate`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val service = mock<LightningService>()
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        val attempt = store.admitForTest()
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+        )
+        val retained = store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
+        store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
+            OnchainSendOutcome.Unknown(receipt.txid)
+        }
+        // Even before outcome persistence, this process knows dispatch was attempted.
+        assertFailsWith<to.bitkit.utils.ServiceError.PaymentDeadlineExpired> {
+            store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
+                throw to.bitkit.utils.ServiceError.PaymentDeadlineExpired()
+            }
+        }
+        assertEquals(retained, store.current())
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        assertFailsWith<to.bitkit.utils.ServiceError.PaymentDeadlineExpired> {
+            reopened.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
+                throw to.bitkit.utils.ServiceError.PaymentDeadlineExpired()
+            }
+        }
+        assertEquals(retained, reopened.current())
+    }
+
+    @Test
     fun `preparation cancellation cleanup releases only exact empty guard and never a receipt`() = test {
         var saved: String? = null
         val keychain = mock<Keychain>()

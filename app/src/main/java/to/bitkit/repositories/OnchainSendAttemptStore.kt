@@ -19,6 +19,7 @@ import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.WalletScope
 import to.bitkit.services.LightningService
 import to.bitkit.utils.AppError
+import to.bitkit.utils.ServiceError
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -135,6 +136,8 @@ class OnchainSendAttemptStore @Inject constructor(
     // One known positive result per existing wallet guard; entries disappear after a successful durable write.
     private val retainedPositive = mutableMapOf<Int, OnchainSendAttempt>()
     private val inFlightPreparations = mutableSetOf<String>()
+    // Process-local proof that this initial receipt has never entered the native submission boundary.
+    private val firstSubmissions = mutableSetOf<String>()
 
     suspend fun current(): OnchainSendAttempt? = withContext(ioDispatcher) {
         mutex.withLock { loadWithRetainedAccepted(lightningService.currentWalletIndex) }
@@ -267,6 +270,7 @@ class OnchainSendAttemptStore @Inject constructor(
             ).also {
                 persist(it)
                 inFlightPreparations -= attemptId
+                if (!isRecovery) firstSubmissions += attemptId
             }
         }
     }
@@ -284,7 +288,25 @@ class OnchainSendAttemptStore @Inject constructor(
             }
             if (current.hasPositiveEvidence) return@withLock OnchainSendOutcome.Accepted(requireNotNull(current.txid))
             require(current.txid.equals(txid, ignoreCase = true) && txid.lowercase() in current.candidateTxids)
-            broadcast()
+            val firstSubmission = firstSubmissions.remove(attemptId)
+            try {
+                broadcast()
+            } catch (error: ServiceError.PaymentDeadlineExpired) {
+                // Only the queued deadline check raises this before prepared.broadcast(). A retry,
+                // reopened guard or any earlier dispatch has no process-local first-submission proof.
+                if (!firstSubmission || current.restoredFromBackup ||
+                    current.evidence != OnchainSendEvidence.Pending || current.candidateTxids.size != 1
+                ) throw error
+                persist(current.copy(
+                    txid = null,
+                    originalInputs = null,
+                    candidateTxids = emptyList(),
+                    candidateFeeRates = emptyMap(),
+                    preparationPending = current.requestId != null,
+                ))
+                // Shop proof cleanup still precedes guard deletion through the existing preparation path.
+                throw OnchainSendNotDispatchedError(error)
+            }
         }
     }
 
