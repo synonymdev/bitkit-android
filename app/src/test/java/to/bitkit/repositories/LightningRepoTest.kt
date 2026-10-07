@@ -1674,6 +1674,34 @@ class LightningRepoTest : BaseUnitTest() {
         OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
     ) { outcome }
 
+    @Test
+    fun `original retry delegates saved outpoints to native validation when fresh outputs are absent`() = test {
+        startNodeForTesting()
+        val originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u), OnchainSendInput("22".repeat(32), 1u))
+        val original = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Unknown,
+            txid = "aa".repeat(32),
+            originalInputs = originalInputs,
+            candidateTxids = listOf("aa".repeat(32)),
+        )
+        whenever(onchainSendAttemptStore.current()).thenReturn(original)
+        whenever(lightningService.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenThrow(IllegalStateException("fixture stops after exact preparation request"))
+        var authorizations = 0
+        val result = sut.retryOriginalOnchainSend(original.attemptId, original.walletId, 4uL) {
+            authorizations++
+        }
+        assertTrue(result.isFailure)
+        assertEquals(0, authorizations)
+        verify(lightningService).prepareOnchainSend(
+            eq(original.address), eq(original.amountSats), eq(4uL),
+            argThat { map { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) } == originalInputs },
+            eq(false), eq(original.walletIndex), isNull(),
+        )
+        verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
+    }
+
     private fun pendingSendAttempt() = OnchainSendAttempt(
         walletId = "test-wallet", attemptId = "attempt-1", requestId = null, orderId = null,
         address = "address", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,

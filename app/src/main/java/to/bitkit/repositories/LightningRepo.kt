@@ -52,6 +52,7 @@ import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
@@ -1649,10 +1650,10 @@ class LightningRepo @Inject constructor(
                     feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?,
                 ): PreparedOnchainSend {
                     val inputs = requireNotNull(attempt.originalInputs)
-                    val outputs = lightningService.listSpendableOutputs().getOrThrow()
+                    // The saved signed receipt is the input identity. Native preparation resolves
+                    // the actual values and spendability; never replace missing inputs from a fresh list.
                     val selected = inputs.map { input ->
-                        outputs.singleOrNull { it.outpoint.txid == input.txid && it.outpoint.vout == input.vout }
-                            ?: throw OnchainSendBlockedError(attempt)
+                        SpendableUtxo(OutPoint(input.txid, input.vout), 0uL)
                     }
                     return lightningService.prepareOnchainSend(
                         attempt.address,
