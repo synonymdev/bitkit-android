@@ -131,13 +131,16 @@ class SendPendingViewModel @Inject constructor(
             try {
                 val result = runSuspendCatching { retry(original, feeRateSatsPerVByte).getOrThrow() }
                 result.onSuccess { outcome ->
+                    val completed = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+                        ?.takeIf { it.hasPositiveEvidence && it.localFollowupComplete && it.matchesOriginalRoute(original) }
                     _uiState.update {
                         if (it.recoveredTxid != null || it.recoveredTransfer != null) return@update it
                         it.copy(
-                            recoveredTxid = (outcome as? OnchainSendOutcome.Accepted)?.txid
-                                .takeUnless { original.isTransfer },
+                            recoveredTxid = completed?.txid.takeUnless { original.isTransfer },
+                            recoveredTransfer = completed?.takeIf { original.isTransfer },
+                            recoveryAttempt = if (completed != null) null else it.recoveryAttempt,
                             recoveryError = (outcome as? OnchainSendOutcome.Rejected)?.reason,
-                            currentTxid = outcome.txid,
+                            currentTxid = completed?.txid ?: outcome.txid,
                         )
                     }
                 }.onFailure { error ->

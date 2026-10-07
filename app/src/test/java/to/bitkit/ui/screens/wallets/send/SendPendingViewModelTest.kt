@@ -98,6 +98,32 @@ class SendPendingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `accepted retry waits for exact durable original completion`() = test {
+        val original = pendingOriginal()
+        val winner = "cd".repeat(32)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        val accepted = original.copy(
+            txid = winner, candidateTxids = original.candidateTxids + winner,
+            evidence = OnchainSendEvidence.Accepted, localFollowupComplete = false,
+        )
+        sut.retryOriginal(2uL) { _, _ ->
+            whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(accepted)
+            Result.success(OnchainSendOutcome.Accepted(winner))
+        }
+        advanceUntilIdle()
+        assertNull(sut.uiState.value.recoveredTxid)
+        assertEquals(winner, sut.uiState.value.currentTxid)
+        assertEquals(original, sut.uiState.value.recoveryAttempt)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(accepted.copy(localFollowupComplete = true))
+        attemptUpdates.value++
+        advanceUntilIdle()
+        assertEquals(winner, sut.uiState.value.recoveredTxid)
+        assertNull(sut.uiState.value.recoveryAttempt)
+    }
+
+    @Test
     fun `exact ordinary observed successor resolves only after original local completion`() = test {
         val original = pendingOriginal()
         val winner = "cd".repeat(32)
