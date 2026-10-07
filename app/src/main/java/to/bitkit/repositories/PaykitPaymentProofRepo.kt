@@ -171,7 +171,13 @@ class PaykitPaymentProofRepo @Inject constructor(
             operationMutex.withLock {
                 val proof = pendingProof(request, paymentEndpointIdentifier, paymentAppId, kind)
                 val currentProofs = loadProofs()
-                if (currentProofs.any { it.isStartedFor(proof.identity, request.id) }) {
+                if (currentProofs.any {
+                        it.isStartedFor(proof.identity, request.id) ||
+                            (PubkyPublicKeyFormat.matches(it.identity, proof.identity) &&
+                                PubkyPublicKeyFormat.matches(it.requestId.counterparty, request.counterparty) &&
+                                it.hardwareSignedTransaction != null && !it.onchainAcceptanceVerified)
+                    }
+                ) {
                     throw PaykitPaymentRequestError.OperationInProgress
                 }
                 val alreadyPaid = paykitSdkService.paymentRequests().any { record ->
@@ -601,6 +607,17 @@ class PaykitPaymentProofRepo @Inject constructor(
                     it.onchainAmountSats == amountSats
             } ?: return@withLock null
             proof.retainedSignedHardwareReceipt()?.let {
+                proof.privatePaymentListVersion?.let { version ->
+                    val consumption = privatePaykitRepo.get().consumePrivatePaymentList(
+                        proof.requestId.counterparty,
+                        PrivatePaykitPaymentContext(
+                            paymentAppsByEndpoint = mapOf(proof.paymentEndpointIdentifier to proof.paymentAppId),
+                            paymentListVersion = version,
+                        ),
+                    )
+                    val error = consumption.exceptionOrNull()
+                    if (error != null && error !is PrivatePaykitError.PaymentListAlreadyConsumed) throw error
+                }
                 RetainedHardwareOnchainPayment(it, proof.hardwareDispatchAttempted != false)
             }
         }

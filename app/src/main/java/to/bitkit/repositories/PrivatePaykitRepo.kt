@@ -412,6 +412,7 @@ class PrivatePaykitRepo @Inject constructor(
         result
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun consumePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,
@@ -425,9 +426,16 @@ class PrivatePaykitRepo @Inject constructor(
                 throw PrivatePaykitError.PaymentListAlreadyConsumed
             }
 
+            val previousEndpoints = contactState.remoteEndpoints
             contactState.consumedPrivatePaymentListVersion = paymentListVersion
             contactState.remoteEndpoints = emptyList()
-            persistState(markWalletBackup = true)
+            try {
+                persistState(markWalletBackup = true)
+            } catch (error: Throwable) {
+                contactState.consumedPrivatePaymentListVersion = consumedVersion
+                contactState.remoteEndpoints = previousEndpoints
+                throw error
+            }
             Logger.info(
                 "Consumed private Paykit payment list version $paymentListVersion " +
                     "for '${redacted(normalizedKey)}'",

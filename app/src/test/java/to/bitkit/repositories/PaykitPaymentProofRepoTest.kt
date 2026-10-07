@@ -38,6 +38,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
@@ -105,6 +106,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         shouldFailNextLoad = false
         shouldFailNextSave = false
         shouldFailProofRemoval = false
+        whenever(privatePaykitRepo.consumePrivatePaymentList(any(), any())).thenReturn(Result.success(Unit))
         whenever(store.hasPendingProofs()).thenReturn(true)
         whenever(
             paykitSdkService.identityStatus()
@@ -1566,6 +1568,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         storedProofs = emptyList()
         val reopened = paymentProofRepo()
         reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(encoded))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(eq(request.counterparty), any())).thenReturn(Result.success(Unit))
         assertEquals(
             RetainedHardwareOnchainPayment(signed, false),
             reopened.retainedHardwareOnchainPayment(
@@ -1576,6 +1579,22 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 request.amountSats
             )
         )
+        verify(privatePaykitRepo).consumePrivatePaymentList(eq(request.counterparty), argThat { paymentListVersion == 7uL })
+        val otherRequest = paymentRequest(MethodId.P2wpkh.rawValue, paymentRequestId = "another-order")
+        assertTrue(reopened.prepare(otherRequest, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).isFailure)
+        whenever(privatePaykitRepo.consumePrivatePaymentList(eq(request.counterparty), any()))
+            .thenReturn(Result.failure(IllegalStateException("private state unavailable")))
+        var blockedByStorage = false
+        try {
+            reopened.retainedHardwareOnchainPayment(request.id, walletId, LOCAL_IDENTITY, ONCHAIN_ADDRESS, request.amountSats)
+        } catch (_: IllegalStateException) {
+            blockedByStorage = true
+        }
+        assertTrue(blockedByStorage)
+        whenever(privatePaykitRepo.consumePrivatePaymentList(eq(request.counterparty), any()))
+            .thenReturn(Result.failure(PrivatePaykitError.PaymentListAlreadyConsumed))
+        assertEquals(signed, reopened.retainedHardwareOnchainPayment(request.id, walletId, LOCAL_IDENTITY, ONCHAIN_ADDRESS, request.amountSats)?.signedTx)
+        whenever(privatePaykitRepo.consumePrivatePaymentList(eq(request.counterparty), any())).thenReturn(Result.success(Unit))
         assertNull(
             reopened.retainedHardwareOnchainPayment(
                 request.id,
