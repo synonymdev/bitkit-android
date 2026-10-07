@@ -1549,10 +1549,12 @@ class ActivityService(
         ServiceQueue.CORE.background {
             val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
             check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            if (cacheStore.data.first().isContactDetached(existing.id, walletId)) return@background
             if (existing.contact == null) {
                 upsertActivity(Activity.Onchain(existing.copy(contact = contact)))
             }
-            check(requireNotNull(getOnchainActivityByTxId(txid, walletId)).contact != null)
+            check(cacheStore.data.first().isContactDetached(existing.id, walletId) ||
+                requireNotNull(getOnchainActivityByTxId(txid, walletId)).contact != null)
         }
 
     /** Called only after exact original-node transaction/prevout verification, to repair an existing placeholder. */
