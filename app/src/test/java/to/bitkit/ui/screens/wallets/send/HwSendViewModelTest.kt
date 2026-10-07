@@ -748,7 +748,7 @@ class HwSendViewModelTest : BaseUnitTest() {
                 ADDRESS,
                 AMOUNT_SATS
             )
-        }.thenReturn(fixture.signedTx)
+        }.thenReturn(to.bitkit.repositories.RetainedHardwareOnchainPayment(fixture.signedTx, true))
         sut.signAndBroadcast(
             original,
             prepareContactPayment = { error("must retain original preparation") },
@@ -771,6 +771,39 @@ class HwSendViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         verify(hwWalletRepo, never()).signFunding(any(), any())
         verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `restored unattempted Shop receipt expires without claiming dispatch or signing again`() = test {
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+            paymentDeadlineAt = deadline
+        )
+        whenever {
+            proofRepo.retainedHardwareOnchainPayment(
+                requireNotNull(original.paymentRequestId),
+                WALLET_ID,
+                original.paymentIdentity,
+                ADDRESS,
+                AMOUNT_SATS
+            )
+        }.thenReturn(to.bitkit.repositories.RetainedHardwareOnchainPayment(fixture.signedTx, false))
+        now = deadline + 1.seconds
+        var attempted: Boolean? = null
+        sut.signAndBroadcast(
+            original,
+            prepareContactPayment = { error("must retain original preparation") },
+            authorizeContactPayment = { error("expired before authorization") },
+            onPaymentDeadlineExpired = { attempted = it }
+        )
+        advanceUntilIdle()
+        assertEquals(false, attempted)
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test

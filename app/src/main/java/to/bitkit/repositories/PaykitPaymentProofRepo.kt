@@ -63,6 +63,11 @@ enum class PaykitPaymentProofKind(val type: String) {
     }
 }
 
+data class RetainedHardwareOnchainPayment(
+    val signedTx: HwFundingSignedTx,
+    val hasAttemptedBroadcast: Boolean,
+)
+
 @Serializable
 data class PendingPaykitPaymentProof(
     val identity: String,
@@ -80,6 +85,7 @@ data class PendingPaykitPaymentProof(
     val onchainMatchingTransactionIdsBeforeAttempt: Set<String> = emptySet(),
     val onchainAcceptanceVerified: Boolean = false,
     val hardwareDispatchDenied: Boolean = false,
+    val hardwareDispatchAttempted: Boolean? = null,
     val hardwareSignedTransaction: String? = null,
     val hardwareMiningFeeSats: ULong? = null,
     val hardwareFeeRate: ULong? = null,
@@ -261,6 +267,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     hardwareMiningFeeSats = signedTx?.miningFeeSats,
                     hardwareFeeRate = signedTx?.feeRate,
                     hardwareTotalSpent = signedTx?.totalSpent,
+                    hardwareDispatchAttempted = signedTx?.let { false },
                 )
                 persist(proofs)
             }
@@ -554,7 +561,8 @@ class PaykitPaymentProofRepo @Inject constructor(
                             hardwareSignedTransaction = signedTx?.serializedTx ?: it.hardwareSignedTransaction,
                             hardwareMiningFeeSats = signedTx?.miningFeeSats ?: it.hardwareMiningFeeSats,
                             hardwareFeeRate = signedTx?.feeRate ?: it.hardwareFeeRate,
-                            hardwareTotalSpent = signedTx?.totalSpent ?: it.hardwareTotalSpent
+                            hardwareTotalSpent = signedTx?.totalSpent ?: it.hardwareTotalSpent,
+                            hardwareDispatchAttempted = true
                         )
                     } else {
                         it
@@ -571,7 +579,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         identity: String?,
         address: String,
         amountSats: ULong,
-    ): HwFundingSignedTx? = withContext(ioDispatcher) {
+    ): RetainedHardwareOnchainPayment? = withContext(ioDispatcher) {
         operationMutex.withLock {
             if (!PubkyPublicKeyFormat.matches(currentIdentity(), identity)) return@withLock null
             val proof = loadProofs().singleOrNull {
@@ -587,7 +595,9 @@ class PaykitPaymentProofRepo @Inject constructor(
                     it.onchainAddress == address &&
                     it.onchainAmountSats == amountSats
             } ?: return@withLock null
-            proof.retainedSignedHardwareReceipt()
+            proof.retainedSignedHardwareReceipt()?.let {
+                RetainedHardwareOnchainPayment(it, proof.hardwareDispatchAttempted != false)
+            }
         }
     }
 
@@ -676,10 +686,11 @@ class PaykitPaymentProofRepo @Inject constructor(
                 if (currentIdentity() != originalIdentity) return@runSuspendCatching false
                 val proofs = loadProofs()
                 val original = proofs.singleOrNull {
+                    val definitelyUnsent = it.paymentIdentifier == null || it.hardwareDispatchDenied ||
+                        (it.hardwareDispatchAttempted == false && it.retainedSignedHardwareReceipt() != null)
                     PubkyPublicKeyFormat.matches(it.identity, originalIdentity) && it.requestId == request.id &&
                         it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
-                        it.paymentStarted && (it.paymentIdentifier == null || it.hardwareDispatchDenied) &&
-                        it.proofData == null && !it.onchainAcceptanceVerified
+                        it.paymentStarted && definitelyUnsent && it.proofData == null && !it.onchainAcceptanceVerified
                 } ?: return@runSuspendCatching false
                 if (original.hardwareDispatchDenied) releaseDeniedPrivateConsumption(original)
                 // Only the caller's definite first-dispatch authorization denial permits this removal.

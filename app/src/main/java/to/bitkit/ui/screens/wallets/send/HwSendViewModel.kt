@@ -111,12 +111,17 @@ class HwSendViewModel @Inject constructor(
                             pending =
                                 PendingHwSendBroadcast(
                                     request,
-                                    restored,
+                                    restored.signedTx,
                                     isPreparedForBroadcast = true,
-                                    hasAttemptedBroadcast = true
+                                    hasAttemptedBroadcast = restored.hasAttemptedBroadcast
                                 )
                             pendingBroadcast = pending
-                            _uiState.update { it.copy(hasPendingBroadcast = true, isBroadcastUnresolved = true) }
+                            _uiState.update {
+                                it.copy(
+                                    hasPendingBroadcast = true,
+                                    isBroadcastUnresolved = restored.hasAttemptedBroadcast
+                                )
+                            }
                         }
                     }
                     if (pending == null && hwWalletRepo.needsPassphrase(request.walletId)) {

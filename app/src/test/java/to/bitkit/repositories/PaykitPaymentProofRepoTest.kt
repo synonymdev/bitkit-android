@@ -1541,12 +1541,13 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
         // Snapshot at the authorization boundary, before any broadcast callback can save a receipt.
         repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId, signedTx = signed).getOrThrow()
+        assertEquals(false, storedProofs.single().hardwareDispatchAttempted)
         val encoded = Json.encodeToString(repo.backupSnapshot())
         storedProofs = emptyList()
         val reopened = paymentProofRepo()
         reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(encoded))
         assertEquals(
-            signed,
+            RetainedHardwareOnchainPayment(signed, false),
             reopened.retainedHardwareOnchainPayment(
                 request.id,
                 walletId,
@@ -1593,6 +1594,35 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         assertFalse(storedProofs.single().onchainAcceptanceVerified)
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+        assertTrue(reopened.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false))
+        assertTrue(storedProofs.isEmpty())
+        reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(encoded))
+        assertTrue(
+            reopened.retainHardwareOnchainCandidate(
+                request.id,
+                walletId,
+                txid,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+                signed
+            )
+        )
+        val dispatched = Json.encodeToString(reopened.backupSnapshot())
+        storedProofs = emptyList()
+        reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(dispatched))
+        assertEquals(
+            true,
+            reopened.retainedHardwareOnchainPayment(
+                request.id,
+                walletId,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats
+            )?.hasAttemptedBroadcast
+        )
+        assertFalse(reopened.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false))
+        assertEquals(1, storedProofs.size)
     }
 
     @Test
@@ -1762,7 +1792,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 val reopened = paymentProofRepo()
                 reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(backup))
                 assertEquals(
-                    signed,
+                    RetainedHardwareOnchainPayment(signed, false),
                     reopened.retainedHardwareOnchainPayment(
                         request.id,
                         walletId,
