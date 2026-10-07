@@ -32,6 +32,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitPaymentContext
@@ -240,6 +241,7 @@ class ContactDetailViewModel @Inject constructor(
                                 it.paymentRequest,
                                 publicKey,
                                 it.privatePaymentContext,
+                                it.endpoints,
                             )
                         )
                     }
@@ -420,6 +422,7 @@ sealed interface ContactDetailEffect {
         val paymentRequest: String,
         val publicKey: String,
         val privatePaymentContext: PrivatePaykitPaymentContext?,
+        val endpoints: List<Endpoint> = emptyList(),
     ) : ContactDetailEffect
 
     data object ContactDeleted : ContactDetailEffect

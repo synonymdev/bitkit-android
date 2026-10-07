@@ -24,7 +24,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
-import to.bitkit.ui.components.MoneyCell
+import to.bitkit.ui.components.PaykitAmountCell
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -63,7 +63,7 @@ internal fun SubscriptionRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        MoneyCell(sats = subscription.displaySats)
+        PaykitAmountCell(subscription.amount)
     }
 }
 

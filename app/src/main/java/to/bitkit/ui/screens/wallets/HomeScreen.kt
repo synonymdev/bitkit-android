@@ -164,6 +164,7 @@ import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.screens.wallets.usdt.UsdtWalletCard
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.blocks.BlockCardSmall
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
@@ -394,6 +395,7 @@ fun HomeScreen(
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
+        onClickUsdt = { walletNavController.navigateTo(Routes.UsdtWallet) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
     )
 }
@@ -435,6 +437,7 @@ private fun Content(
     onNavigateToSavings: () -> Unit = {},
     onNavigateToSpending: () -> Unit = {},
     onClickHardwareWallet: (String) -> Unit = {},
+    onClickUsdt: () -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
     hazeState: HazeState = rememberHazeState(),
     balances: BalanceState = LocalBalances.current,
@@ -571,6 +574,7 @@ private fun Content(
                     onNavigateToSavings = onNavigateToSavings,
                     onNavigateToSpending = onNavigateToSpending,
                     onClickHardwareWallet = onClickHardwareWallet,
+                    onClickUsdt = onClickUsdt,
                 )
 
                 1 -> WidgetsPage(
@@ -613,6 +617,7 @@ private fun WalletPage(
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
     onClickHardwareWallet: (String) -> Unit,
+    onClickUsdt: () -> Unit,
 ) {
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
@@ -659,6 +664,7 @@ private fun WalletPage(
                 onNavigateToSavings = onNavigateToSavings,
                 onNavigateToSpending = onNavigateToSpending,
                 onClickHardwareWallet = onClickHardwareWallet,
+                onClickUsdt = onClickUsdt,
             )
             VerticalSpacer(32.dp)
 
@@ -724,6 +730,7 @@ private fun BalancesSection(
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
     onClickHardwareWallet: (String) -> Unit,
+    onClickUsdt: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -754,6 +761,7 @@ private fun BalancesSection(
         }
 
         HwDevices(wallets = hardwareWallets, onClick = onClickHardwareWallet)
+        if (!LocalInspectionMode.current && Env.isUsdtEnabled) UsdtWalletCard(onClick = onClickUsdt)
     }
 }
 

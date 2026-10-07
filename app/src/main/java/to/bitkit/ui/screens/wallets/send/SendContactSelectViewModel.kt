@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
@@ -75,6 +76,7 @@ class SendContactSelectViewModel @Inject constructor(
                                     result.paymentRequest,
                                     publicKey,
                                     result.privatePaymentContext,
+                                    result.endpoints,
                                 )
                             )
                         PublicPaykitPaymentResult.NoEndpoint ->
@@ -120,5 +122,6 @@ sealed interface SendContactSelectEffect {
         val paymentRequest: String,
         val publicKey: String,
         val privatePaymentContext: PrivatePaykitPaymentContext?,
+        val endpoints: List<Endpoint> = emptyList(),
     ) : SendContactSelectEffect
 }

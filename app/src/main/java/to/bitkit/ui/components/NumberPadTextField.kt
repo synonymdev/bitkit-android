@@ -16,7 +16,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -93,52 +92,16 @@ private fun MoneyAmount(
             )
             VerticalSpacer(12.dp)
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (!isSymbolSuffix) {
-                Display(
-                    text = symbol,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Colors.White64,
-                    modifier = Modifier.padding(end = 6.dp)
-                )
-            }
-            Display(
-                text = buildAnnotatedString {
-                    if (value != placeholder) {
-                        withStyle(valueStyle) {
-                            append(value)
-                        }
-                    }
-                    if (placeholder.isNotEmpty() && showPlaceholder) {
-                        withStyle(placeholderStyle) {
-                            append(placeholder)
-                        }
-                    }
-                },
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            if (isSymbolSuffix) {
-                Display(
-                    text = symbol,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Colors.White64,
-                    modifier = Modifier.padding(start = 6.dp)
-                )
-            }
-            if (showEditButton) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_pencil_simple),
-                    contentDescription = stringResource(R.string.common__edit),
-                    tint = Colors.White,
-                    modifier = Modifier
-                        .padding(start = 5.dp)
-                        .size(24.dp)
-                )
-            }
-        }
+        NumberPadAmountText(
+            showEditButton = showEditButton,
+            value = value,
+            placeholder = placeholder,
+            symbol = symbol,
+            isSymbolSuffix = isSymbolSuffix,
+            showPlaceholder = showPlaceholder,
+            valueStyle = valueStyle,
+            placeholderStyle = placeholderStyle,
+        )
     }
 }
 
@@ -240,5 +203,61 @@ private fun PreviewModernValue() {
             satoshis = 1_250_000,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+@Composable
+fun NumberPadAmountText(
+    value: String,
+    symbol: String,
+    modifier: Modifier = Modifier,
+    showEditButton: Boolean = false,
+    placeholder: String = "",
+    isSymbolSuffix: Boolean = false,
+    showPlaceholder: Boolean = true,
+    valueStyle: SpanStyle = SpanStyle(color = Colors.White),
+    placeholderStyle: SpanStyle = SpanStyle(color = Colors.White50),
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        if (!isSymbolSuffix) {
+            Display(
+                text = symbol,
+                color = Colors.White64,
+                modifier = Modifier.padding(end = 6.dp)
+            )
+        }
+        Display(
+            text = buildAnnotatedString {
+                if (value != placeholder) {
+                    withStyle(valueStyle) {
+                        append(value)
+                    }
+                }
+                if (placeholder.isNotEmpty() && showPlaceholder) {
+                    withStyle(placeholderStyle) {
+                        append(placeholder)
+                    }
+                }
+            },
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        if (isSymbolSuffix) {
+            Display(
+                text = symbol,
+                color = Colors.White64,
+                modifier = Modifier.padding(start = 6.dp)
+            )
+        }
+        if (showEditButton) {
+            Icon(
+                painter = painterResource(R.drawable.ic_pencil_simple),
+                contentDescription = stringResource(R.string.common__edit),
+                tint = Colors.White,
+                modifier = Modifier.padding(start = 5.dp).size(24.dp)
+            )
+        }
     }
 }

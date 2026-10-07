@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
@@ -32,6 +33,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SuggestionsRepo
 import to.bitkit.repositories.TransferRepo
+import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
@@ -51,6 +53,7 @@ class HomeViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val suggestionsRepo: SuggestionsRepo,
+    private val usdtRepo: UsdtRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -122,9 +125,16 @@ class HomeViewModel @Inject constructor(
             }
         }
 
+        observeEmptyState()
+        viewModelScope.launch { createBannersFlow() }
+    }
+
+    private fun observeEmptyState() {
         @OptIn(ExperimentalCoroutinesApi::class)
         val hasActivityFlow = activityRepo.activitiesChanged.mapLatest {
             activityRepo.getActivities(walletId = null, limit = 1u).getOrNull()?.isNotEmpty() == true
+        }.combine(usdtRepo.state) { hasActivity, usdt ->
+            hasActivity || (Env.isUsdtEnabled && ((usdt.balance ?: 0uL) > 0uL || usdt.transfers.isNotEmpty()))
         }
 
         viewModelScope.launch {
@@ -151,7 +161,6 @@ class HomeViewModel @Inject constructor(
                 }
             }.collect()
         }
-        viewModelScope.launch { createBannersFlow() }
     }
 
     private fun setupArticleRotation() {

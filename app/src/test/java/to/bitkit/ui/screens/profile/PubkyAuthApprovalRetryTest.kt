@@ -43,7 +43,7 @@ class PubkyAuthApprovalRetryTest : BaseUnitTest() {
             Result.failure(AppError(PubkyRingAuthTimeoutError())),
             Result.success(Unit),
         )
-        val sut = PubkyAuthApprovalViewModel(context, pubkyRepo, mock())
+        val sut = PubkyAuthApprovalViewModel(context, pubkyRepo, mock(), mock())
 
         sut.effects.test {
             sut.load(authUrl)

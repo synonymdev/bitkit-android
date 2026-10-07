@@ -4,6 +4,9 @@ package to.bitkit.repositories
 
 import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import java.util.TimeZone
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -179,8 +182,9 @@ class PaykitSubscriptionTest {
         val subscription = PaykitSubscription(
             paymentRequestId = "shared",
             counterparty = "counterparty-a",
-            amountValue = "0.001",
-            amountSats = 100_000uL,
+            amount = PaykitAmount(PaykitAsset.BTC, 100_000uL),
+            paymentReference = "fixture-reference",
+            pricing = PaykitRequestPricing(),
             note = null,
             createdAt = null,
             proposalExpiresAt = null,

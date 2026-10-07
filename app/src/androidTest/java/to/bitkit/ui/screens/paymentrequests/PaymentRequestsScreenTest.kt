@@ -19,6 +19,9 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.CurrencyState
@@ -316,8 +319,8 @@ class PaymentRequestsScreenTest {
     private fun request(id: String = "request") = PaykitPaymentRequest(
         paymentRequestId = id,
         counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-        amountValue = "0.00025",
-        amountSats = 25_000uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
+        paymentReference = "reference-$id",
         note = "Dinner",
         createdAt = Instant.parse("2027-01-15T08:00:00Z"),
         expiresAt = null,
@@ -327,8 +330,9 @@ class PaymentRequestsScreenTest {
     private fun subscription(note: String) = PaykitSubscription(
         paymentRequestId = "subscription",
         counterparty = request().counterparty,
-        amountValue = "0.00025",
-        amountSats = 25_000uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
+        paymentReference = "invoice",
+        pricing = PaykitRequestPricing(),
         note = note,
         createdAt = Instant.parse("2027-01-15T08:00:00Z"),
         proposalExpiresAt = null,

@@ -16,6 +16,7 @@ import kotlin.time.Instant
 data class PaykitPaymentStateBackup(
     val subscriptions: Map<String, Subscription>,
     val pendingProofs: List<Proof>,
+    val usdt: PaykitUsdtStateBackup? = null,
     val acceptedOneTimeRequests: Map<String, Set<PaykitPaymentRequestId>>? = null,
 ) {
     @Serializable
@@ -47,6 +48,7 @@ data class PaykitPaymentStateBackup(
         val paymentStarted: Boolean,
         val paymentIdentifier: String? = null,
         val proofData: String? = null,
+        val conversionQuoteId: String? = null,
         val billingPeriod: PaykitBillingPeriod? = null,
         val onchainAddress: String? = null,
         val onchainAmountSats: ULong? = null,
@@ -62,6 +64,7 @@ data class PaykitPaymentStateBackup(
             paymentStarted = proof.paymentStarted,
             paymentIdentifier = proof.paymentIdentifier,
             proofData = proof.proofData,
+            conversionQuoteId = proof.conversionQuoteId,
             billingPeriod = proof.billingPeriod,
             onchainAddress = proof.onchainAddress,
             onchainAmountSats = proof.onchainAmountSats,
@@ -78,6 +81,7 @@ data class PaykitPaymentStateBackup(
             paymentStarted = paymentStarted,
             paymentIdentifier = paymentIdentifier,
             proofData = proofData,
+            conversionQuoteId = conversionQuoteId,
             billingPeriod = billingPeriod,
             onchainAddress = onchainAddress,
             onchainAmountSats = onchainAmountSats,

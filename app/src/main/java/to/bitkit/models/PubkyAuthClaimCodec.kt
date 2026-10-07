@@ -13,6 +13,10 @@ object PubkyAuthClaimCodec {
     const val COMBINED_PAYLOAD_LENGTH = 124
 
     fun validateAccountPayload(claim: PubkyAuthClaim, accountPayload: ByteArray) {
+        if (claim.sharesUsdt) {
+            require(!claim.includesPaykitAccess && accountPayload.isNotEmpty()) { "Invalid payment-details claim" }
+            return
+        }
         if (!claim.includesWatchOnlyAccount) {
             require(accountPayload.isEmpty()) { "Paykit-only approval cannot include an account" }
             return

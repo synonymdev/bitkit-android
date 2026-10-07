@@ -1,0 +1,10 @@
+<journey name="usdt wallet navigation">
+  <description>Use an onboarded wallet in an E2E build with USDT RPC and bundler URLs configured. No chain funding or live provider is required. A network error may be visible when services are offline; no payment is submitted.</description>
+  <actions>
+    <action>Open USDT from Home and verify the wallet screen uses the same balance, action buttons and activity layout as the Bitcoin wallet.</action>
+    <action>Open Receive. Verify the address starts with 0x and the network is Arbitrum One. Open details and verify Copy and the QR show the same address.</action>
+    <action>Close Receive, open Send and manual entry. Enter an invalid Bitcoin address and verify the address error prevents continuing.</action>
+    <action>Replace it with an owned valid EVM address. Continue to Amount, enter six decimal places and try a seventh; verify the amount remains limited to six. Close before requesting a quote.</action>
+    <action>Return Home and open Bitcoin Receive. Verify the Bitcoin address, network and amount controls remain separate from USDT.</action>
+  </actions>
+</journey>

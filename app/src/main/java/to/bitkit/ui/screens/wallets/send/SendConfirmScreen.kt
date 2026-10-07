@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.wallets.send
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -41,8 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -66,6 +63,7 @@ import to.bitkit.R
 import to.bitkit.ext.commentAllowed
 import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.PaykitPaymentRequest
@@ -79,6 +77,8 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.NumberPadActionButton
+import to.bitkit.ui.components.PaykitAmountDisplay
+import to.bitkit.ui.components.PaymentReviewIllustration
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SendCell
@@ -112,6 +112,7 @@ private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val SWIPE_ROTATION_DEGREES = 14f
 private const val IMAGE_FILL_PERCENTAGE = 0.8f
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
+const val HARDWARE_SIGN_CANCELLED_RESULT_KEY = "HARDWARE_SIGN_CANCELLED_RESULT_KEY"
 
 @Suppress("MagicNumber")
 @Composable
@@ -350,15 +351,19 @@ private fun ContentRunning(
             .padding(horizontal = 16.dp)
             .fillMaxSize()
     ) {
-        BalanceHeaderView(
-            sats = (preparingRequest?.amountSats ?: uiState.amount).toLong(),
-            useSwipeToHide = false,
-            onClick = { onEvent(SendEvent.BackToAmount) }.takeUnless { isPreparing },
-            testTag = "ReviewAmount",
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("ReviewAmount")
-        )
+        if (preparingRequest != null && preparingRequest.amount.asset != PaykitAsset.BTC) {
+            PaykitAmountDisplay(preparingRequest.amount)
+        } else {
+            BalanceHeaderView(
+                sats = (preparingRequest?.amount?.atomic ?: uiState.amount).toLong(),
+                useSwipeToHide = false,
+                onClick = { onEvent(SendEvent.BackToAmount) }.takeUnless { isPreparing },
+                testTag = "ReviewAmount",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("ReviewAmount")
+            )
+        }
 
         BoxWithConstraints(
             modifier = Modifier
@@ -411,16 +416,9 @@ private fun ContentRunning(
                         )
                         VerticalSpacer(16.dp)
                     }
-                    Image(
-                        painter = painterResource(R.drawable.coin_stack_4),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth(IMAGE_FILL_PERCENTAGE)
-                            .weight(1f)
-                            .align(Alignment.CenterHorizontally)
-                            .padding(bottom = 16.dp)
-                            .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
+                    PaymentReviewIllustration(
+                        swipeProgress = { swipeProgress.floatValue },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }

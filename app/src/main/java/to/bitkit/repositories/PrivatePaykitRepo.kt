@@ -74,6 +74,7 @@ class PrivatePaykitRepo @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
+    private val usdtRepo: UsdtRepo,
     private val coreService: CoreService,
     private val clock: Clock,
 ) {
@@ -740,6 +741,7 @@ class PrivatePaykitRepo @Inject constructor(
                         .associate { it.methodId.rawValue to requireNotNull(it.appId) },
                     paymentListVersion = paymentListVersion,
                 ),
+                endpoints = privatePayable,
             )
         }
 
@@ -1350,6 +1352,9 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             val settings = settingsStore.data.first()
             val endpoints = mutableListOf<Endpoint>()
+            if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings)) {
+                endpoints += usdtRepo.paymentEndpoint().getOrThrow()
+            }
             if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
                 val reservedAddress = addressReservationRepo.currentOrRotatedAddress(
                     publicKey,
