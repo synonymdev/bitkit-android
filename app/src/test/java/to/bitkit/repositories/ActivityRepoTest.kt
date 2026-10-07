@@ -630,6 +630,33 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `contact retry completes detachment cleanup and replacement after partial write`() = test {
+        val contact = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        var original = createOnchainActivity(id = "original", txId = "original-tx", doesExist = false)
+        val replacement = createOnchainActivity(id = "replacement", txId = "replacement-tx", boostTxIds = listOf("original-tx"))
+        whenever(coreService.activity.getActivity("original-tx", WalletScope.default)).thenAnswer { original }
+        whenever(coreService.activity.update(eq("original"), any())).doSuspendableAnswer {
+            original = it.getArgument(1)
+            Unit
+        }
+        whenever(coreService.activity.get(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenAnswer { listOf(original, replacement) }
+        var failCleanup = true
+        whenever(cacheStore.setActivityContactDetached("original", WalletScope.default, false)).doSuspendableAnswer {
+            if (failCleanup) {
+                failCleanup = false
+                error("detachment marker write failed")
+            }
+            Unit
+        }
+        assertTrue(sut.setContact(contact, "original-tx", syncLdkPayments = false).isFailure)
+        assertEquals(contact, original.v1.contact)
+        assertTrue(sut.setContact(contact, "original-tx", syncLdkPayments = false).isSuccess)
+        verify(cacheStore, times(2)).setActivityContactDetached("original", WalletScope.default, false)
+        verify(coreService.activity).update(eq("replacement"), argThat { this is Activity.Onchain && v1.contact == contact })
+    }
+
+    @Test
     fun `setContact propagates contact to replacement transaction`() = test {
         val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val replacedTxId = "replaced_tx_id"

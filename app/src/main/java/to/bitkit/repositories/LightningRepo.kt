@@ -1624,9 +1624,11 @@ class LightningRepo @Inject constructor(
                 return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
             }
         }
+        var outcomePersisted = true
         val recorded = runSuspendCatching {
             onchainSendAttemptStore.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex)
         }.getOrElse { error ->
+            outcomePersisted = false
             val winner = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull()
             if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
                 winner.hasPositiveEvidence
@@ -1650,6 +1652,17 @@ class LightningRepo @Inject constructor(
 
         runSuspendCatching { finishOnchainSendLocally(recorded) }
             .onFailure { Logger.warn("Failed to finish accepted on-chain send locally", it, context = TAG) }
+        if (!outcomePersisted) {
+            runSuspendCatching {
+                val durable = requireNotNull(onchainSendAttemptStore.currentDurable())
+                check(durable.attemptId == recorded.attemptId && durable.walletId == recorded.walletId &&
+                    durable.hasPositiveEvidence && durable.txid.equals(txId, true)) {
+                    "Accepted on-chain outcome repair is not durable"
+                }
+            }.getOrElse {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(it, txId))
+            }
+        }
         runSuspendCatching { syncState() }
             .onFailure { Logger.warn("Failed to sync after accepted on-chain send", it, context = TAG) }
         Result.success(winningOutcome)

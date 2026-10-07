@@ -527,13 +527,14 @@ class ActivityRepo @Inject constructor(
                 )
                 return@runCatching
             }
-            if (PubkyPublicKeyFormat.matches(activity.contact(), normalizedKey)) {
-                return@runCatching
-            }
-
             val updatedAt = nowTimestamp().epochSecond.toULong()
-            val updatedActivity = activity.withContact(normalizedKey, updatedAt)
-            updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            val updatedActivity = if (PubkyPublicKeyFormat.matches(activity.contact(), normalizedKey)) {
+                activity
+            } else {
+                activity.withContact(normalizedKey, updatedAt).also {
+                    updateActivity(it.rawId(), it).getOrThrow()
+                }
+            }
             cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = false)
             updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt, walletId)
         }.onFailure {
