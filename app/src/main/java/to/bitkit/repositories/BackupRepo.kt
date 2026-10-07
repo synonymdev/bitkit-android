@@ -5,6 +5,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -501,30 +502,38 @@ class BackupRepo @Inject constructor(
         val backupRequired = currentTimeMillis()
         runningBackups += category
         failedBackupRequired -= category
-        cacheStore.updateBackupStatus(category) {
-            it.copy(running = true, required = backupRequired)
-        }
-
-        val data = runSuspendCatching { getBackupDataBytes(category) }
-            .getOrElse {
-                markBackupFailed(category, backupRequired, it)
-                return@withContext Result.failure(it)
+        try {
+            cacheStore.updateBackupStatus(category) {
+                it.copy(running = true, required = backupRequired)
             }
 
-        vssBackupClient.putObject(key = category.name, data = data)
-            .onSuccess {
-                runningBackups -= category
-                failedBackupRequired -= category
-                cacheStore.updateBackupStatus(category) {
-                    it.copy(
-                        running = false,
-                        synced = currentTimeMillis(),
-                    )
+            val data = runSuspendCatching { getBackupDataBytes(category) }
+                .getOrElse {
+                    markBackupFailed(category, backupRequired, it)
+                    return@withContext Result.failure(it)
                 }
-                Logger.info("Backup succeeded for: '$category'", context = TAG)
+
+            vssBackupClient.putObject(key = category.name, data = data)
+                .onSuccess {
+                    runningBackups -= category
+                    failedBackupRequired -= category
+                    cacheStore.updateBackupStatus(category) {
+                        it.copy(
+                            running = false,
+                            synced = currentTimeMillis(),
+                        )
+                    }
+                    Logger.info("Backup succeeded for: '$category'", context = TAG)
+                }
+                .onFailure { markBackupFailed(category, backupRequired, it) }
+                .map {}
+        } finally {
+            if (runningBackups.remove(category)) {
+                withContext(NonCancellable) {
+                    cacheStore.updateBackupStatus(category) { it.copy(running = false) }
+                }
             }
-            .onFailure { markBackupFailed(category, backupRequired, it) }
-            .map {}
+        }
     }
 
     private suspend fun markBackupFailed(category: BackupCategory, backupRequired: Long, e: Throwable) {

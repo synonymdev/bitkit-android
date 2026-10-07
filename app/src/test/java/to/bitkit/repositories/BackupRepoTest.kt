@@ -6,9 +6,12 @@ import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.JsonObject
@@ -184,6 +187,51 @@ class BackupRepoTest : BaseUnitTest() {
             )
             verify(paykitPaymentProofRepo).backupSnapshot()
             verify(privatePaykitRepo).backupSnapshot()
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `cancelled manual wallet backup retains pending state and resumes automatically`() = test {
+        val statuses = MutableStateFlow(
+            mapOf(BackupCategory.WALLET to BackupItemStatus(required = 1_000)),
+        )
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        paymentSubmissionActive.value = true
+        whenever(privatePaykitRepo.backupSnapshot()).doSuspendableAnswer {
+            paymentSubmissionActive.first { !it }
+            Result.success("pending-write")
+        }
+
+        val backup = launch { sut.triggerBackup(BackupCategory.WALLET) }
+        runCurrent()
+        verify(privatePaykitRepo).backupSnapshot()
+        assertTrue(statuses.value.getValue(BackupCategory.WALLET).running)
+
+        backup.cancelAndJoin()
+
+        assertTrue(backup.isCancelled)
+        assertFalse(statuses.value.getValue(BackupCategory.WALLET).running)
+        assertTrue(statuses.value.getValue(BackupCategory.WALLET).isRequired)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+        try {
+            sut.startObservingBackups()
+            paymentSubmissionActive.value = false
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            val payload = argumentCaptor<ByteArray>()
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), payload.capture())
+            assertEquals(
+                "pending-write",
+                json.decodeFromString<WalletBackupV1>(String(payload.firstValue)).paykitSdkBackupState,
+            )
+            assertFalse(statuses.value.getValue(BackupCategory.WALLET).running)
+            assertFalse(statuses.value.getValue(BackupCategory.WALLET).isRequired)
         } finally {
             sut.stopObservingBackups()
         }
