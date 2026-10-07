@@ -30,6 +30,11 @@ Delegates Pubky operations to `PaykitSdkService`, which uses:
 
 Paykit derives the delegated Paykit key from the active Pubky identity secret and the App Registry's current key generation. Authorized apps share encrypted Pubky-hosted Paykit state; Bitkit retains wallet-owned address reservations and pending payment proofs locally.
 
+Shared-state deployments require Homeserver 0.15 or newer on every serving instance.
+The Paykit dependency does not upgrade the homeserver or verify its version.
+Uncertain-write recovery still retains pending markers and the five-minute
+cooldown; Homeserver 0.15 does not eliminate every uncertain-publication case.
+
 The Android dependency is `com.synonym:paykit-android` from GitHub Packages, pinned in `gradle/libs.versions.toml`. Paykit is excluded from Maven-local resolution. Companion authorization and key-sharing consent are described in [Pubky Auth companion claims](pubky-auth-companion-claims.md).
 
 Session, state, key and publishing calls are serialized by `PaykitSdkService`'s operation lock. The public reads — `fetchFile()` (`fetchPubkyFileBounded()`), `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, and the receiver reads `discoverRelevantReceiverPaths()`, `privateReceiverPathSelection()` and `paymentRequestReceiverPaths()` (`paykitReceiverPaths()` and `paykitReceiverMarker()`) — run outside that lock, at most 6 at once, and are cancelled with their caller. Only unauthenticated public reads may use that path. Reading or saving a contact record stays under the lock, so a caller that discovers receiver paths and then saves them takes the lock only for the save. A wallet wipe still applies to the public reads: one that needs an SDK instance builds it under the lock, one that starts during the wipe fails the way a locked call does, and one that the wipe overtakes fails instead of returning its result, while the wipe's own cleanup can still read.
