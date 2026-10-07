@@ -60,3 +60,20 @@ Repeat with a controlled SDK operation held in progress: background the app, the
 operation and verify that it completes without cancellation and the next contact waits. Delete the
 profile while work is paused, then resume; no work for the deleted identity should restart.
 Controlled operation blocking requires an instrumented fixture, not the standard journey runner.
+
+Emit several proof-state notifications while backgrounded without changing proof persistence.
+No observer-driven stored request refresh starts until the app is active; returning to the app
+refreshes the latest state once. Repeat while payment activity is held: refresh waits until that
+activity ends. A session change discards the old session's pending refresh. These notifications
+and the payment-activity hold require the same controlled fixture, not a real payment.
+
+Hold proof reconciliation during an automatic request refresh, then background the app and release
+it. Reconciliation must finish, but request intake and target discovery wait for resume. Explicit
+payment-completion work keeps its normal behavior. This requires controlled operation blocking.
+
+With public sharing enabled and unchanged receive endpoints, compare retained-profile startup and
+Home/resume. The foreground event and initial wallet-address observation must not start duplicate
+public publication. Change the receive address while backgrounded, then resume: publish the latest
+address. An expired public invoice is refreshed on resume; explicit channel and payment updates
+keep their normal publication behavior. Counting publications and controlling invoice expiry require
+an instrumented fixture, not the standard journey runner.
