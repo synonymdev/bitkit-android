@@ -191,10 +191,18 @@ When the user provides custom instructions after `--`:
 - Always use this structure:
   ```md
   ### QA Notes
+  #### Setup
   #### Journeys
   #### Manual Tests
   #### Automated Checks
   ```
+- Under `#### Setup`, follow `AGENTS.md`'s Device-test setup guidance: give executable steps or a
+  reproducible shared recipe plus PR-specific deviations for the journeys/manual tests requested.
+  Include necessary service/library versions or pins, staging vs local backend/network, flags,
+  prerequisites, fixture accounts/identities and preparation/reset steps. Resolve recipe branches
+  to commits. Do not assume staging includes new Shop/Marketplace, Pubky Ring, homeserver or library
+  versions; explain compatible setup or missing prerequisites. Keep details proportional; use a
+  justified `N/A` when no device tests apply (for example, documentation-only changes).
 - Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line as an unchecked checkbox (`- [ ] `), then `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
 - List a journey as `temporary` only when the user asks for one in custom instructions or a `.ai/pr/` file: a reproduction that needs a code change or data that will not exist on master. Put its XML, and any code change as a `.diff`, in a collapsed `<details>` block under its line, and do not commit it. Never add one unasked; at most, suggest it to the author and ask whether they agree.
 - Reference journeys by bare file name only, never the full path. Only when two listed journeys share the same name, prefix the shortest leading path segment(s) that disambiguate them, the same rule as test files.
@@ -278,6 +286,12 @@ Only include if the PR template (`.github/pull_request_template.md`) contains a 
   - Example: `<!-- VIDEO_1: Record the send flow by scanning a LN invoice and setting amount to 5000 sats -->`
 
 ### 6b. Verification and review
+
+Keep development/fix PRs in draft; publish a non-draft PR only when ready for review after
+applicable validation. Prefer returning an existing PR to draft while addressing review feedback
+before intermediate pushes. Follow `AGENTS.md`'s Draft status and review readiness guidance;
+draft status cannot guarantee that all automation skips the PR. Keep explicitly requested drafts
+as drafts and do not undraft as a side effect of description updates.
 
 Before publishing, apply the verification requirements in `AGENTS.md` under Agent workflow.
 Prefer an independent subagent review with fresh context as described there before marking the PR

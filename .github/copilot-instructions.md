@@ -2,6 +2,12 @@
 
 When performing a code review, respond in English.
 
+## Draft PRs
+
+Check the PR's current draft status before starting and before publishing a review. Skip draft PRs
+and wait until they are ready for review, following `AGENTS.md` under Draft status and review
+readiness. This guidance does not itself configure or disable external review automation.
+
 ## Review summary metadata
 
 Follow `AGENTS.md` under "Review summary metadata": end the review summary with

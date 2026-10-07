@@ -24,6 +24,36 @@ Durable shared agent command specs live in `.agents/commands/`. For PR creation,
   Documentation-only changes need documentation checks such as `git diff --check` and validation of
   changed references, not an application build or device run.
 
+### Device-test setup
+
+When requesting journeys or manual device tests, give the reviewer enough setup instructions to
+reproduce their required environment. Under `#### Setup` in PR QA Notes, provide executable steps
+or a reproducible shared recipe and describe PR-specific deviations. Include only relevant details:
+service/library versions or pinned revisions, staging versus local backend/network, configuration
+and flags, prerequisites, fixture accounts/identities, preparation and reset steps. For a recipe on
+a branch, record its resolved commit. Do not assume a required Shop/Marketplace, Pubky Ring,
+homeserver or library version is available in standard staging; state how to obtain/configure the
+compatible version, or identify the missing prerequisite. Keep setup proportional to the requested
+cases; documentation-only/no-runtime changes can use `N/A — no device testing required.` with the
+reason. Preserve existing authored QA notes when updating a description.
+
+### Draft status and review readiness
+
+Keep PRs in draft while development or fixes are ongoing. Mark ready for review only when the
+change is ready after applicable verification; draft status does not waive the checks above.
+Prefer returning a PR to draft while addressing review feedback, before pushing intermediate
+commits, to reduce unnecessary automated reviews. Preserve an explicit request to keep a PR draft;
+a description update alone must not undraft it.
+
+AI PR reviewers should check the current draft status before starting and before publishing a
+review, skip drafts, and wait until ready for review. This does not prevent author-requested local
+validation or an independent pre-publication review of a frozen local candidate.
+
+Draft is a readiness signal, not a guarantee that every automation stops. The manually dispatched
+`.github/workflows/claude-code-review.yml` has no workflow-level draft guard, and its comment
+minimization step runs before the review plugin. A hard skip before those steps needs a separate
+workflow change; external reviewers also need to honor draft status in their own configuration.
+
 ### Independent review (recommended)
 
 Before marking a PR ready for human review, preferably run an independent review using a subagent

@@ -7,6 +7,8 @@ Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e
 <!-- Changelog: For user-facing changes, add one fragment in changelog.d/next/ or changelog.d/hotfix/. Do not edit CHANGELOG.md in normal PRs. -->
 <!-- Brief summary of the PR changes, linking to the related resources (issue/design/bug/etc) if applicable. -->
 
+<!-- Keep in draft during development/fixes; mark ready only after applicable validation. Prefer returning to draft while addressing review feedback. Draft-aware reviewers skip drafts; automation must honor this separately. -->
+
 ### Description
 
 <!-- One bullet per change: what changed and why. -->
@@ -24,6 +26,10 @@ Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e
 <!-- Screenshot or recording of the changed UI; `N/A` when there is no user-visible change. -->
 
 ### QA Notes
+
+#### Setup
+
+<!-- Enough setup for the requested device journeys/manual tests: executable steps or a reproducible shared recipe (resolved commit) plus PR-specific deviations. Include only relevant service/library versions or pins, staging vs local backend/network, configuration/flags, prerequisites, fixture accounts/identities and preparation/reset steps. Do not assume required Shop/Marketplace, Pubky Ring, homeserver or library versions exist on staging; explain compatible setup or missing prerequisites. Justified N/A for documentation-only/no-device-testing changes. Preserve authored QA notes on updates. -->
 
 #### Journeys
 
