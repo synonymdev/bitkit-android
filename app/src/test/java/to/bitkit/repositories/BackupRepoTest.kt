@@ -245,7 +245,7 @@ class BackupRepoTest : BaseUnitTest() {
             val statusWriteStarted = CompletableDeferred<Unit>()
             val finishStatusWrite = CompletableDeferred<Unit>()
             whenever(cacheStore.backupStatuses).thenReturn(statuses)
-            whenever { cacheStore.updateBackupStatus(eq(category), any()) }.doSuspendableAnswer {
+            whenever(cacheStore.updateBackupStatus(eq(category), any())).doSuspendableAnswer {
                 val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
                 val updated = transform(statuses.value.getValue(category))
                 if (!updated.running) {
@@ -259,7 +259,7 @@ class BackupRepoTest : BaseUnitTest() {
             } else {
                 Result.failure(BackupRepoTestError("upload failed"))
             }
-            whenever { vssBackupClient.putObject(eq(category.name), any()) }.thenReturn(uploadResult)
+            whenever(vssBackupClient.putObject(eq(category.name), any())).thenReturn(uploadResult)
 
             val backup = launch { sut.triggerBackup(category) }
             runCurrent()

@@ -89,6 +89,11 @@ payment deadline, and fault injection that can drop a successful broadcast respo
 wallet reconciliation or its UI delivery. These controls are not journey capabilities; record
 this test as blocked, not passed, when they are unavailable. Do not change the device clock.
 
+For definite hardware failures, inject Core's `InvalidHex` or `InvalidTransaction` before
+the first network submission. Leave the signing screen and reopen the unpaid request; it must
+remain payable. Repeat after an earlier uncertain submission: the proof must stay pending and
+a fresh payment must remain blocked. Electrum and unclassified errors are not proof of rejection.
+
 1. Submit before the deadline, forward the signed transaction to the regtest node, and drop
    only its response. Record the node's transaction ID and keep wallet reconciliation paused.
 2. Let the payment deadline pass and retry. Verify that no additional broadcast occurs, the

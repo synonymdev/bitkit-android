@@ -52,7 +52,7 @@ fun HwSendSignScreen(
     authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
     onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit,
     onPaymentSubmissionChange: (Boolean) -> Unit,
-    onBroadcastAttemptChanged: (Boolean) -> Unit,
+    onBroadcastAttemptChange: (Boolean) -> Unit,
     paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
 ) {
@@ -78,7 +78,7 @@ fun HwSendSignScreen(
             prepareContactPayment,
             authorizeContactPayment,
             onPaymentDeadlineExpired,
-            onBroadcastAttemptChanged,
+            onBroadcastAttemptChange,
         )
     }
 

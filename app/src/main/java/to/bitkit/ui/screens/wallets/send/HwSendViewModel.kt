@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import to.bitkit.R
 import to.bitkit.ext.isBroadcastConnectivityFailure
+import to.bitkit.ext.isDefiniteHardwarePreBroadcastFailure
 import to.bitkit.ext.isHwDeviceBusy
 import to.bitkit.ext.isHwFirmwareError
 import to.bitkit.ext.isHwSessionFailure
@@ -175,6 +176,10 @@ class HwSendViewModel @Inject constructor(
                 _uiState.update { it.copy(isBroadcastUnresolved = wasBroadcastUnresolved) }
                 onPaymentDeadlineExpired(payment.hasAttemptedBroadcast)
                 return null
+            }
+            if (error.isDefiniteHardwarePreBroadcastFailure()) {
+                pendingBroadcast = payment
+                onBroadcastAttemptChanged(payment.hasAttemptedBroadcast)
             }
             throw error
         }
@@ -403,7 +408,7 @@ class HwSendViewModel @Inject constructor(
                 description = context.getString(R.string.wallet__payment_timeout),
             )
             else -> {
-                if (pendingBroadcast != null) {
+                if (pendingBroadcast?.hasAttemptedBroadcast != true) {
                     pendingBroadcast = null
                     _uiState.update { it.copy(hasPendingBroadcast = false) }
                 }

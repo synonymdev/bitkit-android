@@ -1,5 +1,8 @@
 # Contacts
 
+`delete-newly-saved-contact.xml` checks deletion directly from Contact Saved and adding that
+contact again. It is mirrored on iOS. Deleted contact screens must not remain in Back history.
+
 `contact-payment-sharing.xml` checks disabling sharing and keeping it off after returning to
 Settings. The same journey is available on iOS.
 

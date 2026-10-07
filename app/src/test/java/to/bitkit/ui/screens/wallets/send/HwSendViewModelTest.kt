@@ -79,44 +79,12 @@ class HwSendViewModelTest : BaseUnitTest() {
 
     @Test
     fun `signing reconnects and retries once after THP channel failure`() = test {
-        val funding = HwFundingTransaction(
-            psbt = "psbt",
-            miningFeeSats = 1_000uL,
-            feeRate = 2.0f,
-            totalSpent = 26_000uL,
-            satsPerVByte = 2uL,
-        )
-        val signedTx = HwFundingSignedTx(
-            serializedTx = "rawtx",
-            miningFeeSats = funding.miningFeeSats,
-            feeRate = 2uL,
-            totalSpent = funding.totalSpent,
-        )
-        val broadcast = HwFundingBroadcastResult(
-            txId = "txid",
-            miningFeeSats = signedTx.miningFeeSats,
-            feeRate = signedTx.feeRate,
-            totalSpent = signedTx.totalSpent,
-        )
-        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
-        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(connectedDevice()))
-        whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
-            .thenReturn(Result.success(funding))
+        val (funding, signedTx, broadcast) = stubSuccessfulPayment()
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(
             Result.failure(TrezorException.ProtocolException("THP decryption error: aead::Error")),
             Result.success(signedTx),
         )
-        whenever(hwWalletRepo.broadcastFunding(signedTx)).thenReturn(Result.success(broadcast))
-
-        sut.signAndBroadcast(
-            HwSendRequest(
-                walletId = WALLET_ID,
-                address = ADDRESS,
-                amountSats = AMOUNT_SATS,
-                satsPerVByte = SATS_PER_VBYTE,
-                tags = emptyList(),
-            )
-        )
+        sut.signAndBroadcast(request())
         advanceUntilIdle()
 
         verify(hwWalletRepo, times(2)).ensureConnected(WALLET_ID)
@@ -172,6 +140,54 @@ class HwSendViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
         sut.completeBroadcast()
         assertFalse(sut.uiState.value.hasPendingBroadcast)
+    }
+
+    @Test
+    fun `invalid transaction releases the attempt only without an earlier uncertain broadcast`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        for (hadPriorAttempt in listOf(false, true)) {
+            val attempts = mutableListOf<Boolean>()
+            if (hadPriorAttempt) {
+                whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+                    .thenReturn(Result.failure(BroadcastException.ElectrumException("offline")))
+                sut.signAndBroadcast(request(), onBroadcastAttemptChanged = { attempts += it })
+                advanceUntilIdle()
+            }
+            whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+                .thenReturn(Result.failure(AppError(BroadcastException.InvalidTransaction("invalid transaction"))))
+
+            sut.signAndBroadcast(request(), onBroadcastAttemptChanged = { attempts += it })
+            advanceUntilIdle()
+
+            assertEquals(hadPriorAttempt, attempts.last())
+            assertEquals(hadPriorAttempt, sut.uiState.value.hasPendingBroadcast)
+            assertTrue(sut.uiState.value.canLeave)
+            sut.cancel()
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun `unclassified broadcast failures retain the signed transaction for retry`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(AppError("broadcast outcome unknown")),
+            Result.success(fixture.broadcast),
+        )
+        val attempts = mutableListOf<Boolean>()
+        sut.signAndBroadcast(request(), onBroadcastAttemptChanged = { attempts += it })
+        advanceUntilIdle()
+
+        assertEquals(listOf(true), attempts)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+
+        sut.signAndBroadcast(request(), onBroadcastAttemptChanged = { attempts += it })
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
     }
 
     @Test

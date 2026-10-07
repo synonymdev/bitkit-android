@@ -8029,7 +8029,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertTrue(sut.prepareHardwareContactPayment())
             clearInvocations(paykitPaymentProofRepo)
-            if (attempted) sut.onHardwareBroadcastAttemptChanged(true)
+            sut.onHardwareBroadcastAttemptChanged(true)
+            if (!attempted) sut.onHardwareBroadcastAttemptChanged(false)
 
             sut.hideSheet()
             advanceUntilIdle()
@@ -9491,9 +9492,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         verify(publicPaykitRepo, times(2)).syncPaykitApp()
 
-        pubkyContactsLoadVersion.value = 2L
+        val contact = PubkyProfile.placeholder("pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg")
+        pubkyContacts.value = listOf(contact)
         advanceUntilIdle()
         verify(publicPaykitRepo, times(2)).syncPaykitApp()
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(setOf(contact.publicKey))
     }
 
     @Test

@@ -373,7 +373,7 @@ fun SendSheet(
                         authorizeContactPayment = appViewModel::authorizeHardwareContactPayment,
                         onPaymentDeadlineExpired = appViewModel::onHardwarePaymentDeadlineExpired,
                         onPaymentSubmissionChange = appViewModel::onHardwarePaymentSubmissionChanged,
-                        onBroadcastAttemptChanged = appViewModel::onHardwareBroadcastAttemptChanged,
+                        onBroadcastAttemptChange = appViewModel::onHardwareBroadcastAttemptChanged,
                         paymentDeadlineAt = appViewModel.hardwarePaymentDeadlineAt,
                         onBack = {
                             navController.previousBackStackEntry
