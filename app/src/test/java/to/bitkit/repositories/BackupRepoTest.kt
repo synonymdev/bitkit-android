@@ -183,7 +183,7 @@ class BackupRepoTest : BaseUnitTest() {
             verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), payload.capture())
             assertEquals(
                 "pending-write",
-                json.decodeFromString<WalletBackupV1>(String(payload.firstValue)).paykitSdkBackupState
+                json.decodeFromString<WalletBackupV1>(String(payload.firstValue)).paykitSdkBackupState,
             )
             verify(paykitPaymentProofRepo).backupSnapshot()
             verify(privatePaykitRepo).backupSnapshot()

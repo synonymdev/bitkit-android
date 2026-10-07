@@ -51,7 +51,7 @@ fun HwSendSignScreen(
     prepareContactPayment: suspend () -> Boolean,
     authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
     onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit,
-    onPaymentSubmissionChanged: (Boolean) -> Unit,
+    onPaymentSubmissionChange: (Boolean) -> Unit,
     paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
 ) {
@@ -75,12 +75,12 @@ fun HwSendSignScreen(
         viewModel.warmUp(walletId)
     }
     LaunchedEffect(uiState.isSigning) {
-        onPaymentSubmissionChanged(uiState.isSigning)
+        onPaymentSubmissionChange(uiState.isSigning)
     }
     DisposableEffect(viewModel) {
         onDispose {
             viewModel.cancel()
-            onPaymentSubmissionChanged(false)
+            onPaymentSubmissionChange(false)
         }
     }
     // Without this the sheet's NavHost pops the route itself, ignoring the guard and skipping onBack
