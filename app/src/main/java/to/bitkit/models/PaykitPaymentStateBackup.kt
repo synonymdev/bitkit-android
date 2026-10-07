@@ -54,6 +54,10 @@ data class PaykitPaymentStateBackup(
         val onchainWalletId: String? = null,
         val onchainMatchingTransactionIdsBeforeAttempt: Set<String>,
         val onchainAcceptanceVerified: Boolean = false,
+        val hardwareSignedTransaction: String? = null,
+        val hardwareMiningFeeSats: ULong? = null,
+        val hardwareFeeRate: ULong? = null,
+        val hardwareTotalSpent: ULong? = null,
     ) {
         constructor(proof: PendingPaykitPaymentProof) : this(
             identity = proof.identity,
@@ -70,6 +74,10 @@ data class PaykitPaymentStateBackup(
             onchainWalletId = proof.onchainWalletId,
             onchainMatchingTransactionIdsBeforeAttempt = proof.onchainMatchingTransactionIdsBeforeAttempt,
             onchainAcceptanceVerified = proof.onchainAcceptanceVerified,
+            hardwareSignedTransaction = proof.hardwareSignedTransaction,
+            hardwareMiningFeeSats = proof.hardwareMiningFeeSats,
+            hardwareFeeRate = proof.hardwareFeeRate,
+            hardwareTotalSpent = proof.hardwareTotalSpent
         )
 
         fun restored() = PendingPaykitPaymentProof(
@@ -87,6 +95,10 @@ data class PaykitPaymentStateBackup(
             onchainWalletId = onchainWalletId ?: WalletScope.default,
             onchainMatchingTransactionIdsBeforeAttempt = onchainMatchingTransactionIdsBeforeAttempt,
             onchainAcceptanceVerified = onchainAcceptanceVerified,
+            hardwareSignedTransaction = hardwareSignedTransaction,
+            hardwareMiningFeeSats = hardwareMiningFeeSats,
+            hardwareFeeRate = hardwareFeeRate,
+            hardwareTotalSpent = hardwareTotalSpent
         )
     }
 }

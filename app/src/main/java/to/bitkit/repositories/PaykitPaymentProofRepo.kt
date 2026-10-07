@@ -34,12 +34,14 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.SignedTransactionId
 import to.bitkit.utils.asNodeException
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -78,6 +80,10 @@ data class PendingPaykitPaymentProof(
     val onchainMatchingTransactionIdsBeforeAttempt: Set<String> = emptySet(),
     val onchainAcceptanceVerified: Boolean = false,
     val hardwareDispatchDenied: Boolean = false,
+    val hardwareSignedTransaction: String? = null,
+    val hardwareMiningFeeSats: ULong? = null,
+    val hardwareFeeRate: ULong? = null,
+    val hardwareTotalSpent: ULong? = null,
     val privatePaymentListVersion: ULong? = null,
 )
 
@@ -502,24 +508,85 @@ class PaykitPaymentProofRepo @Inject constructor(
         identity: String?,
         address: String,
         amountSats: ULong,
+        signedTx: HwFundingSignedTx? = null,
     ): Boolean = withContext(ioDispatcher) {
         if (walletId == WalletScope.default || !txid.isHex(HASH_BYTE_COUNT)) return@withContext false
+        if (signedTx != null &&
+            runCatching { SignedTransactionId.fromHex(signedTx.serializedTx) }
+                .getOrNull()?.equals(txid, true) != true
+        ) {
+            return@withContext false
+        }
         val originalIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return@withContext false
         operationMutex.withLock {
             if (!PubkyPublicKeyFormat.matches(currentIdentity(), originalIdentity)) return@withLock false
             val proofs = loadProofs()
             val original = proofs.singleOrNull {
-                PubkyPublicKeyFormat.matches(it.identity, originalIdentity) && it.requestId == requestId &&
-                    it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
-                    it.paymentStarted && !it.hardwareDispatchDenied &&
-                    it.onchainAddress == address && it.onchainAmountSats == amountSats &&
-                    it.proofData == null && !it.onchainAcceptanceVerified &&
-                    (it.paymentIdentifier == null || it.paymentIdentifier.equals(txid, true))
+                PubkyPublicKeyFormat.matches(it.identity, originalIdentity) &&
+                    it.requestId == requestId &&
+                    it.onchainWalletId == walletId &&
+                    it.kind == PaykitPaymentProofKind.Onchain &&
+                    it.paymentStarted &&
+                    !it.hardwareDispatchDenied &&
+                    it.onchainAddress == address &&
+                    it.onchainAmountSats == amountSats &&
+                    it.proofData == null &&
+                    !it.onchainAcceptanceVerified &&
+                    (it.paymentIdentifier == null || it.paymentIdentifier.equals(txid, true)) &&
+                    (it.hardwareSignedTransaction == null || it.hardwareSignedTransaction == signedTx?.serializedTx)
             } ?: return@withLock false
             // Lookup identity only: never acceptance, a Sent activity, or a delivered proof.
-            persist(proofs.map { if (it == original) it.copy(paymentIdentifier = txid.lowercase()) else it })
+            persist(
+                proofs.map {
+                    if (it == original) {
+                        it.copy(
+                            paymentIdentifier = txid.lowercase(),
+                            hardwareSignedTransaction = signedTx?.serializedTx ?: it.hardwareSignedTransaction,
+                            hardwareMiningFeeSats = signedTx?.miningFeeSats ?: it.hardwareMiningFeeSats,
+                            hardwareFeeRate = signedTx?.feeRate ?: it.hardwareFeeRate,
+                            hardwareTotalSpent = signedTx?.totalSpent ?: it.hardwareTotalSpent
+                        )
+                    } else {
+                        it
+                    }
+                }
+            )
             true
         }
+    }
+
+    suspend fun retainedHardwareOnchainPayment(
+        requestId: PaykitPaymentRequestId,
+        walletId: String,
+        identity: String?,
+        address: String,
+        amountSats: ULong,
+    ): HwFundingSignedTx? = withContext(ioDispatcher) {
+        operationMutex.withLock {
+            if (!PubkyPublicKeyFormat.matches(currentIdentity(), identity)) return@withLock null
+            val proof = loadProofs().singleOrNull {
+                PubkyPublicKeyFormat.matches(it.identity, identity) &&
+                    it.requestId == requestId &&
+                    it.onchainWalletId == walletId &&
+                    walletId != WalletScope.default &&
+                    it.kind == PaykitPaymentProofKind.Onchain &&
+                    it.paymentStarted &&
+                    !it.hardwareDispatchDenied &&
+                    !it.onchainAcceptanceVerified &&
+                    it.proofData == null &&
+                    it.onchainAddress == address &&
+                    it.onchainAmountSats == amountSats
+            } ?: return@withLock null
+            proof.retainedSignedHardwareReceipt()
+        }
+    }
+
+    private fun PendingPaykitPaymentProof.retainedSignedHardwareReceipt(): HwFundingSignedTx? {
+        val raw = hardwareSignedTransaction ?: return null
+        val txid = runCatching { SignedTransactionId.fromHex(raw) }.getOrNull() ?: return null
+        if (!txid.equals(paymentIdentifier, true)) return null
+        if (hardwareMiningFeeSats == null || hardwareFeeRate == null || hardwareTotalSpent == null) return null
+        return HwFundingSignedTx(raw, hardwareMiningFeeSats, hardwareFeeRate, hardwareTotalSpent)
     }
 
     suspend fun clearHardwareOnchainCandidateBeforeDispatch(

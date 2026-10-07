@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.NodeException
@@ -50,6 +52,7 @@ import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.data.keychain.Keychain
@@ -60,6 +63,7 @@ import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.SignedTransactionId
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -1513,6 +1517,92 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.single().hardwareDispatchDenied)
         assertTrue(repo.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false))
         assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    @Suppress("LongMethod")
+    fun `signed hardware Shop receipt restores exact bytes before explicit retry`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val signed =
+            HwFundingSignedTx(
+                "02000000000101f7c5a048189164c6b05b07516b5dbb9c826c601d12dc4ed97f0069618b8b7c1601" +
+                    "00000000fdffffff024179010000000000160014f066a63663b0d464b31a7a88619beae011c3fb7b" +
+                    "e80300000000000016001483ea855bb508cb08ed9e8cf9152d8927871c19aa02473044022052c5a1" +
+                    "5ade616af16f314bcc2ae15bf4ef4996e0f2315794e647ba6c955745b602200f3095f4a7deb39a94" +
+                    "716c0fd2001a2fbff1861a8ff0c2015739a40a62891c22012102cb13c86b55418d0e3bccf2911539" +
+                    "4e1fb6a9f209d3f59dc9bbb0805b253464cb724c0300",
+                141uL,
+                2uL,
+                request.amountSats + 141uL
+            )
+        val txid = SignedTransactionId.fromHex(signed.serializedTx)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        assertTrue(
+            repo.retainHardwareOnchainCandidate(
+                request.id,
+                walletId,
+                txid,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+                signed
+            )
+        )
+        val encoded = Json.encodeToString(repo.backupSnapshot())
+        storedProofs = emptyList()
+        val reopened = paymentProofRepo()
+        reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(encoded))
+        assertEquals(
+            signed,
+            reopened.retainedHardwareOnchainPayment(
+                request.id,
+                walletId,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats
+            )
+        )
+        assertNull(
+            reopened.retainedHardwareOnchainPayment(
+                request.id,
+                "other-wallet",
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats
+            )
+        )
+        assertNull(
+            reopened.retainedHardwareOnchainPayment(
+                request.id,
+                walletId,
+                COUNTERPARTY,
+                ONCHAIN_ADDRESS,
+                request.amountSats
+            )
+        )
+        assertNull(
+            reopened.retainedHardwareOnchainPayment(
+                request.id,
+                walletId,
+                LOCAL_IDENTITY,
+                "other-address",
+                request.amountSats
+            )
+        )
+        assertNull(
+            reopened.retainedHardwareOnchainPayment(
+                request.id,
+                walletId,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats + 1uL
+            )
+        )
+        assertFalse(storedProofs.single().onchainAcceptanceVerified)
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test

@@ -64,10 +64,29 @@ class HwSendViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(coreService.activity).thenReturn(activityService)
-        whenever { proofRepo.retainHardwareOnchainCandidate(any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any()) }
+        whenever {
+            proofRepo.retainHardwareOnchainCandidate(
+                any(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull()
+            )
+        }
             .thenReturn(true)
-        whenever { proofRepo.clearHardwareOnchainCandidateBeforeDispatch(any(), any(), any(),
-            org.mockito.kotlin.anyOrNull(), any(), any(), any()) }.thenReturn(false)
+        whenever {
+            proofRepo.clearHardwareOnchainCandidateBeforeDispatch(
+                any(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull(),
+                any(),
+                any(),
+                any()
+            )
+        }.thenReturn(false)
         whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
         sut = HwSendViewModel(
             context = context,
@@ -715,19 +734,75 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restored hardware Shop receipt retries only after authorization without signing again`() = test {
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity"
+        )
+        whenever {
+            proofRepo.retainedHardwareOnchainPayment(
+                requireNotNull(original.paymentRequestId),
+                WALLET_ID,
+                original.paymentIdentity,
+                ADDRESS,
+                AMOUNT_SATS
+            )
+        }.thenReturn(fixture.signedTx)
+        sut.signAndBroadcast(
+            original,
+            prepareContactPayment = { error("must retain original preparation") },
+            authorizeContactPayment = { attempted ->
+                assertTrue(attempted)
+                false
+            }
+        )
+        advanceUntilIdle()
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+        sut.signAndBroadcast(
+            original,
+            prepareContactPayment = { error("must retain original preparation") },
+            authorizeContactPayment = { attempted ->
+                assertTrue(attempted)
+                true
+            }
+        )
+        advanceUntilIdle()
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
     fun `hardware Shop never broadcasts when candidate persistence fails`() = test {
         val fixture = stubSuccessfulPayment()
-        val original = request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
-            paymentIdentity = "original-identity")
-        whenever { proofRepo.retainHardwareOnchainCandidate(any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any()) }
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity"
+        )
+        whenever {
+            proofRepo.retainHardwareOnchainCandidate(
+                any(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull()
+            )
+        }
             .thenReturn(false)
         sut.signAndBroadcast(original)
         advanceUntilIdle()
         verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
         verify(proofRepo).retainHardwareOnchainCandidate(
-            requireNotNull(original.paymentRequestId), WALLET_ID,
+            requireNotNull(original.paymentRequestId),
+            WALLET_ID,
             "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e",
-            original.paymentIdentity, ADDRESS, AMOUNT_SATS,
+            original.paymentIdentity,
+            ADDRESS,
+            AMOUNT_SATS,
+            fixture.signedTx
         )
     }
 
@@ -747,6 +822,7 @@ class HwSendViewModelTest : BaseUnitTest() {
                 org.mockito.kotlin.anyOrNull(),
                 any(),
                 any(),
+                org.mockito.kotlin.anyOrNull()
             )
         }.doSuspendableAnswer { resume.await() }
         sut.signAndBroadcast(original)
@@ -775,6 +851,7 @@ class HwSendViewModelTest : BaseUnitTest() {
                 org.mockito.kotlin.anyOrNull(),
                 any(),
                 any(),
+                org.mockito.kotlin.anyOrNull()
             )
         }
             .thenReturn(false, true)
@@ -804,6 +881,7 @@ class HwSendViewModelTest : BaseUnitTest() {
                 org.mockito.kotlin.anyOrNull(),
                 any(),
                 any(),
+                org.mockito.kotlin.anyOrNull()
             )
         }
             .thenThrow(IllegalStateException("storage unavailable")).thenReturn(true)

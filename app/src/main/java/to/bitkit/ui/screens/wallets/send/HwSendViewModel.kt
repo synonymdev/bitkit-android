@@ -99,6 +99,26 @@ class HwSendViewModel @Inject constructor(
             try {
                 runCatching {
                     var pending = pendingBroadcast?.takeIf { it.matches(request) }
+                    if (pending == null && request.paymentRequestId != null) {
+                        val restored = paykitPaymentProofRepo.retainedHardwareOnchainPayment(
+                            request.paymentRequestId,
+                            request.walletId,
+                            request.paymentIdentity,
+                            request.address,
+                            request.amountSats
+                        )
+                        if (restored != null) {
+                            pending =
+                                PendingHwSendBroadcast(
+                                    request,
+                                    restored,
+                                    isPreparedForBroadcast = true,
+                                    hasAttemptedBroadcast = true
+                                )
+                            pendingBroadcast = pending
+                            _uiState.update { it.copy(hasPendingBroadcast = true, isBroadcastUnresolved = true) }
+                        }
+                    }
                     if (pending == null && hwWalletRepo.needsPassphrase(request.walletId)) {
                         _uiState.update { it.copy(isPassphraseRequired = true) }
                         return@runCatching
@@ -180,6 +200,7 @@ class HwSendViewModel @Inject constructor(
                     request.paymentIdentity,
                     request.address,
                     request.amountSats,
+                    payment.signedTx
                 )
             }.onFailure { Logger.warn("Failed to retain signed hardware receipt", it, context = TAG) }
                 .getOrDefault(false)
