@@ -638,7 +638,10 @@ class BackupRepo @Inject constructor(
         }
         val transfers = db.transferDao().getAll()
         val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot().getOrThrow()
-        val paykitSdkBackupState = privatePaykitRepo.get().backupSnapshot().getOrThrow()
+        val privateRepo = privatePaykitRepo.get()
+        val privateVersion = privateRepo.backupStateVersion.value
+        val sdkVersion = paykitSdkService.backupStateVersion.value
+        val paykitSdkBackupState = privateRepo.backupSnapshot().getOrThrow()
 
         val watchOnlyAccountSnapshot = watchOnlyAccountStore.backupSnapshot()
         val walletIndex = backupWalletIndex()
@@ -652,6 +655,9 @@ class BackupRepo @Inject constructor(
                 it.evidence == OnchainSendEvidence.Pending && it.txid == null &&
                 it.originalInputs == null && it.candidateTxids.isEmpty()
         } != true) { "Waiting for signed Shop receipt before wallet backup" }
+        check(privateRepo.backupStateVersion.value == privateVersion &&
+            paykitSdkService.backupStateVersion.value == sdkVersion
+        ) { "Private payment state changed during wallet snapshot" }
         val proofs = snapshotProofs
         val active = snapshotAttempt?.let { attempt ->
             val wire = ActiveOnchainAttemptBackup.from(
@@ -854,6 +860,10 @@ class BackupRepo @Inject constructor(
             if (attempt.isTransfer) {
                 transferRepo.get().resumeAcceptedFunding(attempt).onFailure {
                     Logger.warn("Restored accepted funding remains pending local follow-up", it, context = TAG)
+                }
+            } else if (attempt.requestId != null && !attempt.localFollowupComplete) {
+                runSuspendCatching { paykitPaymentProofRepo.get().reconcile() }.onFailure {
+                    Logger.warn("Restored accepted Shop payment remains pending local follow-up", it, context = TAG)
                 }
             } else if (attempt.requestId == null && !attempt.localFollowupComplete) {
                 runSuspendCatching {

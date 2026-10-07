@@ -146,6 +146,8 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { transferDao.getAll() }.thenReturn(emptyList())
         whenever { privatePaykitRepo.restoreBackup(anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.backupSnapshot() }.thenReturn(Result.success(null))
+        whenever(privatePaykitRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitSdkService.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever { paykitPaymentProofRepo.backupSnapshot() }.thenReturn(emptyList())
         whenever(paykitPresentationStore.backupSnapshot()).thenReturn(emptyMap())
         whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }.thenReturn(Result.success(Unit))
@@ -224,6 +226,32 @@ class BackupRepoTest : BaseUnitTest() {
         stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire.copy(status = "unknown")))
         sut.performFullRestoreFromLatestBackup().getOrThrow()
         verify(lightningRepo, times(1)).completeAcceptedOrdinaryFollowup(any())
+    }
+
+    @Test
+    fun `wallet backup rejects private consumption changed during proof capture`() = test {
+        val version = MutableStateFlow(0L)
+        whenever(privatePaykitRepo.backupStateVersion).thenReturn(version)
+        whenever { onchainSendAttemptStore.backupSnapshot(any(), any()) }.doSuspendableAnswer {
+            version.value = 1L
+            null to emptyList<PaykitPaymentStateBackup.Proof>()
+        }
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+    }
+
+    @Test
+    fun `restored accepted Shop reconciles after proof and private state`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt).copy(status = "accepted")
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire))
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        val ordered = org.mockito.kotlin.inOrder(paykitPaymentProofRepo, privatePaykitRepo)
+        ordered.verify(paykitPaymentProofRepo).restoreBackup(state.pendingProofs)
+        ordered.verify(privatePaykitRepo).restoreBackup(anyOrNull())
+        ordered.verify(paykitPaymentProofRepo).reconcile()
     }
 
     @Test
