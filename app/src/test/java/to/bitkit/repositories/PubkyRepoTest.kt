@@ -94,6 +94,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
@@ -2471,6 +2472,139 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(repo.sessionRestorationFailed.value)
         assertFalse(repo.isAuthenticated.value)
         verify(pubkyService, never()).signIn(any())
+        verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
+    }
+
+    @Test
+    fun `deferred restoration recovers without another foreground caller`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        sut.initialize()
+        clearInvocations(pubkyService, keychain)
+
+        val retry = launch { sut.retryDeferredSessionRestoration() }
+        restore.answer = { VALID_SELF_KEY }
+        advanceTimeBy(5.seconds)
+        runCurrent()
+        retry.join()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertFalse(sut.sessionRestorationFailed.value)
+        verify(pubkyService).importSession("saved_session")
+        verify(pubkyService).contactRecords()
+        verify(keychain, never()).delete(any())
+    }
+
+    @Test
+    fun `deferred restoration bounds repeated failures and permits a later caller`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        sut.initialize()
+        clearInvocations(pubkyService)
+
+        sut.retryDeferredSessionRestoration()
+
+        verify(pubkyService, times(8)).importSession("saved_session")
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.sessionRestorationFailed.value)
+        restore.answer = { VALID_SELF_KEY }
+        assertTrue(sut.restoreSessionIfNeeded())
+    }
+
+    @Test
+    fun `deferred restoration shares in-flight work with foreground callers`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        sut.initialize()
+        val finishRestore = CompletableDeferred<Unit>()
+        restore.answer = {
+            finishRestore.await()
+            VALID_SELF_KEY
+        }
+        clearInvocations(pubkyService)
+
+        val retry = launch { sut.retryDeferredSessionRestoration() }
+        advanceTimeBy(5.seconds)
+        runCurrent()
+        val duplicate = launch { sut.retryDeferredSessionRestoration() }
+        val foreground = async { sut.awaitIdentityReady() }
+        assertFalse(foreground.isCompleted)
+        finishRestore.complete(Unit)
+
+        assertEquals(PubkyIdentityReadiness.Ready, foreground.await())
+        retry.join()
+        duplicate.join()
+        verify(pubkyService).importSession("saved_session")
+        verify(pubkyService).contactRecords()
+    }
+
+    @Test
+    fun `deferred restoration stops when the identity is removed or replaced`() = test {
+        listOf("wipe", "sign out", "replace").forEachCase({ it }) { action ->
+            resetForCase()
+            val restore = stubSavedSessionRestore()
+            restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+            sut.initialize()
+            val retry = launch { sut.retryDeferredSessionRestoration() }
+
+            when (action) {
+                "wipe" -> sut.wipeLocalState()
+                "sign out" -> sut.signOut().getOrThrow()
+                "replace" -> authenticateForTesting(VALID_CONTACT_KEY_A, "other_session")
+            }
+            clearInvocations(pubkyService)
+            advanceUntilIdle()
+            retry.join()
+
+            verify(pubkyService, never()).importSession(any())
+            assertEquals(VALID_CONTACT_KEY_A.takeIf { action == "replace" }, sut.publicKey.value)
+        }
+    }
+
+    @Test
+    fun `deferred restoration stops on permanent failure and preserves credentials`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        sut.initialize()
+        restore.answer = { throw TestAppError("Revoked") }
+        clearInvocations(pubkyService, keychain)
+
+        sut.retryDeferredSessionRestoration()
+
+        verify(pubkyService).importSession("saved_session")
+        verify(keychain, never()).delete(any())
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `cancelling deferred restoration cancels admission but lets active SDK work finish`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        sut.initialize()
+        val finishRestore = CompletableDeferred<Unit>()
+        var completedSdkWork = false
+        restore.answer = {
+            withContext(NonCancellable) {
+                finishRestore.await()
+                completedSdkWork = true
+            }
+            VALID_SELF_KEY
+        }
+        clearInvocations(pubkyService)
+
+        val active = launch { sut.retryDeferredSessionRestoration() }
+        advanceTimeBy(5.seconds)
+        runCurrent()
+        val queued = launch { sut.retryDeferredSessionRestoration() }
+        queued.cancelAndJoin()
+        active.cancel()
+        assertFalse(active.isCompleted)
+        finishRestore.complete(Unit)
+        active.join()
+
+        assertTrue(completedSdkWork)
+        advanceUntilIdle()
+        verify(pubkyService).importSession("saved_session")
         verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
     }
 

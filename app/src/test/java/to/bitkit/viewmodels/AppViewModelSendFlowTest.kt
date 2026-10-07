@@ -915,6 +915,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deferred session recovery runs once while foreground online and enabled`() = test {
+        enablePaykitUi()
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        var activeRetries = 0
+        var attempts = 0
+        whenever(pubkyRepo.retryDeferredSessionRestoration()).doSuspendableAnswer {
+            attempts++
+            activeRetries++
+            try {
+                awaitCancellation()
+            } finally {
+                activeRetries--
+            }
+        }
+
+        sut.startPaykitPaymentRequestPolling()
+        assertEquals(0, attempts)
+        connectivityState.value = ConnectivityState.CONNECTED
+        runCurrent()
+        assertEquals(1, attempts)
+        assertEquals(1, activeRetries)
+        sut.startPaykitPaymentRequestPolling()
+        assertEquals(1, attempts)
+
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        runCurrent()
+        assertEquals(0, activeRetries)
+        connectivityState.value = ConnectivityState.CONNECTED
+        runCurrent()
+        assertEquals(2, attempts)
+        isPaykitEnabled.value = false
+        runCurrent()
+        assertEquals(0, activeRetries)
+
+        isPaykitEnabled.value = true
+        runCurrent()
+        assertEquals(3, attempts)
+        sut.stopPaykitPaymentRequestPolling()
+        runCurrent()
+        assertEquals(0, activeRetries)
+        clearInvocations(pubkyRepo)
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        connectivityState.value = ConnectivityState.CONNECTED
+        runCurrent()
+        verify(pubkyRepo, never()).retryDeferredSessionRestoration()
+    }
+
+    @Test
     fun `foreground maintenance retries a missing session until restored`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = null

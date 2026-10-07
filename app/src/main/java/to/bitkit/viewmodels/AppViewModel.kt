@@ -423,6 +423,7 @@ class AppViewModel @Inject constructor(
             paykitPaymentRequestRepo.setPaymentSubmissionActive(value)
         }
     private var paykitPaymentRequestPollingJob: Job? = null
+    private var paykitSessionRestoreRetryJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
@@ -974,6 +975,7 @@ class AppViewModel @Inject constructor(
         isPaymentRequestPollingStopped = false
         if (paykitPaymentRequestPollingJob?.isActive == true) return
 
+        startPaykitSessionRestoreRetries()
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
             refreshIncomingPaykitPaymentRequests(messagePriority = Priority.Background)
@@ -1008,6 +1010,17 @@ class AppViewModel @Inject constructor(
                     refreshIdlePaykitContactEndpoints(refreshIdentity)
                     refreshPaymentRequestTargets(force = true)
                 }
+            }
+        }
+    }
+
+    private fun startPaykitSessionRestoreRetries() {
+        if (paykitSessionRestoreRetryJob?.isActive == true) return
+        paykitSessionRestoreRetryJob = viewModelScope.launch {
+            combine(isOnline, isPaykitEnabled) { connectivity, enabled ->
+                connectivity == ConnectivityState.CONNECTED && enabled
+            }.distinctUntilChanged().collectLatest { shouldRetry ->
+                if (shouldRetry && walletRepo.walletExists()) pubkyRepo.retryDeferredSessionRestoration()
             }
         }
     }
@@ -1061,6 +1074,8 @@ class AppViewModel @Inject constructor(
 
     fun stopPaykitPaymentRequestPolling() {
         isPaymentRequestPollingStopped = true
+        paykitSessionRestoreRetryJob?.cancel()
+        paykitSessionRestoreRetryJob = null
         clearPaymentRequestPreparation()
         paykitPaymentRequestPollingJob?.cancel()
         paykitPaymentRequestPollingJob = null
