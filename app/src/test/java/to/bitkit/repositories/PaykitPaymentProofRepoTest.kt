@@ -856,13 +856,17 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.prepare(firstRequest, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
         repo.markOnchainPaymentStarted(firstRequest, ONCHAIN_ADDRESS).getOrThrow()
         repo.prepare(secondRequest, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        repo.markOnchainPaymentStarted(secondRequest, ONCHAIN_ADDRESS).getOrThrow()
+        repo.markOnchainPaymentStarted(secondRequest, ONCHAIN_ADDRESS, "hardware-wallet").getOrThrow()
 
         repo.reconcile()
 
         assertEquals(
             listOf(PAYMENT_REQUEST_ID, secondPaymentRequestId),
             repo.onchainPaymentResolutions.value.map { it.requestId.paymentRequestId },
+        )
+        assertEquals(
+            listOf(WalletScope.default, "hardware-wallet"),
+            repo.onchainPaymentResolutions.value.map { it.walletId },
         )
     }
 

@@ -7922,7 +7922,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `hardware retry denial keeps the started proof until cancellation`() = test {
+    fun `hardware retry denial keeps the started proof after cancellation`() = test {
         val request = paymentRequest()
         val privateContext = privatePaymentContext(7uL)
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
@@ -7953,6 +7953,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(sut.prepareHardwareContactPayment())
 
+        sut.onHardwareBroadcastAttemptChanged(true)
         sut.sendEffect.test {
             assertFalse(sut.authorizeHardwareContactPayment(hasAttemptedBroadcast = true))
             expectNoEvents()
@@ -7965,8 +7966,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onHardwareSignCancelled()
         advanceUntilIdle()
 
-        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(request)
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+
+        whenever(
+            paykitPaymentProofRepo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain),
+        ).thenReturn(Result.failure(PaykitPaymentRequestError.OperationInProgress))
+        assertFalse(sut.prepareHardwareContactPayment())
+        sut.onHardwarePaymentDeadlineExpired(hasAttemptedBroadcast = false)
+        advanceUntilIdle()
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(request)
     }
 
     @Test
@@ -7997,7 +8006,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `dismissing hardware signing fails the started payment proof`() = test {
+    fun `dismissing hardware signing preserves only attempted payment proofs`() = test {
         val request = paymentRequest()
         val privateContext = privatePaymentContext(7uL)
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
@@ -8014,14 +8023,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 hardwareWalletId = "hardware-wallet",
             )
         )
-        sut.showSheet(Sheet.Send(SendRoute.HardwareSign))
-        advanceUntilIdle()
-        assertTrue(sut.prepareHardwareContactPayment())
+        for (attempted in listOf(true, false)) {
+            setActiveContactPaymentContext(testPublicKey, privateContext, request)
+            sut.showSheet(Sheet.Send(SendRoute.HardwareSign))
+            advanceUntilIdle()
+            assertTrue(sut.prepareHardwareContactPayment())
+            clearInvocations(paykitPaymentProofRepo)
+            if (attempted) sut.onHardwareBroadcastAttemptChanged(true)
 
-        sut.hideSheet()
-        advanceUntilIdle()
+            sut.hideSheet()
+            advanceUntilIdle()
 
-        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+            verify(paykitPaymentProofRepo, times(if (attempted) 0 else 1)).failOnchainPayment(request)
+        }
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
     }
 
@@ -8634,7 +8648,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertNull(sut.sendUiState.value.resolvedHardwarePaymentTxId)
 
         onchainPaymentResolutions.value = listOf(
-            PaykitOnchainPaymentProofResolution(testPublicKey, request.id, transactionId),
+            PaykitOnchainPaymentProofResolution(testPublicKey, request.id, transactionId, "hardware-wallet"),
         )
         runCurrent()
         repeat(2) {
@@ -8642,6 +8656,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 assertEquals(transactionId, awaitItem().resolvedHardwarePaymentTxId)
             }
         }
+        verify(activityRepo).setContact(testPublicKey, transactionId, false, "hardware-wallet")
         sut.completeHardwareContactPayment("other-transaction")
         assertEquals(transactionId, sut.sendUiState.value.resolvedHardwarePaymentTxId)
         sut.completeHardwareContactPayment(transactionId)
@@ -8657,21 +8672,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         runCurrent()
 
-        onchainPaymentResolutions.value = listOf(
-            PaykitOnchainPaymentProofResolution(
-                testPublicKey,
-                request.id,
-                transactionId,
-            ),
-        )
-        runCurrent()
+        for (walletId in listOf(WalletScope.default, "hardware-wallet")) {
+            onchainPaymentResolutions.value = listOf(
+                PaykitOnchainPaymentProofResolution(testPublicKey, request.id, transactionId, walletId),
+            )
+            runCurrent()
 
-        verify(paykitPaymentProofRepo).consumeOnchainPaymentResolution(any())
-        verify(activityRepo).setContact(
-            contactPublicKey = request.counterparty,
-            forPaymentId = transactionId,
-            syncLdkPayments = false,
-        )
+            verify(activityRepo).setContact(
+                contactPublicKey = request.counterparty,
+                forPaymentId = transactionId,
+                syncLdkPayments = false,
+                walletId = walletId,
+            )
+        }
+        verify(paykitPaymentProofRepo, times(2)).consumeOnchainPaymentResolution(any())
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
     }
 
@@ -9456,6 +9470,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).pruneUnsavedContactState(any<Collection<String>>())
         verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
         verify(publicPaykitRepo, never()).syncPaykitApp()
+    }
+
+    @Test
+    fun `contact sync retries a failed app registration without repeating a successful one`() = test {
+        enablePaykitUi()
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        advanceUntilIdle()
+        clearInvocations(publicPaykitRepo)
+        whenever(publicPaykitRepo.syncPaykitApp()).thenReturn(
+            Result.failure(IllegalStateException("network unavailable")),
+            Result.success(Unit),
+        )
+
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+        verify(publicPaykitRepo).syncPaykitApp()
+
+        pubkyContactsLoadVersion.value = 1L
+        advanceUntilIdle()
+        verify(publicPaykitRepo, times(2)).syncPaykitApp()
+
+        pubkyContactsLoadVersion.value = 2L
+        advanceUntilIdle()
+        verify(publicPaykitRepo, times(2)).syncPaykitApp()
     }
 
     @Test

@@ -88,6 +88,7 @@ class HwSendViewModel @Inject constructor(
         prepareContactPayment: suspend () -> Boolean = { true },
         authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
         onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
+        onBroadcastAttemptChanged: (Boolean) -> Unit = {},
     ) {
         if (_uiState.value.isSigning || signingJob?.isActive == true) return
         if (pendingBroadcast?.matches(request) == false) return
@@ -123,7 +124,8 @@ class HwSendViewModel @Inject constructor(
                         return@runCatching
                     }
                     currentCoroutineContext().ensureActive()
-                    val result = broadcast(payment, onPaymentDeadlineExpired) ?: return@runCatching
+                    val result = broadcast(payment, onPaymentDeadlineExpired, onBroadcastAttemptChanged)
+                        ?: return@runCatching
                     currentCoroutineContext().ensureActive()
                     runSuspendCatching { persistResult(request, result) }
                         .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
@@ -149,31 +151,28 @@ class HwSendViewModel @Inject constructor(
         onPaymentDeadlineExpired: suspend (Boolean) -> Unit,
     ): Boolean {
         if (payment.request.paymentDeadlineAt?.let { clock.now() > it } == true) {
-            _uiState.update { it.copy(isBroadcastUnresolved = payment.hasAttemptedBroadcast) }
             onPaymentDeadlineExpired(payment.hasAttemptedBroadcast)
             return false
         }
-        val authorized = authorizeContactPayment(payment.hasAttemptedBroadcast)
-        if (!authorized && payment.hasAttemptedBroadcast &&
-            payment.request.paymentDeadlineAt?.let { clock.now() > it } == true
-        ) {
-            _uiState.update { it.copy(isBroadcastUnresolved = true) }
-        }
-        return authorized
+        return authorizeContactPayment(payment.hasAttemptedBroadcast)
     }
 
     private suspend fun broadcast(
         payment: PendingHwSendBroadcast,
         onPaymentDeadlineExpired: suspend (Boolean) -> Unit,
+        onBroadcastAttemptChanged: (Boolean) -> Unit,
     ): HwFundingBroadcastResult? {
+        val wasBroadcastUnresolved = _uiState.value.isBroadcastUnresolved
         _uiState.update { it.copy(isBroadcastUnresolved = true) }
         pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)
+        onBroadcastAttemptChanged(true)
         return withTimeout(BROADCAST_TIMEOUT) {
             hwWalletRepo.broadcastFunding(payment.signedTx, payment.request.paymentDeadlineAt)
         }.getOrElse { error ->
             if (generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }) {
                 pendingBroadcast = payment
-                _uiState.update { it.copy(isBroadcastUnresolved = payment.hasAttemptedBroadcast) }
+                onBroadcastAttemptChanged(payment.hasAttemptedBroadcast)
+                _uiState.update { it.copy(isBroadcastUnresolved = wasBroadcastUnresolved) }
                 onPaymentDeadlineExpired(payment.hasAttemptedBroadcast)
                 return null
             }
@@ -182,11 +181,9 @@ class HwSendViewModel @Inject constructor(
     }
 
     fun submitPassphrase(
-        request: HwSendRequest,
+        walletId: String,
         passphrase: String,
-        prepareContactPayment: suspend () -> Boolean = { true },
-        authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
-        onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
+        onVerified: () -> Unit,
     ) {
         if (passphrase.isEmpty()) return
         val state = _uiState.value
@@ -197,16 +194,11 @@ class HwSendViewModel @Inject constructor(
         _uiState.update { it.copy(isVerifyingPassphrase = true) }
         passphraseJob = viewModelScope.launch {
             try {
-                hwWalletRepo.reconnectWithPassphrase(request.walletId, passphrase)
+                hwWalletRepo.reconnectWithPassphrase(walletId, passphrase)
                     .onSuccess {
                         if (!_uiState.value.isPassphraseRequired) return@onSuccess
                         _uiState.update { it.copy(isPassphraseRequired = false) }
-                        signAndBroadcast(
-                            request,
-                            prepareContactPayment,
-                            authorizeContactPayment,
-                            onPaymentDeadlineExpired,
-                        )
+                        onVerified()
                     }
                     .onFailure { error ->
                         if (error is HwPassphraseMismatchError) {
@@ -216,7 +208,7 @@ class HwSendViewModel @Inject constructor(
                                 description = context.getString(R.string.hardware__passphrase_mismatch),
                             )
                         } else {
-                            handleFailure(error, request.walletId)
+                            handleFailure(error, walletId)
                         }
                     }
             } finally {
@@ -260,10 +252,11 @@ class HwSendViewModel @Inject constructor(
         }
     }
 
-    fun resolveBroadcast(walletId: String, requestId: PaykitPaymentRequestId, transactionId: String) {
-        val pending = pendingBroadcast ?: return
-        if (!pending.hasAttemptedBroadcast || pendingResult.value != null) return
-        if (pending.request.walletId != walletId || pending.request.paymentRequestId != requestId) return
+    fun resolveBroadcast(walletId: String, requestId: PaykitPaymentRequestId, transactionId: String): Boolean {
+        val pending = pendingBroadcast ?: return false
+        if (!pending.hasAttemptedBroadcast) return false
+        if (pending.request.walletId != walletId || pending.request.paymentRequestId != requestId) return false
+        if (pendingResult.value != null) return true
 
         // Reconciliation has confirmed payment. Stop retries and use the normal completion path.
         signingJob?.cancel()
@@ -287,6 +280,7 @@ class HwSendViewModel @Inject constructor(
                 }
             }
         }
+        return true
     }
 
     private suspend fun prepareSignedTransaction(

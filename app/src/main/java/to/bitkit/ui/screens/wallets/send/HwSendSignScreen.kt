@@ -52,6 +52,7 @@ fun HwSendSignScreen(
     authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
     onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit,
     onPaymentSubmissionChange: (Boolean) -> Unit,
+    onBroadcastAttemptChanged: (Boolean) -> Unit,
     paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
 ) {
@@ -71,6 +72,15 @@ fun HwSendSignScreen(
     )
 
     val onBackRequest: () -> Unit = { if (uiState.canLeave) onBack() }
+    val signAndBroadcast: () -> Unit = {
+        viewModel.signAndBroadcast(
+            request,
+            prepareContactPayment,
+            authorizeContactPayment,
+            onPaymentDeadlineExpired,
+            onBroadcastAttemptChanged,
+        )
+    }
 
     LaunchedEffect(walletId) {
         viewModel.warmUp(walletId)
@@ -94,27 +104,14 @@ fun HwSendSignScreen(
         hasPendingBroadcast = uiState.hasPendingBroadcast,
         vendor = vendor,
         onBack = onBackRequest,
-        onOpenConnect = {
-            viewModel.signAndBroadcast(
-                request,
-                prepareContactPayment,
-                authorizeContactPayment,
-                onPaymentDeadlineExpired
-            )
-        },
+        onOpenConnect = signAndBroadcast,
     )
 
     if (uiState.isPassphraseRequired) {
         HwPassphrasePromptSheet(
             isVerifying = uiState.isVerifyingPassphrase,
             onSubmit = { passphrase ->
-                viewModel.submitPassphrase(
-                    request,
-                    passphrase,
-                    prepareContactPayment,
-                    authorizeContactPayment,
-                    onPaymentDeadlineExpired,
-                )
+                viewModel.submitPassphrase(walletId, passphrase, signAndBroadcast)
             },
             onDismiss = viewModel::dismissPassphrase,
         )

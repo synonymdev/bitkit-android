@@ -158,7 +158,9 @@ fun SendSheet(
                 val transactionId = sendUiState.resolvedHardwarePaymentTxId ?: return@LaunchedEffect
                 val walletId = sendUiState.hardwareWalletId ?: return@LaunchedEffect
                 val requestId = sendUiState.incomingPaymentRequestId ?: return@LaunchedEffect
-                hwSendViewModel.resolveBroadcast(walletId, requestId, transactionId)
+                if (!hwSendViewModel.resolveBroadcast(walletId, requestId, transactionId)) {
+                    appViewModel.acknowledgeHardwarePaymentResolution(transactionId)
+                }
             }
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
@@ -371,6 +373,7 @@ fun SendSheet(
                         authorizeContactPayment = appViewModel::authorizeHardwareContactPayment,
                         onPaymentDeadlineExpired = appViewModel::onHardwarePaymentDeadlineExpired,
                         onPaymentSubmissionChange = appViewModel::onHardwarePaymentSubmissionChanged,
+                        onBroadcastAttemptChanged = appViewModel::onHardwareBroadcastAttemptChanged,
                         paymentDeadlineAt = appViewModel.hardwarePaymentDeadlineAt,
                         onBack = {
                             navController.previousBackStackEntry

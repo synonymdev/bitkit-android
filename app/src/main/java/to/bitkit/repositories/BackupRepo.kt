@@ -515,13 +515,15 @@ class BackupRepo @Inject constructor(
 
             vssBackupClient.putObject(key = category.name, data = data)
                 .onSuccess {
-                    runningBackups -= category
-                    failedBackupRequired -= category
-                    cacheStore.updateBackupStatus(category) {
-                        it.copy(
-                            running = false,
-                            synced = currentTimeMillis(),
-                        )
+                    withContext(NonCancellable) {
+                        cacheStore.updateBackupStatus(category) {
+                            it.copy(
+                                running = false,
+                                synced = currentTimeMillis(),
+                            )
+                        }
+                        runningBackups -= category
+                        failedBackupRequired -= category
                     }
                     Logger.info("Backup succeeded for: '$category'", context = TAG)
                 }
@@ -537,14 +539,16 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun markBackupFailed(category: BackupCategory, backupRequired: Long, e: Throwable) {
-        runningBackups -= category
-        cacheStore.updateBackupStatus(category) {
-            if (it.required == backupRequired) {
-                failedBackupRequired[category] = backupRequired
-            } else {
-                failedBackupRequired -= category
+        withContext(NonCancellable) {
+            cacheStore.updateBackupStatus(category) {
+                if (it.required == backupRequired) {
+                    failedBackupRequired[category] = backupRequired
+                } else {
+                    failedBackupRequired -= category
+                }
+                it.copy(running = false)
             }
-            it.copy(running = false)
+            runningBackups -= category
         }
         Logger.error("Backup failed for: '$category'", e, context = TAG)
     }

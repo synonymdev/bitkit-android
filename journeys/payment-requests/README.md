@@ -104,6 +104,10 @@ this test as blocked, not passed, when they are unavailable. Do not change the d
 5. Deliver a resolution for a different identity, request or hardware wallet before the matching
    one. Verify it cannot complete the pending send, then release the matching result and verify
    normal completion. Capture redacted logs and UI evidence for each boundary.
+6. Repeat with a new request, failing the broadcast without forwarding the transaction to the
+   node. After the deadline passes, retry and verify there is no additional broadcast. Back and
+   sheet dismissal must work once the attempt stops; the started proof must remain for
+   reconciliation. Leaving must not turn the uncertain payment into a new payable attempt.
 
 ## Payment deadline history
 

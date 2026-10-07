@@ -82,6 +82,7 @@ data class PaykitOnchainPaymentProofResolution(
     val identity: String,
     val requestId: PaykitPaymentRequestId,
     val transactionId: String,
+    val walletId: String = WalletScope.default,
 )
 
 @Singleton
@@ -534,6 +535,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             identity = proof.identity,
             requestId = proof.requestId,
             transactionId = txid.lowercase(),
+            walletId = proof.onchainWalletId,
         )
         _onchainPaymentResolutions.update { resolutions ->
             if (resolution in resolutions) resolutions else resolutions + resolution

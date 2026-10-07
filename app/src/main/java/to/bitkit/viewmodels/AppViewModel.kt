@@ -404,6 +404,8 @@ class AppViewModel @Inject constructor(
     private var requestedPaymentRequest: PaykitPaymentRequest? = null
     private var shouldRestorePaymentRequestSheet = false
     private var preparedContactPaymentContext: ContactPaymentContext? = null
+    private var attemptedHardwarePaymentContext: ContactPaymentContext? = null
+    private var privatePaykitAppRegistrationIdentity: String? = null
     private var requestedPaymentRequestIdentity: String? = null
     private var deferredSubscriptionNotification: SubscriptionNotificationTarget? = null
     private var requestedPaymentRequestTags: ImmutableList<String> = persistentListOf()
@@ -787,7 +789,7 @@ class AppViewModel @Inject constructor(
             paykitPaymentRequestRepo.activate(state.publicKey)
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
             paymentRequestIdentity = state.publicKey
-            if (identityChanged) refreshPrivateOnlyPaykitApp("contact sync")
+            refreshPrivateOnlyPaykitApp("contact sync", onlyIfNeeded = !identityChanged)
             if (!state.contactsLoaded) return
 
             val removedKeys = lastPrivatePaykitContactKeys - state.contactKeys
@@ -867,9 +869,12 @@ class AppViewModel @Inject constructor(
         if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, resolution.identity)) return
         paykitPaymentProofRepo.consumeOnchainPaymentResolution(resolution)
         val sendState = _sendUiState.value
-        if (_currentSheet.value is Sheet.Send && sendState.hardwareWalletId != null &&
+        val matchesHardwareWallet = sendState.hardwareWalletId != null &&
+            sendState.hardwareWalletId == resolution.walletId
+        if (_currentSheet.value is Sheet.Send && matchesHardwareWallet &&
             sendState.incomingPaymentRequestId == resolution.requestId
         ) {
+            synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
             _sendUiState.update { it.copy(resolvedHardwarePaymentTxId = resolution.transactionId) }
             return
         }
@@ -903,12 +908,15 @@ class AppViewModel @Inject constructor(
         updateSendDetails: Boolean,
     ) {
         viewModelScope.launch {
-            lightningRepo.sync()
-            activityRepo.syncActivities()
+            if (resolution.walletId == WalletScope.default) {
+                lightningRepo.sync()
+                activityRepo.syncActivities()
+            }
             activityRepo.setContact(
                 contactPublicKey = resolution.requestId.counterparty,
                 forPaymentId = resolution.transactionId,
                 syncLdkPayments = false,
+                walletId = resolution.walletId,
             ).onFailure {
                 Logger.warn("Failed to associate a resolved Paykit payment with its contact", it, context = TAG)
             }
@@ -1621,12 +1629,19 @@ class AppViewModel @Inject constructor(
         return shouldHideRequestSendSheet
     }
 
-    private suspend fun refreshPrivateOnlyPaykitApp(reason: String) {
+    private suspend fun refreshPrivateOnlyPaykitApp(reason: String, onlyIfNeeded: Boolean = false) {
         val settings = settingsStore.data.first()
         if (!settings.sharesPrivatePaykitEndpoints || settings.sharesPublicPaykitEndpoints) return
-        if (pubkyRepo.publicKey.value == null) return
+        val identity = pubkyRepo.publicKey.value ?: return
+        if (onlyIfNeeded && PubkyPublicKeyFormat.matches(privatePaykitAppRegistrationIdentity, identity)) return
+        privatePaykitAppRegistrationIdentity = null
 
         publicPaykitRepo.syncPaykitApp()
+            .onSuccess {
+                if (PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, identity)) {
+                    privatePaykitAppRegistrationIdentity = identity
+                }
+            }
             .onFailure {
                 Logger.warn("Failed to refresh private Paykit app registration for '$reason'", it, context = TAG)
             }
@@ -3502,6 +3517,7 @@ class AppViewModel @Inject constructor(
             if (request != null && !retryIncomingRequest) completePaymentRequestPresentation(request)
             activeContactPaymentContext = null
             preparedContactPaymentContext = null
+            attemptedHardwarePaymentContext = null
             request
         }
         if (interruptedRequest == null) return
@@ -5632,6 +5648,12 @@ class AppViewModel @Inject constructor(
         paykitPaymentRequestRepo.setPaymentSubmissionActive(active && activeIncomingPaymentRequest() != null)
     }
 
+    fun onHardwareBroadcastAttemptChanged(attempted: Boolean) {
+        synchronized(contactPaymentContextLock) {
+            attemptedHardwarePaymentContext = if (attempted) preparedContactPaymentContext else null
+        }
+    }
+
     suspend fun authorizeHardwareContactPayment(hasAttemptedBroadcast: Boolean): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         val request = contactPaymentContext?.incomingPaymentRequest ?: return true
@@ -5645,7 +5667,7 @@ class AppViewModel @Inject constructor(
         handleHardwarePaymentFailure(
             PaykitPaymentRequestError.RequestExpired,
             contactPaymentContext,
-            hasAttemptedBroadcast
+            hasAttemptedBroadcast,
         )
     }
 
@@ -5654,7 +5676,10 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         hasAttemptedBroadcast: Boolean,
     ) {
-        if (hasAttemptedBroadcast) {
+        val preservesUncertainPayment = synchronized(contactPaymentContextLock) {
+            contactPaymentContext != null && contactPaymentContext == attemptedHardwarePaymentContext
+        }
+        if (hasAttemptedBroadcast || preservesUncertainPayment) {
             toast(error)
             return
         }
@@ -5669,9 +5694,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun completeHardwareContactPayment(txId: String) {
-        _sendUiState.update {
-            if (it.resolvedHardwarePaymentTxId == txId) it.copy(resolvedHardwarePaymentTxId = null) else it
-        }
+        acknowledgeHardwarePaymentResolution(txId)
         val context = synchronized(contactPaymentContextLock) {
             preparedContactPaymentContext
         }
@@ -5680,12 +5703,21 @@ class AppViewModel @Inject constructor(
         completeOnchainPaymentProofInBackground(request, txId, preparation)
     }
 
+    fun acknowledgeHardwarePaymentResolution(txId: String) {
+        _sendUiState.update {
+            if (it.resolvedHardwarePaymentTxId == txId) it.copy(resolvedHardwarePaymentTxId = null) else it
+        }
+    }
+
     fun onHardwareSignCancelled() {
         cancelHardwarePaymentRequestIfNeeded()
     }
 
     private fun cancelHardwarePaymentRequestIfNeeded() {
         val request = synchronized(contactPaymentContextLock) {
+            if (preparedContactPaymentContext == attemptedHardwarePaymentContext) {
+                preparedContactPaymentContext = null
+            }
             activeContactPaymentContext
                 ?.takeIf { it == preparedContactPaymentContext && _sendUiState.value.hardwareWalletId != null }
                 ?.incomingPaymentRequest

@@ -238,6 +238,49 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cancelled manual backup completes success and failure status writes`() = test {
+        for (uploadSucceeds in listOf(true, false)) {
+            val category = BackupCategory.SETTINGS
+            val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+            val statusWriteStarted = CompletableDeferred<Unit>()
+            val finishStatusWrite = CompletableDeferred<Unit>()
+            whenever(cacheStore.backupStatuses).thenReturn(statuses)
+            whenever { cacheStore.updateBackupStatus(eq(category), any()) }.doSuspendableAnswer {
+                val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+                val updated = transform(statuses.value.getValue(category))
+                if (!updated.running) {
+                    statusWriteStarted.complete(Unit)
+                    finishStatusWrite.await()
+                }
+                statuses.update { current -> current + (category to updated) }
+            }
+            val uploadResult = if (uploadSucceeds) {
+                Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1))
+            } else {
+                Result.failure(BackupRepoTestError("upload failed"))
+            }
+            whenever { vssBackupClient.putObject(eq(category.name), any()) }.thenReturn(uploadResult)
+
+            val backup = launch { sut.triggerBackup(category) }
+            runCurrent()
+            assertTrue(statusWriteStarted.isCompleted)
+            assertTrue(statuses.value.getValue(category).running)
+
+            backup.cancel()
+            runCurrent()
+            assertFalse(backup.isCompleted)
+            finishStatusWrite.complete(Unit)
+            backup.join()
+
+            val status = statuses.value.getValue(category)
+            assertTrue(backup.isCancelled)
+            assertFalse(status.running)
+            assertEquals(if (uploadSucceeds) 1_000L else 0L, status.synced)
+            assertEquals(!uploadSucceeds, status.isRequired)
+        }
+    }
+
+    @Test
     fun `start observing is skipped while wiping`() = test {
         sut.setWiping(true)
 
