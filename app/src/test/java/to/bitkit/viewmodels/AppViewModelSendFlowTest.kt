@@ -201,6 +201,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -7619,8 +7620,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     @Suppress("LongMethod")
-    fun `failed LNURL request callback releases preparation and retry reopens request`() = test {
-        val request = paymentRequest()
+    fun `failed LNURL request callback reopens accepted request after proposal expiry`() = test {
+        val request = paymentRequest().copy(
+            lifecycleState = PaymentRequestLifecycleState.ACCEPTED,
+            expiresAt = Clock.System.now() - 1.seconds,
+            paymentDeadlineAt = Clock.System.now() + 1.hours,
+        )
         val privateContext = privatePaymentContext(7uL)
         val lnurl = LnurlPayData(
             uri = "lnurl1failedrequest",
@@ -8006,7 +8011,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `dismissing hardware signing preserves only attempted payment proofs`() = test {
+    fun `dismissing hardware signing preserves only unresolved attempted payment proofs`() = test {
         val request = paymentRequest()
         val privateContext = privatePaymentContext(7uL)
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
@@ -8023,19 +8028,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 hardwareWalletId = "hardware-wallet",
             )
         )
-        for (attempted in listOf(true, false)) {
+        for (attemptChanges in listOf(listOf(true), emptyList(), listOf(true, false))) {
             setActiveContactPaymentContext(testPublicKey, privateContext, request)
             sut.showSheet(Sheet.Send(SendRoute.HardwareSign))
             advanceUntilIdle()
             assertTrue(sut.prepareHardwareContactPayment())
             clearInvocations(paykitPaymentProofRepo)
-            sut.onHardwareBroadcastAttemptChanged(true)
-            if (!attempted) sut.onHardwareBroadcastAttemptChanged(false)
+            attemptChanges.forEach(sut::onHardwareBroadcastAttemptChanged)
 
             sut.hideSheet()
             advanceUntilIdle()
 
-            verify(paykitPaymentProofRepo, times(if (attempted) 0 else 1)).failOnchainPayment(request)
+            verify(paykitPaymentProofRepo, times(if (attemptChanges.lastOrNull() == true) 0 else 1))
+                .failOnchainPayment(request)
         }
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
     }
