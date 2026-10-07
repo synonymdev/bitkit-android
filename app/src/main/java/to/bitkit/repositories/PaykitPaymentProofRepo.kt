@@ -228,9 +228,14 @@ class PaykitPaymentProofRepo @Inject constructor(
         address: String,
         walletId: String = WalletScope.default,
         privatePaymentListVersion: ULong? = null,
+        signedTx: HwFundingSignedTx? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
+            val signedTxid = signedTx?.let {
+                if (walletId == WalletScope.default) throw PaykitPaymentRequestError.RequestUnavailable
+                SignedTransactionId.fromHex(it.serializedTx)
+            }
             operationMutex.withLock {
                 val proofs = loadProofs().toMutableList()
                 if (proofs.any { it.isStartedFor(identity, request.id) }) {
@@ -251,6 +256,11 @@ class PaykitPaymentProofRepo @Inject constructor(
                     onchainAmountSats = request.amountSats,
                     onchainWalletId = walletId,
                     privatePaymentListVersion = privatePaymentListVersion,
+                    paymentIdentifier = signedTxid,
+                    hardwareSignedTransaction = signedTx?.serializedTx,
+                    hardwareMiningFeeSats = signedTx?.miningFeeSats,
+                    hardwareFeeRate = signedTx?.feeRate,
+                    hardwareTotalSpent = signedTx?.totalSpent,
                 )
                 persist(proofs)
             }

@@ -408,9 +408,13 @@ fun SendSheet(
                         paymentIdentity = paymentIdentity,
                         satsPerVByte = satsPerVByte,
                         viewModel = hwSendViewModel,
-                        prepareContactPayment = {
+                        prepareContactPayment = { signedTx ->
                             appViewModel.prepareHardwareContactPayment(
-                                walletId, uiState.address, uiState.incomingPaymentRequestId, paymentIdentity,
+                                walletId,
+                                uiState.address,
+                                uiState.incomingPaymentRequestId,
+                                paymentIdentity,
+                                signedTx,
                             )
                         },
                         authorizeContactPayment = { hasAttemptedBroadcast ->

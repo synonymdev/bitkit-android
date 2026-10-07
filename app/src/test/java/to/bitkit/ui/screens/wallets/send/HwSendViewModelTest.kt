@@ -168,7 +168,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             Result.success(fixture.broadcast),
         )
         var preparationCalls = 0
-        val prepareContactPayment: suspend () -> Boolean = {
+        val prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean = {
             verify(hwWalletRepo).signFunding(WALLET_ID, fixture.funding)
             verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
             preparationCalls += 1
@@ -251,7 +251,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.reconnectWithPassphrase(WALLET_ID, "hidden wallet"))
             .thenReturn(Result.success(Unit))
         var preparationCalls = 0
-        val prepareContactPayment: suspend () -> Boolean = {
+        val prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean = {
             preparationCalls += 1
             true
         }

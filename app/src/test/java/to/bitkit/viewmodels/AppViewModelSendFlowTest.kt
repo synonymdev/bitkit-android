@@ -99,6 +99,7 @@ import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FeeRate
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
@@ -476,7 +477,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paykitPaymentProofRepo.associateLightningPayment(any(), any(), any(), eq("bitkit"))
         }.thenReturn(Result.success(Unit))
         whenever {
-            paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
+            paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(Unit))
         whenever { activityRepo.setContact(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.scheduleSavedContactPreparation(any<Collection<String>>()) }
@@ -7349,7 +7350,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
         )
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -7807,11 +7808,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             SendUiState(address = "bcrt1qpaymentrequest", amount = request.amountSats, isPaymentRequest = true),
         )
 
-        assertFalse(sut.prepareHardwareContactPayment())
+        assertFalse(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -7835,11 +7836,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
         )
 
-        assertFalse(sut.prepareHardwareContactPayment())
+        assertFalse(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -7856,6 +7857,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 "bcrt1qpaymentrequest",
                 "hardware-wallet",
                 7uL,
+                hardwareSignedReceipt(),
             )
         ).thenReturn(Result.failure(IllegalStateException("proof start failed")))
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -7870,7 +7872,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
         )
 
-        assertFalse(sut.prepareHardwareContactPayment())
+        assertFalse(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
@@ -7898,13 +7900,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         whenever(paykitPaymentProofRepo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain))
             .thenReturn(Result.success(Unit), Result.failure(PaykitPaymentRequestError.OperationInProgress))
-        assertTrue(sut.prepareHardwareContactPayment())
-        assertFalse(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
+        assertFalse(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         verify(paykitPaymentProofRepo, times(2)).prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain)
         verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentRequestRepo).accept(request)
-        verify(paykitPaymentProofRepo).markOnchainPaymentStarted(request, "bcrt1qpaymentrequest", "hardware-wallet", 7uL)
+        verify(paykitPaymentProofRepo).markOnchainPaymentStarted(
+            request,
+            "bcrt1qpaymentrequest",
+            "hardware-wallet",
+            7uL,
+            hardwareSignedReceipt(),
+        )
         verify(paykitPaymentRequestRepo, never()).ensurePaymentAllowed(request)
     }
 
@@ -7960,7 +7968,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 hardwareWalletId = "hardware-wallet",
             ),
         )
-        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
         verify(paykitPaymentRequestRepo, never()).ensurePaymentAllowed(request)
         whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
@@ -8044,7 +8052,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val sheet = Sheet.Send(SendRoute.HardwareSign)
         sut.showSheet(sheet)
         advanceUntilIdle()
-        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         sut.sendEffect.test {
             assertFalse(sut.authorizeHardwareContactPayment(hasAttemptedBroadcast = true))
@@ -8122,7 +8130,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 hardwareWalletId = "hardware-wallet",
             )
         )
-        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         sut.onHardwareSignCancelled()
         advanceUntilIdle()
@@ -8153,7 +8161,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         sut.showSheet(Sheet.Send(SendRoute.HardwareSign))
         advanceUntilIdle()
-        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         sut.hideSheet()
         advanceUntilIdle()
@@ -8182,7 +8190,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payMethod = SendMethod.ONCHAIN, hardwareWalletId = walletId, isPaymentRequest = true))
         sut.showSheet(Sheet.Send(SendRoute.HardwareSign))
         advanceUntilIdle()
-        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
         assertFalse(sut.completeHardwareContactPayment(txid, walletId, request.id, testPublicKey))
 
         sut.onHardwareSignCancelled()
@@ -8192,9 +8200,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentProofRepo, never()).cancelPreparation(any())
 
         setActiveContactPaymentContext(testPublicKey, privatePaymentContext(7uL), incomingPaymentRequest = request)
-        assertFalse(sut.prepareHardwareContactPayment(walletId, "bcrt1qpaymentrequest", request.id, testPublicKey))
+        assertFalse(
+            sut.prepareHardwareContactPayment(
+                walletId,
+                "bcrt1qpaymentrequest",
+                request.id,
+                testPublicKey,
+                hardwareSignedReceipt(),
+            ),
+        )
         verify(paykitPaymentRequestRepo, times(1)).accept(request)
-        verify(paykitPaymentProofRepo, times(1)).markOnchainPaymentStarted(request, "bcrt1qpaymentrequest", walletId, 7uL)
+        verify(paykitPaymentProofRepo, times(1)).markOnchainPaymentStarted(
+            request,
+            "bcrt1qpaymentrequest",
+            walletId,
+            7uL,
+            hardwareSignedReceipt(),
+        )
         verify(
             lightningRepo,
             never()
@@ -8228,11 +8250,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             ),
         )
 
-        assertFalse(sut.prepareHardwareContactPayment())
+        assertFalse(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -8262,7 +8284,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
         )
 
-        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
         val completion = backgroundScope.launch { sut.completeHardwareContactPayment("txid", "hardware-wallet", request.id, testPublicKey) }
         runCurrent()
 
@@ -8287,7 +8309,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setActiveContactPaymentContext(testPublicKey, privatePaymentContext(7uL), incomingPaymentRequest = request)
         setSendState(SendUiState(address = "bcrt1qpaymentrequest", amount = request.amountSats,
             payMethod = SendMethod.ONCHAIN, hardwareWalletId = walletId, isPaymentRequest = true))
-        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
         pubkyPublicKey.value = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request.copy(paymentRequestId = "another-request"))
         setSendState(SendUiState(address = "bcrt1qother", amount = 9_000uL,
@@ -8369,8 +8391,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         setActiveContactPaymentContext(testPublicKey, privateContext)
 
-        assertTrue(sut.prepareHardwareContactPayment())
-        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
+        assertTrue(sut.prepareHardwareContactPayment(signedTx = hardwareSignedReceipt()))
 
         verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
     }
@@ -10533,6 +10555,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         request = request,
         creatorIdentity = testPublicKey,
         wasPublishedToActiveState = wasPublishedToActiveState,
+    )
+
+    private fun hardwareSignedReceipt() = HwFundingSignedTx(
+        requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
+            .bufferedReader().use { it.readText().trim() },
+        1000uL,
+        2uL,
+        2000uL,
     )
 }
 

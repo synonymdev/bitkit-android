@@ -144,6 +144,7 @@ import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -5810,6 +5811,7 @@ class AppViewModel @Inject constructor(
         address: String = _sendUiState.value.address,
         requestId: PaykitPaymentRequestId? = activeIncomingPaymentRequest()?.id,
         identity: String? = hardwarePaymentIdentity(),
+        signedTx: HwFundingSignedTx? = null,
     ): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (contactPaymentContext?.incomingPaymentRequest?.id != requestId) return false
@@ -5817,6 +5819,7 @@ class AppViewModel @Inject constructor(
         if (incomingPaymentRequest != null &&
             (identity == null || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value))
         ) return false
+        if (incomingPaymentRequest != null && signedTx == null) return false
         // A retry of the original signed transaction skips this hook in HwSendViewModel.
         // A new Shop payment must consult the durable paymentStarted guard again.
         if (incomingPaymentRequest == null && isPreparedContactPayment(contactPaymentContext)) return true
@@ -5833,6 +5836,7 @@ class AppViewModel @Inject constructor(
             paykitPaymentProofRepo.markOnchainPaymentStarted(
                 requireNotNull(incomingPaymentRequest), address, walletId ?: WalletScope.default,
                 contactPaymentContext.privatePaymentContext?.paymentListVersion,
+                signedTx,
             ).onFailure {
                 synchronized(contactPaymentContextLock) {
                     if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null

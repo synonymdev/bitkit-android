@@ -1539,18 +1539,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val txid = SignedTransactionId.fromHex(signed.serializedTx)
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
-        assertTrue(
-            repo.retainHardwareOnchainCandidate(
-                request.id,
-                walletId,
-                txid,
-                LOCAL_IDENTITY,
-                ONCHAIN_ADDRESS,
-                request.amountSats,
-                signed
-            )
-        )
+        // Snapshot at the authorization boundary, before any broadcast callback can save a receipt.
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId, signedTx = signed).getOrThrow()
         val encoded = Json.encodeToString(repo.backupSnapshot())
         storedProofs = emptyList()
         val reopened = paymentProofRepo()
@@ -1750,11 +1740,40 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(hwWalletRepo.broadcastFunding(signed))
             .thenReturn(Result.failure(BroadcastException.ElectrumException("response lost after dispatch")))
         val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock(), repo)
-        send.signAndBroadcast(HwSendRequest(walletId, ONCHAIN_ADDRESS, request.amountSats, 2uL, emptyList(),
-            request.id, LOCAL_IDENTITY), prepareContactPayment = {
-            repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
-            true
-        })
+        send.signAndBroadcast(
+            HwSendRequest(
+                walletId,
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+                2uL,
+                emptyList(),
+                request.id,
+                LOCAL_IDENTITY,
+            ),
+            prepareContactPayment = { receipt ->
+                assertEquals(signed, receipt)
+                repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId, signedTx = receipt).getOrThrow()
+                true
+            },
+            authorizeContactPayment = {
+                verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+                val backup = Json.encodeToString(repo.backupSnapshot())
+                storedProofs = emptyList()
+                val reopened = paymentProofRepo()
+                reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(backup))
+                assertEquals(
+                    signed,
+                    reopened.retainedHardwareOnchainPayment(
+                        request.id,
+                        walletId,
+                        LOCAL_IDENTITY,
+                        ONCHAIN_ADDRESS,
+                        request.amountSats,
+                    ),
+                )
+                true
+            },
+        )
         advanceUntilIdle()
         assertFalse(send.uiState.value.isSigning)
         assertTrue(send.uiState.value.isBroadcastUnresolved)

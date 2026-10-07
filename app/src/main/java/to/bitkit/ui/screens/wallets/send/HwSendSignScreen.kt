@@ -20,6 +20,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
@@ -49,7 +50,7 @@ fun HwSendSignScreen(
     paymentIdentity: String?,
     satsPerVByte: ULong,
     viewModel: HwSendViewModel,
-    prepareContactPayment: suspend () -> Boolean,
+    prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean,
     authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
     onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit,
     paymentDeadlineAt: Instant?,

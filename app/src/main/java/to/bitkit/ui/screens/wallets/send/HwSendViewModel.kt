@@ -86,7 +86,7 @@ class HwSendViewModel @Inject constructor(
 
     fun signAndBroadcast(
         request: HwSendRequest,
-        prepareContactPayment: suspend () -> Boolean = { true },
+        prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean = { true },
         authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
         onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
     ) {
@@ -136,7 +136,7 @@ class HwSendViewModel @Inject constructor(
                     }
                     var payment = checkNotNull(pending) { "Hardware payment was not prepared" }
                     if (payment.isPreparedForBroadcast.not()) {
-                        if (!prepareContactPayment()) return@runCatching
+                        if (!prepareContactPayment(payment.signedTx)) return@runCatching
                         payment = payment.copy(isPreparedForBroadcast = true)
                         pendingBroadcast = payment
                     }
@@ -237,7 +237,7 @@ class HwSendViewModel @Inject constructor(
     fun submitPassphrase(
         request: HwSendRequest,
         passphrase: String,
-        prepareContactPayment: suspend () -> Boolean = { true },
+        prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean = { true },
         authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
         onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
     ) {
