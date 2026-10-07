@@ -59,6 +59,7 @@ data class PaykitPaymentStateBackup(
         val hardwareFeeRate: ULong? = null,
         val hardwareTotalSpent: ULong? = null,
         val hardwareDispatchAttempted: Boolean? = null,
+        val privatePaymentListVersion: ULong? = null,
     ) {
         constructor(proof: PendingPaykitPaymentProof) : this(
             identity = proof.identity,
@@ -79,7 +80,8 @@ data class PaykitPaymentStateBackup(
             hardwareMiningFeeSats = proof.hardwareMiningFeeSats,
             hardwareFeeRate = proof.hardwareFeeRate,
             hardwareTotalSpent = proof.hardwareTotalSpent,
-            hardwareDispatchAttempted = proof.hardwareDispatchAttempted
+            hardwareDispatchAttempted = proof.hardwareDispatchAttempted,
+            privatePaymentListVersion = proof.privatePaymentListVersion
         )
 
         fun restored() = PendingPaykitPaymentProof(
@@ -101,7 +103,8 @@ data class PaykitPaymentStateBackup(
             hardwareMiningFeeSats = hardwareMiningFeeSats,
             hardwareFeeRate = hardwareFeeRate,
             hardwareTotalSpent = hardwareTotalSpent,
-            hardwareDispatchAttempted = hardwareDispatchAttempted
+            hardwareDispatchAttempted = hardwareDispatchAttempted,
+            privatePaymentListVersion = privatePaymentListVersion
         )
     }
 }

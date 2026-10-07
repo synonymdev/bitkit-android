@@ -692,7 +692,8 @@ class PaykitPaymentProofRepo @Inject constructor(
                         it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
                         it.paymentStarted && definitelyUnsent && it.proofData == null && !it.onchainAcceptanceVerified
                 } ?: return@runSuspendCatching false
-                if (original.hardwareDispatchDenied) releaseDeniedPrivateConsumption(original)
+                // Release the captured private version while its proof still makes cleanup retryable.
+                releaseDeniedPrivateConsumption(original)
                 // Only the caller's definite first-dispatch authorization denial permits this removal.
                 persist(proofs - original)
                 true
