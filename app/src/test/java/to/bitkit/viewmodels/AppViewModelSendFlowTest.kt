@@ -277,6 +277,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     private val proofStateVersion = MutableStateFlow(0L)
+    private val paymentSubmissionActive = MutableStateFlow(false)
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
     private val nonCanonicalTestPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
@@ -431,6 +432,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.automaticSubscriptionProposals()).thenReturn(emptyList())
         whenever(paykitPaymentRequestRepo.eligibleTargets).thenReturn(MutableStateFlow(emptyList()))
         whenever(paykitPaymentRequestRepo.isCreatingRequest).thenReturn(MutableStateFlow(false))
+        whenever(paykitPaymentRequestRepo.isPaymentSubmissionActive).thenReturn(paymentSubmissionActive)
+        whenever(paykitPaymentRequestRepo.setPaymentSubmissionActive(any())).thenAnswer {
+            paymentSubmissionActive.value = it.getArgument(0)
+            Unit
+        }
         whenever { paykitPaymentRequestRepo.refreshEligibleTargets(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.refreshAfterStateChange(any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.isSubscriptionNotificationHandled(any(), any()) }.thenReturn(false)
@@ -8097,6 +8103,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.prepareHardwareContactPayment())
 
         verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+    }
+
+    @Test
+    fun `hardware submission pauses background work only during the attempt`() = test {
+        setActiveContactPaymentContext(testPublicKey, privatePaymentContext(7uL), paymentRequest())
+        sut.onHardwarePaymentSubmissionChanged(true)
+        assertTrue(paymentSubmissionActive.value)
+        sut.onHardwarePaymentSubmissionChanged(false)
+        assertFalse(paymentSubmissionActive.value)
+        sut.onHardwarePaymentSubmissionChanged(true)
+        assertTrue(paymentSubmissionActive.value)
+        sut.onHardwareSignCancelled()
+        runCurrent()
+        assertFalse(paymentSubmissionActive.value)
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
+    }
+
+    @Test
+    fun `proof changes coalesce while payment submission is active`() = test {
+        pubkyPublicKey.value = testPublicKey
+        enablePaykitUi()
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+        paymentSubmissionActive.value = true
+        repeat(3) {
+            proofStateVersion.value++
+            runCurrent()
+        }
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+
+        paymentSubmissionActive.value = false
+        runCurrent()
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        paymentSubmissionActive.value = true
+        runCurrent()
+        paymentSubmissionActive.value = false
+        runCurrent()
+        verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any())
     }
 
     @Test

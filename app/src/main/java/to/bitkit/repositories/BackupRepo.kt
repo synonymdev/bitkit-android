@@ -431,6 +431,7 @@ class BackupRepo @Inject constructor(
             }
 
             delay(BACKUP_DEBOUNCE)
+            if (category == BackupCategory.WALLET) paykitSdkService.isPaymentSubmissionActive.first { !it }
 
             val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
             if (status.isRequired && !shouldSkipBackup()) {

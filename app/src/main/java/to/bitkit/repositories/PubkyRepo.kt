@@ -252,6 +252,7 @@ class PubkyRepo @Inject constructor(
         data object NoSession : InitResult
         data class Restored(val publicKey: String) : InitResult
         data object RestorationFailed : InitResult
+        data object RestorationDeferred : InitResult
     }
 
     private data class SavedContact(
@@ -417,7 +418,13 @@ class PubkyRepo @Inject constructor(
                 )
             }.onFailure {
                 Logger.error("Failed to initialize paykit", it, context = TAG)
-            }.getOrElse { InitResult.RestorationFailed }
+            }.getOrElse {
+                if (it.isPaykitTemporarilyUnavailable()) {
+                    InitResult.RestorationDeferred
+                } else {
+                    InitResult.RestorationFailed
+                }
+            }
 
             when (result) {
                 is InitResult.NoSession -> {
@@ -429,12 +436,12 @@ class PubkyRepo @Inject constructor(
                     continueSignIn(result.publicKey)
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
                 }
-                is InitResult.RestorationFailed -> {
+                InitResult.RestorationFailed, InitResult.RestorationDeferred -> {
                     clearAuthenticatedState(
                         clearCachedProfile = false,
                         clearRestorationFailure = notifyFailure,
                     )
-                    if (notifyFailure) _sessionRestorationFailed.update { true }
+                    if (notifyFailure) _sessionRestorationFailed.update { result == InitResult.RestorationFailed }
                 }
             }
             initializationReady.complete(Unit)
@@ -479,7 +486,7 @@ class PubkyRepo @Inject constructor(
             }.getOrElse {
                 if (it.isPaykitTemporarilyUnavailable()) {
                     Logger.warn("Deferred session restoration, keeping saved session", it, context = TAG)
-                    return@getOrElse InitResult.RestorationFailed
+                    return@getOrElse InitResult.RestorationDeferred
                 }
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
                 resolveSignedInSession(savedSessionSecret, storedSecretKeyHex ?: adoptedSecretKeyHex())
@@ -509,7 +516,11 @@ class PubkyRepo @Inject constructor(
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.error("Failed re-sign-in recovery", it, context = TAG)
-                InitResult.RestorationFailed
+                if (it.isPaykitTemporarilyUnavailable()) {
+                    InitResult.RestorationDeferred
+                } else {
+                    InitResult.RestorationFailed
+                }
             }
         }
     }

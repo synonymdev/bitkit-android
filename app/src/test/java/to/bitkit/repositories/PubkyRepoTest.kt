@@ -2447,6 +2447,7 @@ class PubkyRepoTest : BaseUnitTest() {
             sut = createSut()
             sut.awaitInitialization()
             assertFalse(sut.isAuthenticated.value)
+            assertFalse(sut.sessionRestorationFailed.value)
             verify(pubkyService, never()).signIn(any())
             verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
         }
@@ -2455,6 +2456,22 @@ class PubkyRepoTest : BaseUnitTest() {
         currentFailure = null
         assertTrue(sut.restoreSessionIfNeeded())
         assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `temporary initial import result does not report an expired session`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.initializeAndImportSession("saved_session")).thenReturn(
+            Result.failure(AppError(PaykitException.ConcurrentUpdate("concurrent_update", "Locked"))),
+        )
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertFalse(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(pubkyService, never()).signIn(any())
+        verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
     }
 
     @Test

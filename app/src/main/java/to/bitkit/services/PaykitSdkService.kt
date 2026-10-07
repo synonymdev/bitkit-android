@@ -258,10 +258,16 @@ class PaykitSdkService @Inject constructor(
     @Volatile
     private var sdk: PaykitSdk? = null
 
+    @Volatile
+    private var runtimeGeneration = 0L
+
     private var cachedPaykitKey: PaykitKeyGeneration? = null
     private var cachedBackupState: PaykitBackupStateSnapshot? = null
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
+    private val _isPaymentSubmissionActive = MutableStateFlow(false)
+    val isPaymentSubmissionActive: StateFlow<Boolean> = _isPaymentSubmissionActive.asStateFlow()
+
     private var sdkFactory: () -> PaykitSdk = {
         PaykitSdk.withPaymentAdapterAndPubkySharedStateAndClientConfig(
             sessionProvider = sessionProvider,
@@ -294,6 +300,10 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun initialize() {
         initialize { initializeRuntime() }
+    }
+
+    fun setPaymentSubmissionActive(active: Boolean) {
+        _isPaymentSubmissionActive.update { active }
     }
 
     suspend fun initializeAndImportSession(secret: String): Result<PubkySessionBootstrapResult> {
@@ -890,10 +900,23 @@ class PaykitSdkService @Inject constructor(
     suspend fun processOutboundPrivateMessages(counterparty: String) =
         processOutboundPrivateMessages(counterparty, Priority.Ordered)
 
-    internal suspend fun processOutboundPrivateMessages(counterparty: String, priority: Priority) = run {
+    internal suspend fun processOutboundPrivateMessages(counterparty: String, priority: Priority) =
+        processOutboundPrivateMessages(counterparty, priority, expectedIdentity = null)
+
+    internal suspend fun processOutboundPrivateMessages(
+        counterparty: String,
+        priority: Priority,
+        expectedIdentity: String?,
+    ) = run {
         isSetup.await()
         operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
+                if (expectedIdentity != null) {
+                    val identity = completeSdkCall { handle.identityStatus() }?.publicKey
+                    check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) {
+                        "Payment Request identity changed"
+                    }
+                }
                 completeSdkCall { handle.processOutboundPrivateMessages(counterparty) }
             }
         }
@@ -1011,17 +1034,16 @@ class PaykitSdkService @Inject constructor(
         paymentRequestId: String,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(Priority.Interactive) {
             withStateRevisionTracking { handle ->
-                completeSdkCall { handle.claimPaymentRequestForExecution(counterparty, paymentRequestId) }
-                completeSdkCall { handle.acceptPaymentRequest(counterparty, paymentRequestId) }
+                completeSdkCall { handle.claimAndAcceptPaymentRequest(counterparty, paymentRequestId) }
             }
         }
     }
 
     suspend fun claimPaymentRequestForExecution(counterparty: String, paymentRequestId: String): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(Priority.Interactive) {
             withStateRevisionTracking {
                 completeSdkCall { it.claimPaymentRequestForExecution(counterparty, paymentRequestId) }
             }
@@ -1189,8 +1211,18 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun exportBackupState(): String {
         isSetup.await()
-        return operationLock.withLock {
-            withPaykitKey { completeSdkCall { it.exportBackupString() } }
+        val generation = runtimeGeneration
+        return operationLock.withoutLock {
+            var backup: String?
+            do {
+                isPaymentSubmissionActive.first { !it }
+                backup = operationLock.withLock(Priority.Background) {
+                    check(runtimeGeneration == generation) { "Paykit runtime changed before backup export" }
+                    if (isPaymentSubmissionActive.value) return@withLock null
+                    withPaykitKey { completeSdkCall { it.exportBackupString() } }
+                }
+            } while (backup == null)
+            backup
         }
     }
 
@@ -1446,6 +1478,7 @@ class PaykitSdkService @Inject constructor(
     }
 
     private fun resetRuntime() {
+        runtimeGeneration++
         sdk = null
         cachedPaykitKey = null
         cachedBackupState = null

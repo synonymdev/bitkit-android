@@ -318,6 +318,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val _isCreatingRequest = MutableStateFlow(false)
     val isCreatingRequest: StateFlow<Boolean> = _isCreatingRequest.asStateFlow()
 
+    val isPaymentSubmissionActive: StateFlow<Boolean>
+        get() = paykitSdkService.isPaymentSubmissionActive
+
+    fun setPaymentSubmissionActive(active: Boolean) = paykitSdkService.setPaymentSubmissionActive(active)
+
     @Volatile
     private var activeIdentity: String? = null
 
@@ -1058,13 +1063,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     current.counterparty,
                     current.paymentRequestId,
                 )
-                processPendingMessages()
                 // Stored on real time, so a period the offset made due is not dropped when it turns Off.
                 val acceptanceDate = clock.now()
                 subscriptionAcceptedAt = subscriptionAcceptedAt + (current.id to acceptanceDate)
                 persistSubscriptionState(identity)
                 applySubscriptionRecordLocked(record, subscriptionClock.now())
                 synchronizeAfterSubscriptionAction(identity)
+                scheduleAcceptedResponse(current.counterparty)
                 _pendingRequests.value
                     .filter { it.belongsTo(current) }
                     .minByOrNull { it.billingPeriod?.startsAt ?: Instant.DISTANT_FUTURE }
@@ -1419,18 +1424,33 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
                     actionVersion++
                     operation(current)
-                    processPendingMessages()
+                    if (resultingState != PaymentRequestLifecycleState.ACCEPTED) processPendingMessages()
                     val updatedRequest = current.copy(lifecycleState = resultingState)
                     _paymentRequestHistory.update { requests ->
                         listOf(updatedRequest) + requests.filterNot { it.id == current.id }
                     }
                     _pendingRequests.update { requests -> requests.filterNot { it.id == current.id } }
                     discardExpiredRequestsLocked()
+                    if (resultingState == PaymentRequestLifecycleState.ACCEPTED) {
+                        scheduleAcceptedResponse(current.counterparty)
+                    }
                     Unit
                 }
             } finally {
                 synchronized(processingLock) { processingRequestIds.remove(request.id) }
             }
+        }
+    }
+
+    private fun scheduleAcceptedResponse(counterparty: String) {
+        val identity = activeIdentity ?: return
+        val generation = stateGeneration.get()
+        repoScope.launch {
+            isPaymentSubmissionActive.first { !it }
+            if (!isCurrentState(generation, identity)) return@launch
+            runSuspendCatching {
+                paykitSdkService.processOutboundPrivateMessages(counterparty, Priority.Background, identity)
+            }.onFailure { Logger.warn("Failed to deliver accepted Paykit payment request", it, context = TAG) }
         }
     }
 
@@ -1629,6 +1649,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private fun clearStateLocked() {
+        setPaymentSubmissionActive(false)
         completedRefreshGeneration = -1L
         receivedContacts = null
         expirationJob?.cancel()

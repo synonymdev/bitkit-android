@@ -416,6 +416,10 @@ class AppViewModel @Inject constructor(
     private var paymentRequestIdentity: String? = null
     private var isPaymentRequestIdentityActivating = false
     private var isSubmittingPaymentRequest = false
+        set(value) {
+            field = value
+            paykitPaymentRequestRepo.setPaymentSubmissionActive(value)
+        }
     private var paykitPaymentRequestPollingJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
@@ -1058,9 +1062,17 @@ class AppViewModel @Inject constructor(
             }.filterNotNull().collect(::clearPaymentRequestPreparation)
         }
         viewModelScope.launch {
-            paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey).collect {
-                refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
-            }
+            var changeVersion = 0L
+            paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey)
+                .map { ++changeVersion }
+                .combine(paykitPaymentRequestRepo.isPaymentSubmissionActive) { version, active ->
+                    version.takeUnless { active }
+                }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .collect {
+                    refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
+                }
         }
         viewModelScope.launch {
             var previousSheet: Sheet? = null
@@ -3475,6 +3487,7 @@ class AppViewModel @Inject constructor(
         failureReason: IncomingPaykitPaymentRequestFailureReason,
         retryIncomingRequest: Boolean = true,
     ) {
+        isSubmittingPaymentRequest = false
         uncertainOnchainPaymentRequestId = null
         val interruptedRequest = synchronized(contactPaymentContextLock) {
             val request = activeContactPaymentContext?.incomingPaymentRequest
@@ -3503,7 +3516,6 @@ class AppViewModel @Inject constructor(
         ) {
             deferPaymentRequestPresentation(interruptedRequest, failureReason)
         }
-        isSubmittingPaymentRequest = false
     }
 
     private suspend fun rejectPubkyAuthScan(
@@ -5568,6 +5580,11 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    override fun onCleared() {
+        isSubmittingPaymentRequest = false
+        super.onCleared()
+    }
+
     suspend fun prepareHardwareContactPayment(): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (isPreparedContactPayment(contactPaymentContext)) return true
@@ -5602,6 +5619,10 @@ class AppViewModel @Inject constructor(
         get() = synchronized(contactPaymentContextLock) {
             activeContactPaymentContext?.incomingPaymentRequest?.paymentDeadlineAt
         }
+
+    fun onHardwarePaymentSubmissionChanged(active: Boolean) {
+        paykitPaymentRequestRepo.setPaymentSubmissionActive(active && activeIncomingPaymentRequest() != null)
+    }
 
     suspend fun authorizeHardwareContactPayment(hasAttemptedBroadcast: Boolean): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }

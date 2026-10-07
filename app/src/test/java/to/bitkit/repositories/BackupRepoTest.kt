@@ -104,12 +104,14 @@ class BackupRepoTest : BaseUnitTest() {
     private val settingsData = MutableStateFlow(SettingsData())
     private val widgetsData = MutableStateFlow(WidgetsData())
     private val hwWalletData = MutableStateFlow(HwWalletData())
+    private val paymentSubmissionActive = MutableStateFlow(false)
 
     private lateinit var sut: BackupRepo
 
     @Before
     fun setUp() = test {
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(1_000))
+        whenever(paykitSdkService.isPaymentSubmissionActive).thenReturn(paymentSubmissionActive)
         whenever(db.transferDao()).thenReturn(transferDao)
         whenever { transferDao.upsert(any<List<TransferEntity>>()) }.thenReturn(Unit)
         whenever { cacheStore.updateBackupStatus(any(), any()) }.thenReturn(Unit)
@@ -143,6 +145,48 @@ class BackupRepoTest : BaseUnitTest() {
         }.thenReturn(Result.success(Unit))
 
         sut = createSut()
+    }
+
+    @Test
+    fun `wallet backup waits for submission and includes the latest pending state`() = test {
+        val statuses = MutableStateFlow(
+            mapOf(BackupCategory.WALLET to BackupItemStatus(required = 1_000)),
+        )
+        val allowClear = CompletableDeferred(Unit)
+        stubBackupStatuses(statuses, allowClear) {}
+        stubBackupObservers()
+        val proofVersion = MutableStateFlow(0L)
+        whenever(paykitPaymentProofStore.backupStateVersion).thenReturn(proofVersion)
+        paymentSubmissionActive.value = true
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            proofVersion.value++
+            runCurrent()
+            proofVersion.value++
+            runCurrent()
+
+            assertTrue(statuses.value.getValue(BackupCategory.WALLET).isRequired)
+            verify(privatePaykitRepo, never()).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+            whenever(privatePaykitRepo.backupSnapshot()).thenReturn(Result.success("pending-write"))
+            paymentSubmissionActive.value = false
+            runCurrent()
+
+            val payload = argumentCaptor<ByteArray>()
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), payload.capture())
+            assertEquals(
+                "pending-write",
+                json.decodeFromString<WalletBackupV1>(String(payload.firstValue)).paykitSdkBackupState
+            )
+            verify(paykitPaymentProofRepo).backupSnapshot()
+            verify(privatePaykitRepo).backupSnapshot()
+        } finally {
+            sut.stopObservingBackups()
+        }
     }
 
     @Test
