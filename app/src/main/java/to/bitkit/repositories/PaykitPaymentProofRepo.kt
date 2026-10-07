@@ -65,7 +65,7 @@ data class PendingPaykitPaymentProof(
     val identity: String,
     val requestId: PaykitPaymentRequestId,
     val paymentEndpointIdentifier: String,
-    val paymentAppId: String,
+    val paymentAppId: String = "",
     val kind: PaykitPaymentProofKind,
     val paymentStarted: Boolean = false,
     val paymentIdentifier: String? = null,
@@ -868,6 +868,8 @@ class PaykitPaymentProofRepo @Inject constructor(
         ?.let(PubkyPublicKeyFormat::normalized)
 
     private suspend fun submitReady(proof: PendingPaykitPaymentProof): Boolean {
+        // Missing legacy app provenance must remain readable, never guessed for delivery.
+        if (proof.paymentAppId.isBlank()) return false
         if (proof.kind == PaykitPaymentProofKind.Onchain && proof.onchainAcceptanceVerified != true) return false
         val proofData = proof.proofData ?: return false
         val identityStatus = paykitSdkService.identityStatus()

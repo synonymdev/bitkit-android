@@ -135,6 +135,16 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `proof without original app provenance stays retained and is not submitted`() = test {
+        storedProofs = listOf(readyLightningProof(PAYMENT_REQUEST_ID).copy(paymentAppId = ""))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        paymentProofRepo().reconcile()
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+        assertEquals("", storedProofs.single().paymentAppId)
+        assertTrue(storedProofs.single().paymentStarted)
+    }
+
+    @Test
     fun `unstarted proof preparation notifies backup without refreshing requests`() = test {
         observeRequestStateChanges()
         val repo = paymentProofRepo(projectionStore)

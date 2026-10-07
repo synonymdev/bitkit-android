@@ -43,7 +43,7 @@ data class PaykitPaymentStateBackup(
         val identity: String,
         val requestId: PaykitPaymentRequestId,
         val paymentEndpointIdentifier: String,
-        val paymentAppId: String,
+        val paymentAppId: String = "",
         val kind: String,
         val paymentStarted: Boolean,
         val paymentIdentifier: String? = null,

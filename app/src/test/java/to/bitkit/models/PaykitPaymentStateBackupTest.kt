@@ -17,6 +17,23 @@ import kotlin.time.Instant
 
 class PaykitPaymentStateBackupTest {
     @Test
+    fun `proofs without an app id remain readable without inventing provenance`() {
+        WalletScope.pushTestOverride("wallet0").use {
+            val local = Json.decodeFromString<to.bitkit.repositories.PendingPaykitPaymentProof>(
+                """{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},"paymentEndpointIdentifier":"bitcoin-onchain","kind":"Onchain","paymentStarted":true}""",
+            )
+            assertEquals("", local.paymentAppId)
+            assertTrue(local.paymentStarted)
+            assertFalse(local.onchainAcceptanceVerified)
+            val backup = Json.decodeFromString<PaykitPaymentStateBackup.Proof>(
+                """{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},"paymentEndpointIdentifier":"bitcoin-onchain","kind":"bitcoin-onchain-txid","paymentStarted":true,"onchainMatchingTransactionIdsBeforeAttempt":[]}""",
+            )
+            assertEquals("", backup.restored().paymentAppId)
+            assertEquals(local.requestId, backup.restored().requestId)
+            assertFalse(backup.restored().onchainAcceptanceVerified)
+        }
+    }
+    @Test
     fun `shared active operation survives payment backup reader writer roundtrip`() {
         val wire = """
             {"subscriptions":{},"pendingProofs":[],"activeOnchainAttempt":{"version":1,"wallet":{"kind":"software","network":"regtest","binding":"${"ab".repeat(
