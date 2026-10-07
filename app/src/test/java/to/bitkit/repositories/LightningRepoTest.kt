@@ -1702,6 +1702,21 @@ class LightningRepoTest : BaseUnitTest() {
         verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
     }
 
+    @Test
+    fun `unresolved original opens recovery before an unhealthy sync blocks another send`() = test {
+        startNodeForTesting()
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
+        whenever(lightningService.sync()).thenThrow(RuntimeException("exact original observation unavailable"))
+        val original = pendingSendAttempt().copy(evidence = OnchainSendEvidence.Unknown)
+        whenever(onchainSendAttemptStore.current()).thenReturn(original)
+
+        val result = sut.sendOnChain("different-address", 2_000uL)
+
+        val blocked = assertIs<OnchainSendBlockedError>(result.exceptionOrNull())
+        assertEquals(original, blocked.attempt)
+        verify(onchainSendAttemptStore, never()).admit(any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(), anyOrNull())
+    }
+
     private fun pendingSendAttempt() = OnchainSendAttempt(
         walletId = "test-wallet", attemptId = "attempt-1", requestId = null, orderId = null,
         address = "address", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,

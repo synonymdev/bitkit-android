@@ -1507,6 +1507,14 @@ class LightningRepo @Inject constructor(
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
+        // Recovery must remain reachable when observing the original transaction makes sync fail.
+        val retainedAttempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrElse {
+            return@executeWhenNodeRunning Result.failure(it)
+        }
+        if (retainedAttempt?.blocksNextSend == true) {
+            return@executeWhenNodeRunning Result.failure(OnchainSendBlockedError(retainedAttempt))
+        }
+
         // Ensure wallet is synced before sending to have up-to-date state
         ensureSyncedBeforeSend().onFailure {
             return@executeWhenNodeRunning Result.failure(it)
