@@ -3106,7 +3106,8 @@ class AppViewModel @Inject constructor(
         }
         val target = if (_sendUiState.value.paykitUsesUsdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = runCatching {
-            request.payment(target, Clock.System.now()).takeIf { it.isValid(Clock.System.now()) }?.amount
+            request.payment(_sendUiState.value.paykitMethod(), Clock.System.now())
+                .takeIf { it.isValid(Clock.System.now()) }?.amount
         }.getOrNull()
         _sendUiState.update { state ->
             val sats = if (target == PaykitAsset.BTC) converted?.atomic ?: 0u else state.amount
@@ -3163,7 +3164,7 @@ class AppViewModel @Inject constructor(
         }
         current.incomingPaymentRequest?.let { request ->
             val now = Clock.System.now()
-            val terms = request.payment(PaykitAsset.USDT, now, paymentTerms?.quoteId)
+            val terms = request.payment(MethodId.UsdtArbitrum, now, paymentTerms?.quoteId)
             if (terms != paymentTerms || !terms.isValid(now) || terms.amount != reviewedAmount) {
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
@@ -3191,14 +3192,12 @@ class AppViewModel @Inject constructor(
         val recipient = payment.endpoints.firstOrNull { it.methodId == MethodId.UsdtArbitrum }?.value
         val hasBitcoinEndpoint = address.isNotEmpty() || invoice != null || lnurl != null
         val useUsdt = recipient != null && prefersUsdt(payment, hasBitcoinEndpoint)
-        val target = if (useUsdt) PaykitAsset.USDT else PaykitAsset.BTC
-        val amount = requestAmount(payment, target)
         _sendUiState.update {
             it.copy(
                 address = address, addressInput = address, isAddressInputValid = address.isNotEmpty(),
                 decodedInvoice = invoice, lnurl = lnurl, paykitUsesUsdt = useUsdt, usdtRecipient = recipient,
-                amount = if (target == PaykitAsset.BTC) amount?.atomic ?: 0u else 0u,
-                paykitAmount = if (target == PaykitAsset.USDT) amount?.value.orEmpty() else "",
+                amount = 0u,
+                paykitAmount = "",
                 payMethod = if (invoice != null || lnurl != null) SendMethod.LIGHTNING else SendMethod.ONCHAIN
             )
         }
@@ -3218,11 +3217,6 @@ class AppViewModel @Inject constructor(
         updateCanSwitchWallet()
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
-
-    private fun requestAmount(payment: ContactPaymentContext, target: PaykitAsset): PaykitAmount? =
-        payment.incomingPaymentRequest?.let {
-            runCatching { it.payment(target, Clock.System.now()).amount }.getOrNull()
-        }
 
     private fun prefersUsdt(payment: ContactPaymentContext, hasBitcoinEndpoint: Boolean): Boolean {
         val request = payment.incomingPaymentRequest
@@ -3272,7 +3266,9 @@ class AppViewModel @Inject constructor(
                 onchainFeeUi = it.onchainFeeUi.copy(isLoading = true),
             )
         }
-        setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
+        if (!reviewPaykitMethodChange(previous)) {
+            setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
+        }
         viewModelScope.launch {
             val shouldResetUtxos = when (settingsStore.data.first().coinSelectAuto) {
                 true -> {
@@ -3332,7 +3328,7 @@ class AppViewModel @Inject constructor(
         val nextSource = sources[(selectedIndex + 1) % sources.size]
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
-            paymentAmountForSource(current, target)
+            paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
             return
@@ -3362,15 +3358,29 @@ class AppViewModel @Inject constructor(
             )
         }
         updateCanSwitchWallet()
+        reviewPaykitMethodChange(current)
     }
 
-    private fun paymentAmountForSource(current: SendUiState, target: PaykitAsset): PaykitAmount? {
+    private fun reviewPaykitMethodChange(previous: SendUiState): Boolean {
+        if (previous.paykitMethod() == _sendUiState.value.paykitMethod() ||
+            activeIncomingPaymentRequest()?.pricing?.conversion == null
+        ) {
+            return false
+        }
+        paykitPaymentTerms = null
+        paykitReviewedAmount = null
+        setSendEffect(SendEffect.NavigateToAmount)
+        return true
+    }
+
+    private fun paymentAmountForSource(current: SendUiState, source: SendFundingSource): PaykitAmount? {
+        val target = if (source == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val input = activeIncomingPaymentRequest()?.amount ?: if (current.paykitUsesUsdt) {
             runCatching { PaykitAmount.parse(PaykitAsset.USDT, current.paykitAmount) }.getOrNull()
         } else {
             PaykitAmount(PaykitAsset.BTC, current.amount)
         }
-        return activeIncomingPaymentRequest()?.payment(target, Clock.System.now())?.amount
+        return activeIncomingPaymentRequest()?.payment(current.paykitMethod(source), Clock.System.now())?.amount
             ?: input?.takeIf { it.atomic > 0u }
                 ?.convertedTo(target, currencyRepo.currencyState.value.paykitRate, nowMillis())
     }
@@ -3467,6 +3477,7 @@ class AppViewModel @Inject constructor(
     fun switchToLightning() {
         viewModelScope.launch {
             sendStateGeneration++
+            val previous = _sendUiState.value
             _sendUiState.update {
                 it.copy(
                     payMethod = SendMethod.LIGHTNING,
@@ -3478,6 +3489,7 @@ class AppViewModel @Inject constructor(
                     confirmedWarnings = persistentListOf(),
                 )
             }
+            if (reviewPaykitMethodChange(previous)) return@launch
             estimateLightningRoutingFeesIfNeeded()
         }
     }
@@ -3531,7 +3543,7 @@ class AppViewModel @Inject constructor(
         var terms: PaykitRequestPayment? = null
         val payment = try {
             val amount = enteredPaykitAmount(current)
-            terms = paykit.incomingPaymentRequest?.payment(amount.asset, Clock.System.now())
+            terms = paykit.incomingPaymentRequest?.payment(current.paykitMethod(), Clock.System.now())
             if (terms?.isValid(Clock.System.now()) == false) throw PaykitAmountError.RateUnavailable
             terms?.amount ?: amount
         } catch (_: PaykitAmountError.RateUnavailable) {
@@ -3868,7 +3880,9 @@ class AppViewModel @Inject constructor(
     private fun requiresPaykitAssetSelection(payment: ContactPaymentContext): Boolean =
         payment.endpoints.isNotEmpty() && (
             payment.endpoints.any { it.methodId == MethodId.UsdtArbitrum } ||
-                payment.incomingPaymentRequest?.let { it.amount.asset != PaykitAsset.BTC } == true
+                payment.incomingPaymentRequest?.let {
+                    it.amount.asset != PaykitAsset.BTC || it.pricing.conversion != null
+                } == true
             )
 
     private fun logDecodedScan(scan: Scanner, isPaymentRequest: Boolean) {
@@ -4163,13 +4177,10 @@ class AppViewModel @Inject constructor(
         } else {
             null
         }
-        val amount = incomingPaymentRequest?.let {
-            runCatching {
-                it.payment(PaykitAsset.BTC, Clock.System.now()).amount.atomic
-            }.getOrNull()
-        }
-            ?: lnInvoice?.amountSatoshis?.takeIf { it > 0uL }
-            ?: invoice.amountSatoshis
+        var amount = incomingPaymentRequest?.payment(
+            if (lnInvoice != null) MethodId.Bolt11 else PublicPaykitRepo.onchainMethodId(invoice.address),
+            Clock.System.now()
+        )?.amount?.atomic ?: lnInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: invoice.amountSatoshis
         _sendUiState.update {
             it.copy(
                 address = invoice.address,
@@ -4193,8 +4204,13 @@ class AppViewModel @Inject constructor(
         if (incomingPaymentRequest != null) {
             if (lnInvoice != null) {
                 waitForUsableChannels()
-                if (!lightningRepo.canSend(amount) && amount <= maxSendOnchain) {
-                    _sendUiState.update { it.copy(payMethod = SendMethod.ONCHAIN) }
+                val onchainAmount = incomingPaymentRequest.payment(
+                    PublicPaykitRepo.onchainMethodId(invoice.address),
+                    Clock.System.now()
+                ).amount.atomic
+                if (!lightningRepo.canSend(amount) && onchainAmount <= maxSendOnchain) {
+                    amount = onchainAmount
+                    _sendUiState.update { it.copy(payMethod = SendMethod.ONCHAIN, amount = onchainAmount) }
                 }
             }
             if (_sendUiState.value.payMethod == SendMethod.ONCHAIN && amount <= Defaults.dustLimit.toULong()) {
@@ -4390,6 +4406,17 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun SendUiState.paykitMethod(
+        source: SendFundingSource = selectedFundingSource(),
+    ): MethodId = when (source) {
+        SendFundingSource.Usdt -> MethodId.UsdtArbitrum
+        SendFundingSource.Spending -> when (lnurl) {
+            is LnurlParams.LnurlPay -> MethodId.Lnurl
+            else -> MethodId.Bolt11
+        }
+        SendFundingSource.Savings, is SendFundingSource.Hardware -> PublicPaykitRepo.onchainMethodId(address)
+    }
+
     private fun SendUiState.selectedFundingSource(): SendFundingSource = when {
         paykitUsesUsdt -> SendFundingSource.Usdt
         hardwareWalletId != null -> SendFundingSource.Hardware(hardwareWalletId)
@@ -4428,7 +4455,7 @@ class AppViewModel @Inject constructor(
 
         val amount = incomingPaymentRequest?.let {
             runCatching {
-                it.payment(PaykitAsset.BTC, Clock.System.now()).amount.atomic
+                it.payment(MethodId.Bolt11, Clock.System.now()).amount.atomic
             }.getOrNull()
         } ?: invoice.amountSatoshis
         val quickPayHandled = handleQuickPayIfApplicable(
@@ -4496,7 +4523,7 @@ class AppViewModel @Inject constructor(
         val displaySats = data.minSendableSat()
         val incomingAmount = activeIncomingPaymentRequest()?.let {
             runCatching {
-                it.payment(PaykitAsset.BTC, Clock.System.now()).amount.atomic
+                it.payment(MethodId.Lnurl, Clock.System.now()).amount.atomic
             }.getOrNull()
         }
         if (incomingAmount != null && incomingAmount !in displaySats..data.maxSendableSat()) {
@@ -5552,14 +5579,7 @@ class AppViewModel @Inject constructor(
             activeContactPaymentContext
         },
     ): PaymentProofPreparation {
-        val methodId = when (_sendUiState.value.payMethod) {
-            SendMethod.ONCHAIN -> PublicPaykitRepo.onchainMethodId(_sendUiState.value.address)
-            SendMethod.LIGHTNING -> if (_sendUiState.value.lnurl is LnurlParams.LnurlPay) {
-                MethodId.Lnurl
-            } else {
-                MethodId.Bolt11
-            }
-        }
+        val methodId = _sendUiState.value.paykitMethod()
         val appId = contactPaymentContext?.privatePaymentContext?.paymentAppsByEndpoint?.get(methodId.rawValue)
             ?: throw PaykitPaymentRequestError.RequestUnavailable
         return PaymentProofPreparation(
@@ -5574,7 +5594,7 @@ class AppViewModel @Inject constructor(
         if (_sendUiState.value.paykitUsesUsdt) {
             return runCatching {
                 val terms = incomingPaymentRequest.payment(
-                    PaykitAsset.USDT,
+                    MethodId.UsdtArbitrum,
                     Clock.System.now(),
                     paykitPaymentTerms?.quoteId
                 )
@@ -5584,6 +5604,7 @@ class AppViewModel @Inject constructor(
         }
         if (!incomingPaymentRequest.acceptsPaymentAmount(
                 _sendUiState.value.amount,
+                _sendUiState.value.paykitMethod(),
                 paykitPaymentTerms,
                 Clock.System.now()
             )
@@ -6049,6 +6070,7 @@ class AppViewModel @Inject constructor(
                 isSubscriptionPayment = isSubscriptionPayment,
                 isInitialSubscriptionPayment = isInitialSubscriptionPayment,
                 initialSubscriptionPaymentAutoStartPending = isInitialSubscriptionPayment,
+                requiresAmountReview = activeIncomingPaymentRequest()?.pricing?.conversion != null,
                 incomingPaymentRequestId = incomingPaymentRequestId,
                 selectedTags = selectedTags,
             )
@@ -7395,12 +7417,13 @@ data class SendUiState(
     val isSubscriptionPayment: Boolean = false,
     val isInitialSubscriptionPayment: Boolean = false,
     val initialSubscriptionPaymentAutoStartPending: Boolean = false,
+    val requiresAmountReview: Boolean = false,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
     val shouldAutomaticallyPay: Boolean
         get() = isInitialSubscriptionPayment && hardwareWalletId == null &&
-            !initialSubscriptionPaymentNeedsConfirmation
+            !initialSubscriptionPaymentNeedsConfirmation && !requiresAmountReview
 }
 
 @Immutable

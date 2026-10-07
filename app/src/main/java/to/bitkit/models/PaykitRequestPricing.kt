@@ -22,20 +22,27 @@ data class PaykitRequestPricing(
 ) {
     fun payment(
         requested: PaykitAmount,
-        asset: PaykitAsset,
+        endpoint: String,
         period: PaykitBillingPeriod?,
         at: Instant,
         quoteId: String? = null,
     ): PaykitRequestPayment {
-        val deadline = paymentDeadline(period)
-        if (requested.asset == asset) {
-            if (quoteId != null) throw PaykitAmountError.InvalidAmount
-            return PaykitRequestPayment(requested, null, null, deadline)
+        val parts = endpoint.split("-")
+        val asset = PaykitAsset.entries.firstOrNull { it.code == parts[0] }
+        if (asset == null || parts.size != 3 || parts.any { !it.matches(Regex("[a-z0-9]+")) }) {
+            throw PaykitAmountError.InvalidAmount
         }
-        val (rates, selected) = conversionRates(period, at, quoteId)
-        val rate = rates.firstOrNull { it.asset == asset.code } ?: throw PaykitAmountError.RateUnavailable
+        val deadline = paymentDeadline(period)
+        val (rates, selected) = if (conversion == PaymentConversion.PerPeriod && requested.asset == asset) {
+            emptyList<ConversionRate>() to quoteId?.let { periodQuote(period, at, it) }
+        } else {
+            conversionRates(period, at, quoteId)
+        }
+        val selector = parts.take(2).joinToString("-")
+        val rate = rates.firstOrNull { it.asset == selector } ?: rates.firstOrNull { it.asset == asset.code }
+        if (rate == null && requested.asset != asset) throw PaykitAmountError.RateUnavailable
         return PaykitRequestPayment(
-            amount = requested.quotedTo(asset, rate.value),
+            amount = requested.quotedTo(asset, rate?.value ?: "1"),
             quoteId = selected?.eventId,
             validFrom = selected?.let { Instant.parse(it.validFrom) },
             expiresAt = listOfNotNull(deadline, selected?.let { Instant.parse(it.expiresAt) }).minOrNull(),
@@ -57,7 +64,10 @@ data class PaykitRequestPricing(
                 selected = periodQuote(period, at, quoteId)
                 selected.rates
             }
-            null -> throw PaykitAmountError.RateUnavailable
+            null -> {
+                if (quoteId != null) throw PaykitAmountError.InvalidAmount
+                emptyList()
+            }
         }
         return rates to selected
     }

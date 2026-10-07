@@ -386,7 +386,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         val isAvailable = MethodId.UsdtArbitrum.rawValue in request.acceptedPaymentEndpointIdentifiers &&
             !request.isExpired(now)
         if (!isAvailable || terms == null || !terms.isValid(now)) throw PaykitPaymentRequestError.RequestUnavailable
-        if (terms.amount != payment || request.payment(PaykitAsset.USDT, now, terms.quoteId) != terms) {
+        if (terms.amount != payment || request.payment(MethodId.UsdtArbitrum, now, terms.quoteId) != terms) {
             throw PaykitPaymentRequestError.RequestUnavailable
         }
     }
@@ -537,7 +537,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         val receivedAt = Instant.fromEpochSeconds(payment.timestamp.toLong())
         val terms = runCatching {
             request.payment(
-                PaykitAsset.USDT,
+                MethodId.UsdtArbitrum,
                 receivedAt,
                 submission.conversionQuoteId
             )

@@ -143,6 +143,11 @@ internal fun IncomingPaymentRequestDetailsContent(
                 .padding(horizontal = 16.dp),
         ) {
             VerticalSpacer(16.dp)
+            Caption13Up(
+                text = stringResource(R.string.wallet__payment_request_requested_amount),
+                color = Colors.White64
+            )
+            VerticalSpacer(8.dp)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 PaykitAmountDisplay(
                     request.amount,
