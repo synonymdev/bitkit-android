@@ -425,7 +425,7 @@ class HwSendViewModel @Inject constructor(
                 description = context.getString(R.string.wallet__payment_timeout),
             )
             else -> {
-                if (pendingBroadcast != null) {
+                if (pendingBroadcast != null && !retainedShopPayment) {
                     pendingBroadcast = null
                     _uiState.update { it.copy(hasPendingBroadcast = false) }
                 }
