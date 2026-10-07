@@ -295,6 +295,33 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wallet backup defers unsigned ordinary and transfer snapshots`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        val attempt = wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0).copy(
+            evidence = OnchainSendEvidence.Pending,
+            txid = null,
+            originalInputs = null,
+            candidateTxids = emptyList(),
+            candidateFeeRates = emptyMap(),
+            preparationPending = true,
+            restoredFromBackup = false,
+        )
+        val unsigned = attempt.copy(requestId = null, preparationPending = false)
+        val original = state.pendingProofs.single().copy(paymentIdentifier = null)
+        val unrelated = original.copy(paymentAppId = "unrelated-app", identity = "other-payer")
+        whenever(onchainSendAttemptStore.backupSnapshot(0)).thenReturn(unsigned)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        whenever(paykitPaymentProofRepo.backupSnapshot()).thenReturn(listOf(original, unrelated))
+        for (transfer in listOf(false, true)) {
+            whenever(onchainSendAttemptStore.backupSnapshot(0)).thenReturn(unsigned.copy(isTransfer = transfer))
+            assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        }
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+    }
+
+    @Test
     fun `wallet backup exports and restores shared active guard before original proof`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
         val golden = json.decodeFromString<WalletBackupV1>(bytes.decodeToString())

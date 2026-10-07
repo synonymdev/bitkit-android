@@ -170,11 +170,25 @@ class HwSendViewModel @Inject constructor(
     ): HwFundingBroadcastResult? {
         payment.request.paymentRequestId?.let { requestId ->
             val request = payment.request
-            val retained = paykitPaymentProofRepo.retainHardwareOnchainCandidate(
-                requestId, request.walletId, SignedTransactionId.fromHex(payment.signedTx.serializedTx),
-                request.paymentIdentity, request.address, request.amountSats,
-            )
-            if (!retained) return null
+            // Protect the only signed receipt while its durable lookup is being saved as well.
+            _uiState.update { it.copy(isBroadcastUnresolved = true) }
+            val retained = runSuspendCatching {
+                paykitPaymentProofRepo.retainHardwareOnchainCandidate(
+                    requestId,
+                    request.walletId,
+                    SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                    request.paymentIdentity,
+                    request.address,
+                    request.amountSats,
+                )
+            }.onFailure { Logger.warn("Failed to retain signed hardware receipt", it, context = TAG) }
+                .getOrDefault(false)
+            if (!retained) {
+                // No dispatch occurred. Keep the exact signed transaction available for a save retry;
+                // Back/cancel must not discard it while the durable Shop preparation remains started.
+                _uiState.update { it.copy(isBroadcastUnresolved = true) }
+                return null
+            }
         }
         _uiState.update { it.copy(isBroadcastUnresolved = true) }
         pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)

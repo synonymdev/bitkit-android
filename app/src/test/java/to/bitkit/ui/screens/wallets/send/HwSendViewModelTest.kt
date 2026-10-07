@@ -680,6 +680,93 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cancel cannot discard signed hardware receipt while candidate save is suspended`() = test {
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        val resume = CompletableDeferred<Boolean>()
+        whenever {
+            proofRepo.retainHardwareOnchainCandidate(
+                any(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull(),
+                any(),
+                any(),
+            )
+        }.doSuspendableAnswer { resume.await() }
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        sut.cancel()
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        resume.complete(true)
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `hardware candidate save denial retains signed receipt across cancel and retries without signing`() = test {
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        whenever {
+            proofRepo.retainHardwareOnchainCandidate(
+                any(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull(),
+                any(),
+                any(),
+            )
+        }
+            .thenReturn(false, true)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        sut.cancel()
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `hardware candidate save exception retains signed receipt across cancel and retries without signing`() = test {
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        whenever {
+            proofRepo.retainHardwareOnchainCandidate(
+                any(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull(),
+                any(),
+                any(),
+            )
+        }
+            .thenThrow(IllegalStateException("storage unavailable")).thenReturn(true)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        sut.cancel()
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
     fun `matching asynchronous completion consumes retained result and permits the next hardware send`() = test {
         val fixture = stubSuccessfulPayment()
         sut.signAndBroadcast(request().copy(paymentRequestId = PaykitPaymentRequestId("original", "counterparty")))

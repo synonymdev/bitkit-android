@@ -652,13 +652,14 @@ class BackupRepo @Inject constructor(
             transfers = db.transferDao().getAll()
             paykitPaymentProofRepo.get().backupSnapshot()
         }
-        // A private preparation may already have consumed a payment-list version. Defer the
-        // entire wallet snapshot until its receipt is retained; never omit only the guard/proof.
-        check(snapshotAttempt?.let {
-            it.preparationPending && !it.restoredFromBackup && it.requestId != null &&
-                it.evidence == OnchainSendEvidence.Pending && it.txid == null &&
-                it.originalInputs == null && it.candidateTxids.isEmpty()
-        } != true) { "Waiting for signed Shop receipt before wallet backup" }
+        // Every unsigned local guard is unrecoverable without its receipt. Defer the entire
+        // snapshot until signing finishes; never omit only the guard or related Shop proof.
+        check(
+            snapshotAttempt?.let {
+                !it.restoredFromBackup && it.evidence == OnchainSendEvidence.Pending && it.txid == null &&
+                    it.originalInputs == null && it.candidateTxids.isEmpty()
+            } != true
+        ) { "Waiting for signed receipt before wallet backup" }
         check(privateRepo.backupStateVersion.value == privateVersion &&
             paykitSdkService.backupStateVersion.value == sdkVersion
         ) { "Private payment state changed during wallet snapshot" }
