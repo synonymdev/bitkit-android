@@ -195,7 +195,18 @@ When the user provides custom instructions after `--`:
   #### Journeys
   #### Manual Tests
   #### Automated Checks
+  #### Evidence
+  #### Gaps
   ```
+- Strongly recommend that authors run the tests they request from reviewers before requesting
+  review, following `AGENTS.md`'s Author verification guidance. Existing mandatory checks still apply.
+- Under `#### Evidence`, briefly identify the cases the author actually verified, app commit/build,
+  environment, observed results, and supporting report/artifact links where useful. Distinguish tests
+  added or requested from tests executed; a checkbox alone does not establish a complete pass.
+- Under `#### Gaps`, identify failed, blocked or untested cases, the failure or reason for not running
+  them, and missing prerequisites. Do not present partial verification as a complete pass. Use
+  `None` only when no applicable gaps remain. Documentation-only changes can report documentation
+  checks and a justified runtime `N/A`. Preserve authored notes and the tested revisions on updates.
 - Under `#### Setup`, follow `AGENTS.md`'s Device-test setup guidance: give executable steps or a
   reproducible shared recipe plus PR-specific deviations for the journeys/manual tests requested.
   Include necessary service/library versions or pins, staging vs local backend/network, flags,

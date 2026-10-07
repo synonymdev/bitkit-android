@@ -43,6 +43,14 @@ Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e
 
 <!-- Flat list in the keyword order `added`, `updated`, `removed`, `ran`: keyword, bare test file name, dash, the behaviour proven — `- added `TransferViewModelTest.kt` — rejects amounts over the spending balance`; `ran` only for what CI does not run. `N/A` when nothing changed. -->
 
+#### Evidence
+
+<!-- Authors are strongly encouraged to run the tests requested from reviewers before requesting review; mandatory checks still apply. Briefly state cases actually verified, app commit/build, environment, observed results and supporting links where useful. Tests added/requested or checkboxes alone are not proof of execution. For docs-only changes, report documentation checks. -->
+
+#### Gaps
+
+<!-- Identify failed, blocked or untested cases, the failure or reason they were not run, and missing prerequisites. Never present partial verification as a complete pass. None only when no applicable gaps remain; justify runtime N/A for docs-only changes. Preserve authored notes and tested revisions when updating. -->
+
 ### Models used
 
 <!-- Informational: use the actual model/effort pairs from session metadata, with separate inline-code spans as below. Use one Review line for all passes; deduplicate pairs, and separate distinct pairs with commas. Never add per-round model rows. Optionally add `- Review rounds: N` when the completed-pass count is known, not a count of parallel reviewer agents. Use `Unknown` if unrecorded or `reasoning: Not exposed` if no setting is exposed. Use `Not used` for phases without AI, and `Review: Not performed` when no review occurred; omit effort for these values. Preserve known pairs on updates. -->

@@ -37,6 +37,16 @@ compatible version, or identify the missing prerequisite. Keep setup proportiona
 cases; documentation-only/no-runtime changes can use `N/A — no device testing required.` with the
 reason. Preserve existing authored QA notes when updating a description.
 
+### Author verification
+
+Authors are strongly encouraged to run the tests they ask reviewers to perform before requesting
+review. In PR QA Notes, briefly record what was verified, on which app commit/build and environment,
+the observed results, and supporting evidence where useful. For anything not verified, identify the
+affected cases, why they were not run, and any missing prerequisites. Report failures honestly;
+partial verification must not be presented as a complete pass. This recommendation complements
+mandatory checks above and does not make them optional. For documentation-only changes, report
+documentation checks and a justified runtime `N/A`.
+
 ### Draft status and review readiness
 
 Keep PRs in draft while development or fixes are ongoing. Mark ready for review only when the
