@@ -86,6 +86,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val hwWalletStore = mock<HwWalletStore>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
+    private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val paykitSdkService = mock<PaykitSdkService>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
@@ -196,6 +197,29 @@ class BackupRepoTest : BaseUnitTest() {
         )
         sut.performFullRestoreFromLatestBackup().getOrThrow()
         verify(transferRepo, times(2)).resumeAcceptedFunding(any())
+    }
+
+    @Test
+    fun `restored accepted ordinary payment resumes after original context without another node event`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val originalWire = requireNotNull(state.activeOnchainAttempt)
+        val original = originalWire.restored("regtest", originalWire.wallet.binding, WalletScope.default, 0)
+        val ordinary = original.copy(
+            requestId = null, payerIdentity = null, orderId = null, isTransfer = false,
+            evidence = OnchainSendEvidence.Accepted,
+        )
+        val wire = to.bitkit.models.ActiveOnchainAttemptBackup.from(ordinary, "regtest", originalWire.wallet.binding)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(originalWire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire))
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        val ordered = org.mockito.kotlin.inOrder(onchainSendAttemptStore, privatePaykitRepo, lightningRepo)
+        ordered.verify(onchainSendAttemptStore).restoreActive(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
+        ordered.verify(privatePaykitRepo).restoreBackup(anyOrNull())
+        ordered.verify(lightningRepo).completeAcceptedOrdinaryFollowup(requireNotNull(ordinary.txid))
+        stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire.copy(status = "unknown")))
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        verify(lightningRepo, times(1)).completeAcceptedOrdinaryFollowup(any())
     }
 
     @Test
@@ -1255,6 +1279,7 @@ class BackupRepoTest : BaseUnitTest() {
         keychain = keychain,
         onchainSendAttemptStore = onchainSendAttemptStore,
         transferRepo = Provider { transferRepo },
+        lightningRepo = Provider { lightningRepo },
         vssStoreIdProvider = vssStoreIdProvider,
         preActivityMetadataRepo = preActivityMetadataRepo,
         lightningService = lightningService,

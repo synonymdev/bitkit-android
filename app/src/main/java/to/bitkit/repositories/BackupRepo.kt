@@ -114,6 +114,7 @@ class BackupRepo @Inject constructor(
     private val keychain: Keychain,
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val transferRepo: Provider<TransferRepo>,
+    private val lightningRepo: Provider<LightningRepo>,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
@@ -838,9 +839,17 @@ class BackupRepo @Inject constructor(
         }
         keychain.delete(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
         // Restore can finish while the node is already Running: no new lifecycle/event is guaranteed.
-        restoredAttempt?.takeIf { it.isTransfer && it.hasPositiveEvidence }?.let { attempt ->
-            transferRepo.get().resumeAcceptedFunding(attempt).onFailure {
-                Logger.warn("Restored accepted funding remains pending local follow-up", it, context = TAG)
+        restoredAttempt?.takeIf { it.hasPositiveEvidence }?.let { attempt ->
+            if (attempt.isTransfer) {
+                transferRepo.get().resumeAcceptedFunding(attempt).onFailure {
+                    Logger.warn("Restored accepted funding remains pending local follow-up", it, context = TAG)
+                }
+            } else if (attempt.requestId == null && !attempt.localFollowupComplete) {
+                runSuspendCatching {
+                    lightningRepo.get().completeAcceptedOrdinaryFollowup(requireNotNull(attempt.txid))
+                }.onFailure {
+                    Logger.warn("Restored accepted payment remains pending local follow-up", it, context = TAG)
+                }
             }
         }
         Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
