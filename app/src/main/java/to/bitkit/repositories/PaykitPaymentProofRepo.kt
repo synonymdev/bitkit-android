@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import dagger.Lazy
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CoroutineDispatcher
@@ -76,6 +77,8 @@ data class PendingPaykitPaymentProof(
     val onchainWalletId: String = WalletScope.default,
     val onchainMatchingTransactionIdsBeforeAttempt: Set<String> = emptySet(),
     val onchainAcceptanceVerified: Boolean = false,
+    val hardwareDispatchDenied: Boolean = false,
+    val privatePaymentListVersion: ULong? = null,
 )
 
 data class PaykitOnchainPaymentProofResolution(
@@ -94,6 +97,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val store: PaykitPaymentProofStore,
     private val hwWalletRepo: HwWalletRepo,
+    private val privatePaykitRepo: Lazy<PrivatePaykitRepo>,
 ) {
     companion object {
         private const val TAG = "PaykitPaymentProofRepo"
@@ -127,7 +131,11 @@ class PaykitPaymentProofRepo @Inject constructor(
     )
 
     suspend fun backupSnapshot(): List<PaykitPaymentStateBackup.Proof> = withContext(ioDispatcher) {
-        operationMutex.withLock { store.load().map { PaykitPaymentStateBackup.Proof(it) } }
+        operationMutex.withLock {
+            val proofs = store.load()
+            check(proofs.none { it.hardwareDispatchDenied }) { "Hardware dispatch denial cleanup is pending" }
+            proofs.map { PaykitPaymentStateBackup.Proof(it) }
+        }
     }
 
     suspend fun restoreBackup(proofs: List<PaykitPaymentStateBackup.Proof>) = withContext(ioDispatcher) {
@@ -213,6 +221,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         request: PaykitPaymentRequest,
         address: String,
         walletId: String = WalletScope.default,
+        privatePaymentListVersion: ULong? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
@@ -235,6 +244,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     onchainAddress = address,
                     onchainAmountSats = request.amountSats,
                     onchainWalletId = walletId,
+                    privatePaymentListVersion = privatePaymentListVersion,
                 )
                 persist(proofs)
             }
@@ -501,7 +511,8 @@ class PaykitPaymentProofRepo @Inject constructor(
             val original = proofs.singleOrNull {
                 PubkyPublicKeyFormat.matches(it.identity, originalIdentity) && it.requestId == requestId &&
                     it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
-                    it.paymentStarted && it.onchainAddress == address && it.onchainAmountSats == amountSats &&
+                    it.paymentStarted && !it.hardwareDispatchDenied &&
+                    it.onchainAddress == address && it.onchainAmountSats == amountSats &&
                     it.proofData == null && !it.onchainAcceptanceVerified &&
                     (it.paymentIdentifier == null || it.paymentIdentifier.equals(txid, true))
             } ?: return@withLock false
@@ -536,7 +547,8 @@ class PaykitPaymentProofRepo @Inject constructor(
                         !it.onchainAcceptanceVerified
                 } ?: return@runSuspendCatching false
                 // Only a definite first queued dispatch denial permits the existing preparation cleanup.
-                persist(proofs.map { if (it == original) it.copy(paymentIdentifier = null) else it })
+                // Keep exact identity and receipt until private cleanup and proof removal both finish.
+                persist(proofs.map { if (it == original) it.copy(hardwareDispatchDenied = true) else it })
                 true
             }.onFailure { Logger.warn("Failed to clear denied hardware candidate", it, context = TAG) }
                 .getOrDefault(false)
@@ -558,7 +570,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     val proof = proofs[index]
                     PubkyPublicKeyFormat.matches(proof.identity, originalIdentity) &&
                         proof.requestId == requestId && proof.onchainWalletId == walletId &&
-                        proof.kind == PaykitPaymentProofKind.Onchain && proof.paymentStarted
+                        proof.kind == PaykitPaymentProofKind.Onchain && proof.paymentStarted && !proof.hardwareDispatchDenied
                 } ?: return@runSuspendCatching false
                 val original = proofs[index]
                 if ((original.paymentIdentifier != null && !original.paymentIdentifier.equals(txid, true)) ||
@@ -589,9 +601,10 @@ class PaykitPaymentProofRepo @Inject constructor(
                 val original = proofs.singleOrNull {
                     PubkyPublicKeyFormat.matches(it.identity, originalIdentity) && it.requestId == request.id &&
                         it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
-                        it.paymentStarted && it.paymentIdentifier == null && it.proofData == null &&
-                        !it.onchainAcceptanceVerified
+                        it.paymentStarted && (it.paymentIdentifier == null || it.hardwareDispatchDenied) &&
+                        it.proofData == null && !it.onchainAcceptanceVerified
                 } ?: return@runSuspendCatching false
+                if (original.hardwareDispatchDenied) releaseDeniedPrivateConsumption(original)
                 // Only the caller's definite first-dispatch authorization denial permits this removal.
                 persist(proofs - original)
                 true
@@ -671,6 +684,32 @@ class PaykitPaymentProofRepo @Inject constructor(
         }.onFailure { Logger.warn("Failed to clear interrupted Shop preparation", it, context = TAG) }
     }
 
+    private suspend fun releaseDeniedPrivateConsumption(proof: PendingPaykitPaymentProof) {
+        val version = proof.privatePaymentListVersion ?: return
+        privatePaykitRepo.get().releasePrivatePaymentListVersion(proof.requestId.counterparty, version).getOrThrow()
+    }
+
+    private suspend fun finishDeniedHardwarePreparations(proofs: List<PendingPaykitPaymentProof>) {
+        runSuspendCatching {
+            operationMutex.withLock {
+                if (proofs.none { it.hardwareDispatchDenied }) return@withLock
+                val identity = currentIdentity() ?: return@withLock
+                val denied = proofs.filter {
+                    it.hardwareDispatchDenied && it.onchainWalletId != WalletScope.default &&
+                        it.kind == PaykitPaymentProofKind.Onchain && it.paymentStarted &&
+                        it.paymentIdentifier?.isHex(HASH_BYTE_COUNT) == true && it.proofData == null &&
+                        !it.onchainAcceptanceVerified && PubkyPublicKeyFormat.matches(it.identity, identity)
+                }
+                for (proof in denied) {
+                    if (proof !in loadProofs()) continue
+                    releaseDeniedPrivateConsumption(proof)
+                    // Removal follows idempotent exact-version release. A crash leaves the denial for retry.
+                    persist(loadProofs() - proof)
+                }
+            }
+        }.onFailure { Logger.warn("Denied hardware payment cleanup remains pending", it, context = TAG) }
+    }
+
     suspend fun reconcile() = withContext(ioDispatcher) {
         releaseInterruptedShopPreparation()
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
@@ -691,6 +730,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             operationMutex.withLock { loadProofs().also { if (it.isEmpty()) persist(emptyList()) } }
         }.getOrElse { return@withContext }
         if (snapshot.isEmpty()) return@withContext
+        finishDeniedHardwarePreparations(snapshot)
         snapshot.filter { it.kind == PaykitPaymentProofKind.Onchain && it.onchainWalletId == WalletScope.default }
             .forEach { proof ->
                 val txid = proof.proofData ?: attempt?.txid
@@ -756,6 +796,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         attempt: OnchainSendAttempt?,
         activityReady: Boolean,
     ): Boolean {
+        if (proof.hardwareDispatchDenied) return false
         if (proof.kind == PaykitPaymentProofKind.Onchain && proof.onchainWalletId == WalletScope.default &&
             !activityReady
         ) {

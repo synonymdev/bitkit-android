@@ -476,7 +476,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paykitPaymentProofRepo.associateLightningPayment(any(), any(), any(), eq("bitkit"))
         }.thenReturn(Result.success(Unit))
         whenever {
-            paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any())
+            paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
         }.thenReturn(Result.success(Unit))
         whenever { activityRepo.setContact(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.scheduleSavedContactPreparation(any<Collection<String>>()) }
@@ -7349,7 +7349,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
         )
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
     }
 
     @Test
@@ -7811,7 +7811,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
     }
 
     @Test
@@ -7839,7 +7839,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
     }
 
     @Test
@@ -7855,6 +7855,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 request,
                 "bcrt1qpaymentrequest",
                 "hardware-wallet",
+                7uL,
             )
         ).thenReturn(Result.failure(IllegalStateException("proof start failed")))
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -7903,7 +7904,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentProofRepo, times(2)).prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain)
         verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentRequestRepo).accept(request)
-        verify(paykitPaymentProofRepo).markOnchainPaymentStarted(request, "bcrt1qpaymentrequest", "hardware-wallet")
+        verify(paykitPaymentProofRepo).markOnchainPaymentStarted(request, "bcrt1qpaymentrequest", "hardware-wallet", 7uL)
         verify(paykitPaymentRequestRepo, never()).ensurePaymentAllowed(request)
     }
 
@@ -8193,7 +8194,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setActiveContactPaymentContext(testPublicKey, privatePaymentContext(7uL), incomingPaymentRequest = request)
         assertFalse(sut.prepareHardwareContactPayment(walletId, "bcrt1qpaymentrequest", request.id, testPublicKey))
         verify(paykitPaymentRequestRepo, times(1)).accept(request)
-        verify(paykitPaymentProofRepo, times(1)).markOnchainPaymentStarted(request, "bcrt1qpaymentrequest", walletId)
+        verify(paykitPaymentProofRepo, times(1)).markOnchainPaymentStarted(request, "bcrt1qpaymentrequest", walletId, 7uL)
         verify(
             lightningRepo,
             never()
@@ -8231,7 +8232,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any(), anyOrNull())
     }
 
     @Test

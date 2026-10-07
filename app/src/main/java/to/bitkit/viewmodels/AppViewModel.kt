@@ -5812,7 +5812,10 @@ class AppViewModel @Inject constructor(
             return false
         }
         if (preparedPaymentProofRequest != null) {
-            markOnchainPaymentStarted(incomingPaymentRequest, address, walletId ?: WalletScope.default).onFailure {
+            paykitPaymentProofRepo.markOnchainPaymentStarted(
+                requireNotNull(incomingPaymentRequest), address, walletId ?: WalletScope.default,
+                contactPaymentContext.privatePaymentContext?.paymentListVersion,
+            ).onFailure {
                 synchronized(contactPaymentContextLock) {
                     if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
                 }

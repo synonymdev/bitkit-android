@@ -83,6 +83,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val lightningRepo = mock<LightningRepo>()
     private val store = mock<PaykitPaymentProofStore>()
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private var storedProofs = emptyList<PendingPaykitPaymentProof>()
     private var shouldFailNextLoad = false
     private var shouldFailNextSave = false
@@ -1442,6 +1443,49 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `denied hardware cleanup retries original private version before removing proof`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val txid = "ab".repeat(32)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId, 7uL).getOrThrow()
+        assertTrue(repo.retainHardwareOnchainCandidate(request.id, walletId, txid, LOCAL_IDENTITY,
+            ONCHAIN_ADDRESS, request.amountSats))
+        assertTrue(repo.clearHardwareOnchainCandidateBeforeDispatch(request.id, walletId, txid, LOCAL_IDENTITY,
+            ONCHAIN_ADDRESS, request.amountSats, false))
+        whenever(privatePaykitRepo.releasePrivatePaymentListVersion(request.id.counterparty, 7uL))
+            .thenReturn(Result.failure(IllegalStateException("storage")), Result.success(Unit))
+        assertTrue(runCatching { repo.backupSnapshot() }.isFailure)
+        paymentProofRepo().reconcile()
+        assertTrue(storedProofs.single().hardwareDispatchDenied)
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        paymentProofRepo().reconcile()
+        assertTrue(storedProofs.isEmpty())
+        verify(privatePaykitRepo, times(2)).releasePrivatePaymentListVersion(request.id.counterparty, 7uL)
+    }
+
+    @Test
+    fun `queued hardware denial survives reopen and finishes cleanup before another preparation`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val txid = "ab".repeat(32)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        assertTrue(repo.retainHardwareOnchainCandidate(request.id, walletId, txid, LOCAL_IDENTITY,
+            ONCHAIN_ADDRESS, request.amountSats))
+        assertTrue(repo.clearHardwareOnchainCandidateBeforeDispatch(request.id, walletId, txid, LOCAL_IDENTITY,
+            ONCHAIN_ADDRESS, request.amountSats, false))
+        // Kill after the durable denial, before the sheet's cleanup callback.
+        val reopened = paymentProofRepo()
+        reopened.reconcile()
+        assertTrue(storedProofs.isEmpty())
+        assertTrue(reopened.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).isSuccess)
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+    }
+
+    @Test
     fun `first queued expiry clears only the exact unsubmitted hardware candidate`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val walletId = "original-hardware-wallet"
@@ -1465,7 +1509,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         }
         storedProofs = listOf(retained)
         assertTrue(clear())
-        assertNull(storedProofs.single().paymentIdentifier)
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        assertTrue(storedProofs.single().hardwareDispatchDenied)
         assertTrue(repo.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, false))
         assertTrue(storedProofs.isEmpty())
     }
@@ -1674,6 +1719,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         lightningRepo = lightningRepo,
         store = store,
         hwWalletRepo = hwWalletRepo,
+        privatePaykitRepo = dagger.Lazy { privatePaykitRepo },
     )
 
     private fun acceptedAttempt(request: PaykitPaymentRequest, txid: String) = OnchainSendAttempt(
