@@ -9,6 +9,7 @@ import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
+import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitAndroid
 import com.synonym.paykit.PaykitAppCapabilities
 import com.synonym.paykit.PaykitException
@@ -910,17 +911,29 @@ class PaykitSdkService @Inject constructor(
         expectedIdentity: String?,
     ) = run {
         isSetup.await()
-        operationLock.withLock(priority) {
-            withStateRevisionTracking { handle ->
-                if (expectedIdentity != null) {
-                    val identity = completeSdkCall { handle.identityStatus() }?.publicKey
-                    check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) {
-                        "Payment Request identity changed"
-                    }
+        val generation = runtimeGeneration
+        val deferDuringPayment = priority == Priority.Background
+        var report: OutboundPrivateSendReport?
+        do {
+            if (deferDuringPayment) isPaymentSubmissionActive.first { !it }
+            report = operationLock.withLock(priority) {
+                if (deferDuringPayment) {
+                    check(runtimeGeneration == generation) { "Paykit runtime changed before peer delivery" }
+                    if (isPaymentSubmissionActive.value) return@withLock null
                 }
-                completeSdkCall { handle.processOutboundPrivateMessages(counterparty) }
+                withStateRevisionTracking { handle ->
+                    if (expectedIdentity != null) {
+                        val identity = completeSdkCall { handle.identityStatus() }?.publicKey
+                        check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) {
+                            "Payment Request identity changed"
+                        }
+                    }
+                    if (deferDuringPayment && isPaymentSubmissionActive.value) return@withStateRevisionTracking null
+                    completeSdkCall { handle.processOutboundPrivateMessages(counterparty) }
+                }
             }
-        }
+        } while (report == null)
+        report
     }
 
     suspend fun processPendingPrivateMessages(): List<OutboundPrivateCounterpartySendReport> =
