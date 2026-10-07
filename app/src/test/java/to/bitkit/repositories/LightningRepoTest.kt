@@ -1804,6 +1804,38 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `observed original activity waits for its exact fee instead of displaying zero`() = test {
+        val txid = "ab".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+            candidateTxids = listOf(txid),
+            candidateFeeRates = mapOf(txid to 1uL),
+            backupFollowup = to.bitkit.models.ActiveOnchainAttemptBackup.Followup("0", emptyList(), createdAtMillis = "123"),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(null)
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(activityService, never()).createSentOnchainActivityFromSendResult(
+            any(), any(), any(), any(), any(), any(), anyOrNull(), any(),
+        )
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(141uL)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid, attempt.address, attempt.amountSats, 141uL, 1uL, false, null, attempt.walletId,
+        )
+        verify(activityService).repairVerifiedSentOnchainFee(txid, attempt.walletId, 141uL, 1uL)
+        verify(onchainSendAttemptStore).retainWinningFee(attempt.attemptId, attempt.walletIndex, txid, 141uL)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+    }
+
+
+    @Test
     fun `successor activity fee never reuses original nonzero fee and missing exact fee stays guarded`() = test {
         val txid = "cd".repeat(32)
         val attempt = pendingSendAttempt().copy(
@@ -1912,6 +1944,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(coreService.activity).thenReturn(activityService)
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(activityService.getOnchainActivityByTxId(eq(txid), any())).thenReturn(mock())
+        whenever(lightningService.observedOriginalSendFee(any())).thenReturn(141uL)
         whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(),
                 paymentDeadlineAt = anyOrNull(),
             ))
