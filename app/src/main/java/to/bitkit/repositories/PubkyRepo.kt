@@ -148,11 +148,19 @@ class PubkyRepo @Inject constructor(
 
         /** Shortest time between two contact list updates of a background profile refresh. */
         internal val CONTACT_REFRESH_BATCH_WINDOW = 300.milliseconds
+
+        /** Maximum automatic restore attempts during one foreground recovery window. */
+        private const val DEFERRED_RESTORE_ATTEMPTS = 8
+
+        /** Delay after a deferred restore before another attempt may begin. */
+        private val DEFERRED_RESTORE_INTERVAL = 5.seconds
     }
 
     private val scope = appScope(ioDispatcher, TAG)
     private val serviceInitializeMutex = Mutex()
     private val initializeMutex = Mutex()
+    private val deferredRestoreMutex = Mutex()
+    private var deferredRestoreGeneration: Long? = null
     private val completedRestoreVersion = AtomicLong()
     private var completedRestoreSignInGeneration = -1L
     private val loadProfileMutex = Mutex()
@@ -252,6 +260,7 @@ class PubkyRepo @Inject constructor(
         data object NoSession : InitResult
         data class Restored(val publicKey: String) : InitResult
         data object RestorationFailed : InitResult
+        data object RestorationDeferred : InitResult
     }
 
     private data class SavedContact(
@@ -339,6 +348,23 @@ class PubkyRepo @Inject constructor(
         restored
     }
 
+    /** Retries a temporarily unavailable saved session while the caller remains active. */
+    suspend fun retryDeferredSessionRestoration() = withContext(ioDispatcher) {
+        deferredRestoreMutex.withLock {
+            awaitInitialization()
+            repeat(DEFERRED_RESTORE_ATTEMPTS) {
+                val generation = initializeMutex.withLock {
+                    deferredRestoreGeneration?.takeIf { it == signInGeneration.get() }
+                } ?: return@withLock
+                delay(DEFERRED_RESTORE_INTERVAL)
+                if (restoreSession(expectedGeneration = generation)) {
+                    loadIdentityData()
+                    return@withLock
+                }
+            }
+        }
+    }
+
     /**
      * Waits for a usable saved identity, sharing any in-flight restore. Later calls can retry failures.
      * Restoration waits for active identity work and runs in the repository scope, so cancelling the caller does not
@@ -367,9 +393,14 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun restoreSession(): Boolean {
+    private suspend fun restoreSession(expectedGeneration: Long? = null): Boolean {
         val version = completedRestoreVersion.get()
         return initializeMutex.withLock {
+            if (expectedGeneration != null &&
+                (expectedGeneration != signInGeneration.get() || expectedGeneration != deferredRestoreGeneration)
+            ) {
+                return@withLock false
+            }
             if (completedRestoreVersion.get() != version &&
                 completedRestoreSignInGeneration == signInGeneration.get()
             ) {
@@ -400,6 +431,7 @@ class PubkyRepo @Inject constructor(
                 ensureServiceInitialized(savedSession.getOrNull())
             }.onFailure {
                 Logger.error("Failed to initialize paykit", it, context = TAG)
+                deferredRestoreGeneration = signInGeneration.get().takeIf { _ -> it.isPaykitTemporarilyUnavailable() }
                 if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
                     _sessionRestorationFailed.update { true }
                 }
@@ -417,7 +449,13 @@ class PubkyRepo @Inject constructor(
                 )
             }.onFailure {
                 Logger.error("Failed to initialize paykit", it, context = TAG)
-            }.getOrElse { InitResult.RestorationFailed }
+            }.getOrElse {
+                if (it.isPaykitTemporarilyUnavailable()) {
+                    InitResult.RestorationDeferred
+                } else {
+                    InitResult.RestorationFailed
+                }
+            }
 
             when (result) {
                 is InitResult.NoSession -> {
@@ -429,14 +467,15 @@ class PubkyRepo @Inject constructor(
                     continueSignIn(result.publicKey)
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
                 }
-                is InitResult.RestorationFailed -> {
+                InitResult.RestorationFailed, InitResult.RestorationDeferred -> {
                     clearAuthenticatedState(
                         clearCachedProfile = false,
                         clearRestorationFailure = notifyFailure,
                     )
-                    if (notifyFailure) _sessionRestorationFailed.update { true }
+                    if (notifyFailure) _sessionRestorationFailed.update { result == InitResult.RestorationFailed }
                 }
             }
+            deferredRestoreGeneration = signInGeneration.get().takeIf { result == InitResult.RestorationDeferred }
             initializationReady.complete(Unit)
             return result is InitResult.Restored
         } finally {
@@ -479,7 +518,7 @@ class PubkyRepo @Inject constructor(
             }.getOrElse {
                 if (it.isPaykitTemporarilyUnavailable()) {
                     Logger.warn("Deferred session restoration, keeping saved session", it, context = TAG)
-                    return@getOrElse InitResult.RestorationFailed
+                    return@getOrElse InitResult.RestorationDeferred
                 }
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
                 resolveSignedInSession(savedSessionSecret, storedSecretKeyHex ?: adoptedSecretKeyHex())
@@ -509,7 +548,11 @@ class PubkyRepo @Inject constructor(
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.error("Failed re-sign-in recovery", it, context = TAG)
-                InitResult.RestorationFailed
+                if (it.isPaykitTemporarilyUnavailable()) {
+                    InitResult.RestorationDeferred
+                } else {
+                    InitResult.RestorationFailed
+                }
             }
         }
     }

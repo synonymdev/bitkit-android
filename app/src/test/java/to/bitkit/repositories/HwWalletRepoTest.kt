@@ -2312,7 +2312,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
-        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
+        verify(trezorRepo, never()).broadcastRawTx(any(), anyOrNull())
         verify(trezorRepo, never()).disconnectStaleSession(any())
     }
 
@@ -2342,7 +2342,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
         assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
-        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
+        verify(trezorRepo, never()).broadcastRawTx(any(), anyOrNull())
     }
 
     @Test
@@ -2402,7 +2402,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo).disconnectStaleSession("dev1")
-        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
+        verify(trezorRepo, never()).broadcastRawTx(any(), anyOrNull())
     }
 
     @Test
@@ -2443,7 +2443,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo, never()).disconnectStaleSession(any())
-        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
+        verify(trezorRepo, never()).broadcastRawTx(any(), anyOrNull())
     }
 
     @Test

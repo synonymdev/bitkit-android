@@ -142,8 +142,7 @@ fun SheetHost(
     var wasSheetVisible by remember { mutableStateOf(false) }
     var visibleKey by remember { mutableStateOf<Any?>(null) }
 
-    // Automatically expand or hide the bottom sheet based on bool flag
-    LaunchedEffect(shouldExpand) {
+    LaunchedEffect(shouldExpand, visibilityKey) {
         if (shouldExpand) {
             scaffoldState.bottomSheetState.expand()
         } else {

@@ -249,6 +249,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pubkyRepo = mock<PubkyRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
+    private val paymentSubmissionActive = MutableStateFlow(false)
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val paykitPaymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val paykitPaymentRequestDiagnostics = mock<PaykitPaymentRequestDiagnostics>()
@@ -298,6 +299,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        whenever(paykitPaymentRequestRepo.isPaymentSubmissionActive).thenReturn(paymentSubmissionActive)
         timedSheetType.value = null
         paykitPaymentRequestHistory.value = emptyList()
         surfacedPaykitPaymentRequestIds.clear()

@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.onchainBroadcastRawTx
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -18,6 +19,7 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertSame
@@ -38,7 +40,7 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
             object : Clock {
                 override fun now() = now
             },
-            StandardTestDispatcher(testScheduler)
+            StandardTestDispatcher(testScheduler),
         )
 
         for (isMax in listOf(false, true)) {
@@ -64,7 +66,7 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
             object : Clock {
                 override fun now() = deadline
             },
-            testDispatcher
+            testDispatcher,
         )
 
         val error = runCatching {
@@ -105,12 +107,12 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
             mock(),
             object : Clock {
                 override fun now() = now
-            }
+            },
         )
         withContext(ServiceQueue.CORE.queueContext) {
             mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")).use { native ->
                 native.`when`<String> {
-                    runBlocking { com.synonym.bitkitcore.onchainBroadcastRawTx("signed-tx", "electrum") }
+                    runBlocking { onchainBroadcastRawTx("signed-tx", "electrum") }
                 }.thenReturn("txid")
                 assertEquals("txid", service.broadcastRawTx("signed-tx", "electrum", deadline))
                 now = deadline + 1.nanoseconds
@@ -118,7 +120,7 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
                 val error = runCatching { service.broadcastRawTx("signed-tx", "electrum", deadline) }.exceptionOrNull()
 
                 assertIs<ServiceError.PaymentDeadlineExpired>(error?.cause)
-                native.verify { runBlocking { com.synonym.bitkitcore.onchainBroadcastRawTx("signed-tx", "electrum") } }
+                native.verify { runBlocking { onchainBroadcastRawTx("signed-tx", "electrum") } }
                 native.verifyNoMoreInteractions()
             }
         }
@@ -127,7 +129,7 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
     private fun lightningService(
         node: Node,
         clock: Clock,
-        queue: kotlin.coroutines.CoroutineContext,
+        queue: CoroutineContext,
     ) = LightningService(
         bgDispatcher = testDispatcher,
         ioDispatcher = testDispatcher,

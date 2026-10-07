@@ -320,10 +320,11 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `queued passive messages yield to foreground app sync while ordered drains remain barriers`() = runTest {
+    fun `queued background work yields to foreground app sync while ordered work remains a barrier`() = runTest {
         val operations = listOf<suspend PaykitSdkService.(Priority) -> Any?>(
             { processPendingPrivateMessages(it) },
             { receivePrivateMessagesFromLinkedPeers(it) },
+            { ensureLinkWithPeer(RING_PUBKY, priority = it) },
         )
         for (operation in operations) {
             val priorities = listOf(Priority.Background, Priority.Ordered)
@@ -345,6 +346,10 @@ class PaykitSdkServiceTest {
                     events += "messages"
                     emptyList<PrivateStreamCounterpartyIntakeReport>()
                 }
+                whenever { sdk.ensureLinkWithPeer(RING_PUBKY, 1u) }.thenAnswer {
+                    events += "messages"
+                    LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKING, 1uL, null)
+                }
                 whenever { sdk.identityStatus() }
                     .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
                 whenever { sdk.publishPaykitApp(any(), any()) }.thenAnswer {
@@ -356,11 +361,7 @@ class PaykitSdkServiceTest {
                 runCurrent()
                 val messages = async { service.operation(messagePriority) }
                 val publication = async {
-                    if (appPriority == Priority.Ordered) {
-                        service.syncPaykitApp(privatePaymentsEnabled = false)
-                    } else {
-                        service.syncPaykitApp(privatePaymentsEnabled = false, priority = appPriority)
-                    }
+                    service.syncPaykitApp(privatePaymentsEnabled = false, priority = appPriority)
                 }
                 runCurrent()
                 assertTrue(events.isEmpty())
@@ -471,13 +472,264 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `cancelling an active execution claim does not continue to accept`() = runTest {
+    fun `payment mutations overtake background work without crossing signout barriers`() = runTest {
+        val payments = listOf<suspend PaykitSdkService.() -> Any?>(
+            { claimPaymentRequestForExecution(RING_PUBKY, "request") },
+            { acceptPaymentRequest(RING_PUBKY, "request") },
+        )
+        for ((index, payment) in payments.withIndex()) {
+            for (withBarrier in listOf(false, true)) {
+                val sdk = mock<PaykitSdk>()
+                val release = CompletableDeferred<Unit>()
+                val events = mutableListOf<String>()
+                whenever { sdk.contactRecords() }.doSuspendableAnswer {
+                    release.await()
+                    emptyList()
+                }
+                whenever { sdk.pendingOutboundPrivateCounterparties() }.thenAnswer {
+                    events += "background"
+                    emptyList<String>()
+                }
+                whenever { sdk.signOut() }.thenAnswer {
+                    events += "signout"
+                    IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT)
+                }
+                whenever { sdk.claimPaymentRequestForExecution(RING_PUBKY, "request") }.thenAnswer {
+                    events += "payment"
+                    mock<PaymentRequestRecord>()
+                }
+                whenever { sdk.claimAndAcceptPaymentRequest(RING_PUBKY, "request") }.thenAnswer {
+                    events += "payment"
+                    mock<PaymentRequestRecord>()
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val active = async { service.contactRecords() }
+                runCurrent()
+                val background = async { service.pendingOutboundPrivateCounterparties(Priority.Background) }
+                val barrier = if (withBarrier) async { service.signOut() } else null
+                val foreground = async { service.payment() }
+                runCurrent()
+                assertTrue(events.isEmpty())
+
+                release.complete(Unit)
+                active.await()
+                background.await()
+                barrier?.await()
+                foreground.await()
+
+                assertEquals(
+                    if (withBarrier) listOf("background", "signout", "payment") else listOf("payment", "background"),
+                    events,
+                )
+                verify(sdk, times(if (index == 0) 1 else 0)).claimPaymentRequestForExecution(RING_PUBKY, "request")
+                verify(sdk, times(if (index == 1) 1 else 0)).claimAndAcceptPaymentRequest(RING_PUBKY, "request")
+                verify(sdk, never()).acceptPaymentRequest(any(), any())
+            }
+        }
+    }
+
+    @Test
+    fun `queued backup rechecks submission state and releases the queue while deferred`() = runTest {
+        for (cancelBackup in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val release = CompletableDeferred<Unit>()
+            whenever { sdk.contactRecords() }.doSuspendableAnswer {
+                release.await()
+                emptyList()
+            }
+            whenever { sdk.exportBackupString() }.thenReturn("pending-write-backup")
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val active = async { service.contactRecords() }
+            runCurrent()
+            val backup = async { service.exportBackupState() }
+            runCurrent()
+            service.setPaymentSubmissionActive(true)
+            release.complete(Unit)
+            active.await()
+            runCurrent()
+
+            assertFalse(backup.isCompleted)
+            verify(sdk, never()).exportBackupString()
+            service.linkedPeers(Priority.Interactive)
+            if (cancelBackup) {
+                backup.cancel()
+                assertFailsWith<CancellationException> { backup.await() }
+            }
+            service.setPaymentSubmissionActive(false)
+            runCurrent()
+            if (!cancelBackup) assertEquals("pending-write-backup", backup.await())
+            verify(sdk, times(if (cancelBackup) 0 else 1)).exportBackupString()
+        }
+    }
+
+    @Test
+    fun `deferred backup cannot export a replaced identity or wiped wallet`() = runTest {
+        val resets = listOf<suspend PaykitSdkService.() -> Unit>(
+            { clearState() },
+            { signOut() },
+            { withWalletWipe {} },
+        )
+        for (reset in resets) {
+            val sdk = mock<PaykitSdk>()
+            whenever { sdk.exportBackupString() }.thenReturn("replacement-backup")
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            service.setPaymentSubmissionActive(true)
+            val backup = async { runSuspendCatching { service.exportBackupState() } }
+            runCurrent()
+
+            service.reset()
+            service.setPaymentSubmissionActive(false)
+
+            assertTrue(backup.await().isFailure)
+            verify(sdk, never()).exportBackupString()
+        }
+    }
+
+    @Test
+    fun `queued peer delivery rechecks submission and releases the queue while deferred`() = runTest {
+        for (cancelDelivery in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val release = CompletableDeferred<Unit>()
+            val report = mock<OutboundPrivateSendReport>()
+            whenever { sdk.contactRecords() }.doSuspendableAnswer {
+                release.await()
+                emptyList()
+            }
+            whenever { sdk.identityStatus() }
+                .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            whenever { sdk.processOutboundPrivateMessages(RING_PUBKY) }.thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val active = async { service.contactRecords() }
+            runCurrent()
+            val delivery = async {
+                service.processOutboundPrivateMessages(RING_PUBKY, Priority.Background, RING_PUBKY)
+            }
+            runCurrent()
+            service.setPaymentSubmissionActive(true)
+            release.complete(Unit)
+            active.await()
+            runCurrent()
+
+            assertFalse(delivery.isCompleted)
+            verify(sdk, never()).identityStatus()
+            verify(sdk, never()).processOutboundPrivateMessages(any())
+            service.linkedPeers(Priority.Interactive)
+            if (cancelDelivery) {
+                delivery.cancel()
+                assertFailsWith<CancellationException> { delivery.await() }
+            }
+            service.setPaymentSubmissionActive(false)
+            runCurrent()
+            if (!cancelDelivery) assertSame(report, delivery.await())
+            verify(sdk, times(if (cancelDelivery) 0 else 1)).processOutboundPrivateMessages(RING_PUBKY)
+        }
+    }
+
+    @Test
+    fun `peer delivery defers when submission starts during its identity check`() = runTest {
         val sdk = mock<PaykitSdk>()
-        val releaseClaim = CompletableDeferred<Unit>()
-        var claimFinished = false
-        whenever { sdk.claimPaymentRequestForExecution(RING_PUBKY, "request") }.doSuspendableAnswer {
-            releaseClaim.await()
-            claimFinished = true
+        val checkingIdentity = CompletableDeferred<Unit>()
+        val releaseIdentity = CompletableDeferred<Unit>()
+        val report = mock<OutboundPrivateSendReport>()
+        whenever { sdk.identityStatus() }.doSuspendableAnswer {
+            checkingIdentity.complete(Unit)
+            releaseIdentity.await()
+            IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        whenever { sdk.processOutboundPrivateMessages(RING_PUBKY) }.thenReturn(report)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val delivery = async {
+            service.processOutboundPrivateMessages(RING_PUBKY, Priority.Background, RING_PUBKY)
+        }
+        checkingIdentity.await()
+        service.setPaymentSubmissionActive(true)
+        releaseIdentity.complete(Unit)
+        runCurrent()
+
+        assertFalse(delivery.isCompleted)
+        verify(sdk, never()).processOutboundPrivateMessages(any())
+        service.linkedPeers(Priority.Interactive)
+        service.setPaymentSubmissionActive(false)
+        assertSame(report, delivery.await())
+        verify(sdk).processOutboundPrivateMessages(RING_PUBKY)
+    }
+
+    @Test
+    fun `deferred peer delivery cannot cross a runtime replacement or wallet wipe`() = runTest {
+        val resets = listOf<suspend PaykitSdkService.() -> Unit>(
+            { clearState() },
+            { signOut() },
+            { withWalletWipe {} },
+        )
+        for (reset in resets) {
+            val sdk = mock<PaykitSdk>()
+            whenever { sdk.identityStatus() }
+                .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            whenever { sdk.processOutboundPrivateMessages(RING_PUBKY) }.thenReturn(mock())
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            service.setPaymentSubmissionActive(true)
+            val delivery = async {
+                runSuspendCatching {
+                    service.processOutboundPrivateMessages(RING_PUBKY, Priority.Background, RING_PUBKY)
+                }
+            }
+            runCurrent()
+
+            service.reset()
+            service.setPaymentSubmissionActive(false)
+
+            assertTrue(delivery.await().isFailure)
+            verify(sdk, never()).processOutboundPrivateMessages(any())
+        }
+    }
+
+    @Test
+    fun `foreground peer delivery remains available during payment submission`() = runTest {
+        for (priority in listOf(Priority.Ordered, Priority.Interactive)) {
+            val sdk = mock<PaykitSdk>()
+            val report = mock<OutboundPrivateSendReport>()
+            whenever { sdk.identityStatus() }
+                .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            whenever { sdk.processOutboundPrivateMessages(RING_PUBKY) }.thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            service.setPaymentSubmissionActive(true)
+
+            assertSame(report, service.processOutboundPrivateMessages(RING_PUBKY, priority, RING_PUBKY))
+            verify(sdk).processOutboundPrivateMessages(RING_PUBKY)
+        }
+    }
+
+    @Test
+    fun `deferred peer delivery checks identity inside the queue`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        whenever { sdk.contactRecords() }.doSuspendableAnswer {
+            release.await()
+            emptyList()
+        }
+        whenever { sdk.identityStatus() }.thenReturn(IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT))
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val active = async { service.contactRecords() }
+        runCurrent()
+        val delivery = async {
+            runSuspendCatching { service.processOutboundPrivateMessages(RING_PUBKY, Priority.Background, RING_PUBKY) }
+        }
+        runCurrent()
+        release.complete(Unit)
+        active.await()
+
+        assertIs<IllegalStateException>(delivery.await().exceptionOrNull())
+        verify(sdk, never()).processOutboundPrivateMessages(any())
+    }
+
+    @Test
+    fun `cancelling active acceptance waits for its durable call and preserves backup notification`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val releaseAcceptance = CompletableDeferred<Unit>()
+        var acceptanceFinished = false
+        whenever { sdk.claimAndAcceptPaymentRequest(RING_PUBKY, "request") }.doSuspendableAnswer {
+            releaseAcceptance.await()
+            acceptanceFinished = true
             mock()
         }
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
@@ -486,10 +738,12 @@ class PaykitSdkServiceTest {
         acceptance.cancel()
         runCurrent()
         assertFalse(acceptance.isCompleted)
-        releaseClaim.complete(Unit)
+        releaseAcceptance.complete(Unit)
 
         assertFailsWith<CancellationException> { acceptance.await() }
-        assertTrue(claimFinished)
+        assertTrue(acceptanceFinished)
+        verify(sdk).claimAndAcceptPaymentRequest(RING_PUBKY, "request")
+        verify(sdk, never()).claimPaymentRequestForExecution(any(), any())
         verify(sdk, never()).acceptPaymentRequest(any(), any())
         assertEquals(1L, service.backupStateVersion.value)
     }

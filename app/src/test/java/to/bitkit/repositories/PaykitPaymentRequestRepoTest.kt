@@ -98,6 +98,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val paymentProofStore = mock<PaykitPaymentProofStore>()
     private val proofStateVersion = MutableStateFlow(0L)
+    private val paymentSubmissionActive = MutableStateFlow(false)
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val subscriptionNotificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
     private var schedulerOriginMillis = 0L
@@ -111,6 +112,11 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Before
     fun setUp() = test {
         schedulerOriginMillis = testDispatcher.scheduler.currentTime
+        whenever(paykitSdkService.isPaymentSubmissionActive).thenReturn(paymentSubmissionActive)
+        whenever(paykitSdkService.setPaymentSubmissionActive(any())).thenAnswer {
+            paymentSubmissionActive.value = it.getArgument(0)
+            Unit
+        }
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(paykitSdkService.processOutboundPrivateMessages(any())).thenReturn(
             OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
@@ -948,7 +954,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `accept removes current request and delivers queued response`() = test {
+    fun `accept commits locally without waiting for peer delivery during payment`() = test {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
         whenever(
@@ -959,16 +965,46 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).thenReturn(record)
         sut.refresh().getOrThrow()
         clearInvocations(paykitSdkService)
+        sut.setPaymentSubmissionActive(true)
 
         sut.accept(sut.pendingRequests.value.single()).getOrThrow()
+        runCurrent()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(PaymentRequestLifecycleState.ACCEPTED, sut.paymentRequestHistory.value.single().lifecycleState)
-        verifyBlocking(paykitSdkService) { processPendingPrivateMessages() }
+        verify(paykitSdkService, never()).processPendingPrivateMessages(any())
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any(), anyOrNull())
         verify(presentationStore).addAcceptedOneTimeId(
             LOCAL_IDENTITY,
             PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY),
         )
+        whenever(paykitSdkService.processOutboundPrivateMessages(COUNTERPARTY, Priority.Background, LOCAL_IDENTITY))
+            .doSuspendableAnswer { throw PaykitException.Transport("transport_error", "Offline") }
+        sut.setPaymentSubmissionActive(false)
+        runCurrent()
+        verify(paykitSdkService).processOutboundPrivateMessages(COUNTERPARTY, Priority.Background, LOCAL_IDENTITY)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(record.copy(state = PaymentRequestLifecycleState.ACCEPTED)))
+        sut.refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background).getOrThrow()
+        verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
+        verify(paykitSdkService, times(1)).acceptPaymentRequest(any(), any())
+    }
+
+    @Test
+    fun `deferred acceptance delivery is discarded when identity changes`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any())).thenReturn(record)
+        sut.refresh().getOrThrow()
+        sut.setPaymentSubmissionActive(true)
+        sut.accept(sut.pendingRequests.value.single()).getOrThrow()
+        runCurrent()
+
+        sut.activate(SECOND_IDENTITY)
+        runCurrent()
+
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any(), anyOrNull())
+        assertFalse(paymentSubmissionActive.value)
     }
 
     @Test
