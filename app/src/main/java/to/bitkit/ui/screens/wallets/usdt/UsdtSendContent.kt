@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -237,7 +238,7 @@ private fun UsdtNetwork(
                 NumberPadActionButton(
                     destination.label,
                     onClick = { expanded = true },
-                    color = Colors.Green,
+                    color = Colors.Usdt,
                     modifier = Modifier.testTag("UsdtNetwork")
                 )
                 DropdownMenu(
@@ -279,7 +280,7 @@ private fun UsdtRecipientContent(
         RectangleButton(
             label = stringResource(R.string.wallet__payment_request_paste),
             icon = R.drawable.ic_clipboard_text,
-            iconTint = Colors.Green,
+            iconTint = Colors.Usdt,
             modifier = Modifier.testTag("UsdtPaste")
         ) {
             val value = context.getClipboardText()?.trim()
@@ -293,7 +294,7 @@ private fun UsdtRecipientContent(
         RectangleButton(
             label = stringResource(R.string.wallet__recipient_manual),
             icon = R.drawable.ic_pencil_simple,
-            iconTint = Colors.Green,
+            iconTint = Colors.Usdt,
             modifier = Modifier.testTag("UsdtManual")
         ) { onPageChange(UsdtPage.MANUAL) }
         error?.let {
@@ -359,8 +360,8 @@ private fun UsdtAmountContent(
     Column(modifier = Modifier.fillMaxSize()) {
         Caption13Up("USDT · " + destination.label, color = Colors.White64)
         VerticalSpacer(8.dp)
-        NumberPadAmountText(value = amount.ifEmpty { "0" }, symbol = "₮", modifier = Modifier.testTag("UsdtAmount"))
-        FillHeight()
+        NumberPadAmountText(value = amount.ifEmpty { "0" }, symbol = "$", modifier = Modifier.testTag("UsdtAmount"))
+        VerticalSpacer(32.dp)
         state.error?.let {
             BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
             VerticalSpacer(16.dp)
@@ -368,7 +369,7 @@ private fun UsdtAmountContent(
         Row(verticalAlignment = Alignment.Bottom) {
             Column(modifier = Modifier.weight(1f)) {
                 Caption13Up(stringResource(R.string.usdt__balance), color = Colors.White64)
-                VerticalSpacer(4.dp)
+                VerticalSpacer(8.dp)
                 BodySSB(
                     (
                         if (hideBalance) {
@@ -381,18 +382,21 @@ private fun UsdtAmountContent(
                         ) + " USDT"
                 )
             }
-            NumberPadActionButton(text = "USDT", color = Colors.Green, enabled = false, onClick = {})
+            NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
         }
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
         HorizontalDivider()
-        NumberPad(
-            type = NumberPadType.DECIMAL,
-            enabled = !state.busy && amountEditable,
-            onDeleteLongPress = { onAmountChange("") },
-            onPress = { key ->
-                onAmountChange(NumberPadInputHandler.handleInput(key, amount, maxLength = 21, maxDecimals = 6))
-            },
-        )
+        BoxWithConstraints(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            NumberPad(
+                type = NumberPadType.DECIMAL,
+                availableHeight = maxHeight,
+                enabled = !state.busy && amountEditable,
+                onDeleteLongPress = { onAmountChange("") },
+                onPress = { key ->
+                    onAmountChange(NumberPadInputHandler.handleInput(key, amount, maxLength = 21, maxDecimals = 6))
+                },
+            )
+        }
         VerticalSpacer(16.dp)
         PrimaryButton(
             text = stringResource(R.string.common__continue),
@@ -415,7 +419,7 @@ private fun UsdtConfirmation(quote: UsdtQuote, state: UsdtSendState, onConfirm: 
                 quote.destination.label,
                 onClick = { if (!state.busy) onEditAmount() }
             )
-            VerticalSpacer(32.dp)
+            VerticalSpacer(44.dp)
             if (showDetails) {
                 UsdtQuoteDetails(quote)
             } else if (quote.destination == UsdtDestination.ARBITRUM) {
@@ -484,7 +488,7 @@ private fun UsdtConfirmation(quote: UsdtQuote, state: UsdtSendState, onConfirm: 
                 Icon(
                     painterResource(if (showDetails) R.drawable.ic_eye_slash else R.drawable.ic_coins),
                     null,
-                    tint = Colors.Green,
+                    tint = Colors.Usdt,
                     modifier = Modifier.size(16.dp)
                 )
             },
@@ -494,7 +498,7 @@ private fun UsdtConfirmation(quote: UsdtQuote, state: UsdtSendState, onConfirm: 
         )
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
-            color = Colors.Green,
+            color = Colors.Usdt,
             onConfirm = onConfirm,
             enabled = !state.busy,
             loading = state.busy,
@@ -509,7 +513,7 @@ private fun UsdtConfirmation(quote: UsdtQuote, state: UsdtSendState, onConfirm: 
 private fun UsdtQuoteDetails(quote: UsdtQuote) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         SendCell(caption = stringResource(R.string.wallet__send_from), modifier = Modifier.weight(1f)) {
-            NumberPadActionButton(text = "USDT", color = Colors.Green, enabled = false, onClick = {})
+            NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
         }
         SendCell(caption = stringResource(R.string.usdt__destination), modifier = Modifier.weight(1f)) {
             BodySSB(quote.destination.label, modifier = Modifier.height(28.dp))
@@ -519,8 +523,8 @@ private fun UsdtQuoteDetails(quote: UsdtQuote) {
     SendCell(
         caption = stringResource(R.string.wallet__send_to)
     ) { SelectionContainer { BodySSB(quote.recipient) } }
-    VerticalSpacer(16.dp)
     quote.bridgeProvider?.let { provider ->
+        VerticalSpacer(16.dp)
         SendCell(caption = stringResource(R.string.usdt__bridge_provider)) {
             BodySSB(if (provider == UsdtBridgeProvider.ORCHESTRA) "Orchestra" else "USDT0")
         }

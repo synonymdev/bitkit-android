@@ -478,8 +478,7 @@ fun SubscriptionDetailScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Caption13Up(text = subscription.cadenceText(), color = Colors.White64)
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        PaykitAmountDisplay(subscription.amount)
-                        FillWidth()
+                        PaykitAmountDisplay(subscription.amount, modifier = Modifier.weight(1f))
                         SubscriptionAvatar(
                             subscription = subscription,
                             contact = contacts.contactFor(subscription),

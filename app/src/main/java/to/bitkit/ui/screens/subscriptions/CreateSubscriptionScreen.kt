@@ -269,7 +269,7 @@ internal fun CreateSubscriptionDetails(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth().clickableAlpha(onClick = onAmountClick)
                 ) {
-                    PaykitAmountDisplay(amount)
+                    PaykitAmountDisplay(amount, modifier = Modifier.weight(1f))
                     Icon(
                         painter = painterResource(R.drawable.ic_pencil_simple),
                         contentDescription = stringResource(R.string.common__edit),
@@ -286,7 +286,7 @@ internal fun CreateSubscriptionDetails(
                     VerticalSpacer(8.dp)
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (MethodId.UsdtArbitrum.rawValue in acceptedMethods) {
-                            BodyMSB(text = "USDT", color = Colors.Green)
+                            BodyMSB(text = "USDT", color = Colors.Usdt)
                         }
                         if (acceptedMethods.any { MethodId.fromRawValue(it)?.isOnchain == true }) {
                             BodyMSB(text = stringResource(R.string.lightning__savings), color = Colors.Brand)

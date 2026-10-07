@@ -108,7 +108,7 @@ fun NewTransactionSheetView(
                 rememberLottieDynamicProperties(
                     rememberLottieDynamicProperty(
                         property = LottieProperty.COLOR,
-                        value = Colors.Green.toArgb(),
+                        value = Colors.Usdt.toArgb(),
                         keyPath = arrayOf("**"),
                     )
                 )
@@ -187,39 +187,53 @@ fun NewTransactionSheetView(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            if (details.direction == NewTransactionSheetDirection.SENT) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("sent_buttons_row")
-                ) {
-                    SecondaryButton(
-                        text = stringResource(R.string.wallet__send_details),
-                        onClick = onDetailClick,
-                        enabled = (details.activityId != null || details.paymentHashOrTxId != null) &&
-                            !details.isLoadingDetails,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("Details")
-                    )
-                    PrimaryButton(
-                        text = stringResource(R.string.common__close),
-                        onClick = onCloseClick,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("Close")
-                    )
-                }
-            } else {
-                PrimaryButton(
-                    text = localizedRandom(R.string.common__ok_random),
-                    onClick = onCloseClick,
-                    modifier = Modifier.testTag("ReceivedTransactionButton")
-                )
-            }
+            TransactionButtons(details, onCloseClick, onDetailClick)
             Spacer(modifier = Modifier.height(8.dp))
         }
+    }
+}
+
+@Composable
+private fun TransactionButtons(
+    details: NewTransactionSheetDetails,
+    onCloseClick: () -> Unit,
+    onDetailClick: () -> Unit
+) {
+    if (details.direction == NewTransactionSheetDirection.SENT || details.usdtTransferId != null) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("sent_buttons_row")
+        ) {
+            SecondaryButton(
+                text = stringResource(R.string.wallet__send_details),
+                onClick = onDetailClick,
+                enabled = !details.isLoadingDetails && (
+                    details.activityId != null || details.paymentHashOrTxId != null || details.usdtTransferId != null
+                    ),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("Details")
+            )
+            PrimaryButton(
+                text = if (details.direction == NewTransactionSheetDirection.RECEIVED) {
+                    localizedRandom(R.string.common__ok_random)
+                } else {
+                    stringResource(R.string.common__close)
+                },
+                onClick = onCloseClick,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("Close")
+            )
+        }
+    } else {
+        PrimaryButton(
+            text = localizedRandom(R.string.common__ok_random),
+            onClick = onCloseClick,
+            modifier = Modifier.testTag("ReceivedTransactionButton")
+        )
     }
 }
 

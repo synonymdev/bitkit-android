@@ -321,7 +321,7 @@ private fun ColumnScope.WatchOnlyConsentContent(
                     else -> R.string.profile__auth_approval_watch_only_intro_title
                 }
             ).withAccent(
-                accentColor = if (claim?.sharesUsdt == true && !claim.sharesBitcoin) Colors.Green else Colors.Blue
+                accentColor = if (claim?.sharesUsdt == true && !claim.sharesBitcoin) Colors.Usdt else Colors.Blue
             ),
         )
         VerticalSpacer(8.dp)
@@ -573,7 +573,7 @@ private fun PaymentDetailsSection(
                     VerticalSpacer(8.dp)
                     BodySSB(
                         text = stringResource(R.string.common__copy),
-                        color = Colors.Green,
+                        color = Colors.Usdt,
                         modifier = Modifier
                             .clickable(onClick = copyToClipboard(address))
                             .testTag("PubkyAuthCopyUsdtAddress")
@@ -593,7 +593,7 @@ private fun PaymentDetailsSection(
                 VerticalSpacer(8.dp)
                 BodySSB(
                     text = stringResource(R.string.common__retry),
-                    color = Colors.Green,
+                    color = Colors.Usdt,
                     modifier = Modifier.clickable(onClick = onRetryUsdt)
                 )
             }

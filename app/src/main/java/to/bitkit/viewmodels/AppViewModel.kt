@@ -5245,6 +5245,11 @@ class AppViewModel @Inject constructor(
 
     fun onClickActivityDetail() {
         val details = _transactionSheet.value
+        details.usdtTransferId?.let {
+            hideNewTransactionSheet()
+            navigateToUsdtActivity(it)
+            return
+        }
         details.activityId?.let {
             hideNewTransactionSheet()
             mainScreenEffect(
@@ -5372,6 +5377,13 @@ class AppViewModel @Inject constructor(
     }
 
     fun resetQuickPay() = _quickPayData.update { null }
+
+    fun navigateToUsdtActivity(transferId: String) {
+        viewModelScope.launch {
+            hideSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.UsdtActivity(transferId)))
+        }
+    }
 
     fun navigateToActivity(activityRawId: String) {
         viewModelScope.launch {

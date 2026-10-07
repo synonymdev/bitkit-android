@@ -36,6 +36,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityRowSurface
@@ -63,7 +64,7 @@ internal fun UsdtActivityRow(transfer: UsdtTransfer, hideBalance: Boolean, onCli
         AmountViewContent(
             title = usdtFormatAmount(transfer.activityAmount),
             titlePrefix = if (transfer.isIncoming) "+" else "−",
-            subtitle = "USDT",
+            subtitle = "$ " + usdtOverviewAmount(transfer.activityAmount),
             hideBalance = hideBalance
         )
     }
@@ -197,7 +198,7 @@ private val UsdtTransfer.iconResource: Int get() = when (status) {
 private val UsdtTransfer.statusColor get() = when (status) {
     UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED -> Colors.Red
     UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION, UsdtTransferStatus.BRIDGE_FAILED -> Colors.Yellow
-    else -> Colors.Green
+    else -> Colors.Usdt
 }
 
 private val UsdtTransferStatus.labelResource: Int get() = when (this) {
