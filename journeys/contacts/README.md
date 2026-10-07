@@ -56,6 +56,12 @@ contacts. Foreground the app and verify preparation and delivery resume without 
 contacts again. A direct payment or withdrawal is not a background retry and must retain its
 normal completion behavior.
 
+Hold an explicit request send, payment-proof completion, or sharing withdrawal in progress, then
+background the app and release the operation. It must continue without waiting for foreground
+contact preparation. Acceptance delivery also remains eligible after payment submission ends.
+These checks require controlled operation blocking and do not guarantee execution after OS
+suspension or termination.
+
 Repeat with a controlled SDK operation held in progress: background the app, then release the
 operation and verify that it completes without cancellation and the next contact waits. Delete the
 profile while work is paused, then resume; no work for the deleted identity should restart.

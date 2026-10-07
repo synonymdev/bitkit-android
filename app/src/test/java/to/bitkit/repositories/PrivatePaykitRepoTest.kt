@@ -224,6 +224,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
 
+        sut.setContactPreparationActive(false)
         val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
@@ -1283,6 +1284,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.pendingOutboundPrivateCounterparties())
             .thenReturn(pendingKeys, pendingKeys, emptyList())
 
+        sut.setContactPreparationActive(false)
         val result = sut.removePublishedEndpointsForCleanup("test")
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())

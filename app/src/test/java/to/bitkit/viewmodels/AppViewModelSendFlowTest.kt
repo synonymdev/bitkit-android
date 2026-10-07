@@ -7078,7 +7078,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `outgoing payment request creation continues after its caller returns`() = test {
+    fun `outgoing payment request creation continues after backgrounding`() = test {
         val request = paymentRequest().copy(counterparty = "pubkyrecipient")
         val target = PaykitPaymentRequestTarget(request.counterparty)
         val draft = PaykitPaymentRequestDraft(
@@ -7098,6 +7098,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.createPaymentRequest(draft, target) { callbackRequest.complete(it) }
         creationStarted.await()
+        sut.stopPaykitPaymentRequestPolling()
         finishCreation.complete(Unit)
         runCurrent()
 
@@ -8132,6 +8133,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val privateContext = privatePaymentContext(7uL)
         val completionStarted = CompletableDeferred<Unit>()
         val finishCompletion = CompletableDeferred<Unit>()
+        var proofCompleted = false
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
@@ -8139,6 +8141,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .doSuspendableAnswer {
                 completionStarted.complete(Unit)
                 finishCompletion.await()
+                proofCompleted = true
             }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
@@ -8157,9 +8160,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         completionStarted.await()
         assertFalse(finishCompletion.isCompleted)
+        assertFalse(proofCompleted)
 
+        sut.stopPaykitPaymentRequestPolling()
         finishCompletion.complete(Unit)
         advanceUntilIdle()
+        assertTrue(proofCompleted)
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, "bitkit")
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
     }
