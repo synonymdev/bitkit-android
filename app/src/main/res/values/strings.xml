@@ -1221,9 +1221,11 @@
     <string name="usdt__amount">Amount (USDT)</string>
     <string name="usdt__balance">Balance</string>
     <string name="usdt__bridge_attention">Bridge needs attention</string>
+    <string name="usdt__bridge_reference">Bridge reference</string>
     <string name="usdt__bridge_submitted_description">Your payment is pending. You can track confirmation and cross-network delivery in Activity.</string>
     <string name="usdt__bridging">Delivering to destination</string>
     <string name="usdt__confirmed">Confirmed</string>
+    <string name="usdt__copy_details">Copy Details</string>
     <string name="usdt__deposit_amount">Deposit amount</string>
     <string name="usdt__deposit_amount_out_of_range">Amount outside deposit limits.</string>
     <string name="usdt__deposit_attention">This deposit needs provider assistance. Contact Bitkit support with the deposit reference.</string>

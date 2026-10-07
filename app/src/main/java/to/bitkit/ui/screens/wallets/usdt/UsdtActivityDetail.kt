@@ -232,6 +232,7 @@ private fun paykitContactName(transferId: String): String? {
 @Composable
 private fun UsdtOrchestraDetails(bridge: com.synonym.bitkitcore.UsdtOrchestraTransfer, hideBalance: Boolean) {
     SendCell(caption = stringResource(R.string.usdt__bridge_provider)) { BodySSB("Orchestra") }
+    SendCell(caption = stringResource(R.string.usdt__bridge_reference)) { SelectionContainer { BodyS(bridge.quoteId) } }
     bridge.destinationTx?.let { hash ->
         SendCell(
             caption = stringResource(R.string.usdt__destination_tx)
@@ -263,4 +264,5 @@ private fun UsdtTransactionDetails(transfer: UsdtTransfer) {
             uri.openUri("https://arbiscan.io/tx/" + txHash)
         })
     }
+    if (transfer.destination != UsdtDestination.ARBITRUM) UsdtSupportActions(transfer.supportDetails)
 }
