@@ -161,7 +161,12 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         val recurring = request.copy(billingPeriod = period)
         val subscription = PaykitSubscriptionId(request.paymentRequestId, contact)
         val repo = repo()
-        repo.prepare(context(recurring), quote, amount, recurring.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
+        repo.prepare(
+            context(recurring),
+            quote,
+            amount,
+            recurring.payment(MethodId.UsdtArbitrum, clock.now())
+        ).getOrThrow()
         assertTrue(repo.protectedRequestIdsForSubscriptionCancellation(identity, subscription).getOrThrow().isEmpty())
         stubSend(Result.success(mock()))
         repo.send(quote) {
@@ -175,7 +180,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             context(recurring),
             quote,
             amount,
-            recurring.payment(PaykitAsset.USDT, clock.now()),
+            recurring.payment(MethodId.UsdtArbitrum, clock.now()),
         ).getOrThrow()
         assertTrue(restarted.attempts.value.single().paymentStarted)
         assertEquals(
@@ -210,7 +215,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     @Test
     fun `execution authorization failure releases an unsubmitted attempt`() = test {
         val repo = repo()
-        repo.prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
         stubSend(Result.success(mock()))
         val result = repo.send(quote) { throw PaykitPaymentRequestError.RequestUnavailable }
         assertTrue(result.isFailure)
@@ -219,7 +224,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
 
     @Test
     fun `binding survives restart and blocks replacement of a pending payment`() = test {
-        repo().prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
+        repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
         assertNotNull(stored)
         val pending = mock<UsdtTransfer> { on { status }.thenReturn(UsdtTransferStatus.PENDING) }
         stubStoredTransfer(Result.success(pending))
@@ -229,7 +234,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
                 context(),
                 quote.copy(id = "replacement"),
                 amount,
-                request.payment(PaykitAsset.USDT, clock.now())
+                request.payment(MethodId.UsdtArbitrum, clock.now())
             ).isFailure
         )
         restarted.reconcile().getOrThrow()
@@ -242,7 +247,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             context(),
             quote.copy(id = "replacement"),
             amount,
-            request.payment(PaykitAsset.USDT, clock.now())
+            request.payment(MethodId.UsdtArbitrum, clock.now())
         ).getOrThrow()
         assertEquals("replacement", restarted.attempts.value.single().quoteId)
     }
@@ -250,7 +255,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     @Test
     fun `restored started payment remains protected without local core history`() = test {
         val original = repo()
-        original.prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
+        original.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
         val unstartedState = stored
         stubSend(Result.success(mock()))
         original.send(quote).getOrThrow()
@@ -266,7 +271,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
                     context(),
                     quote.copy(id = "replacement"),
                     amount,
-                    request.payment(PaykitAsset.USDT, clock.now())
+                    request.payment(MethodId.UsdtArbitrum, clock.now())
                 ).isFailure
             )
             assertEquals(backup, restored.backupSnapshot())
@@ -286,13 +291,13 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
             val repo = repo()
             stubStoredTransfer(history)
             stubSend(Result.failure(UsdtException.QuoteExpired()))
-            repo.prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
+            repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
             assertTrue(repo.send(quote).isFailure)
             val replacement = repo.prepare(
                 context(),
                 quote.copy(id = "replacement"),
                 amount,
-                request.payment(PaykitAsset.USDT, clock.now())
+                request.payment(MethodId.UsdtArbitrum, clock.now())
             )
             assertEquals(history.isSuccess && history.getOrNull() == null, replacement.isSuccess)
         }
@@ -301,7 +306,9 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     @Test
     fun `unreadable persistence prevents sending and is preserved`() = test {
         stored = "unreadable"
-        assertTrue(repo().prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).isFailure)
+        assertTrue(
+            repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).isFailure
+        )
         assertEquals("unreadable", stored)
     }
 
@@ -313,7 +320,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
                 context(),
                 quote.copy(amount = 49_999u),
                 amount,
-                request.payment(PaykitAsset.USDT, clock.now())
+                request.payment(MethodId.UsdtArbitrum, clock.now())
             ).isFailure
         )
         assertTrue(
@@ -321,7 +328,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
                 context(),
                 quote.copy(recipient = "0x2222222222222222222222222222222222222222"),
                 amount,
-                request.payment(PaykitAsset.USDT, clock.now())
+                request.payment(MethodId.UsdtArbitrum, clock.now())
             ).isFailure
         )
         assertTrue(
@@ -329,16 +336,16 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
                 context(request.copy(acceptedPaymentEndpointIdentifiers = listOf(MethodId.Bolt11.rawValue))),
                 quote,
                 amount,
-                request.payment(PaykitAsset.USDT, clock.now())
+                request.payment(MethodId.UsdtArbitrum, clock.now())
             ).isFailure
         )
         assertEquals(null, stored)
-        repo.prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
     }
 
     @Test
     fun `proof delivery can retry after restart without replacing the payment`() = test {
-        repo().prepare(context(), quote, amount, request.payment(PaykitAsset.USDT, clock.now())).getOrThrow()
+        repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
         val confirmed = mock<UsdtTransfer> {
             on { status }.thenReturn(UsdtTransferStatus.CONFIRMED)
             on { txHash }.thenReturn("transaction")
@@ -356,7 +363,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
                 context(),
                 quote.copy(id = "replacement"),
                 amount,
-                request.payment(PaykitAsset.USDT, clock.now())
+                request.payment(MethodId.UsdtArbitrum, clock.now())
             ).isFailure
         )
     }
@@ -505,7 +512,9 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         val binding = PaykitUsdtPaymentRepo.binding(request, identity, "bitkit", null, request.billingPeriod?.sdkValue)
         PaykitUsdtPaymentRepo.validateProofSize(binding)
         val oversized = context(request.copy(paymentReference = "é".repeat(256)))
-        assertTrue(repo().prepare(oversized, quote, amount, request.payment(PaykitAsset.USDT, clock.now())).isFailure)
+        assertTrue(
+            repo().prepare(oversized, quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).isFailure
+        )
         assertEquals(null, stored)
     }
 

@@ -1464,6 +1464,7 @@
     <string name="wallet__payment_request_recipient_unavailable">Payment requests can only be sent to a saved contact with a private connection.</string>
     <string name="wallet__payment_request_request">Request</string>
     <string name="wallet__payment_request_request_payment">Request Payment</string>
+    <string name="wallet__payment_request_requested_amount">Requested amount</string>
     <string name="wallet__payment_request_send">Send Payment Request</string>
     <string name="wallet__payment_request_send_request">Send Request</string>
     <string name="wallet__payment_request_sending">Queued for delivery</string>

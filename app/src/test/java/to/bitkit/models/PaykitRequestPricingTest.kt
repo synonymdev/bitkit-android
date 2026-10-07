@@ -29,10 +29,61 @@ class PaykitRequestPricingTest {
             )
         )
         val requested = PaykitAmount.parse(PaykitAsset.USD, "0.05")
-        assertEquals(62uL, pricing.payment(requested, PaykitAsset.BTC, null, now).amount.atomic)
-        assertEquals(50_000uL, pricing.payment(requested, PaykitAsset.USDT, null, now).amount.atomic)
-        assertEquals(requested, pricing.payment(requested, PaykitAsset.USD, null, now).amount)
-        assertFails { pricing.payment(requested, PaykitAsset.USDT, null, now, "unknown") }
+        assertEquals(62uL, pricing.payment(requested, "btc-bitcoin-p2wpkh", null, now).amount.atomic)
+        assertEquals(50_000uL, pricing.payment(requested, "usdt-arbitrum-address", null, now).amount.atomic)
+        assertEquals(requested, pricing.payment(requested, "usd-bank-account", null, now).amount)
+        assertFails { pricing.payment(requested, "usdt-arbitrum-address", null, now, "unknown") }
+    }
+
+    @Test fun `fixed pricing selects the rail before the asset including same asset payments`() {
+        val requested = PaykitAmount.parse(PaykitAsset.BTC, "1")
+        val rates = listOf(ConversionRate("btc", "2"), ConversionRate("btc-lightning", "0.5"))
+        for (values in listOf(rates, rates.reversed())) {
+            val pricing = PaykitRequestPricing(PaymentConversion.Fixed(values))
+            assertEquals("0.5", pricing.payment(requested, "btc-lightning-bolt11", null, now).amount.value)
+            assertEquals("0.5", pricing.payment(requested, "btc-lightning-lnurl", null, now).amount.value)
+            assertEquals("2", pricing.payment(requested, "btc-bitcoin-p2wpkh", null, now).amount.value)
+        }
+        val pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(rates[1])))
+        assertEquals(requested, pricing.payment(requested, "btc-bitcoin-p2wpkh", null, now).amount)
+    }
+
+    @Test fun `payment market value is independent of the requested value`() {
+        val pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.001"))))
+        val requested = PaykitAmount.parse(PaykitAsset.USD, "1000")
+        val payment = pricing.payment(requested, "btc-bitcoin-p2wpkh", null, now)
+        assertEquals("1", payment.amount.value)
+        val valuation = payment.amount.convertedTo(
+            PaykitAsset.USD,
+            PaykitExchangeRate("2000", now.toEpochMilliseconds()),
+            now.toEpochMilliseconds()
+        )
+        assertEquals("2000", valuation.value)
+        assertEquals("1000", requested.value)
+    }
+
+    @Test fun `same asset recurring payments use parity and optional quote validity`() {
+        val requested = PaykitAmount.parse(PaykitAsset.BTC, "1")
+        val period = PaykitBillingPeriod(now, now + 86400.seconds)
+        val quote = PaymentConversionQuoteRecord(
+            "quote",
+            period.sdkValue,
+            listOf(ConversionRate("usdt", "100000")),
+            now.toString(),
+            (now + 60.seconds).toString(),
+            null
+        )
+        val pricing = PaykitRequestPricing(PaymentConversion.PerPeriod, quotes = listOf(quote))
+        val unquoted = pricing.payment(requested, "btc-lightning-bolt11", period, now)
+        assertEquals(requested, unquoted.amount)
+        assertEquals(null, unquoted.quoteId)
+        val quoted = pricing.payment(requested, "btc-lightning-bolt11", period, now, "quote")
+        assertEquals(requested, quoted.amount)
+        assertEquals("quote", quoted.quoteId)
+        assertFalse(quoted.isValid(now - 1.seconds))
+        assertTrue(quoted.isValid(now + 60.seconds))
+        assertFalse(quoted.isValid(now + 61.seconds))
+        assertFails { pricing.payment(requested, "btc-lightning-bolt11", period, now, "unknown") }
     }
 
     @Test fun `subscriptions keep one payment currency across billing periods`() {
@@ -40,9 +91,9 @@ class PaykitRequestPricingTest {
         val lightning = MethodId.Bolt11.rawValue
         val usdt = MethodId.UsdtArbitrum.rawValue
         val available = listOf(bitcoin, lightning, usdt)
-        for ((asset, endpoints, paidAsset) in listOf(
-            Triple(PaykitAsset.BTC, listOf(bitcoin, lightning), PaykitAsset.BTC),
-            Triple(PaykitAsset.USD, listOf(usdt), PaykitAsset.USDT),
+        for ((asset, endpoints) in listOf(
+            PaykitAsset.BTC to listOf(bitcoin, lightning),
+            PaykitAsset.USD to listOf(usdt),
         )) {
             val selected = PaykitRequestPricing.subscriptionEndpoints(asset, available)
             assertEquals(endpoints, selected)
@@ -51,7 +102,7 @@ class PaykitRequestPricingTest {
             val pricing = PaykitRequestPricing(rates.takeIf { it.isNotEmpty() }?.let(PaymentConversion::Fixed))
             val requested = PaykitAmount.parse(asset, "5")
             val period = PaykitBillingPeriod(now + (31 * 86400).seconds, now + (62 * 86400).seconds)
-            val payment = pricing.payment(requested, paidAsset, period, period.startsAt)
+            val payment = pricing.payment(requested, endpoints.first(), period, period.startsAt)
             assertEquals("5", payment.amount.value)
             assertEquals(null, payment.quoteId)
             assertEquals(null, payment.expiresAt)
@@ -66,8 +117,8 @@ class PaykitRequestPricingTest {
             PaykitRequestPricing(),
             PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00001"))))
         )) {
-            assertFails { pricing.payment(requested, PaykitAsset.USDT, null, now) }
-            assertEquals(requested, pricing.payment(requested, PaykitAsset.USD, null, now).amount)
+            assertFails { pricing.payment(requested, "usdt-arbitrum-address", null, now) }
+            assertEquals(requested, pricing.payment(requested, "usd-bank-account", null, now).amount)
         }
     }
 
@@ -108,16 +159,16 @@ class PaykitRequestPricingTest {
             listOf(first, later)
         )
         val requested = PaykitAmount.parse(PaykitAsset.BTC, "0.00001")
-        val selected = pricing.payment(requested, PaykitAsset.USDT, period, now)
+        val selected = pricing.payment(requested, "usdt-arbitrum-address", period, now)
         assertEquals("1.1", selected.amount.value)
         assertEquals("later", selected.quoteId)
-        val pinned = pricing.payment(requested, PaykitAsset.USDT, period, now, "first")
+        val pinned = pricing.payment(requested, "usdt-arbitrum-address", period, now, "first")
         assertEquals("1", pinned.amount.value)
         assertTrue(pinned.isValid(now + 30.seconds))
         assertFalse(pinned.isValid(now + 31.seconds))
         assertFalse(pinned.isValid(now - 1.seconds))
-        assertEquals(pinned, pricing.payment(requested, PaykitAsset.USDT, period, now + 600.seconds, "first"))
-        assertFails { pricing.payment(requested, PaykitAsset.USDT, period, now, "missing") }
-        assertFails { pricing.payment(requested, PaykitAsset.USDT, null, now) }
+        assertEquals(pinned, pricing.payment(requested, "usdt-arbitrum-address", period, now + 600.seconds, "first"))
+        assertFails { pricing.payment(requested, "usdt-arbitrum-address", period, now, "missing") }
+        assertFails { pricing.payment(requested, "usdt-arbitrum-address", null, now) }
     }
 }

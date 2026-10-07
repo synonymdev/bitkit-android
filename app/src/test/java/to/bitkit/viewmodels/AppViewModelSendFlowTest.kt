@@ -20,6 +20,8 @@ import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.ValidationResult
+import com.synonym.paykit.ConversionRate
+import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
@@ -8701,6 +8703,62 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `quoted initial subscription payment waits for amount review`() = test {
+        setSendState(
+            SendUiState(
+                amount = 1_000u,
+                payMethod = SendMethod.LIGHTNING,
+                isAmountInputValid = true,
+                isInitialSubscriptionPayment = true,
+                initialSubscriptionPaymentAutoStartPending = true,
+                requiresAmountReview = true,
+            )
+        )
+        sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `switching request payment methods updates the quoted amount`() = test {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        val request = paymentRequest().copy(
+            pricing = PaykitRequestPricing(
+                PaymentConversion.Fixed(
+                    listOf(
+                        ConversionRate("btc", "2"),
+                        ConversionRate("btc-lightning", "0.5")
+                    )
+                )
+            )
+        )
+        setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request)
+        setUnifiedState(amount = request.amount.atomic / 2u, payMethod = SendMethod.LIGHTNING)
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAmount, awaitItem())
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+            assertEquals(request.amount.atomic * 2u, sut.sendUiState.value.amount)
+
+            sut.switchToLightning()
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAmount, awaitItem())
+            sut.refreshPaykitRequestAmount()
+            assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+            assertEquals(request.amount.atomic / 2u, sut.sendUiState.value.amount)
+
+            sut.setTransactionSpeed(TransactionSpeed.Medium)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAmount, awaitItem())
+            sut.refreshPaykitRequestAmount()
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+            assertEquals(request.amount.atomic * 2u, sut.sendUiState.value.amount)
+        }
     }
 
     @Test

@@ -351,6 +351,13 @@ private fun ContentRunning(
             .padding(horizontal = 16.dp)
             .fillMaxSize()
     ) {
+        if (preparingRequest != null) {
+            Caption13Up(
+                text = stringResource(R.string.wallet__payment_request_requested_amount),
+                color = Colors.White64
+            )
+            VerticalSpacer(8.dp)
+        }
         if (preparingRequest != null && preparingRequest.amount.asset != PaykitAsset.BTC) {
             PaykitAmountDisplay(preparingRequest.amount)
         } else {

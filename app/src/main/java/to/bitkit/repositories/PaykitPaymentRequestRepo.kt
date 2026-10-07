@@ -103,8 +103,8 @@ data class PaykitPaymentRequest(
 ) {
     val amountValue: String get() = amount.value
 
-    fun payment(asset: PaykitAsset, at: Instant, quoteId: String? = null): PaykitRequestPayment =
-        pricing.payment(amount, asset, billingPeriod, at, quoteId)
+    fun payment(method: MethodId, at: Instant, quoteId: String? = null): PaykitRequestPayment =
+        pricing.payment(amount, method.rawValue, billingPeriod, at, quoteId)
 
     enum class ParseFailure(
         val logValue: String,
@@ -150,20 +150,21 @@ data class PaykitPaymentRequest(
         at: Instant = Clock.System.now(),
     ): Boolean {
         if (amountMsats == null) return true
-        val payment = runCatching { payment(PaykitAsset.BTC, at, paymentTerms?.quoteId) }.getOrNull() ?: return false
+        val payment = runCatching { payment(MethodId.Bolt11, at, paymentTerms?.quoteId) }.getOrNull() ?: return false
         return payment.isValid(at) && (paymentTerms == null || paymentTerms == payment) &&
             payment.amount.atomic <= ULong.MAX_VALUE / 1000uL && amountMsats == satsToMsat(payment.amount.atomic)
     }
 
     fun acceptsLightningInvoiceAmountSats(amountSats: ULong): Boolean =
-        amountSats == 0uL || acceptsPaymentAmount(amountSats)
+        amountSats == 0uL || acceptsPaymentAmount(amountSats, MethodId.Bolt11)
 
     fun acceptsPaymentAmount(
         amountSats: ULong,
+        method: MethodId,
         paymentTerms: PaykitRequestPayment? = null,
         at: Instant = Clock.System.now(),
     ): Boolean {
-        val payment = runCatching { payment(PaykitAsset.BTC, at, paymentTerms?.quoteId) }.getOrNull() ?: return false
+        val payment = runCatching { payment(method, at, paymentTerms?.quoteId) }.getOrNull() ?: return false
         return payment.isValid(at) && (paymentTerms == null || paymentTerms == payment) &&
             amountSats == payment.amount.atomic
     }
