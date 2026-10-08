@@ -240,7 +240,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val attempts = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        val admitted = attempts.admit(
+        var admitted = attempts.admit(
             walletId = WalletScope.default, requestId = request.id, orderId = null,
             address = ONCHAIN_ADDRESS, amountSats = request.amountSats, isMaxAmount = false,
             feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
@@ -257,6 +257,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(admitted.preparationPending)
         assertTrue(storedProofs.single().paymentStarted)
         assertFalse(attempts.releaseInterruptedShopPreparation { error("live preparation must not be cleared") })
+        admitted = attempts.retainPreparedReceipt(admitted.attemptId, 0,
+            OnchainPreparedReceipt("ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)),
+                ONCHAIN_ADDRESS, request.amountSats), false)
+        assertFalse(attempts.releaseInterruptedShopPreparation { error("live prepared receipt must not be cleared") })
         val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         whenever(lightningRepo.currentOnchainSendAttempt()).doSuspendableAnswer { reopened.current() }
         whenever(lightningRepo.releaseInterruptedShopPreparation(any())).doSuspendableAnswer {

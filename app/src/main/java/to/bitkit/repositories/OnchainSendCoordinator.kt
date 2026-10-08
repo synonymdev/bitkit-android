@@ -22,14 +22,14 @@ object OnchainRecoveryFeeRate {
 /** One native prepared transaction; its direct submission is cached even if it fails. */
 class PreparedOnchainSend(
     val receipt: OnchainPreparedReceipt,
-    private val submit: suspend () -> OnchainSendOutcome,
+    private val submit: suspend (beforeDispatch: suspend () -> Unit) -> OnchainSendOutcome,
 ) {
     private val mutex = Mutex()
     private var result: Result<OnchainSendOutcome>? = null
 
-    suspend fun broadcast(): OnchainSendOutcome = withContext(NonCancellable) {
+    suspend fun broadcast(beforeDispatch: suspend () -> Unit = {}): OnchainSendOutcome = withContext(NonCancellable) {
         mutex.withLock {
-            val cached = result ?: runSuspendCatching { submit() }.also { result = it }
+            val cached = result ?: runSuspendCatching { submit(beforeDispatch) }.also { result = it }
             cached.getOrThrow()
         }
     }

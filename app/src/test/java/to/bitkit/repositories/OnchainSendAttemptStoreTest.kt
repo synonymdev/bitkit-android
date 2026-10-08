@@ -96,6 +96,57 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restart releases prepared candidate only when native dispatch was never entered`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val service = mock<LightningService>()
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        val original = store.admitForTest(walletId = WalletScope.default)
+        val receipt = OnchainPreparedReceipt("ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)),
+            original.address, original.amountSats)
+        store.retainPreparedReceipt(original.attemptId, 0, receipt, false)
+        assertEquals(receipt.txid, store.current()?.txid)
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        assertNull(reopened.current())
+        reopened.admitForTest(walletId = WalletScope.default)
+    }
+
+    @Test
+    fun `failed durable native dispatch marker stops broadcast`() = test {
+        var saved: String? = null
+        var failMarker = false
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
+            if (failMarker) error("dispatch marker unavailable")
+            saved = it.getArgument(1)
+        }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val service = mock<LightningService>()
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        val original = store.admitForTest(walletId = WalletScope.default)
+        val receipt = OnchainPreparedReceipt("ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)),
+            original.address, original.amountSats)
+        store.retainPreparedReceipt(original.attemptId, 0, receipt, false)
+        failMarker = true
+        var broadcasts = 0
+        assertFailsWith<IllegalStateException> {
+            store.broadcastPreparedCandidate(original.attemptId, 0, receipt.txid) { beforeDispatch ->
+                beforeDispatch()
+                broadcasts++
+                OnchainSendOutcome.Unknown(receipt.txid)
+            }
+        }
+        assertEquals(0, broadcasts)
+        failMarker = false
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        assertNull(reopened.current())
+    }
+
+    @Test
     fun `first submission deadline failure clears only never dispatched receipt`() = test {
         var saved: String? = null
         val keychain = mock<Keychain>()
@@ -132,6 +183,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         )
         val retained = store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
         store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
+            it()
             OnchainSendOutcome.Unknown(receipt.txid)
         }
         // Even before outcome persistence, this process knows dispatch was attempted.
@@ -140,14 +192,14 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
                 throw to.bitkit.utils.ServiceError.PaymentDeadlineExpired()
             }
         }
-        assertEquals(retained, store.current())
+        assertEquals(retained.copy(initialDispatchAttempted = true), store.current())
         val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         assertFailsWith<to.bitkit.utils.ServiceError.PaymentDeadlineExpired> {
             reopened.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
                 throw to.bitkit.utils.ServiceError.PaymentDeadlineExpired()
             }
         }
-        assertEquals(retained, reopened.current())
+        assertEquals(retained.copy(initialDispatchAttempted = true), reopened.current())
     }
 
     @Test
@@ -632,11 +684,12 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     private suspend fun OnchainSendAttemptStore.admitForTest(
+        walletId: String = "wallet-1",
         contactPublicKey: String? = null,
         beforeSendAttempt: suspend () -> Unit = {
         }
     ): OnchainSendAttempt = admit(
-        walletId = "wallet-1",
+        walletId = walletId,
         requestId = null,
         orderId = null,
         address = "bcrt1qrecipient",

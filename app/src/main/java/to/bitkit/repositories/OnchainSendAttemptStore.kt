@@ -93,6 +93,8 @@ data class OnchainSendAttempt(
     val restoredFromBackup: Boolean = false,
     val preparationPending: Boolean = false,
     val verifiedWinningFeeSats: ULong? = null,
+    // Write-ahead boundary: false is proof that this original prepared payment never dispatched.
+    val initialDispatchAttempted: Boolean = true,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -140,18 +142,16 @@ class OnchainSendAttemptStore @Inject constructor(
     // One known positive result per existing wallet guard; entries disappear after a successful durable write.
     private val retainedPositive = mutableMapOf<Int, OnchainSendAttempt>()
     private val inFlightPreparations = mutableSetOf<String>()
-    // Process-local proof that this initial receipt has never entered the native submission boundary.
-    private val firstSubmissions = mutableSetOf<String>()
 
     suspend fun current(): OnchainSendAttempt? = withContext(ioDispatcher) {
         mutex.withLock {
-            releaseInterruptedUnsignedPreparation(loadWithRetainedAccepted(lightningService.currentWalletIndex))
+            releaseInterruptedUnsubmittedPreparation(loadWithRetainedAccepted(lightningService.currentWalletIndex))
         }
     }
 
     /** Read only restart-safe evidence, excluding a positive result retained after a failed write. */
     suspend fun currentDurable(): OnchainSendAttempt? = withContext(ioDispatcher) {
-        mutex.withLock { releaseInterruptedUnsignedPreparation(load(lightningService.currentWalletIndex)) }
+        mutex.withLock { releaseInterruptedUnsubmittedPreparation(load(lightningService.currentWalletIndex)) }
     }
 
     @Suppress("LongParameterList")
@@ -173,7 +173,7 @@ class OnchainSendAttemptStore @Inject constructor(
     ): OnchainSendAttempt = withContext(ioDispatcher) {
         mutex.withLock {
             val walletIndex = lightningService.currentWalletIndex
-            val previous = releaseInterruptedUnsignedPreparation(load(walletIndex))
+            val previous = releaseInterruptedUnsubmittedPreparation(load(walletIndex))
             if (previous != null && (
                     previous.walletId != walletId ||
                         previous.blocksNextSend ||
@@ -199,6 +199,7 @@ class OnchainSendAttemptStore @Inject constructor(
                 transferContext = transferContext,
                 payerIdentity = payerIdentity,
                 preparationPending = requestId != null,
+                initialDispatchAttempted = false,
                 backupFollowup = ActiveOnchainAttemptBackup.Followup(
                     feeSats = "0",
                     tags = tags,
@@ -220,11 +221,10 @@ class OnchainSendAttemptStore @Inject constructor(
         }
     }
 
-    private suspend fun releaseInterruptedUnsignedPreparation(current: OnchainSendAttempt?): OnchainSendAttempt? {
+    private suspend fun releaseInterruptedUnsubmittedPreparation(current: OnchainSendAttempt?): OnchainSendAttempt? {
         if (current == null || current.attemptId in inFlightPreparations || current.restoredFromBackup ||
             current.walletId != WalletScope.default || current.requestId != null ||
-            current.evidence != OnchainSendEvidence.Pending || current.txid != null ||
-            current.candidateTxids.isNotEmpty() || current.originalInputs != null
+            current.evidence != OnchainSendEvidence.Pending || current.initialDispatchAttempted
         ) return current
         keychain.delete(KEY, current.walletIndex)
         _backupStateVersion.update { it + 1 }
@@ -237,12 +237,11 @@ class OnchainSendAttemptStore @Inject constructor(
         mutex.withLock {
             val current = loadWithRetainedAccepted(lightningService.currentWalletIndex) ?: return@withLock false
             if (current.attemptId in inFlightPreparations) return@withLock false
-            if (!current.preparationPending || current.restoredFromBackup || current.requestId == null) {
+            if (current.initialDispatchAttempted || current.restoredFromBackup || current.requestId == null) {
                 return@withLock false
             }
             if (current.walletId != WalletScope.default || current.payerIdentity.isNullOrBlank()) return@withLock false
-            if (current.evidence != OnchainSendEvidence.Pending || current.txid != null) return@withLock false
-            if (current.candidateTxids.isNotEmpty() || current.originalInputs != null) return@withLock false
+            if (current.evidence != OnchainSendEvidence.Pending) return@withLock false
             if (!removeOriginalProof(current)) return@withLock false
             keychain.delete(KEY, current.walletIndex)
             _backupStateVersion.update { it + 1 }
@@ -300,8 +299,8 @@ class OnchainSendAttemptStore @Inject constructor(
                 preparationPending = false,
             ).also {
                 persist(it)
-                inFlightPreparations -= attemptId
-                if (!isRecovery) firstSubmissions += attemptId
+                // Keep a live initial preparation protected until its queued dispatch exits.
+                if (isRecovery) inFlightPreparations -= attemptId
             }
         }
     }
@@ -310,7 +309,7 @@ class OnchainSendAttemptStore @Inject constructor(
         attemptId: String,
         walletIndex: Int,
         txid: String,
-        broadcast: suspend () -> OnchainSendOutcome,
+        broadcast: suspend (beforeDispatch: suspend () -> Unit) -> OnchainSendOutcome,
     ): OnchainSendOutcome = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
             val current = loadWithRetainedAccepted(walletIndex)
@@ -319,17 +318,23 @@ class OnchainSendAttemptStore @Inject constructor(
             }
             if (current.hasPositiveEvidence) return@withLock OnchainSendOutcome.Accepted(requireNotNull(current.txid))
             require(txid.lowercase() in current.candidateTxids)
-            val firstSubmission = firstSubmissions.remove(attemptId)
+            val firstSubmission = !current.initialDispatchAttempted
             if (!firstSubmission) {
                 persist(current.copy(txid = txid.lowercase(), evidence = OnchainSendEvidence.Pending, refusalReason = null))
             }
             try {
-                broadcast()
+                broadcast {
+                    // Called on the native queue after wallet/deadline validation, while this mutex is owned.
+                    val live = loadWithRetainedAccepted(walletIndex)
+                    check(live?.attemptId == attemptId && !live.hasPositiveEvidence)
+                    persist(live.copy(initialDispatchAttempted = true))
+                    inFlightPreparations -= attemptId
+                }
             } catch (error: ServiceError.PaymentDeadlineExpired) {
-                // Only the queued deadline check raises this before prepared.broadcast(). A retry,
-                // reopened guard or any earlier dispatch has no process-local first-submission proof.
-                if (!firstSubmission || current.restoredFromBackup ||
-                    current.evidence != OnchainSendEvidence.Pending || current.candidateTxids.size != 1
+                // The native queue checks the deadline before the durable dispatch boundary.
+                // Any earlier submission or imported backup remains uncertain and guarded.
+                if (!firstSubmission || loadWithRetainedAccepted(walletIndex)?.initialDispatchAttempted != false ||
+                    current.restoredFromBackup || current.evidence != OnchainSendEvidence.Pending || current.candidateTxids.size != 1
                 ) throw error
                 persist(current.copy(
                     txid = null,
@@ -340,6 +345,8 @@ class OnchainSendAttemptStore @Inject constructor(
                 ))
                 // Shop proof cleanup still precedes guard deletion through the existing preparation path.
                 throw OnchainSendNotDispatchedError(error)
+            } finally {
+                inFlightPreparations -= attemptId
             }
         }
     }
@@ -364,6 +371,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     evidence = evidence,
                     txid = outcome.txid,
                     refusalReason = (outcome as? OnchainSendOutcome.Rejected)?.reason,
+                    initialDispatchAttempted = true,
                 )
                 if (outcome is OnchainSendOutcome.Accepted) retainedPositive[walletIndex] = recorded
                 persist(recorded)
@@ -442,7 +450,7 @@ class OnchainSendAttemptStore @Inject constructor(
         captureProofs: suspend () -> List<PaykitPaymentStateBackup.Proof>,
     ): Pair<OnchainSendAttempt?, List<PaykitPaymentStateBackup.Proof>> = withContext(ioDispatcher) {
         mutex.withLock {
-            val attempt = releaseInterruptedUnsignedPreparation(loadWithRetainedAccepted(walletIndex))
+            val attempt = releaseInterruptedUnsubmittedPreparation(loadWithRetainedAccepted(walletIndex))
             attempt?.takeIf { it.blocksNextSend } to captureProofs()
         }
     }
@@ -464,6 +472,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     restoredFromBackup = attempt.restoredFromBackup,
                     preparationPending = attempt.preparationPending,
                     verifiedWinningFeeSats = attempt.verifiedWinningFeeSats,
+                    initialDispatchAttempted = attempt.initialDispatchAttempted,
                 ) == attempt
                 check(sameOperation && existing.candidateTxids.containsAll(attempt.candidateTxids)) {
                     "Cannot change a restored on-chain operation's original context"

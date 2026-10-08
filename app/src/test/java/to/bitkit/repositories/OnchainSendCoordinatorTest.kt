@@ -83,7 +83,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong,
                 paymentDeadlineAt: Instant?): PreparedOnchainSend {
                 preparations++
-                return PreparedOnchainSend(receipt) { broadcasts++; OnchainSendOutcome.Unknown(nextTxid) }
+                return PreparedOnchainSend(receipt) { it(); broadcasts++; OnchainSendOutcome.Unknown(nextTxid) }
             }
         }
         val coordinator = OnchainSendCoordinator(f.store, sender, testDispatcher)
@@ -110,6 +110,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 feeRateSatsPerVByte: ULong,
                 paymentDeadlineAt: Instant?,
             ) = PreparedOnchainSend(f.receipt(nextTxid)) {
+                it()
                 f.failWrite = true
                 OnchainSendOutcome.Accepted(nextTxid)
             }
@@ -138,6 +139,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                     feeRateSatsPerVByte: ULong,
                     paymentDeadlineAt: Instant?,
                 ) = PreparedOnchainSend(f.receipt(nextTxid)) {
+                it()
                     if (paymentDeadlineAt != null && dispatchTime > paymentDeadlineAt) {
                         throw PaykitPaymentRequestError.RequestExpired
                     }
@@ -166,6 +168,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         var sends = 0
         val sender = object : OnchainPreparedSender {
             override suspend fun prepareInitial(attempt: OnchainSendAttempt) = PreparedOnchainSend(f.receipt()) {
+                it()
                 assertTrue(requireNotNull(f.saved).contains(firstTxid))
                 sends++
                 OnchainSendOutcome.Unknown(firstTxid)
@@ -191,6 +194,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         f.failWrite = true
         val sender = object : OnchainPreparedSender {
             override suspend fun prepareInitial(attempt: OnchainSendAttempt) = PreparedOnchainSend(f.receipt()) {
+                it()
                 sends++
                 OnchainSendOutcome.Accepted(firstTxid)
             }
@@ -214,6 +218,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             override suspend fun prepareInitial(attempt: OnchainSendAttempt) = PreparedOnchainSend(
                 f.receipt(amount = 1_050uL)
             ) {
+                it()
                 OnchainSendOutcome.Unknown(firstTxid)
             }
             override suspend fun prepareRecovery(
@@ -227,7 +232,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 assertEquals(null, attempt.requestId)
                 assertEquals("channel-1", attempt.channelId)
                 assertEquals(OnchainTransferContext(1_100uL, 2_000uL, 900uL, 1_000uL), attempt.transferContext)
-                return PreparedOnchainSend(f.receipt(nextTxid, 1_050uL)) { OnchainSendOutcome.Unknown(nextTxid) }
+                return PreparedOnchainSend(f.receipt(nextTxid, 1_050uL)) { it(); OnchainSendOutcome.Unknown(nextTxid) }
             }
         }
         val coordinator = OnchainSendCoordinator(f.store, sender, testDispatcher)
@@ -258,6 +263,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                         else -> f.receipt(nextTxid)
                     }
                     return PreparedOnchainSend(receipt) {
+                it()
                         sends++
                         OnchainSendOutcome.Accepted(nextTxid)
                     }
@@ -285,6 +291,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             )
             override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?) =
                 PreparedOnchainSend(f.receipt(nextTxid)) {
+                it()
                     entered.complete(Unit)
                     finish.await()
                     OnchainSendOutcome.Unknown(nextTxid)
@@ -317,6 +324,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             ): PreparedOnchainSend {
                 f.store.observeExactTransaction(firstTxid)
                 return PreparedOnchainSend(f.receipt(nextTxid)) {
+                it()
                     sends++
                     OnchainSendOutcome.Accepted(nextTxid)
                 }
@@ -356,10 +364,10 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         val initial = f.admit(isMax = true)
         val native = mock<OnchainPreparationProtocol>()
         whenever(native.prepareMax(initial.address, true, 1uL, 0)).thenReturn(
-            PreparedOnchainSend(f.receipt(amount = 1_050uL)) { OnchainSendOutcome.Unknown(firstTxid) },
+            PreparedOnchainSend(f.receipt(amount = 1_050uL)) { it(); OnchainSendOutcome.Unknown(firstTxid) },
         )
         whenever(native.prepareFixed(initial.address, 1_050uL, 2uL, listOf(input), 0)).thenReturn(
-            PreparedOnchainSend(f.receipt(nextTxid, 1_050uL)) { OnchainSendOutcome.Unknown(nextTxid) },
+            PreparedOnchainSend(f.receipt(nextTxid, 1_050uL)) { it(); OnchainSendOutcome.Unknown(nextTxid) },
         )
         val coordinator = OnchainSendCoordinator(f.store, OnchainPreparedSenderAdapter(native), testDispatcher)
         coordinator.sendInitial(initial).getOrThrow()
@@ -387,6 +395,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             ): PreparedOnchainSend {
                 prepares++
                 return PreparedOnchainSend(f.receipt(nextTxid)) {
+                it()
                     broadcasts++
                     OnchainSendOutcome.Accepted(nextTxid)
                 }
@@ -428,6 +437,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 entered.complete(Unit)
                 finish.await()
                 return PreparedOnchainSend(f.receipt(nextTxid)) {
+                it()
                     broadcasts++
                     OnchainSendOutcome.Accepted(nextTxid)
                 }
@@ -481,6 +491,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 prepares++
                 val txid = if (prepares == 1) nextTxid else "ef".repeat(32)
                 return PreparedOnchainSend(f.receipt(txid)) {
+                it()
                     active++
                     assertEquals(1, active)
                     broadcasts++
@@ -536,6 +547,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 f.failWrite = true
                 runCatching { f.store.observeExactTransaction(firstTxid) }
                 return PreparedOnchainSend(f.receipt(nextTxid)) {
+                it()
                     sends++
                     error("must not broadcast after positive observation")
                 }
@@ -580,7 +592,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 val sender = object : OnchainPreparedSender {
                     override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend = error("unused")
                     override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?) =
-                        PreparedOnchainSend(f.receipt(nextTxid)) { OnchainSendOutcome.Unknown(nextTxid) }
+                        PreparedOnchainSend(f.receipt(nextTxid)) { it(); OnchainSendOutcome.Unknown(nextTxid) }
                 }
                 val result = OnchainSendCoordinator(store, sender, testDispatcher)
                     .retryOriginal(original.attemptId, original.walletId, 2uL) {}
@@ -598,6 +610,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend = error("unused")
             override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?) =
                 PreparedOnchainSend(f.receipt(nextTxid)) {
+                it()
                     val saved = kotlinx.serialization.json.Json.decodeFromString<OnchainSendAttempt>(
                         requireNotNull(f.saved)
                     )
@@ -634,7 +647,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?,
             ): PreparedOnchainSend {
                 preparations++
-                return PreparedOnchainSend(f.receipt(nextTxid)) { OnchainSendOutcome.Unknown(nextTxid) }
+                return PreparedOnchainSend(f.receipt(nextTxid)) { it(); OnchainSendOutcome.Unknown(nextTxid) }
             }
         }
         for (invalidRate in listOf(4_294_967_296uL, ULong.MAX_VALUE)) {
@@ -651,6 +664,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         for (fails in listOf(false, true)) {
             var sends = 0
             val prepared = PreparedOnchainSend(Fixture().receipt()) {
+                it()
                 sends++
                 if (fails) error("native failed")
                 OnchainSendOutcome.Unknown(firstTxid)

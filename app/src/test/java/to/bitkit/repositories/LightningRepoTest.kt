@@ -1538,7 +1538,7 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `sendOnChain should cache activity meta data`() = test {
         whenever(onchainSendAttemptStore.broadcastPreparedCandidate(any(), any(), any(), any()))
-            .doSuspendableAnswer { (it.getArgument<suspend () -> OnchainSendOutcome>(3))() }
+            .doSuspendableAnswer { (it.getArgument<suspend (suspend () -> Unit) -> OnchainSendOutcome>(3))({}) }
         val mockSettingsData = SettingsData(
             defaultTransactionSpeed = TransactionSpeed.Fast,
             coinSelectAuto = false // Disable auto coin selection to simplify the test
@@ -1714,7 +1714,7 @@ class LightningRepoTest : BaseUnitTest() {
 
     private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
         OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
-    ) { outcome }
+    ) { it(); outcome }
 
     @Test
     fun `original retry delegates saved outpoints to native validation when fresh outputs are absent`() = test {
@@ -1769,7 +1769,7 @@ class LightningRepoTest : BaseUnitTest() {
 
     private suspend fun prepareGuardedSend(attempt: OnchainSendAttempt): LightningRepo {
         whenever(onchainSendAttemptStore.broadcastPreparedCandidate(any(), any(), any(), any()))
-            .doSuspendableAnswer { (it.getArgument<suspend () -> OnchainSendOutcome>(3))() }
+            .doSuspendableAnswer { (it.getArgument<suspend (suspend () -> Unit) -> OnchainSendOutcome>(3))({}) }
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         whenever(
             onchainSendAttemptStore.admit(
@@ -1959,7 +1959,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
             writes++
-            if (writes == 3) error("transient accepted write failure")
+            if (writes == 4) error("transient accepted write failure")
             saved = it.getArgument(1)
         }
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
@@ -2013,7 +2013,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
             writes++
-            if (writes >= 3) error("transient accepted write failure")
+            if (writes >= 4) error("transient accepted write failure")
             saved = it.getArgument(1)
         }
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
@@ -2068,11 +2068,13 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
         whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
             writes++
-            if (writes >= 3) error("transient accepted write failure")
+            if (writes >= 4) error("transient accepted write failure")
             saved = it.getArgument(1)
         }
-        val store = spy(OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System))
+        val durableStore = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        val store = spy(durableStore)
         doSuspendableAnswer {
+            durableStore.broadcastPreparedCandidate(it.getArgument(0), it.getArgument(1), it.getArgument(2), it.getArgument(3))
             store.recordOutcome(it.getArgument(0), OnchainSendOutcome.Accepted(txid), it.getArgument(1))
             error("broadcast result unavailable")
         }.whenever(store).broadcastPreparedCandidate(any(), any(), any(), any())

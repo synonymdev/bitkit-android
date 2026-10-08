@@ -998,11 +998,12 @@ class LightningService internal constructor(
             prepared.recipientAmountSats(),
             miningFeeSats = prepared.miningFeeSats(),
         )
-        PreparedOnchainSend(receipt) {
+        PreparedOnchainSend(receipt) { beforeDispatch ->
             callOnchainSend {
                 // Dispatch only through the handle that signed the original receipt.
                 if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
                 ensurePaymentDeadline(paymentDeadlineAt)
+                beforeDispatch()
                 when (val result = prepared.broadcast()) {
                     is OnchainSendResult.Accepted -> OnchainSendOutcome.Accepted(result.txid)
                     is OnchainSendResult.Rejected -> OnchainSendOutcome.Rejected(result.txid, result.reason)
