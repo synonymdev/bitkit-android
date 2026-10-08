@@ -99,6 +99,13 @@ screenshots can exceed image size limits. It does not see everything, though —
 in it, some tiles carry no text, and an element can be missing from one dump and present in the
 next. `journeys/README.md` lists what needs a screenshot instead.
 
+## Feature map
+
+`docs/features/` has one file per feature: what it does, how a user reaches it, the code that owns it, the journeys and
+e2e specs that drive it, what proves it and what no test covers. Read `docs/features/<feature>.md` before changing or
+testing a feature, and update it in the same PR when a flow, route, `testTag` or precondition changes. The index is
+`docs/features/README.md`; file names match the iOS repo's `Docs/features/`.
+
 ## Journeys
 
 `journeys/` holds XML walkthroughs of app behaviour that an agent evaluates by driving a running
