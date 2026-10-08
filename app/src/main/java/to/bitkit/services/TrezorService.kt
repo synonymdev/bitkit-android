@@ -256,6 +256,22 @@ class TrezorService @Inject constructor(
         }
     }
 
+    suspend fun broadcastRawTxAtBoundary(
+        serializedTx: String,
+        electrumUrl: String,
+        paymentDeadlineAt: Instant?,
+        beforeNativeBroadcast: suspend () -> Unit,
+    ): String = ServiceQueue.CORE.background {
+        if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+            throw ServiceError.PaymentDeadlineExpired()
+        }
+        beforeNativeBroadcast()
+        if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+            throw ServiceError.PaymentDeadlineExpired()
+        }
+        onchainBroadcastRawTx(serializedTx = serializedTx, electrumUrl = electrumUrl)
+    }
+
     suspend fun getTransactionDetail(
         extendedKey: String,
         electrumUrl: String,

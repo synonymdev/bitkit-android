@@ -221,9 +221,27 @@ class HwSendViewModel @Inject constructor(
             }
         }
         _uiState.update { it.copy(isBroadcastUnresolved = true) }
-        pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)
         return withTimeout(BROADCAST_TIMEOUT) {
-            hwWalletRepo.broadcastFunding(payment.signedTx, payment.request.paymentDeadlineAt)
+            val request = payment.request
+            val requestId = request.paymentRequestId
+            if (requestId == null) {
+                pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)
+                hwWalletRepo.broadcastFunding(payment.signedTx, request.paymentDeadlineAt)
+            } else {
+                hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
+                    check(
+                        paykitPaymentProofRepo.markHardwareOnchainDispatch(
+                            requestId,
+                            request.walletId,
+                            SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                            request.paymentIdentity,
+                            request.address,
+                            request.amountSats,
+                        )
+                    ) { "Original hardware payment is no longer eligible for dispatch" }
+                    pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)
+                }
+            }
         }.getOrElse { error ->
             if (generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }) {
                 val request = payment.request

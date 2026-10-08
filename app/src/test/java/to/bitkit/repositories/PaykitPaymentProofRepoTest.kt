@@ -1685,6 +1685,13 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 signed
             )
         )
+        assertEquals(false, storedProofs.single().hardwareDispatchAttempted,
+            "Retaining the signed candidate is not native dispatch")
+        assertFalse(reopened.markHardwareOnchainDispatch(request.id, walletId, txid, COUNTERPARTY,
+            ONCHAIN_ADDRESS, request.amountSats))
+        assertEquals(false, storedProofs.single().hardwareDispatchAttempted)
+        assertTrue(reopened.markHardwareOnchainDispatch(request.id, walletId, txid, LOCAL_IDENTITY,
+            ONCHAIN_ADDRESS, request.amountSats))
         val dispatched = Json.encodeToString(reopened.backupSnapshot())
         storedProofs = emptyList()
         reopened.restoreBackup(Json.decodeFromString<List<PaykitPaymentStateBackup.Proof>>(dispatched))
@@ -1846,6 +1853,11 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(hwWalletRepo.signFunding(walletId, funding)).thenReturn(Result.success(signed))
         whenever(hwWalletRepo.broadcastFunding(signed))
             .thenReturn(Result.failure(BroadcastException.ElectrumException("response lost after dispatch")))
+        whenever(hwWalletRepo.broadcastFundingAtBoundary(any(), org.mockito.kotlin.anyOrNull(), any()))
+            .doSuspendableAnswer {
+                it.getArgument<suspend () -> Unit>(2)()
+                hwWalletRepo.broadcastFunding(it.getArgument(0), it.getArgument(1))
+            }
         val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock(), repo)
         send.signAndBroadcast(
             HwSendRequest(
@@ -1886,6 +1898,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(send.uiState.value.isBroadcastUnresolved)
         assertTrue(storedProofs.single().paymentStarted)
         assertEquals("605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e", storedProofs.single().paymentIdentifier)
+        assertEquals(true, storedProofs.single().hardwareDispatchAttempted)
 
         // Both generic failure and preparation cancellation must preserve an already dispatched Shop payment.
         repo.failOnchainPayment(request)

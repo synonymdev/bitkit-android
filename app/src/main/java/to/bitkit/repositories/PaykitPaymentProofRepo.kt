@@ -572,14 +572,37 @@ class PaykitPaymentProofRepo @Inject constructor(
                             hardwareSignedTransaction = signedTx?.serializedTx ?: it.hardwareSignedTransaction,
                             hardwareMiningFeeSats = signedTx?.miningFeeSats ?: it.hardwareMiningFeeSats,
                             hardwareFeeRate = signedTx?.feeRate ?: it.hardwareFeeRate,
-                            hardwareTotalSpent = signedTx?.totalSpent ?: it.hardwareTotalSpent,
-                            hardwareDispatchAttempted = true
+                            hardwareTotalSpent = signedTx?.totalSpent ?: it.hardwareTotalSpent
                         )
                     } else {
                         it
                     }
                 }
             )
+            true
+        }
+    }
+
+    suspend fun markHardwareOnchainDispatch(
+        requestId: PaykitPaymentRequestId,
+        walletId: String,
+        txid: String,
+        identity: String?,
+        address: String,
+        amountSats: ULong,
+    ): Boolean = withContext(ioDispatcher) {
+        operationMutex.withLock {
+            if (!PubkyPublicKeyFormat.matches(currentIdentity(), identity)) return@withLock false
+            val proofs = loadProofs()
+            val original = proofs.singleOrNull {
+                PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == requestId &&
+                    it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
+                    it.paymentStarted && !it.hardwareDispatchDenied && !it.onchainAcceptanceVerified &&
+                    it.proofData == null && it.paymentIdentifier.equals(txid, true) &&
+                    it.onchainAddress == address && it.onchainAmountSats == amountSats &&
+                    it.retainedSignedHardwareReceipt() != null
+            } ?: return@withLock false
+            persist(proofs.map { if (it == original) it.copy(hardwareDispatchAttempted = true) else it })
             true
         }
     }

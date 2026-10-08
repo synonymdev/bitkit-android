@@ -884,6 +884,19 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    suspend fun broadcastFundingAtBoundary(
+        signedTx: HwFundingSignedTx,
+        paymentDeadlineAt: Instant?,
+        beforeNativeBroadcast: suspend () -> Unit,
+    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val txId = trezorRepo.broadcastRawTxAtBoundary(
+                signedTx.serializedTx, paymentDeadlineAt, beforeNativeBroadcast
+            ).getOrThrow()
+            HwFundingBroadcastResult(txId, signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent)
+        }
+    }
+
     /** Fresh backend observation of this exact transaction in the original hardware wallet. */
     suspend fun observeExactTransaction(
         walletId: String,

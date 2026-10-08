@@ -628,6 +628,22 @@ class TrezorRepo @Inject constructor(
         }
     }
 
+    suspend fun broadcastRawTxAtBoundary(
+        serializedTx: String,
+        paymentDeadlineAt: Instant?,
+        beforeNativeBroadcast: suspend () -> Unit,
+    ): Result<String> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            awaitSetup()
+            trezorService.broadcastRawTxAtBoundary(
+                serializedTx, currentElectrumUrl(), paymentDeadlineAt, beforeNativeBroadcast
+            )
+        }.onFailure {
+            Logger.error("Trezor broadcastRawTx failed", it, context = TAG)
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
+        }
+    }
+
     suspend fun disconnect(): Result<Unit> = withContext(ioDispatcher) {
         val deviceId = _state.value.connectedDeviceId()
         TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=$deviceId")

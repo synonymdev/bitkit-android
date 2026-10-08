@@ -89,6 +89,16 @@ class HwSendViewModelTest : BaseUnitTest() {
                 any()
             )
         }.thenReturn(false)
+        whenever {
+            proofRepo.markHardwareOnchainDispatch(any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any())
+        }
+            .thenReturn(true)
+        whenever { hwWalletRepo.broadcastFundingAtBoundary(any(), org.mockito.kotlin.anyOrNull(), any()) }
+            .doSuspendableAnswer {
+                val beforeDispatch = it.getArgument<suspend () -> Unit>(2)
+                beforeDispatch()
+                hwWalletRepo.broadcastFunding(it.getArgument(0), it.getArgument(1))
+            }
         whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
         sut = HwSendViewModel(
             context = context,
@@ -566,6 +576,21 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isSigning)
         sut.cancel()
         assertFalse(sut.uiState.value.hasPendingBroadcast)
+    }
+
+    @Test
+    fun `changed Shop receipt at native boundary prevents hardware submission`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(proofRepo.markHardwareOnchainDispatch(
+            any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any()
+        ))
+            .thenReturn(false)
+        sut.signAndBroadcast(request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity"))
+        advanceUntilIdle()
+        verify(proofRepo).markHardwareOnchainDispatch(any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
     }
 
     @Test
