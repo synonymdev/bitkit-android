@@ -890,9 +890,11 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun receivePrivateMessages(counterparty: String) = run {
+    suspend fun receivePrivateMessages(counterparty: String) = receivePrivateMessages(counterparty, Priority.Ordered)
+
+    internal suspend fun receivePrivateMessages(counterparty: String, priority: Priority) = run {
         isSetup.await()
-        operationLock.withLock {
+        operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.receivePrivateMessages(counterparty) }
             }

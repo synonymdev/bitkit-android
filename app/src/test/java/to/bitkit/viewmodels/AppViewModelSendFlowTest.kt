@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -710,16 +711,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `foreground polling starts identity republish once and restarts after stopping`() = test {
+        clearInvocations(privatePaykitRepo)
         try {
             sut.startPaykitPaymentRequestPolling()
             runCurrent()
             verify(pubkyRepo).republishIdentityIfNeeded()
+            verify(privatePaykitRepo).setContactPreparationActive(true)
 
             sut.startPaykitPaymentRequestPolling()
             runCurrent()
             verify(pubkyRepo).republishIdentityIfNeeded()
 
             sut.stopPaykitPaymentRequestPolling()
+            verify(privatePaykitRepo).setContactPreparationActive(false)
             sut.startPaykitPaymentRequestPolling()
             runCurrent()
             verify(pubkyRepo, times(2)).republishIdentityIfNeeded()
@@ -7074,7 +7078,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `outgoing payment request creation continues after its caller returns`() = test {
+    fun `outgoing payment request creation continues after backgrounding`() = test {
         val request = paymentRequest().copy(counterparty = "pubkyrecipient")
         val target = PaykitPaymentRequestTarget(request.counterparty)
         val draft = PaykitPaymentRequestDraft(
@@ -7094,6 +7098,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.createPaymentRequest(draft, target) { callbackRequest.complete(it) }
         creationStarted.await()
+        sut.stopPaykitPaymentRequestPolling()
         finishCreation.complete(Unit)
         runCurrent()
 
@@ -8128,6 +8133,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val privateContext = privatePaymentContext(7uL)
         val completionStarted = CompletableDeferred<Unit>()
         val finishCompletion = CompletableDeferred<Unit>()
+        var proofCompleted = false
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
@@ -8135,6 +8141,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .doSuspendableAnswer {
                 completionStarted.complete(Unit)
                 finishCompletion.await()
+                proofCompleted = true
             }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
@@ -8153,9 +8160,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         completionStarted.await()
         assertFalse(finishCompletion.isCompleted)
+        assertFalse(proofCompleted)
 
+        sut.stopPaykitPaymentRequestPolling()
         finishCompletion.complete(Unit)
         advanceUntilIdle()
+        assertTrue(proofCompleted)
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, "bitkit")
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
     }
@@ -8209,6 +8219,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         paymentSubmissionActive.value = false
         runCurrent()
         verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any())
+    }
+
+    @Test
+    fun `proof changes coalesce while request polling is stopped`() = test {
+        pubkyPublicKey.value = testPublicKey
+        enablePaykitUi()
+        runCurrent()
+        sut.stopPaykitPaymentRequestPolling()
+        clearInvocations(paykitPaymentRequestRepo)
+        repeat(3) {
+            proofStateVersion.value++
+            runCurrent()
+        }
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        sut.stopPaykitPaymentRequestPolling()
+        runCurrent()
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any())
+        sut.stopPaykitPaymentRequestPolling()
     }
 
     @Test
@@ -9298,6 +9332,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `public Paykit publication coalesces startup and resumes with the latest address`() = test {
+        enablePublicPaykitSharing()
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+
+        sut.stopPaykitPaymentRequestPolling()
+        runCurrent()
+        walletState.update { it.copy(onchainAddress = "bc1qreplacement") }
+        settingsData.update { it.copy(publicPaykitBolt11ExpiresAtMillis = 1L) }
+        advanceTimeBy(1_000)
+        runCurrent()
+        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        sut.stopPaykitPaymentRequestPolling()
+    }
+
+    @Test
     fun `channel ready refreshes public Paykit endpoints when sharing enabled`() = test {
         enablePublicPaykitSharing()
         advanceUntilIdle()
@@ -9602,6 +9661,69 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(paykitPaymentRequestRepo).refreshAfterStateChange()
         }
         verify(paykitPaymentRequestRepo, never()).refresh(any())
+    }
+
+    @Test
+    fun `automatic request refresh waits for resume when contact work finishes in background`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        val contactWork = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>())).doSuspendableAnswer {
+            contactWork.await()
+            Result.success(Unit)
+        }
+        whenever(privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any())).doSuspendableAnswer {
+            contactWork.await()
+            Result.success(Unit)
+        }
+        pubkyContactsLoadVersion.update { 1L }
+        sut.refreshPrivatePaykitEndpoints()
+        runCurrent()
+        verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
+        verify(privatePaykitRepo).refreshKnownSavedContactEndpoints("foreground", forceRefreshLightning = false)
+
+        sut.stopPaykitPaymentRequestPolling()
+        clearInvocations(paykitPaymentRequestRepo)
+        contactWork.complete(Unit)
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background)
+        verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(false))
+        sut.stopPaykitPaymentRequestPolling()
+    }
+
+    @Test
+    fun `automatic refresh finishes reconciliation but defers intake after backgrounding`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        val reconciliation = CompletableDeferred<Unit>()
+        var reconciled = false
+        whenever(paykitPaymentProofRepo.reconcile()).doSuspendableAnswer {
+            reconciliation.await()
+            reconciled = true
+        }
+        sut.onHomeResumed()
+        runCurrent()
+        assertFalse(reconciled)
+
+        sut.stopPaykitPaymentRequestPolling()
+        clearInvocations(paykitPaymentRequestRepo)
+        reconciliation.complete(Unit)
+        runCurrent()
+        assertTrue(reconciled)
+        verify(paykitPaymentRequestRepo, never()).refresh(any(), any())
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background)
+        sut.stopPaykitPaymentRequestPolling()
     }
 
     @Test

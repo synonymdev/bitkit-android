@@ -325,6 +325,7 @@ class PaykitSdkServiceTest {
             { processPendingPrivateMessages(it) },
             { receivePrivateMessagesFromLinkedPeers(it) },
             { ensureLinkWithPeer(RING_PUBKY, priority = it) },
+            { receivePrivateMessages(RING_PUBKY, it) },
         )
         for (operation in operations) {
             val priorities = listOf(Priority.Background, Priority.Ordered)
@@ -338,18 +339,7 @@ class PaykitSdkServiceTest {
                     events += "active completed"
                     emptyList()
                 }
-                whenever { sdk.processPendingPrivateMessages() }.thenAnswer {
-                    events += "messages"
-                    emptyList<OutboundPrivateCounterpartySendReport>()
-                }
-                whenever { sdk.receivePrivateMessagesFromLinkedPeers() }.thenAnswer {
-                    events += "messages"
-                    emptyList<PrivateStreamCounterpartyIntakeReport>()
-                }
-                whenever { sdk.ensureLinkWithPeer(RING_PUBKY, 1u) }.thenAnswer {
-                    events += "messages"
-                    LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKING, 1uL, null)
-                }
+                stubPrivateMessageOperations(sdk, events)
                 whenever { sdk.identityStatus() }
                     .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
                 whenever { sdk.publishPaykitApp(any(), any()) }.thenAnswer {
@@ -375,6 +365,25 @@ class PaykitSdkServiceTest {
                 assertEquals(listOf("active completed") + queued, events)
                 verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
             }
+        }
+    }
+
+    private fun stubPrivateMessageOperations(sdk: PaykitSdk, events: MutableList<String>) {
+        whenever { sdk.processPendingPrivateMessages() }.thenAnswer {
+            events += "messages"
+            emptyList<OutboundPrivateCounterpartySendReport>()
+        }
+        whenever { sdk.receivePrivateMessagesFromLinkedPeers() }.thenAnswer {
+            events += "messages"
+            emptyList<PrivateStreamCounterpartyIntakeReport>()
+        }
+        whenever { sdk.ensureLinkWithPeer(RING_PUBKY, 1u) }.thenAnswer {
+            events += "messages"
+            LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKING, 1uL, null)
+        }
+        whenever { sdk.receivePrivateMessages(RING_PUBKY) }.thenAnswer {
+            events += "messages"
+            mock<PrivateStreamIntakeReport>()
         }
     }
 
