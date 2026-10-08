@@ -761,7 +761,7 @@ fun SubscriptionFirstPaymentProgress(
         subscription = subscription,
         contact = contact,
         now = rememberSubscriptionNow(persistentListOf(subscription)),
-        onDetails = {},
+        onDetails = null,
         onSubscribe = { true },
         isPaying = true,
         modifier = modifier
@@ -773,7 +773,7 @@ private fun SubscriptionReview(
     subscription: PaykitSubscription,
     contact: PubkyProfile,
     now: Instant,
-    onDetails: () -> Unit,
+    onDetails: (() -> Unit)?,
     onSubscribe: suspend () -> Boolean,
     modifier: Modifier = Modifier,
     isPaying: Boolean = false,
@@ -792,7 +792,7 @@ private fun SubscriptionReview(
         }
         MoneyDisplay(sats = subscription.displaySats, showSymbol = true)
         VerticalSpacer(24.dp)
-        SubscriptionProviderCard(subscription, contact, onClick = onDetails)
+        SubscriptionProviderCard(subscription, contact, onClick = onDetails, showAsCard = true)
         if (!subscription.recurrence.unit.isSupported) {
             VerticalSpacer(16.dp)
             BodyM(text = stringResource(R.string.subscriptions__unsupported_description), color = Colors.White64)
@@ -842,16 +842,17 @@ private fun SubscriptionProviderCard(
     contact: PubkyProfile,
     subtitle: String? = null,
     onClick: (() -> Unit)? = null,
+    showAsCard: Boolean = onClick != null,
 ) {
     val displayedSubtitle = subtitle ?: subscription.subscriptionFrequencyText()
-    val cardModifier = if (onClick == null) {
+    val cardModifier = if (!showAsCard) {
         Modifier.fillMaxWidth()
     } else {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Colors.Gray6)
-            .clickable(onClick = onClick)
+            .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
             .padding(16.dp)
     }
     Row(
@@ -872,7 +873,7 @@ private fun SubscriptionProviderCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (onClick != null) {
+        if (showAsCard) {
             Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null, tint = Colors.White64)
         }
     }
