@@ -13,6 +13,18 @@ fractional-satoshi Lightning payments, and dynamic quotes remain unsupported.
 
 Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save and link the fixture issuer as a contact, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. Its App ID is `paykit-server`; Bitkit uses `bitkit`.
 
+`fixed-price-bitcoin.xml` additionally requires an issuer built with Paykit rc71 or newer
+that can send `conversion.fixed` terms. The basic BTC request fixture and Bitkit's Request UI
+cannot create these quotes. Use the standalone `tools/paykit-fixture-sender` documented in
+[bitkit-e2e-tests #269](https://github.com/synonymdev/bitkit-e2e-tests/pull/269), or an equivalent
+conversion-capable issuer, and follow its setup and linking instructions.
+
+`unpayable-endpoint.xml` requires an issuer that can bind a new request to a one-time address
+already recorded as paid by this payer, then send another request with a fresh unused address.
+Prepare that paid-address fixture separately; the journey itself sends no additional payment.
+If the required issuer or paid-address state is unavailable, report the corresponding journey
+as blocked, not as an app failure or a pass.
+
 The accepted journey uses:
 
 - Payment Request ID: `71300000-0000-4000-8000-000000000001`

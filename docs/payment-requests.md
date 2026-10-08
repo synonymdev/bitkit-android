@@ -10,18 +10,21 @@ parse successfully but cannot be opened.
   endpoint payload.
 - Open-time rejection emits a warning with category `resolution` or `presentation`, a stable
   reason, and only the redacted counterparty.
-- An explicit Pay action tries immediately and fourteen more times at two-second intervals. After
-  the fifteenth failure, Bitkit shows a localized error and leaves the request available for
-  another attempt.
+- An `endpoint_not_payable` rejection ends preparation immediately with
+  `PaymentRequestUnavailableToast`. The request remains pending for manual retry but does not
+  automatically reopen during the current identity's app session.
+- For retryable resolution failures, an explicit Pay action tries immediately and fourteen more
+  times at two-second intervals. After the fifteenth failure, Bitkit shows a localized error and
+  leaves the request available for another attempt.
 - If the request expires during an explicit presentation attempt, Bitkit logs
   `category=presentation reason=request_expired` and shows `PaymentRequestExpiredToast` with the
   localized `wallet__payment_request_expired` message exactly once.
-- Automatic presentation uses the same initial retries, then continues every 120 seconds without
-  showing terminal feedback.
+- For retryable resolution failures, automatic presentation uses the same initial retries, then
+  continues every 120 seconds without showing terminal feedback.
 
 The parse reasons are `missing_local_role`, `outgoing_request`, `unsupported_local_role`,
 `non_actionable_state`, `missing_terms`, `recurring_request`, `unsupported_recurrence`,
-`unsupported_payment_deadline`, `unsupported_asset`, `invalid_amount`, `amount_out_of_range`, `no_supported_endpoint`,
+`unsupported_payment_deadline`, `unsupported_asset`, `unsupported_pricing`, `invalid_amount`, `amount_out_of_range`, `no_supported_endpoint`,
 `invalid_expiration`, and `expired`.
 
 The resolution reasons are `no_supported_endpoint`, `endpoint_not_payable`,

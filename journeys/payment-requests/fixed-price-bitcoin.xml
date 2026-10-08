@@ -1,6 +1,6 @@
 <journey name="fixed price bitcoin requests">
   <description>
-    Verifies fixed-price requests use the issuer's BTC quote while fiat display uses Bitkit's own exchange rate. Requires the linked fixture issuer and a regtest wallet funded for at least 100,000 sats plus fees, as described in README.md. This journey stops before broadcasting.
+    Verifies fixed-price requests use the issuer's BTC quote while fiat display uses Bitkit's own exchange rate. Requires a linked Paykit rc71-or-newer issuer capable of sending conversion.fixed terms and a regtest wallet funded for at least 100,000 sats plus fees, as described in README.md. The basic BTC fixture is insufficient; report this journey as blocked if the conversion-capable issuer is unavailable. This journey stops before broadcasting.
   </description>
   <actions>
     <action>Launch the E2E Bitkit app with Paykit UI enabled and the fixture issuer saved as a contact and linked as identities</action>

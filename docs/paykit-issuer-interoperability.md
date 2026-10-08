@@ -1,6 +1,6 @@
 # Paykit issuer interoperability
 
-This is the Bitkit issuer contract for one-time Paykit Payment Requests. It describes the request and payment-endpoint shapes an issuer must provide for Bitkit to present and open a request. The canonical accepted and rejected examples are in
+This is the Bitkit issuer contract for one-time Paykit Payment Requests. It describes the request and payment-endpoint shapes an issuer must provide for Bitkit to present and open a request. Accepted and rejected unpriced request and endpoint-shape examples are in
 [`app/src/test/resources/paykit-issuer-interoperability.json`](../app/src/test/resources/paykit-issuer-interoperability.json).
 
 This contract records Bitkit behavior. Paykit protocol or SDK policy remains owned by Paykit.
@@ -31,10 +31,11 @@ are excluded. Amounts and rates use positive decimal strings without signs or ex
 Bitkit accepts at most 80 characters and 38 significant digits per operand and rejects
 unrepresentable arithmetic instead of approximating it.
 
-For cross-platform support, the exact amount-times-rate product must also fit within
-38 significant digits after trailing zeros are removed. Android rejects larger products;
-iOS can accept some larger products when Foundation Decimal represents them exactly.
-Issuers must not rely on that extra iOS range for Android recipients.
+Before multiplication, both platforms require the sum of the amount's and rate's
+normalized significant-digit counts to be at most 38. These counts exclude the decimal
+point and leading and trailing zeros. A parity rate of `1` counts as one digit.
+This conservative bound keeps the product exact before rounding to payment units;
+quotes outside the bound are rejected even when a particular product could fit.
 
 On-chain amounts round upward once to satoshis. Lightning amounts round upward once
 to millisatoshis and must then be exactly representable in whole satoshis. The existing
@@ -100,11 +101,11 @@ After this shape check, Bitkit validates that the value is usable: an on-chain a
 
 ## Delivery prerequisites
 
-The issuer and wallet identities must be linked Paykit peers before Bitkit polls the request. Requests may require a specific payment App; Bitkit uses the SDK's request-specific resolver and preserves the selected App in its proof. The issuer can include exact `paymentEndpoints` in the Payment Request or supply current endpoints resolved for the requested App. At least one endpoint must be usable for an identifier retained from the request; embedded endpoints do not require separate advertisement. A request that fails the request gate is not presented; a request whose endpoint cannot be resolved is deferred until usable payment details arrive.
+The issuer and wallet identities must be linked Paykit peers before Bitkit polls the request. Requests may require a specific payment App; Bitkit uses the SDK's request-specific resolver and preserves the selected App in its proof. The issuer can include exact `paymentEndpoints` in the Payment Request or supply current endpoints resolved for the requested App. At least one endpoint must be usable for an identifier retained from the request; embedded endpoints do not require separate advertisement. A request that fails the request gate is not presented. Missing payment details can be retried; a rejected endpoint ends preparation with unavailable-payment feedback and leaves the request pending for manual retry.
 
 ## Contract fixtures
 
-The fixture file is the cross-platform source of truth for Bitkit iOS and Android:
+The shared JSON fixture covers unpriced requests and endpoint shapes on both platforms:
 
 - Request fixtures cover every documented P2TR, P2WPKH, P2SH, and P2PKH identifier for Bitcoin, testnet, signet, and regtest.
 - Request fixtures cover both Lightning identifiers on every network.
@@ -112,4 +113,8 @@ The fixture file is the cross-platform source of truth for Bitkit iOS and Androi
 - Endpoint fixtures accept JSON object payloads with a non-empty string `value`, including optional string bounds and surrounding whitespace.
 - Rejected endpoint fixtures cover a raw string, empty payload, missing/empty/whitespace/numeric `value`, non-string bounds, a wrong-network on-chain identifier, top-level array, malformed JSON, and unsupported identifier.
 
-The iOS fixture suite in [PR #719](https://github.com/synonymdev/bitkit-ios/pull/719) consumes the same fixture names, inputs, and expected results. Any intentional platform difference requires changing this contract and both fixture suites together.
+Fixed pricing is covered by matching tables in `PaykitPaymentRequestServiceTests.swift`
+on iOS and `PaykitPaymentRequestRepoTest.kt` on Android, not by the JSON fixture.
+Those tables cover rate precedence, parity, unit rounding, unsupported quotes and the
+combined precision boundary. Changes to this contract must update the relevant tests
+on both platforms.

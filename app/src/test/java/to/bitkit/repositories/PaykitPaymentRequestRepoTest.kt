@@ -155,6 +155,34 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `fixed pricing rejects products beyond exact decimal precision`() {
+        val cases = listOf(
+            Triple("9." + "0".repeat(35) + "1", "0.00004", 36_001uL),
+            Triple("9." + "0".repeat(36) + "1", "0.00004", null),
+            Triple("9." + "0".repeat(36) + "1", "1", null),
+            Triple("0009." + "0".repeat(35) + "10", "0.0000400", 36_001uL),
+        )
+        cases.forEach { (amount, rate, expected) ->
+            val record = paymentRequestRecord(
+                amount = amount,
+                asset = "usd",
+                conversion = PaymentConversion.Fixed(listOf(ConversionRate("btc", rate))),
+                endpoints = listOf("btc-regtest-p2wpkh"),
+            )
+            val result = record.parseIncomingPaykitPaymentRequest(clock.now())
+            if (expected != null) {
+                assertEquals(expected, (result as PaykitPaymentRequestParseResult.Parsed).request.amountSats)
+            } else {
+                assertEquals(
+                    PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPricing),
+                    result,
+                    "$amount * $rate",
+                )
+            }
+        }
+    }
+
+    @Test
     fun `fixed pricing omits unquoted cross asset rails`() {
         val record = paymentRequestRecord(
             amount = "1",

@@ -1,6 +1,6 @@
 <journey name="unpayable payment request endpoint">
   <description>
-    Requires a linked fixture issuer and a one-time on-chain address already recorded as paid by this payer. Checks rejection feedback without sending another payment.
+    Requires a linked fixture issuer that can bind a new request to a one-time on-chain address already recorded as paid by this payer, then issue a request for a fresh address. See README.md for setup; report this journey as blocked if that fixture is unavailable. Checks rejection feedback without sending another payment.
   </description>
   <actions>
     <action>Launch the E2E Bitkit app with Paykit UI enabled and the fixture issuer saved as a contact and linked as identities</action>

@@ -6,7 +6,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 internal object PaykitBitcoinRequestPricing {
-    /** Maximum precision of decimal inputs and normalized products. */
+    /** Maximum input precision and combined normalized operand precision. */
     private const val MAX_SIGNIFICANT_DIGITS = 38
 
     /** Maximum length of an amount or rate before decimal parsing. */
@@ -39,8 +39,9 @@ internal object PaykitBitcoinRequestPricing {
     }
 
     private fun sats(amount: BigDecimal, rate: BigDecimal, lightning: Boolean): ULong? {
+        val combinedPrecision = amount.stripTrailingZeros().precision() + rate.stripTrailingZeros().precision()
+        if (combinedPrecision > MAX_SIGNIFICANT_DIGITS) return null
         val bitcoin = amount.multiply(rate).stripTrailingZeros()
-        if (bitcoin.precision() > MAX_SIGNIFICANT_DIGITS) return null
         val units = bitcoin.movePointRight(if (lightning) MILLISATOSHI_SCALE else 8).setScale(0, RoundingMode.CEILING)
         val integer = units.toPlainString().toULongOrNull()?.takeIf { it > 0uL } ?: return null
         if (lightning && integer % 1000uL != 0uL) return null
