@@ -117,7 +117,10 @@ fun PaykitUsdtReview(
                     onDone = onDone,
                     onDetails = { details = true },
                     hideBalance = settings.hideBalance,
-                    amountEditable = false
+                    amountEditable = false,
+                    isPaymentRequest = uiState.isPaymentRequest,
+                    paymentRequestNote = uiState.paymentRequestNote,
+                    contact = uiState.contactPaymentProfile,
                 )
             }
         }

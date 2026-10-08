@@ -659,7 +659,6 @@
     <string name="profile__auth_approval_ok">OK</string>
     <string name="profile__auth_approval_paykit_access_description">This service will manage your private Paykit data and send Paykit messages for you. Your pubky secret and wallet keys stay private.</string>
     <string name="profile__auth_approval_bitcoin_account">Separate watch-only account · xpub</string>
-    <string name="profile__auth_approval_paykit_access_title">Paykit access</string>
     <string name="profile__auth_approval_payment_details">PAYMENT DETAILS TO SHARE</string>
     <string name="profile__auth_approval_payment_details_intro_description">Share a separate Bitcoin account to receive earnings. You can also share your existing USDT address. Sharing these details does not let the service spend your funds.</string>
     <string name="profile__auth_approval_payment_details_intro_title">&lt;accent&gt;EARN BITCOIN\nAND USDT&lt;/accent&gt;\nFROM YOUR CONTENT</string>
@@ -667,6 +666,7 @@
     <string name="profile__auth_approval_service">A service is requesting permission to access and edit your &lt;accent&gt;%1$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_named">&lt;accent&gt;%1$s&lt;/accent&gt; is requesting permission to access and edit your &lt;accent&gt;%2$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_unknown">Unknown service</string>
+    <string name="profile__auth_approval_services_separator">" and "</string>
     <string name="profile__auth_approval_shared_bitcoin">Your Bitcoin watch-only account was shared.</string>
     <string name="profile__auth_approval_shared_both">Your Bitcoin watch-only account and USDT receiving address were shared.</string>
     <string name="profile__auth_approval_shared_usdt">Your USDT receiving address was shared.</string>

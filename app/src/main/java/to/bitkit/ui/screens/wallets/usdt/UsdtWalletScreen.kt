@@ -321,7 +321,6 @@ private fun UsdtWalletContent(
                     VerticalSpacer(16.dp)
                     UsdtAmountHeader(
                         amount = wallet.balance?.let { usdtFormatAmount(it) } ?: "—",
-                        network = "Arbitrum One",
                         hideBalance = hideBalance,
                         onToggleHide = if (allowSwipe) ({ settings?.setHideBalance(!hideBalance) }) else null,
                         modifier = Modifier.testTag("UsdtBalance")

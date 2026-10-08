@@ -51,6 +51,7 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
@@ -59,13 +60,17 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadAmountText
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PaymentAddressInput
+import to.bitkit.ui.components.PaymentRequestInvoiceNote
+import to.bitkit.ui.components.PaymentRequestSummary
 import to.bitkit.ui.components.PaymentReviewIllustration
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SendCell
@@ -103,6 +108,9 @@ internal fun ColumnScope.UsdtPaymentContent(
     onDetails: () -> Unit = {},
     hideBalance: Boolean = false,
     amountEditable: Boolean = true,
+    isPaymentRequest: Boolean = false,
+    paymentRequestNote: String? = null,
+    contact: PubkyProfile? = null,
     onDestinationChange: ((UsdtDestination) -> Unit)? = null,
     destinations: ImmutableList<UsdtDestination> = Env.usdtDestinations.toImmutableList(),
 ) {
@@ -119,7 +127,6 @@ internal fun ColumnScope.UsdtPaymentContent(
             ),
             onCloseClick = onDone,
             onDetailClick = onDetails,
-            usdtNetwork = quote.destination.label,
             hideBalance = hideBalance,
             modifier = Modifier.fillMaxSize().testTag("UsdtSendSuccess")
         )
@@ -133,11 +140,14 @@ internal fun ColumnScope.UsdtPaymentContent(
         showSubmitted && bridgeNeedsAttention -> R.string.usdt__bridge_attention
         showSubmitted && failed -> R.string.wallet__send_error_tx_failed
         showSubmitted -> R.string.usdt__submitted
+        quote != null && isPaymentRequest -> R.string.wallet__payment_request
         quote != null -> R.string.wallet__send_review
         page == UsdtPage.AMOUNT -> R.string.usdt__amount
         else -> R.string.usdt__send_title
     }
-    SheetTopBar(stringResource(title), onBack = onBack.takeUnless { showSubmitted || state.busy })
+    SheetTopBar(stringResource(title), onBack = onBack.takeUnless { showSubmitted || state.busy }, action = {
+        if (contact != null && !showSubmitted) { PubkyContactAvatar(profile = contact, size = 32.dp) }
+    })
     VerticalSpacer(16.dp)
     when {
         showSubmitted -> UsdtSubmittedContent(
@@ -148,7 +158,15 @@ internal fun ColumnScope.UsdtPaymentContent(
             onDetails,
             onDone
         )
-        quote != null -> UsdtConfirmation(quote, state, onConfirm, onEditAmount = { onPageChange(UsdtPage.AMOUNT) })
+        quote != null -> UsdtConfirmation(
+            quote,
+            state,
+            isPaymentRequest,
+            paymentRequestNote,
+            contact,
+            onConfirm,
+            onEditAmount = { onPageChange(UsdtPage.AMOUNT) },
+        )
         page == UsdtPage.AMOUNT -> UsdtAmountContent(
             amount,
             destination,
@@ -188,7 +206,7 @@ private fun ColumnScope.UsdtSubmittedContent(
     onDetails: () -> Unit,
     onDone: () -> Unit,
 ) {
-    quote?.let { UsdtAmountHeader(usdtFormatAmount(it.amount), it.destination.label) }
+    quote?.let { UsdtAmountHeader(usdtFormatAmount(it.amount)) }
     VerticalSpacer(32.dp)
     BodyM(
         stringResource(
@@ -409,66 +427,43 @@ private fun UsdtAmountContent(
 }
 
 @Composable
-private fun UsdtConfirmation(quote: UsdtQuote, state: UsdtSendState, onConfirm: () -> Unit, onEditAmount: () -> Unit) {
+private fun UsdtConfirmation(
+    quote: UsdtQuote,
+    state: UsdtSendState,
+    isPaymentRequest: Boolean,
+    paymentRequestNote: String?,
+    contact: PubkyProfile?,
+    onConfirm: () -> Unit,
+    onEditAmount: () -> Unit,
+) {
     var showDetails by rememberSaveable(quote.id) { mutableStateOf(false) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
+    val note = paymentRequestNote?.trim()?.takeIf { it.isNotEmpty() }
     Column(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             UsdtAmountHeader(
                 usdtFormatAmount(quote.amount),
-                quote.destination.label,
                 onClick = { if (!state.busy) onEditAmount() }
             )
-            VerticalSpacer(44.dp)
+            VerticalSpacer(if (!isPaymentRequest) 44.dp else 24.dp)
             if (showDetails) {
-                UsdtQuoteDetails(quote)
+                UsdtQuoteDetails(quote, contact)
+                note?.let {
+                    VerticalSpacer(16.dp)
+                    PaymentRequestInvoiceNote(it)
+                }
             } else if (quote.destination == UsdtDestination.ARBITRUM) {
+                if (isPaymentRequest) {
+                    PaymentRequestSummary(profile = contact, note = note)
+                    VerticalSpacer(16.dp)
+                }
                 PaymentReviewIllustration(
                     swipeProgress = { swipeProgress.floatValue },
                     modifier = Modifier.heightIn(max = 220.dp)
                 )
             }
             VerticalSpacer(16.dp)
-            if (quote.destination != UsdtDestination.ARBITRUM) {
-                SendCell(
-                    caption = stringResource(
-                        if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
-                            R.string.usdt__expected_amount
-                        } else {
-                            R.string.usdt__recipient_gets
-                        }
-                    )
-                ) {
-                    BodySSB(usdtFormatAmount(quote.receivedAmount) + " USDT")
-                }
-                VerticalSpacer(16.dp)
-                if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
-                    SendCell(caption = stringResource(R.string.usdt__bridge_deducted_fee)) {
-                        BodySSB(usdtFormatAmount(quote.amount - minOf(quote.amount, quote.receivedAmount)) + " USDT")
-                    }
-                    VerticalSpacer(16.dp)
-                }
-            }
-            SendCell(
-                caption = stringResource(R.string.usdt__maximum_fee)
-            ) { BodySSB(usdtFormatAmount(quote.maximumFee) + " USDT") }
-            VerticalSpacer(12.dp)
-            if (quote.destination != UsdtDestination.ARBITRUM) {
-                SendCell(
-                    caption = stringResource(R.string.usdt__maximum_total)
-                ) { BodySSB(usdtFormatAmount(quote.amount + quote.maximumFee) + " USDT") }
-                VerticalSpacer(12.dp)
-            }
-            BodyS(
-                stringResource(
-                    if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
-                        R.string.usdt__bridge_estimate_note
-                    } else {
-                        R.string.usdt__fee_note
-                    }
-                ),
-                color = Colors.White64
-            )
+            UsdtQuoteCosts(quote)
             state.error?.let {
                 BodyS(
                     stringResource(it),
@@ -510,13 +505,68 @@ private fun UsdtConfirmation(quote: UsdtQuote, state: UsdtSendState, onConfirm: 
 }
 
 @Composable
-private fun UsdtQuoteDetails(quote: UsdtQuote) {
+private fun UsdtQuoteCosts(quote: UsdtQuote) {
+    if (quote.destination != UsdtDestination.ARBITRUM) {
+        SendCell(
+            caption = stringResource(
+                if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
+                    R.string.usdt__expected_amount
+                } else {
+                    R.string.usdt__recipient_gets
+                }
+            )
+        ) {
+            BodySSB(usdtFormatAmount(quote.receivedAmount) + " USDT")
+        }
+        VerticalSpacer(16.dp)
+        if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
+            SendCell(caption = stringResource(R.string.usdt__bridge_deducted_fee)) {
+                BodySSB(usdtFormatAmount(quote.amount - minOf(quote.amount, quote.receivedAmount)) + " USDT")
+            }
+            VerticalSpacer(16.dp)
+        }
+    }
+    SendCell(
+        caption = stringResource(R.string.usdt__maximum_fee)
+    ) { BodySSB(usdtFormatAmount(quote.maximumFee) + " USDT") }
+    VerticalSpacer(12.dp)
+    if (quote.destination != UsdtDestination.ARBITRUM) {
+        SendCell(
+            caption = stringResource(R.string.usdt__maximum_total)
+        ) { BodySSB(usdtFormatAmount(quote.amount + quote.maximumFee) + " USDT") }
+        VerticalSpacer(12.dp)
+    }
+    BodyS(
+        stringResource(
+            if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
+                R.string.usdt__bridge_estimate_note
+            } else {
+                R.string.usdt__fee_note
+            }
+        ),
+        color = Colors.White64
+    )
+}
+
+@Composable
+private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         SendCell(caption = stringResource(R.string.wallet__send_from), modifier = Modifier.weight(1f)) {
             NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
         }
-        SendCell(caption = stringResource(R.string.usdt__destination), modifier = Modifier.weight(1f)) {
-            BodySSB(quote.destination.label, modifier = Modifier.height(28.dp))
+        SendCell(
+            caption = stringResource(
+                if (contact == null) R.string.usdt__destination else R.string.wallet__payment_request_contact
+            ),
+            modifier = Modifier.weight(1f)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(28.dp)) {
+                if (contact != null) {
+                    PubkyContactAvatar(profile = contact, size = 20.dp)
+                    HorizontalSpacer(4.dp)
+                }
+                BodySSB(contact?.name ?: quote.destination.label, maxLines = 1)
+            }
         }
     }
     VerticalSpacer(16.dp)

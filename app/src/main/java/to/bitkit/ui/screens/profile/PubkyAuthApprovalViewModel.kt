@@ -79,7 +79,9 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             }
             if (_uiState.value.authUrl != authUrl) return@launch
             val unknownService = context.getString(R.string.profile__auth_approval_service_unknown)
-            val serviceName = request.serviceNames.firstOrNull() ?: unknownService
+            val serviceName = request.serviceNames.takeIf {
+                it.isNotEmpty()
+            }?.joinToString(context.getString(R.string.profile__auth_approval_services_separator)) ?: unknownService
             _uiState.update {
                 it.copy(
                     state = if (request.bitkitClaim?.sharesReceivingDetails == true) {

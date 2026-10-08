@@ -17,7 +17,6 @@ import java.math.RoundingMode
 @Composable
 internal fun UsdtAmountHeader(
     amount: String,
-    network: String,
     modifier: Modifier = Modifier,
     hideBalance: Boolean = false,
     prefix: String? = null,
@@ -29,7 +28,7 @@ internal fun UsdtAmountHeader(
     val btc = sats?.formatMoney(LocalCurrencies.current.displayUnit)
     BalanceHeader(
         isBitcoinPrimary = false,
-        smallRowText = btc ?: "USDT · $network",
+        smallRowText = btc ?: "USDT",
         smallRowSymbol = if (btc != null) BITCOIN_SYMBOL else null,
         largeRowText = amount,
         largeRowSymbol = "$",

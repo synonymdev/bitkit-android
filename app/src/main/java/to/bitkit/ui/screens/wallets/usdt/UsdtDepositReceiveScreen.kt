@@ -331,7 +331,7 @@ private fun ColumnScope.Content(
             onCreate
         )
         ReceivePage.FEES -> state.address?.let { address ->
-            UsdtAmountHeader(usdtFormatAmount(address.amount), state.network?.label ?: "Arbitrum One")
+            UsdtAmountHeader(usdtFormatAmount(address.amount))
             VerticalSpacer(24.dp)
             BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64)
             VerticalSpacer(24.dp)
@@ -359,6 +359,7 @@ private fun ColumnScope.Content(
                 uri = state.address?.uri ?: uri,
                 error = receiveError,
                 network = state.network?.label ?: "Arbitrum One",
+                isDefaultNetwork = state.network == null,
                 onEdit = onRefresh,
                 onNetwork = { onPage(ReceivePage.NETWORKS) },
             )
@@ -504,7 +505,6 @@ private fun DepositDetail(
     if (deposit.asset == "USDT") {
         UsdtAmountHeader(
             deposit.amount?.let { usdtFormatAmount(it) } ?: "—",
-            deposit.network.uppercase(),
             hideBalance = hideBalance
         )
     } else {
