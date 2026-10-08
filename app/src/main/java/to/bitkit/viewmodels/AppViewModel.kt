@@ -4598,6 +4598,9 @@ class AppViewModel @Inject constructor(
             if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
             if (!paymentProofStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
             val previous = (error as? OnchainSendBlockedError)?.attempt
+            if (previous != null && (incomingPaymentRequest == null || previous.requestId != incomingPaymentRequest.id)) {
+                clearCancelledContactContext(contactPaymentContext)
+            }
             val priorAccepted = previous?.takeIf {
                 it.hasPositiveEvidence && it.txid != null && !it.isTransfer &&
                     incomingPaymentRequest != null && it.requestId == incomingPaymentRequest.id
@@ -4636,7 +4639,7 @@ class AppViewModel @Inject constructor(
                     description = it,
                 )
             }
-            val unresolvedRequestId = previous?.requestId ?: incomingPaymentRequest?.id
+            val unresolvedRequestId = if (previous != null) previous.requestId else incomingPaymentRequest?.id
             uncertainOnchainPaymentRequestId = unresolvedRequestId
             paykitPaymentProofRepo.onchainPaymentResolutions.value
                 .firstOrNull { it.requestId == unresolvedRequestId }

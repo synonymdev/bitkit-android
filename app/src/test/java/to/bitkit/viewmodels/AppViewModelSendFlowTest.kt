@@ -9459,6 +9459,36 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `blocked new contact cannot be assigned to recovered older payment`() = test {
+        val txid = "ef".repeat(32)
+        val previous = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "older-payment", requestId = null, orderId = null,
+            address = "bcrt1qoriginal", amountSats = 1_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown, txid = txid,
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        setActiveContactPaymentContext(testPublicKey)
+        setSendState(SendUiState(address = "bcrt1qnewcontact", amount = 2_000u, payMethod = SendMethod.ONCHAIN))
+        stubOnchainSend("bcrt1qnewcontact", 2_000u, Result.failure(OnchainSendBlockedError(previous)))
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            assertEquals(SendEffect.NavigateToPending(txid, 1_000, false, isOnchain = true), awaitItem())
+        }
+        sut.onSendSuccess(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.SENT,
+                paymentHashOrTxId = txid,
+                sats = 1_000,
+            )
+        )
+        advanceUntilIdle()
+        verify(activityRepo, never()).setContact(any(), eq(txid), any(), any())
+    }
+
+    @Test
     fun `completed original transfer opens its funded order without another send`() = test {
         val txid = "ab".repeat(32)
         val original = OnchainSendAttempt(
