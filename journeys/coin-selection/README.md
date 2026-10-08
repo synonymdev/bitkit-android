@@ -11,3 +11,11 @@ and a fresh external unified invoice. See [backend setup](../README.md#backend-p
 Open the invoice using the URI intent described there. Coin Selection is under Settings > Advanced.
 On confirmation, `SendConfirmToggleDetails` exposes `SendConfirmAssetButton`. The picker uses
 `coin_selection_screen` and `continue_button`; Tags uses `TagsAddSend`.
+
+The other two journeys remain Android-only; see their XML descriptions for UTXO and funding
+preconditions:
+
+- `manual-coin-selection.xml` checks the UTXO-only list with no Auto row, selected and required
+  totals, and Continue gating.
+- `manual-coin-selection-load.xml` checks the initial UTXO load and preservation of the selection
+  across incoming activity.

@@ -152,6 +152,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
+| `coin-selection/manual-wallet-switch.xml` | same file, journey name and actions; iOS can open the picker on the wallet switch, Android on the next swipe. The iOS picker has no accessibility identifiers, so assert its visible "Coin Selection" title. |
 | `payment-requests/requested-resolution-failure.xml` | same file and journey name; both platforms keep the preparing confirmation open across retries and stop automatic retries when it closes. Native progress and request-row identifiers differ. Android's subscription-reminder preparation has no intermediate Send sheet; see `paykit-clock-changes.md`. |
 | `payment-requests/request-summary.xml` | same file and journey name; Android additionally checks the open Sent receipt's live lifecycle subtitle after payment. iOS keeps a static note/date receipt without that subtitle, so those checks are not ported. |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
