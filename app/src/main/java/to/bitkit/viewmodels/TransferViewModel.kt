@@ -402,6 +402,7 @@ class TransferViewModel @Inject constructor(
                             txId = txid,
                             txTotalSats = original.txTotalSats,
                             preTransferOnchainSats = original.preTransferOnchainSats,
+                            originalContext = original,
                             requireTransferPersisted = true,
                         )
                         runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(order.id, txid) }
@@ -462,6 +463,7 @@ class TransferViewModel @Inject constructor(
                             txId = outcome.txid,
                             txTotalSats = transferContext.txTotalSats,
                             preTransferOnchainSats = transferContext.preTransferOnchainSats,
+                            originalContext = transferContext,
                             requireTransferPersisted = true,
                         )
                         runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(order.id, outcome.txid) }
@@ -702,15 +704,11 @@ class TransferViewModel @Inject constructor(
         txTotalSats: ULong? = null,
         preTransferOnchainSats: ULong? = null,
         activityWalletId: String = WalletScope.default,
+        originalContext: OnchainTransferContext? = null,
         requireTransferPersisted: Boolean = false,
     ) {
         if (requireTransferPersisted) {
-            val originalContext = if (txTotalSats != null && preTransferOnchainSats != null) {
-                OnchainTransferContext(txTotalSats, preTransferOnchainSats)
-            } else {
-                null
-            }
-            transferRepo.persistAcceptedFunding(order, txId, originalContext).getOrThrow()
+            transferRepo.persistAcceptedFunding(order, txId, requireNotNull(originalContext)).getOrThrow()
         } else {
             cacheStore.addPaidOrder(orderId = order.id, txId = txId)
             transferRepo.createTransfer(

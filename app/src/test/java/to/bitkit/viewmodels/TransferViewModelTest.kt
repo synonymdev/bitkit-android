@@ -1180,6 +1180,15 @@ class TransferViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
         )
+        verify(transferRepo).persistAcceptedFunding(
+            order, TXID,
+            OnchainTransferContext(
+                txTotalSats = 100_000uL,
+                preTransferOnchainSats = 100_000uL,
+                originalOrderClientBalanceSats = order.clientBalanceSat,
+                originalOrderFeeSats = order.feeSat,
+            ),
+        )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(blocktankRepo, times(1)).createOrder(eq(order.clientBalanceSat), eq(order.lspBalanceSat), any())
     }
@@ -1381,7 +1390,11 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `accepted transfer resumes after transfer storage failure without another send`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
-        val original = OnchainTransferContext(99_000uL, 125_000uL)
+        val original = OnchainTransferContext(
+            99_000uL, 125_000uL,
+            originalOrderClientBalanceSats = order.clientBalanceSat,
+            originalOrderFeeSats = order.feeSat,
+        )
         val attempt = acceptedFundingAttempt(order, original)
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
         whenever(transferRepo.persistAcceptedFunding(order, TXID, original))
@@ -1424,7 +1437,11 @@ class TransferViewModelTest : BaseUnitTest() {
 
     private suspend fun TestScope.assertPaidFundingSurvivesLocalFailure(resumedEvidence: OnchainSendEvidence?) {
         val order = spendingOrder(feeSat = 98_000uL)
-        val original = OnchainTransferContext(99_000uL, 110_000uL)
+        val original = OnchainTransferContext(
+            99_000uL, 110_000uL,
+            originalOrderClientBalanceSats = order.clientBalanceSat,
+            originalOrderFeeSats = order.feeSat,
+        )
         val attempt = acceptedFundingAttempt(order, original).copy(
             evidence = resumedEvidence ?: OnchainSendEvidence.Accepted,
         )
@@ -1467,7 +1484,11 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `accepted transfer recovery preserves original balance totals`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
-        val original = OnchainTransferContext(99_000uL, 125_000uL)
+        val original = OnchainTransferContext(
+            99_000uL, 125_000uL,
+            originalOrderClientBalanceSats = order.clientBalanceSat,
+            originalOrderFeeSats = order.feeSat,
+        )
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedFundingAttempt(order, original))
         quoteOrder(order)
         prepareConfirm()
