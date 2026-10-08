@@ -1,6 +1,6 @@
 # USDT configuration
 
-Normal builds use published bitkit-core `0.8.0-rc1`, including its matching native libraries and generated bindings.
+Normal builds use published bitkit-core `0.8.0-rc2`, including its matching native libraries and generated bindings.
 
 USDT uses Arbitrum One regardless of the Bitcoin network setting. Gradle reads `USDT_RPC_URL` and `USDT_BUNDLER_URL` from local properties/environment configuration. Both must point to the controlled service's credential-free HTTPS chain and bundler routes. Missing endpoints hide the wallet entry.
 
