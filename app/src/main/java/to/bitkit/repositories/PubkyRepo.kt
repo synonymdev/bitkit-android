@@ -820,7 +820,7 @@ class PubkyRepo @Inject constructor(
                     val secret = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
                         ?: adoptedSecretKeyHex() ?: return@runSuspendCatching null
                     val owner = pubkyService.publicKeyFromSecret(secret).ensurePubkyPrefix()
-                    fetchDisplayProfile(owner).getOrThrow()
+                    resolveContactProfile(owner, retry = false).getOrThrow()
                 }.onSuccess { loaded ->
                     synchronized(readOnlyProfileLock) {
                         if (isCurrentLoad()) _readOnlyProfile.update { loaded }
