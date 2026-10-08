@@ -294,9 +294,9 @@ class OnchainSendAttemptStore @Inject constructor(
                 originalInputs = current.originalInputs ?: receipt.inputs,
                 candidateTxids = (current.candidateTxids + receipt.txid.lowercase()).distinct(),
                 candidateFeeRates = current.candidateFeeRates + (receipt.txid.lowercase() to feeRate),
-                txid = receipt.txid.lowercase(),
-                evidence = OnchainSendEvidence.Pending,
-                refusalReason = null,
+                txid = if (isRecovery) current.txid else receipt.txid.lowercase(),
+                evidence = if (isRecovery) current.evidence else OnchainSendEvidence.Pending,
+                refusalReason = if (isRecovery) current.refusalReason else null,
                 preparationPending = false,
             ).also {
                 persist(it)
@@ -318,8 +318,11 @@ class OnchainSendAttemptStore @Inject constructor(
                 throw OnchainSendBlockedError(current)
             }
             if (current.hasPositiveEvidence) return@withLock OnchainSendOutcome.Accepted(requireNotNull(current.txid))
-            require(current.txid.equals(txid, ignoreCase = true) && txid.lowercase() in current.candidateTxids)
+            require(txid.lowercase() in current.candidateTxids)
             val firstSubmission = firstSubmissions.remove(attemptId)
+            if (!firstSubmission) {
+                persist(current.copy(txid = txid.lowercase(), evidence = OnchainSendEvidence.Pending, refusalReason = null))
+            }
             try {
                 broadcast()
             } catch (error: ServiceError.PaymentDeadlineExpired) {

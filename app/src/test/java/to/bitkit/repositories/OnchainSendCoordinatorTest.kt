@@ -62,7 +62,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         )
 
         fun receipt(txid: String = firstTxid, amount: ULong = 1_000uL) =
-            OnchainPreparedReceipt(txid, listOf(input), "bcrt1qrecipient", amount)
+            OnchainPreparedReceipt(txid, listOf(input), "bcrt1qrecipient", amount, miningFeeSats = 50uL)
 
         suspend fun unresolved(): OnchainSendAttempt {
             val attempt = admit()
@@ -343,7 +343,10 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     @Test
     fun `original authorization failure retains prepared candidate without broadcasting`() = test {
         val f = Fixture()
-        val attempt = f.unresolved()
+        val unknown = f.unresolved()
+        val attempt = f.store.recordOutcome(
+            unknown.attemptId, OnchainSendOutcome.Rejected(firstTxid, "mempool min fee not met"), 0,
+        )
         var prepares = 0
         var broadcasts = 0
         val sender = object : OnchainPreparedSender {
@@ -373,6 +376,9 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         assertEquals(1, prepares)
         assertEquals(0, broadcasts)
         assertEquals(listOf(firstTxid, nextTxid), f.store.current()?.candidateTxids)
+        assertEquals(firstTxid, f.store.current()?.txid)
+        assertEquals(OnchainSendEvidence.Rejected, f.store.current()?.evidence)
+        assertEquals("mempool min fee not met", f.store.current()?.refusalReason)
     }
 
     @Test
@@ -420,7 +426,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         assertEquals(original.requestId, retained?.requestId)
         assertEquals(original.orderId, retained?.orderId)
         assertEquals(original.originalInputs, retained?.originalInputs)
-        assertEquals(OnchainSendEvidence.Pending, retained?.evidence)
+        assertEquals(original.evidence, retained?.evidence)
         val restarted = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service, kotlin.time.Clock.System)
         assertEquals(retained, restarted.current())
         assertFailsWith<OnchainSendBlockedError> { f.admit() }
