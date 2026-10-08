@@ -107,6 +107,7 @@ data class PaykitPaymentRequest(
         RecurringRequest("recurring_request", shouldLogIncomingRejection = false),
         UnsupportedRecurrence("unsupported_recurrence"),
         UnsupportedAsset("unsupported_asset"),
+        UnsupportedPricing("unsupported_pricing"),
         UnsupportedPaymentDeadline("unsupported_payment_deadline"),
         InvalidAmount("invalid_amount"),
         AmountOutOfRange("amount_out_of_range"),
@@ -1776,18 +1777,26 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     if (requiresActionableRequest && paymentDeadlineAt?.let { now > it } == true) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
     }
-    if (requestTerms.amount.asset != PaykitIssuerInterop.BITCOIN_ASSET) {
-        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
-    }
-    val amountSats = requestTerms.amount.value.toPaykitSats()
-        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount)
-    if (amountSats > ULong.MAX_VALUE / 1000uL) {
-        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.AmountOutOfRange)
-    }
-    val endpoints = PaykitIssuerInterop.supportedEndpointIdentifiers(
+    var endpoints = PaykitIssuerInterop.supportedEndpointIdentifiers(
         requestTerms.acceptedPaymentEndpointIdentifiers,
         network,
     )
+    val amountSats: ULong
+    if (requestTerms.conversion != null) {
+        val payment = PaykitBitcoinRequestPricing.bitcoinPayment(requestTerms, endpoints)
+            ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPricing)
+        amountSats = payment.amountSats
+        endpoints = payment.endpointIdentifiers
+    } else {
+        if (requestTerms.amount.asset != PaykitIssuerInterop.BITCOIN_ASSET) {
+            return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
+        }
+        amountSats = requestTerms.amount.value.toPaykitSats()
+            ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount)
+        if (amountSats > ULong.MAX_VALUE / 1000uL) {
+            return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.AmountOutOfRange)
+        }
+    }
     if (requiresActionableRequest && endpoints.isEmpty()) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.NoSupportedEndpoint)
     }

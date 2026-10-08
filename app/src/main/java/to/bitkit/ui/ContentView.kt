@@ -308,7 +308,6 @@ fun ContentView(
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
                     appViewModel.checkAdoptedPubkySource()
-                    appViewModel.refreshPublicPaykitEndpoints()
                     appViewModel.refreshPrivatePaykitEndpoints()
                     appViewModel.startPaykitPaymentRequestPolling()
                 }

@@ -3977,6 +3977,127 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `removeContact stops the screen lookup of the contact it removes`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
+            .doSuspendableAnswer { awaitCancellation() }
+        val screenCancelled = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive))
+            .doSuspendableAnswer {
+                try {
+                    awaitCancellation()
+                } finally {
+                    screenCancelled.complete(Unit)
+                }
+            }
+        sut.loadContacts()
+        val resolve = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
+
+        sut.removeContact(VALID_CONTACT_KEY_A).getOrThrow()
+
+        assertTrue(screenCancelled.isCompleted, "The removed contact's lookup gives up its interactive read")
+        assertTrue(resolve.isCompleted)
+        assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
+    fun `a contact whose removal fails keeps its screen lookup`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        val heldRead = holdScreenLookup(VALID_CONTACT_KEY_A)
+        whenever(pubkyService.removeContact(VALID_CONTACT_KEY_A))
+            .thenAnswer { throw AppError(PubkyContactError.ActiveSubscription) }
+        sut.loadContacts()
+        val resolve = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
+
+        assertSame(PubkyContactError.ActiveSubscription, sut.removeContact(VALID_CONTACT_KEY_A).exceptionOrNull())
+        heldRead.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", "Hi")))
+        resolve.await()
+
+        assertEquals(listOf("Alice" to "Hi"), sut.contacts.value.map { it.name to it.bio })
+    }
+
+    @Test
+    fun `a screen lookup of a removed contact never replaces the profile the contact is added back with`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        val newRead = createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", "New"))
+        val oldRead = holdScreenLookup(VALID_CONTACT_KEY_A, laterRead = newRead)
+        sut.loadContacts()
+        val resolve = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
+
+        sut.removeContact(VALID_CONTACT_KEY_A).getOrThrow()
+        sut.addContact(VALID_CONTACT_KEY_A).getOrThrow()
+        oldRead.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", "Old")))
+        resolve.await()
+        assertEquals(listOf("Alice" to "New"), sut.contacts.value.map { it.name to it.bio })
+        sut.loadContacts()
+
+        assertEquals(
+            listOf("Alice" to "New"),
+            sut.contacts.value.map { it.name to it.bio },
+            "A reload shows the profile the contact was added back with",
+        )
+        verify(pubkyService, times(1)).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk)
+    }
+
+    @Test
+    fun `a screen lookup of a contact a profile deletion removed never replaces the profile it is added back with`() =
+        test {
+            authenticateForTesting()
+            whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+            val records = listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved"))
+            whenever(pubkyService.removeContacts(records.map { it.publicKey })).thenReturn(records)
+            whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw TestAppError("Offline") }
+            val newRead = createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", "New"))
+            val oldRead = holdScreenLookup(VALID_CONTACT_KEY_A, laterRead = newRead)
+            val deletionStarted = CompletableDeferred<Unit>()
+            val finishDeletion = CompletableDeferred<Unit>()
+            whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+                if (deletionStarted.complete(Unit)) finishDeletion.await()
+                records
+            }
+            val deletion = async { sut.deleteProfile() }
+            deletionStarted.await()
+            sut.loadContacts()
+            val resolve = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
+            verify(pubkyService).resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Interactive)
+
+            finishDeletion.complete(Unit)
+            assertTrue(deletion.await().isFailure)
+            assertNotNull(sut.publicKey.value)
+            assertTrue(sut.contacts.value.isEmpty())
+            sut.addContact(VALID_CONTACT_KEY_A).getOrThrow()
+            oldRead.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", "Old")))
+            resolve.await()
+            sut.loadContacts()
+
+            assertEquals(listOf("Alice" to "New"), sut.contacts.value.map { it.name to it.bio })
+        }
+
+    @Test
+    fun `a screen lookup that returns after its contact was removed applies nothing`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
+        val heldRead = holdScreenLookup(VALID_CONTACT_KEY_A)
+        sut.loadContacts()
+        val resolve = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
+
+        sut.removeContact(VALID_CONTACT_KEY_A).getOrThrow()
+        heldRead.complete(createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", "Hi")))
+        resolve.await()
+
+        assertTrue(sut.contacts.value.isEmpty())
+        sut.loadContacts()
+        assertEquals(
+            listOf("Saved" to ""),
+            sut.contacts.value.map { it.name to it.bio },
+            "A contact saved again shows no profile the removed contact's lookup left behind",
+        )
+    }
+
+    @Test
     fun `a screen lookup outlives a refresh that a later contact load replaces`() = test {
         authenticateForTesting()
         whenever(pubkyService.contactRecords()).thenReturn(listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved")))
@@ -4473,6 +4594,19 @@ class PubkyRepoTest : BaseUnitTest() {
                 timeout = PubkyRepo.IMPORT_FOLLOW_LOOKUP_TIMEOUT,
             )
         }.thenReturn(createResolution(publicKey, paykitProfile = createPaykitProfile(name)))
+    }
+
+    private fun holdScreenLookup(
+        publicKey: String,
+        laterRead: ProfileResolution? = null,
+    ): CompletableDeferred<ProfileResolution?> {
+        whenever { pubkyService.resolveContactProfile(publicKey, true, PaykitReadLane.Bulk) }
+            .doSuspendableAnswer { awaitCancellation() }
+        val heldRead = CompletableDeferred<ProfileResolution?>()
+        whenever { pubkyService.resolveContactProfile(publicKey, true, PaykitReadLane.Interactive) }
+            .doSuspendableAnswer { withContext(NonCancellable) { heldRead.await() } }
+            .thenReturn(laterRead)
+        return heldRead
     }
 
     private fun delegateProfileReadsTo(paykit: PaykitSdkService) {

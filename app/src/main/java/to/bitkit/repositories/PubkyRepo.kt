@@ -1049,7 +1049,10 @@ class PubkyRepo @Inject constructor(
         }
         pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
         notifyBackupStateChanged()
-        updateContacts { emptyList() }
+        synchronized(contactsLock) {
+            cancelContactScreenLookups()
+            updateContacts { emptyList() }
+        }
         markContactsLoaded()
         Logger.info("Deleted all contacts", context = TAG)
     }
@@ -1160,9 +1163,11 @@ class PubkyRepo @Inject constructor(
      * because the background refresh of [loadContacts] has not finished looking it up, so a screen showing that
      * contact does not wait behind bulk reads and an edit made there keeps the contact's avatar, bio and links. The
      * lookup takes the contact over from the refresh, which stops its own lookup and never applies a result for it,
-     * and a caller arriving meanwhile waits for the same lookup. Sign-out, profile deletion or an identity change
-     * stops it, not a later refresh. It returns at once for any other row; when the lookup fails, the row keeps its
-     * label. A profile already found by the refresh but not yet applied to the contact list is applied at once.
+     * and a caller arriving meanwhile waits for the same lookup. Removing the contact, sign-out, profile deletion or an
+     * identity change stops it and drops its result, as the contact can be added back with a newer profile before it
+     * returns; a later refresh does not stop it. It returns at once for any other row; when the lookup fails, the row
+     * keeps its label. A profile already found by the refresh but not yet applied to the contact list is applied at
+     * once.
      */
     suspend fun resolvePendingContactProfile(publicKey: String) {
         val owner = _publicKey.value ?: return
@@ -1279,6 +1284,7 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             val prefixedKey = publicKey.ensurePubkyPrefix()
             pubkyService.removeContact(prefixedKey)
+            synchronized(contactsLock) { contactScreenLookups.remove(prefixedKey)?.cancel() }
             removeContactProfileOverride(prefixedKey)
             updateContacts { current -> current.filter { it.publicKey != prefixedKey } }
             markContactsLoaded()
@@ -1818,10 +1824,16 @@ class PubkyRepo @Inject constructor(
             contactProfileRefresh?.job?.cancel()
             contactProfileRefresh?.pendingResults?.clear()
             contactProfileRefresh = null
-            contactScreenLookups.values.forEach { it.cancel() }
-            contactScreenLookups.clear()
+            cancelContactScreenLookups()
             sessionContactProfiles.clear()
             sessionContactProfilesOwner = null
+        }
+    }
+
+    private fun cancelContactScreenLookups() {
+        synchronized(contactsLock) {
+            contactScreenLookups.values.forEach { it.cancel() }
+            contactScreenLookups.clear()
         }
     }
 

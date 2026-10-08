@@ -19,6 +19,7 @@ import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -106,6 +107,62 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY))
         verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `failed access check preserves settings and allows retry`() = test {
+        val previous = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = false,
+        )
+        settingsFlow.value = previous
+        val failure = ContactPaymentSettingsTestError("Paykit unavailable")
+        var accessAvailable = false
+        whenever(privatePaykitRepo.hasPrivatePaymentAccess()).thenAnswer {
+            if (!accessAvailable) throw failure
+            true
+        }
+        val sut = createSut()
+
+        assertSame(failure, sut.setEnabled(true).exceptionOrNull())
+        assertEquals(previous, settingsFlow.value)
+        verify(settingsStore, never()).update(any())
+        verifyNoInteractions(publicPaykitRepo)
+        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo, never()).disableSharingAndPruneUnsavedContactState(any<Collection<String>>())
+
+        accessAvailable = true
+
+        assertTrue(sut.setEnabled(true).isSuccess)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY))
+    }
+
+    @Test
+    fun `cancelling access check leaves settings unchanged and releases sharing lock`() = test {
+        var waitForAccess = true
+        whenever(privatePaykitRepo.hasPrivatePaymentAccess()).doSuspendableAnswer {
+            if (waitForAccess) awaitCancellation()
+            true
+        }
+        val previous = settingsFlow.value
+        val sut = createSut()
+        val enable = async { sut.setEnabled(true) }
+        runCurrent()
+        verify(privatePaykitRepo).hasPrivatePaymentAccess()
+
+        enable.cancelAndJoin()
+
+        assertEquals(previous, settingsFlow.value)
+        verify(settingsStore, never()).update(any())
+        verifyNoInteractions(publicPaykitRepo)
+        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo, never()).disableSharingAndPruneUnsavedContactState(any<Collection<String>>())
+        waitForAccess = false
+
+        assertTrue(sut.setEnabled(true).isSuccess)
     }
 
     @Test
