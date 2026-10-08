@@ -35,6 +35,10 @@ The accepted journey uses:
 
 Rejected fixture shapes stay in unit tests because Bitkit intentionally does not present requests that fail the contract gate.
 
+`success-dismissal.xml` matches iOS's journey: after paying a Lightning request, closing success
+must leave no error toast or duplicate payment; closing a later unpaid request must not send it.
+Use two linked disposable regtest wallets and observe or record dismissal to catch short-lived toasts.
+
 `request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked, and the payer holds enough balance to pay 21,000 sats.
 Its Android-only Sent receipt checks leave the 5,000 sats request open through payment and the
 existing foreground synchronization. A protocol proof changes the note-free subtitle to
