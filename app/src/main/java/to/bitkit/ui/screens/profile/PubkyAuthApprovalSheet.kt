@@ -592,7 +592,7 @@ private fun ProfileCard(profile: PubkyProfile) {
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(Colors.PubkyGreen)
+                    .background(Colors.Gray5)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_user_square),
