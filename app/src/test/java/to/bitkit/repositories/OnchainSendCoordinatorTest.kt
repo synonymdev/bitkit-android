@@ -57,7 +57,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             orderId = "order-1", address = "bcrt1qrecipient", amountSats = 1_000uL,
             isMaxAmount = isMax, feeRateSatsPerVByte = 1uL, isTransfer = true,
             channelId = "channel-1", tags = listOf("tag"),
-            transferContext = OnchainTransferContext(1_100uL, 2_000uL), beforeSendAttempt = {},
+            transferContext = OnchainTransferContext(1_100uL, 2_000uL, 900uL, 1_000uL), beforeSendAttempt = {},
             payerIdentity = "original-payer",
         )
 
@@ -184,7 +184,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         var authorizations = 0
         val sender = object : OnchainPreparedSender {
             override suspend fun prepareInitial(attempt: OnchainSendAttempt) = PreparedOnchainSend(
-                f.receipt(amount = 900uL)
+                f.receipt(amount = 1_050uL)
             ) {
                 OnchainSendOutcome.Unknown(firstTxid)
             }
@@ -192,14 +192,14 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 attempt: OnchainSendAttempt,
                 feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?,
             ): PreparedOnchainSend {
-                assertEquals(900uL, attempt.amountSats)
+                assertEquals(1_050uL, attempt.amountSats)
                 assertEquals(listOf(input), attempt.originalInputs)
                 assertEquals("order-1", attempt.orderId)
                 assertEquals("wallet-1", attempt.walletId)
                 assertEquals(null, attempt.requestId)
                 assertEquals("channel-1", attempt.channelId)
-                assertEquals(OnchainTransferContext(1_100uL, 2_000uL), attempt.transferContext)
-                return PreparedOnchainSend(f.receipt(nextTxid, 900uL)) { OnchainSendOutcome.Unknown(nextTxid) }
+                assertEquals(OnchainTransferContext(1_100uL, 2_000uL, 900uL, 1_000uL), attempt.transferContext)
+                return PreparedOnchainSend(f.receipt(nextTxid, 1_050uL)) { OnchainSendOutcome.Unknown(nextTxid) }
             }
         }
         val coordinator = OnchainSendCoordinator(f.store, sender, testDispatcher)
@@ -328,16 +328,16 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         val initial = f.admit(isMax = true)
         val native = mock<OnchainPreparationProtocol>()
         whenever(native.prepareMax(initial.address, true, 1uL, 0)).thenReturn(
-            PreparedOnchainSend(f.receipt(amount = 900uL)) { OnchainSendOutcome.Unknown(firstTxid) },
+            PreparedOnchainSend(f.receipt(amount = 1_050uL)) { OnchainSendOutcome.Unknown(firstTxid) },
         )
-        whenever(native.prepareFixed(initial.address, 900uL, 2uL, listOf(input), 0)).thenReturn(
-            PreparedOnchainSend(f.receipt(nextTxid, 900uL)) { OnchainSendOutcome.Unknown(nextTxid) },
+        whenever(native.prepareFixed(initial.address, 1_050uL, 2uL, listOf(input), 0)).thenReturn(
+            PreparedOnchainSend(f.receipt(nextTxid, 1_050uL)) { OnchainSendOutcome.Unknown(nextTxid) },
         )
         val coordinator = OnchainSendCoordinator(f.store, OnchainPreparedSenderAdapter(native), testDispatcher)
         coordinator.sendInitial(initial).getOrThrow()
         coordinator.retryOriginal(initial.attemptId, initial.walletId, 2uL) {}.getOrThrow()
         verify(native).prepareMax(initial.address, true, 1uL, 0)
-        verify(native).prepareFixed(initial.address, 900uL, 2uL, listOf(input), 0)
+        verify(native).prepareFixed(initial.address, 1_050uL, 2uL, listOf(input), 0)
     }
 
     @Test

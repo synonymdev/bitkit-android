@@ -15,6 +15,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
@@ -367,6 +368,42 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertFailsWith<OnchainSendBlockedError> { reopened.admitForTest() }
         reopened.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
         assertTrue(reopened.admitForTest().attemptId != attempt.attemptId)
+    }
+
+    @Test
+    fun `send-all funding validates prepared amount before candidate retention or dispatch`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val context = OnchainTransferContext(100_000uL, 100_000uL, 97_000uL, 99_000uL)
+        val attempt = store.admit(
+            walletId = "wallet-1", requestId = null, orderId = "order-1", address = "bcrt1qfunding",
+            amountSats = 99_000uL, isMaxAmount = true, feeRateSatsPerVByte = 1uL, isTransfer = true,
+            channelId = null, tags = emptyList(), transferContext = context, beforeSendAttempt = {},
+        )
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, 99_500uL,
+        )
+        for (amount in listOf(98_999uL, 100_001uL)) {
+            assertFailsWith<IllegalArgumentException> {
+                store.retainPreparedReceipt(attempt.attemptId, 0, receipt.copy(amountSats = amount), false)
+            }
+            assertNull(store.current()?.txid)
+            assertTrue(store.current()?.candidateTxids?.isEmpty() == true)
+            var dispatched = false
+            assertFailsWith<IllegalArgumentException> {
+                store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
+                    dispatched = true
+                    OnchainSendOutcome.Accepted(receipt.txid)
+                }
+            }
+            assertFalse(dispatched)
+        }
+        val retained = store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
+        assertEquals(99_500uL, retained.amountSats)
+        assertEquals(context, retained.transferContext)
     }
 
     @Test

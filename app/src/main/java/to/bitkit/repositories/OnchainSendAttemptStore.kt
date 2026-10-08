@@ -262,6 +262,11 @@ class OnchainSendAttemptStore @Inject constructor(
             } else {
                 require(current.originalInputs == null && current.candidateTxids.isEmpty() && current.txid == null)
                 require((current.isMaxAmount && current.requestId == null) || receipt.amountSats == current.amountSats)
+                if (current.isTransfer && current.isMaxAmount) {
+                    val context = requireNotNull(current.transferContext)
+                    val originalFee = requireNotNull(context.originalOrderFeeSats)
+                    require(receipt.amountSats >= originalFee && receipt.amountSats <= context.txTotalSats)
+                }
             }
             val feeRate = receipt.feeRateSatsPerVByte ?: current.feeRateSatsPerVByte
             require(OnchainRecoveryFeeRate.isValid(feeRate))
