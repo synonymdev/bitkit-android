@@ -957,8 +957,8 @@ class PaykitPaymentProofRepo @Inject constructor(
                 if (!proof.paymentStarted || !proof.proofData.isHex(HASH_BYTE_COUNT) ||
                     !proof.paymentIdentifier.equals(proof.proofData, ignoreCase = true)
                 ) return false
+                if (proof.onchainWalletId != WalletScope.default) return reconcileHardwareOnchainProof(proof)
                 if (proof.onchainAcceptanceVerified != true) {
-                    if (proof.onchainWalletId != WalletScope.default) return reconcileHardwareOnchainProof(proof)
                     if (!attempt.matchesPositiveShopProof(proof)) return false
                     val proofs = loadProofs().toMutableList()
                     val index = proofs.indexOf(proof)
@@ -1039,14 +1039,13 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (!proof.paymentStarted || proof.onchainWalletId == WalletScope.default ||
             (proof.proofData != null && !proof.proofData.equals(txid, true))
         ) return false
-        if (!proof.onchainAcceptanceVerified) {
-            val address = proof.onchainAddress?.takeIf { it.isNotBlank() } ?: return false
-            val amount = proof.onchainAmountSats ?: return false
-            val observed = withTimeoutOrNull(HARDWARE_OBSERVATION_TIMEOUT) {
-                hwWalletRepo.observeExactTransaction(proof.onchainWalletId, txid, address, amount).getOrDefault(false)
-            } == true
-            if (!observed) return false
-        }
+        // A restored accepted proof can be newer than the independently uploaded activity backup.
+        val address = proof.onchainAddress?.takeIf { it.isNotBlank() } ?: return false
+        val amount = proof.onchainAmountSats ?: return false
+        val observed = withTimeoutOrNull(HARDWARE_OBSERVATION_TIMEOUT) {
+            hwWalletRepo.observeExactTransaction(proof.onchainWalletId, txid, address, amount).getOrDefault(false)
+        } == true
+        if (!observed) return false
         val proofs = loadProofs().toMutableList()
         val index = proofs.indexOf(proof)
         if (index < 0) return false

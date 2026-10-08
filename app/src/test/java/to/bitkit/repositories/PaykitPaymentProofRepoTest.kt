@@ -1768,6 +1768,33 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `restored verified hardware proof waits for original activity reconstruction`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val txid = "ab".repeat(32)
+        val walletId = "original-hardware-wallet"
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        storedProofs = listOf(storedProofs.single().copy(
+            paymentIdentifier = txid, proofData = txid, onchainAcceptanceVerified = true,
+        ))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats))
+            .thenReturn(Result.success(false))
+        paymentProofRepo().reconcile()
+        assertEquals(txid, storedProofs.single().proofData)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats))
+            .thenReturn(Result.success(true))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+            .thenReturn(paymentRequestRecord())
+        paymentProofRepo().reconcile()
+        assertTrue(storedProofs.isEmpty())
+        verify(hwWalletRepo, times(2)).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats)
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+    }
+
+    @Test
     fun `hardware fresh observation submits completed durable proof with original wallet`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val txid = "cd".repeat(32)
