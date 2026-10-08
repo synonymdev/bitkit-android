@@ -39,7 +39,7 @@
       Capture a screenshot and verify the centered black Trezor device render has clear edge highlights, a transparent background, and no clipping
     </action>
     <action>
-      Tap "Connect" on the Found Device step
+      Tap "Connect" (testTag "HardwareWalletFoundConnect") on the Found Device step
     </action>
     <action>
       Verify the sheet advances to the "Device Connected" step (testTag "HardwareWalletPairedScreen") headed "Paired Trezor", showing a balance and an editable "Label Funds" field, with no PIN or pairing prompt
