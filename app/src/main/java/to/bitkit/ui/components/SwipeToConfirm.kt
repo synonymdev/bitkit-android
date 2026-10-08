@@ -79,6 +79,7 @@ fun SwipeToConfirm(
     val maxPanX = if (swiperWidth == 0f) 1f else swiperWidth - with(LocalDensity.current) { CircleSize.toPx() }
 
     val panX = remember { Animatable(0f) }
+    val startedConfirmed = remember { confirmed }
     val loadingOpacity = remember { Animatable(0f) }
     val contentAlpha = if (enabled || loading) 1f else 0.5f
 
@@ -90,8 +91,13 @@ fun SwipeToConfirm(
     }
 
     LaunchedEffect(confirmed, maxPanX) {
+        val target = if (confirmed) maxPanX else 0f
+        if (startedConfirmed && confirmed) {
+            panX.snapTo(target)
+            return@LaunchedEffect
+        }
         panX.animateTo(
-            targetValue = if (confirmed) maxPanX else 0f,
+            targetValue = target,
             animationSpec = spring()
         )
     }
