@@ -564,7 +564,9 @@ class LightningRepo @Inject constructor(
         }
         if (observedTxid != null) {
             runSuspendCatching {
-                val observed = onchainSendAttemptStore.observeExactTransaction(observedTxid)
+                val observed = onchainSendAttemptStore.observeExactTransaction(
+                    observedTxid, isConfirmed = event is Event.OnchainTransactionConfirmed,
+                )
                 val attempt = observed ?: onchainSendAttemptStore.current()
                 if (attempt != null && attempt.txid.equals(observedTxid, ignoreCase = true) &&
                     attempt.hasPositiveEvidence && !attempt.localFollowupComplete &&

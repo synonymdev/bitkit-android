@@ -2177,7 +2177,7 @@ class LightningRepoTest : BaseUnitTest() {
         val activityService = mock<ActivityService>()
         whenever(coreService.activity).thenReturn(activityService)
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
-        whenever(onchainSendAttemptStore.observeExactTransaction(txid)).thenReturn(attempt).thenReturn(null)
+        whenever(onchainSendAttemptStore.observeExactTransaction(txid, isConfirmed = false)).thenReturn(attempt).thenReturn(null)
         whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
         val eventHandler = startNodeAndCaptureEvents()
         val event = Event.OnchainTransactionReceived(txid = txid, details = mock())

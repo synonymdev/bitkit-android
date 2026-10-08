@@ -271,6 +271,33 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unconfirmed original cannot win while a successor is retained`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
+        val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
+        val wire = requireNotNull(requireNotNull(backup.paykitPaymentState).activeOnchainAttempt)
+        val original = wire.restored("regtest", wire.wallet.binding, "wallet0", 0)
+        val values = mutableMapOf<Int, String>()
+        val keychain = mock<Keychain>()
+        val service = mock<to.bitkit.services.LightningService>()
+        whenever(service.currentWalletIndex).thenReturn(0)
+        whenever(keychain.loadString(eq(key), any())).thenAnswer { values[it.getArgument(1)] }
+        whenever(keychain.upsertString(eq(key), any(), any())).doSuspendableAnswer {
+            values[it.getArgument(2)] = it.getArgument(1)
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        store.restoreActive(original)
+        val first = original.candidateTxids.first()
+        val successor = original.candidateTxids.last()
+        assertNull(store.observeExactTransaction(first, isConfirmed = false))
+        assertEquals(original, store.current())
+        val accepted = store.recordOutcome(original.attemptId, OnchainSendOutcome.Accepted(successor), 0)
+        assertEquals(successor, accepted.txid)
+        assertNull(store.observeExactTransaction(first, isConfirmed = false))
+        assertEquals(successor, store.current()?.txid)
+    }
+
+    @Test
     fun `restored exact candidate with contact observes without resend and acknowledges`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }

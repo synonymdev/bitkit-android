@@ -404,13 +404,15 @@ class OnchainSendAttemptStore @Inject constructor(
         }
     }
 
-    suspend fun observeExactTransaction(txid: String): OnchainSendAttempt? =
+    suspend fun observeExactTransaction(txid: String, isConfirmed: Boolean = true): OnchainSendAttempt? =
         withContext(ioDispatcher + NonCancellable) {
             mutex.withLock {
                 val current = loadWithRetainedAccepted(lightningService.currentWalletIndex) ?: return@withLock null
                 val matchesCandidate = current.txid.equals(txid, ignoreCase = true) ||
                     txid.lowercase() in current.candidateTxids
                 if (!matchesCandidate || !current.isUnresolved) return@withLock null
+                // A queued Received event cannot choose between same-input recovery candidates.
+                if (!isConfirmed && current.candidateTxids.size > 1) return@withLock null
                 val observed = current.copy(evidence = OnchainSendEvidence.Observed, txid = txid.lowercase())
                 retainedPositive[current.walletIndex] = observed
                 persist(observed)
