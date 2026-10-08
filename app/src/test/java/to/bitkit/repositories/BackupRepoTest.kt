@@ -313,6 +313,7 @@ class BackupRepoTest : BaseUnitTest() {
         )
         val wire = to.bitkit.models.ActiveOnchainAttemptBackup.from(funding, "regtest", originalWire.wallet.binding)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(originalWire.wallet.binding)
+        whenever(onchainSendAttemptStore.current()).thenReturn(funding)
         whenever(transferRepo.resumeAcceptedFunding(any())).thenReturn(Result.success(Unit))
         stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire))
         sut.performFullRestoreFromLatestBackup().getOrThrow()
@@ -332,6 +333,7 @@ class BackupRepoTest : BaseUnitTest() {
             wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0)
         )
         verify(transferRepo, times(2)).resumeAcceptedFunding(any())
+        whenever(onchainSendAttemptStore.current()).thenReturn(funding.copy(evidence = OnchainSendEvidence.Unknown))
         stubWalletBackup(
             paykitPaymentState = state.copy(
                 pendingProofs = emptyList(),
@@ -354,6 +356,7 @@ class BackupRepoTest : BaseUnitTest() {
             candidateFeeRates = mapOf(requireNotNull(original.txid) to 4uL),
         )
         val wire = to.bitkit.models.ActiveOnchainAttemptBackup.from(ordinary, "regtest", originalWire.wallet.binding)
+        whenever(onchainSendAttemptStore.current()).thenReturn(ordinary)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(originalWire.wallet.binding)
         stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire))
         sut.performFullRestoreFromLatestBackup().getOrThrow()
@@ -361,9 +364,33 @@ class BackupRepoTest : BaseUnitTest() {
         ordered.verify(onchainSendAttemptStore).restoreActive(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
         ordered.verify(privatePaykitRepo).restoreBackup(anyOrNull())
         ordered.verify(lightningRepo).completeAcceptedOrdinaryFollowup(requireNotNull(ordinary.txid))
+        whenever(onchainSendAttemptStore.current()).thenReturn(ordinary.copy(evidence = OnchainSendEvidence.Unknown))
         stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire.copy(status = "unknown")))
         sut.performFullRestoreFromLatestBackup().getOrThrow()
         verify(lightningRepo, times(1)).completeAcceptedOrdinaryFollowup(any())
+    }
+
+    @Test
+    fun `older unresolved backup resumes accepted merged ordinary guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val originalWire = requireNotNull(state.activeOnchainAttempt)
+        val wire = originalWire.copy(requestId = null, payerIdentity = null)
+        val downloaded = wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0)
+        val merged = downloaded.copy(
+            evidence = OnchainSendEvidence.Accepted,
+            candidateFeeRates = mapOf(requireNotNull(downloaded.txid) to 4uL),
+        )
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        whenever(onchainSendAttemptStore.current()).thenReturn(merged)
+        stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        val ordered = org.mockito.kotlin.inOrder(onchainSendAttemptStore, privatePaykitRepo, lightningRepo)
+        ordered.verify(onchainSendAttemptStore).restoreActive(downloaded)
+        ordered.verify(privatePaykitRepo).restoreBackup(anyOrNull())
+        ordered.verify(lightningRepo).completeAcceptedOrdinaryFollowup(requireNotNull(merged.txid))
     }
 
     @Test
@@ -406,6 +433,7 @@ class BackupRepoTest : BaseUnitTest() {
         val originalWire = requireNotNull(state.activeOnchainAttempt)
         val wire = originalWire.copy(status = "accepted",
             candidateFeeRates = mapOf(requireNotNull(originalWire.txid) to "4"))
+        whenever(onchainSendAttemptStore.current()).thenReturn(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
         stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire))
         sut.performFullRestoreFromLatestBackup().getOrThrow()

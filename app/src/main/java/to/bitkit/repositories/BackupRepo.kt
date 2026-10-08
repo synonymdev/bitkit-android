@@ -870,7 +870,11 @@ class BackupRepo @Inject constructor(
         }
         keychain.delete(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
         // Restore can finish while the node is already Running: no new lifecycle/event is guaranteed.
-        restoredAttempt?.takeIf { it.hasPositiveEvidence }?.let { attempt ->
+        restoredAttempt?.let { restored ->
+            onchainSendAttemptStore.current()?.takeIf {
+                it.attemptId == restored.attemptId && it.walletIndex == restored.walletIndex
+            }
+        }?.takeIf { it.hasPositiveEvidence }?.let { attempt ->
             if (attempt.isTransfer) {
                 transferRepo.get().resumeAcceptedFunding(attempt).onFailure {
                     Logger.warn("Restored accepted funding remains pending local follow-up", it, context = TAG)
