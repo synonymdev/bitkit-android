@@ -422,7 +422,7 @@ private fun ColumnScope.ApprovalDetails(
         TrustWarning()
         VerticalSpacer(16.dp)
 
-        uiState.homeserverPublicKey?.let { homeserver ->
+        uiState.homeserverPublicKey?.takeIf { uiState.createsIdentity }?.let { homeserver ->
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier

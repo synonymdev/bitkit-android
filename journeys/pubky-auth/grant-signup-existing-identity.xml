@@ -8,6 +8,8 @@
   <actions>
     <action>Open the prepared signup_grant URL in Bitkit</action>
     <action>Verify the authorization sheet shows the recorded requesting app and permissions</action>
+    <action>Verify the current profile name and displayed public key match the recorded identity</action>
+    <action>Verify the signup homeserver card is not shown (id "PubkySignupHomeserver")</action>
     <action>Tap Authorize (id "PubkyAuthAuthorize") and complete PIN or biometric approval when enabled</action>
     <action>Verify the existing authorization success state is shown (id "PubkyAuthOK")</action>
     <action>Verify Create Profile is not opened</action>
