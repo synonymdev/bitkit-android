@@ -1576,6 +1576,55 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `blocked transfer opens the retained previous order`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever { lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull()) }
+            .thenReturn(Result.success(listOf(stubUtxo(100_000u))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever(
+            lightningRepo.sendOnChain(
+                address = any(),
+                sats = any(),
+                speed = any(),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                isMaxAmount = any(),
+                tags = any(),
+                beforeSendAttempt = any(),
+                onBroadcast = any(),
+                requestId = anyOrNull(),
+                orderId = anyOrNull(),
+                transferContext = anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            ),
+        ).thenReturn(Result.success(OnchainSendOutcome.Unknown(TXID)))
+        quoteOrder(order)
+
+        prepareConfirm()
+        val retained = acceptedFundingAttempt(order, null).copy(orderId = "previous-order", evidence = OnchainSendEvidence.Unknown)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(null, retained)
+        val effects = mutableListOf<TransferEffect>()
+        val collector = launch { sut.transferEffects.collect { effects += it } }
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        assertEquals(listOf<TransferEffect>(TransferEffect.OnFundingPending(retained)), effects)
+        collector.cancel()
+
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+        verify(transferRepo, never()).createTransfer(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
+    }
+
+    @Test
     fun `confirmation blocks replacing or clearing the transfer while creating its order`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
         val creation = CompletableDeferred<Result<IBtOrder>>()

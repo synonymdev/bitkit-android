@@ -453,7 +453,7 @@ class TransferViewModel @Inject constructor(
             .fold(
                 onSuccess = { outcome ->
                     if (outcome !is OnchainSendOutcome.Accepted) {
-                        showRetainedFundingPending(order)
+                        showRetainedFundingPending()
                         return@fold false
                     }
                     // Survive ViewModel clearance between accepted broadcast and paid-order cache write.
@@ -472,15 +472,15 @@ class TransferViewModel @Inject constructor(
                     true
                 },
                 onFailure = {
-                    if (!showRetainedFundingPending(order)) ToastEventBus.send(it)
+                    if (!showRetainedFundingPending()) ToastEventBus.send(it)
                     false
                 }
             )
     }
 
-    private suspend fun showRetainedFundingPending(order: IBtOrder): Boolean {
+    private suspend fun showRetainedFundingPending(): Boolean {
         val attempt = lightningRepo.currentOnchainSendAttempt() ?: return false
-        if (attempt.orderId != order.id || !attempt.isTransfer || !attempt.blocksNextSend) return false
+        if (!attempt.isTransfer || !attempt.blocksNextSend) return false
         transferEffects.emit(TransferEffect.OnFundingPending(attempt))
         return true
     }
