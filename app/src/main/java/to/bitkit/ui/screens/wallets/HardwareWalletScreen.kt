@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,6 +42,7 @@ import kotlinx.collections.immutable.toImmutableSet
 import to.bitkit.R
 import to.bitkit.ext.scopedId
 import to.bitkit.models.HwWallet
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.TransportType
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.SecondaryButton
@@ -135,7 +137,7 @@ private fun HardwareWalletContent(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = 119.dp, y = 92.dp)
+                    .offset(x = wallet.vendor.detailIllustrationOffsetX(), y = 92.dp)
                     .size(256.dp)
             )
         }
@@ -246,9 +248,15 @@ private fun RemoveHardwareWalletButton(
     )
 }
 
+private fun HwWalletVendor.detailIllustrationOffsetX(): Dp = when (this) {
+    HwWalletVendor.TREZOR -> 119.dp
+    HwWalletVendor.BLOCKSTREAM -> 16.dp
+}
+
 private fun previewWallet(
     balanceSats: ULong = 10_562_411uL,
     activities: ImmutableList<Activity> = previewOnchainActivityItems(),
+    vendor: HwWalletVendor = HwWalletVendor.TREZOR,
 ) = HwWallet(
     id = "dev1",
     name = "Trezor Safe 3",
@@ -257,6 +265,7 @@ private fun previewWallet(
     isConnected = true,
     balanceSats = balanceSats,
     activities = activities,
+    vendor = vendor,
 )
 
 @Preview(showSystemUi = true)
@@ -266,6 +275,26 @@ private fun Preview() {
         Box {
             HardwareWalletContent(
                 wallet = previewWallet(),
+                showRemoveDialog = false,
+                onActivityItemClick = {},
+                onTransferToSpendingClick = { _ -> },
+                onRemoveClick = {},
+                onConfirmRemove = {},
+                onDismissRemoveDialog = {},
+                onBackClick = {},
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewJade() {
+    AppThemeSurface {
+        Box {
+            HardwareWalletContent(
+                wallet = previewWallet(vendor = HwWalletVendor.BLOCKSTREAM),
                 showRemoveDialog = false,
                 onActivityItemClick = {},
                 onTransferToSpendingClick = { _ -> },
