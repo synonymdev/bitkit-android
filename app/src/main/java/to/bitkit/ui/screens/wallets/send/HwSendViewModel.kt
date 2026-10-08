@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import to.bitkit.R
 import to.bitkit.ext.isBroadcastConnectivityFailure
+import to.bitkit.ext.isDefiniteHardwarePreBroadcastFailure
 import to.bitkit.ext.isHwDeviceBusy
 import to.bitkit.ext.isHwFirmwareError
 import to.bitkit.ext.isHwSessionFailure
@@ -323,8 +324,13 @@ class HwSendViewModel @Inject constructor(
         signingJob?.cancel()
         signingJob = null
         signingAttempt++
-        pendingBroadcast = null
-        _uiState.update { it.copy(isSigning = false, isConnectingDevice = false, hasPendingBroadcast = false) }
+        // A refused Shop payment may leave the sheet, but its signed operation stays guarded.
+        if (pendingBroadcast?.let { it.request.paymentRequestId != null && it.hasAttemptedBroadcast } != true) {
+            pendingBroadcast = null
+        }
+        _uiState.update {
+            it.copy(isSigning = false, isConnectingDevice = false, hasPendingBroadcast = pendingBroadcast != null)
+        }
         val walletId = signingWalletId ?: return
         signingWalletId = null
         viewModelScope.launch { hwWalletRepo.disconnectStaleSession(walletId) }
@@ -459,7 +465,10 @@ class HwSendViewModel @Inject constructor(
         val retainedShopPayment = pendingBroadcast?.let {
             it.request.paymentRequestId != null && it.hasAttemptedBroadcast
         } == true
-        _uiState.update { it.copy(isBroadcastUnresolved = retainedShopPayment) }
+        // This changes navigation only: a protocol refusal never releases the durable wallet guard.
+        _uiState.update {
+            it.copy(isBroadcastUnresolved = retainedShopPayment && !error.isDefiniteHardwarePreBroadcastFailure())
+        }
         when {
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
@@ -522,7 +531,8 @@ data class HwSendUiState(
 ) {
     /**
      * Whether the sign sheet may be dismissed. Connecting or unlocking can be abandoned, and leaving
-     * cancels it; once the device is asked to sign, or a broadcast may have gone out, it cannot.
+     * cancels it. A definite refusal may dismiss the sheet while the signed payment remains guarded.
+     * Active signing and uncertain broadcasts still prevent dismissal.
      */
     val canLeave: Boolean
         get() = (!isSigning || isConnectingDevice) && !isBroadcastUnresolved
