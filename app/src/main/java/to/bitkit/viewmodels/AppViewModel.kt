@@ -4640,10 +4640,26 @@ class AppViewModel @Inject constructor(
                 )
             }
             val unresolvedRequestId = if (previous != null) previous.requestId else incomingPaymentRequest?.id
+            if (previous != null) {
+                _sendUiState.update {
+                    it.copy(
+                        incomingPaymentRequestId = unresolvedRequestId,
+                        isPaymentRequest = unresolvedRequestId != null,
+                        address = previous.address,
+                        amount = previous.amountSats,
+                    )
+                }
+            }
             uncertainOnchainPaymentRequestId = unresolvedRequestId
             paykitPaymentProofRepo.onchainPaymentResolutions.value
-                .firstOrNull { it.requestId == unresolvedRequestId }
-                ?.let(::handlePaykitOnchainPaymentResolution)
+                .firstOrNull {
+                    it.requestId == unresolvedRequestId &&
+                        PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, it.identity)
+                }
+                ?.let {
+                    handlePaykitOnchainPaymentResolution(it)
+                    return
+                }
             showUnresolvedOnchainSend(
                 txid = (error as? OnchainSendPendingError)?.txid ?: previous?.txid,
                 amount = previous?.amountSats ?: amount,

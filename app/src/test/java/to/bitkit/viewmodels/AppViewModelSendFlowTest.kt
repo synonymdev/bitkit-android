@@ -9459,6 +9459,84 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `blocked Shop recovery follows original request through success`() = test {
+        val original = paymentRequest()
+        val incoming = original.copy(paymentRequestId = "new-request", amountSats = 3_000uL)
+        val privateContext = privatePaymentContext(7uL)
+        val txid = "ef".repeat(32)
+        val previous = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "older-shop-payment", requestId = original.id, orderId = null,
+            address = "bcrt1qoriginal", amountSats = original.amountSats, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown, txid = txid,
+        )
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitPaymentRequestRepo.accept(incoming)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(testPublicKey, privateContext, incoming, isInitialSubscriptionPayment = true)
+        setSendState(SendUiState(address = "bcrt1qnewshop", amount = incoming.amountSats,
+            payMethod = SendMethod.ONCHAIN, speed = TransactionSpeed.Medium,
+            isPaymentRequest = true, incomingPaymentRequestId = incoming.id))
+        stubOnchainSend("bcrt1qnewshop", incoming.amountSats, Result.failure(OnchainSendBlockedError(previous)))
+        val resolution = PaykitOnchainPaymentProofResolution(testPublicKey, original.id, txid,
+            amountSats = original.amountSats)
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            assertEquals(SendEffect.NavigateToPending(txid, original.amountSats.toLong(), false, isOnchain = true), awaitItem())
+            assertEquals(original.id, sut.sendUiState.value.incomingPaymentRequestId)
+            sut.showSheet(Sheet.Send(SendRoute.Pending(txid, original.amountSats.toLong(), false, isOnchain = true)))
+            onchainPaymentResolutions.value = listOf(resolution)
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+            assertEquals(txid, sut.successSendUiState.value.paymentHashOrTxId)
+            assertEquals(original.amountSats.toLong(), sut.successSendUiState.value.sats)
+            runCurrent()
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `already resolved original Shop payment never returns to pending`() = test {
+        val original = paymentRequest()
+        val incoming = original.copy(paymentRequestId = "new-request", amountSats = 3_000uL)
+        val privateContext = privatePaymentContext(7uL)
+        val txid = "ef".repeat(32)
+        val previous = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "older-shop-payment", requestId = original.id, orderId = null,
+            address = "bcrt1qoriginal", amountSats = original.amountSats, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown, txid = txid,
+        )
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitPaymentRequestRepo.accept(incoming)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(testPublicKey, privateContext, incoming, isInitialSubscriptionPayment = true)
+        setSendState(SendUiState(address = "bcrt1qnewshop", amount = incoming.amountSats,
+            payMethod = SendMethod.ONCHAIN, speed = TransactionSpeed.Medium,
+            isPaymentRequest = true, incomingPaymentRequestId = incoming.id))
+        stubOnchainSend("bcrt1qnewshop", incoming.amountSats, Result.failure(OnchainSendBlockedError(previous)))
+        val resolution = PaykitOnchainPaymentProofResolution(testPublicKey, original.id, txid,
+            amountSats = original.amountSats)
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        onchainPaymentResolutions.value = listOf(resolution)
+        runCurrent()
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+            assertEquals(txid, sut.successSendUiState.value.paymentHashOrTxId)
+            assertEquals(original.amountSats.toLong(), sut.successSendUiState.value.sats)
+            runCurrent()
+            expectNoEvents()
+        }
+    }
+
+    @Test
     fun `blocked new contact cannot be assigned to recovered older payment`() = test {
         val txid = "ef".repeat(32)
         val previous = OnchainSendAttempt(
