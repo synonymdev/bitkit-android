@@ -1,16 +1,21 @@
 <journey name="subscription cancellation during confirmation">
   <description>
-    Requires a linked regtest issuer and a payer funded for a 5,000-sat on-chain payment.
+    Requires a linked regtest issuer and a payer funded for two 5,000-sat on-chain payments.
     The issuer can cancel an accepted recurring request with a fixed P2WPKH endpoint and no
-    payment deadline. Verifies cancellation while confirmation is open. Cancellation after payment
-    preparation or during an authorization lookup is covered by unit tests.
+    payment deadline. Verifies cancellation while confirmation is open. The first period is paid by
+    the acceptance swipe itself, so the open confirmation is reached on the next period by advancing
+    the subscription clock offset. Cancellation after payment preparation or during an authorization
+    lookup is covered by unit tests.
   </description>
   <actions>
     <action>Have the issuer propose a monthly subscription for 5,000 sats with no payment deadline and an explicit regtest P2WPKH endpoint</action>
-    <action>Accept the proposal in Bitkit and open its unpaid period to the send confirmation screen without confirming payment</action>
+    <action>Accept the proposal in Bitkit and wait for the first period's payment to send and the Subscribed confirmation to appear, then close it</action>
+    <action>Advance the subscription clock offset to the next monthly period in Dev Settings, then refresh Subscriptions</action>
+    <action>Open the next unpaid period to the send confirmation screen without confirming payment</action>
     <action>Have the issuer cancel the subscription and keep Bitkit foregrounded until the payer's request state or logs confirm receipt of the cancellation</action>
     <action>If the send confirmation is still open, try to confirm payment and verify it is refused</action>
-    <action>Verify no transaction to the request's receiving address was broadcast and no payment proof was created for the period</action>
+    <action>Verify no transaction for that period was broadcast to the request's receiving address and no payment proof was created for the period</action>
     <action>Return to Subscriptions and verify the canceled subscription offers no action to pay its unpaid period</action>
+    <action>Reset the subscription clock offset in Dev Settings</action>
   </actions>
 </journey>
