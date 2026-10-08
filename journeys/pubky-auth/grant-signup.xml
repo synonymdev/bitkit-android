@@ -7,12 +7,21 @@
     a Bitkit companion claim. Record its client ID, homeserver, and requested permissions.
   </description>
   <actions>
-    <action>Open the prepared signup_grant URL in Bitkit</action>
+    <action>Copy the prepared signup_grant URL to the device clipboard</action>
+    <action>Tap the main wallet Scan button (id "Scan")</action>
+    <action>If camera permission is requested, deny it to use clipboard input</action>
+    <action>Tap Paste</action>
+    <action>Allow clipboard access if prompted</action>
     <action>Verify the authorization sheet shows the recorded requesting app and permissions</action>
+    <action>Scroll the authorization details to the bottom</action>
     <action>Verify the requested homeserver is shown (id "PubkySignupHomeserver")</action>
     <action>Tap Cancel on the authorization sheet</action>
     <action>Verify the wallet still has no Pubky identity and the requesting app remains unapproved</action>
-    <action>Open a fresh signup_grant URL from the same requesting app in Bitkit</action>
+    <action>Copy a fresh signup_grant URL from the same requesting app to the device clipboard</action>
+    <action>Tap the main wallet Scan button (id "Scan")</action>
+    <action>If camera permission is requested, deny it to use clipboard input</action>
+    <action>Tap Paste</action>
+    <action>Allow clipboard access if prompted</action>
     <action>Tap Authorize (id "PubkyAuthAuthorize") and complete PIN or biometric approval when enabled</action>
     <action>Verify the existing Create Profile screen is shown (id "CreateProfileSave")</action>
     <action>Verify the requesting app receives approval for the same public key that Bitkit registered on the requested homeserver</action>

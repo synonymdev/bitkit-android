@@ -2742,10 +2742,13 @@ class AppViewModel @Inject constructor(
         if (source != ScanSource.DEEPLINK) return true
         val uri = Uri.parse(data)
         val isContactLink = PubkyContactLink.matches(uri)
-        if (isContactLink && PubkyContactLink.publicKey(uri) == null) return true
-        if (!isContactLink && (!allowPubkyAuth || !PubkyAuthRequest.isProtocolUrl(data))) return true
+        if (isContactLink) {
+            if (PubkyContactLink.publicKey(uri) == null) return true
+        } else if (!allowPubkyAuth || !PubkyAuthRequest.isProtocolUrl(data)) {
+            return true
+        }
 
-        if (!PubkyAuthRequest.isSignupUrl(data)) {
+        if (!PubkyAuthRequest.isSignupUrl(data) || PubkyAuthRequest.isGrantSignupUrl(data)) {
             val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
                 pubkyRepo.awaitInitialization()
                 if (!isContactLink) pubkyRepo.awaitIdentityReady()
@@ -6277,7 +6280,10 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePubkyAuth(authUrl: String) {
         val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
         val createsIdentity = isSignup &&
-            (!PubkyAuthRequest.isGrantSignupUrl(authUrl) || pubkyRepo.publicKey.value == null)
+            (
+                !PubkyAuthRequest.isGrantSignupUrl(authUrl) ||
+                    !runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(true)
+                )
         if (createsIdentity) {
             if (rejectPubkySignupForExistingIdentity()) return
             showSheet(Sheet.PubkyAuth(authUrl))

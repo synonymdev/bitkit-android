@@ -6,8 +6,13 @@
     homeserver, a reachable relay, and ordinary app permissions without a Bitkit companion claim.
   </description>
   <actions>
-    <action>Open the prepared signup_grant URL in Bitkit</action>
+    <action>Copy the prepared signup_grant URL to the device clipboard</action>
+    <action>Tap the main wallet Scan button (id "Scan")</action>
+    <action>If camera permission is requested, deny it to use clipboard input</action>
+    <action>Tap Paste</action>
+    <action>Allow clipboard access if prompted</action>
     <action>Verify the authorization sheet shows the recorded requesting app and permissions</action>
+    <action>Scroll the authorization details to the bottom</action>
     <action>Verify the current profile name and displayed public key match the recorded identity</action>
     <action>Verify the signup homeserver card is not shown (id "PubkySignupHomeserver")</action>
     <action>Tap Authorize (id "PubkyAuthAuthorize") and complete PIN or biometric approval when enabled</action>

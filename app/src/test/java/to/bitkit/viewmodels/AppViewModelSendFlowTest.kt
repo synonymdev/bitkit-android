@@ -4354,26 +4354,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `cold pubky auth deeplink waits for a session retry after a failed startup restore`() = test {
         enablePaykitUi()
         advanceUntilIdle()
-        val retry = CompletableDeferred<Unit>()
         whenever(pubkyRepo.hasIdentity()).thenReturn(true)
         whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        var retry = CompletableDeferred<Unit>()
         whenever(pubkyRepo.awaitIdentityReady()).doSuspendableAnswer {
             retry.await()
             pubkyPublicKey.value = testPublicKey
             PubkyIdentityReadiness.Ready
         }
-        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+        listOf("pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw", grantSignupAuthUrl).forEach { authUrl ->
+            sut.hideSheet()
+            pubkyPublicKey.value = null
+            retry = CompletableDeferred()
 
-        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
-        runCurrent()
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            runCurrent()
 
-        assertNull(sut.currentSheet.value)
-        verify(toastManager, never()).enqueue(any())
-        retry.complete(Unit)
-        advanceUntilIdle()
+            assertNull(sut.currentSheet.value)
+            verify(toastManager, never()).enqueue(any())
+            retry.complete(Unit)
+            advanceUntilIdle()
 
-        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
-        verify(toastManager, never()).enqueue(any())
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            verify(toastManager, never()).enqueue(any())
+        }
     }
 
     @Test
@@ -4387,19 +4391,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn("Check your connection and try again.")
         advanceUntilIdle()
 
-        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
-        advanceUntilIdle()
+        listOf("pubkyauth://signin_grant", grantSignupAuthUrl).forEach { authUrl ->
+            clearInvocations(pubkyRepo, toastManager)
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
 
-        assertNull(sut.currentSheet.value)
-        verify(pubkyRepo).awaitIdentityReady()
-        verify(context, never()).getString(R.string.pubky_auth__no_identity)
-        verify(toastManager).enqueue(
-            check {
-                assertEquals(Toast.ToastType.ERROR, it.type)
-                assertEquals("Couldn't Load Your Pubky Profile", it.title)
-                assertEquals("Check your connection and try again.", it.description)
-            }
-        )
+            assertNull(sut.currentSheet.value)
+            verify(pubkyRepo).awaitIdentityReady()
+            verify(context, never()).getString(R.string.pubky_auth__no_identity)
+            verify(context, never()).getString(R.string.pubky_auth__already_signed_in)
+            verify(toastManager).enqueue(
+                check {
+                    assertEquals(Toast.ToastType.ERROR, it.type)
+                    assertEquals("Couldn't Load Your Pubky Profile", it.title)
+                    assertEquals("Check your connection and try again.", it.description)
+                }
+            )
+        }
     }
 
     @Test
@@ -4410,13 +4418,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn("Couldn't Load Your Pubky Profile")
         advanceUntilIdle()
 
-        sut.showScannerSheet()
-        advanceUntilIdle()
-        sut.onScannerSheetResult("pubkyauth://auth?caps=/pub/paykit/v0/:rw")
-        advanceUntilIdle()
+        listOf("pubkyauth://auth?caps=/pub/paykit/v0/:rw", grantSignupAuthUrl).forEach { authUrl ->
+            clearInvocations(toastManager)
+            sut.showScannerSheet()
+            advanceUntilIdle()
+            sut.onScannerSheetResult(authUrl)
+            advanceUntilIdle()
 
-        verify(context, never()).getString(R.string.pubky_auth__no_identity)
-        verify(toastManager).enqueue(check { assertEquals("Couldn't Load Your Pubky Profile", it.title) })
+            verify(context, never()).getString(R.string.pubky_auth__no_identity)
+            verify(context, never()).getString(R.string.pubky_auth__already_signed_in)
+            verify(toastManager).enqueue(check { assertEquals("Couldn't Load Your Pubky Profile", it.title) })
+        }
     }
 
     @Test
