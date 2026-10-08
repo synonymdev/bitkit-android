@@ -1,4 +1,4 @@
-<journey name="Fixed Price Bitcoin Requests">
+<journey name="fixed price bitcoin requests">
   <description>
     Verifies fixed-price requests use the issuer's BTC quote while fiat display uses Bitkit's own exchange rate. Requires the linked fixture issuer and a regtest wallet funded for at least 100,000 sats plus fees, as described in README.md. This journey stops before broadcasting.
   </description>

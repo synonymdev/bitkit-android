@@ -61,6 +61,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.safe
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitSdkOperationLock.Priority
@@ -146,9 +147,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertEquals(it.asset, record.terms?.amount?.asset)
             assertEquals(PaymentConversion.Fixed(it.rates), record.terms?.conversion)
             assertTrue(request.acceptsPaymentAmount(it.expected))
-            assertFalse(request.acceptsPaymentAmount(it.expected + 1uL))
-            assertTrue(request.acceptsLightningInvoiceAmountMsats(it.expected * 1000uL))
-            assertFalse(request.acceptsLightningInvoiceAmountMsats(it.expected * 1000uL + 1uL))
+            assertFalse(request.acceptsPaymentAmount(it.expected.safe() + 1uL.safe()))
+            val expectedMsats = it.expected.safe() * 1000uL.safe()
+            assertTrue(request.acceptsLightningInvoiceAmountMsats(expectedMsats))
+            assertFalse(request.acceptsLightningInvoiceAmountMsats(expectedMsats.safe() + 1uL.safe()))
         }
     }
 

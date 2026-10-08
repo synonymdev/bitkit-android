@@ -31,6 +31,11 @@ are excluded. Amounts and rates use positive decimal strings without signs or ex
 Bitkit accepts at most 80 characters and 38 significant digits per operand and rejects
 unrepresentable arithmetic instead of approximating it.
 
+For cross-platform support, the exact amount-times-rate product must also fit within
+38 significant digits after trailing zeros are removed. Android rejects larger products;
+iOS can accept some larger products when Foundation Decimal represents them exactly.
+Issuers must not rely on that extra iOS range for Android recipients.
+
 On-chain amounts round upward once to satoshis. Lightning amounts round upward once
 to millisatoshis and must then be exactly representable in whole satoshis. The existing
 send sheet uses one amount across its available rails: requests with differing BTC

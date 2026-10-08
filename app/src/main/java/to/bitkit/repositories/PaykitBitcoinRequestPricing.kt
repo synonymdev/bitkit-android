@@ -6,7 +6,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 internal object PaykitBitcoinRequestPricing {
-    /** Decimal precision supported by both mobile platforms. */
+    /** Maximum precision of decimal inputs and normalized products. */
     private const val MAX_SIGNIFICANT_DIGITS = 38
 
     /** Maximum length of an amount or rate before decimal parsing. */
@@ -26,8 +26,10 @@ internal object PaykitBitcoinRequestPricing {
         val payableEndpoints = mutableListOf<String>()
         for (endpoint in endpoints) {
             val selector = endpoint.split('-').take(2).joinToString("-")
-            val rate = rates.firstOrNull { it.asset == selector } ?: rates.firstOrNull { it.asset == "btc" }
-            val rateValue = rate?.value ?: "1".takeIf { terms.amount.asset == "btc" } ?: continue
+            val rate = rates.firstOrNull { it.asset == selector }
+                ?: rates.firstOrNull { it.asset == PaykitIssuerInterop.BITCOIN_ASSET }
+            val rateValue = rate?.value
+                ?: "1".takeIf { terms.amount.asset == PaykitIssuerInterop.BITCOIN_ASSET } ?: continue
             val multiplier = positiveDecimal(rateValue) ?: return null
             val sats = sats(requestedAmount, multiplier, lightning = selector == "btc-lightning") ?: return null
             amounts.add(sats)
