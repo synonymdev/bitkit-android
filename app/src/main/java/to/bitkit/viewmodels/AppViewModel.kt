@@ -785,7 +785,6 @@ class AppViewModel @Inject constructor(
 
         val identityChanged = !PubkyPublicKeyFormat.matches(paymentRequestIdentity, state.publicKey)
         if (identityChanged) {
-            paykitPaymentProofRepo.clearOnchainPaymentResolutions()
             resetPaykitPresentationState(
                 dismissActiveRequest = paymentRequestIdentity != null,
                 preserveRequestedPaymentRequest = paymentRequestIdentity == null,
@@ -880,7 +879,9 @@ class AppViewModel @Inject constructor(
 
     private fun observePaykitOnchainPaymentResolution() {
         viewModelScope.launch {
-            paykitPaymentProofRepo.onchainPaymentResolutions.collect { resolutions ->
+            combine(paykitPaymentProofRepo.onchainPaymentResolutions, pubkyRepo.publicKey) { resolutions, _ ->
+                resolutions
+            }.collect { resolutions ->
                 resolutions.forEach(::handlePaykitOnchainPaymentResolution)
             }
         }

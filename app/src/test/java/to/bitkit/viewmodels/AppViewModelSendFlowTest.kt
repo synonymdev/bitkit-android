@@ -8464,6 +8464,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `retained resolution replays when its original payer becomes active`() = test {
+        val request = paymentRequest()
+        val resolution = PaykitOnchainPaymentProofResolution(
+            testPublicKey, request.id, "ab".repeat(32), "hardware-original", request.amountSats,
+        )
+        onchainPaymentResolutions.value = listOf(resolution)
+        runCurrent()
+        assertNull(sut.resolvedHardwarePaymentFor(resolution.walletId, resolution.transactionId))
+        verify(paykitPaymentProofRepo, never()).consumeOnchainPaymentResolution(resolution)
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        assertEquals(resolution, sut.resolvedHardwarePaymentFor(resolution.walletId, resolution.transactionId))
+        verify(paykitPaymentProofRepo).consumeOnchainPaymentResolution(resolution)
+        verify(paykitPaymentProofRepo, never()).clearOnchainPaymentResolutions()
+    }
+
+    @Test
     fun `closed hardware sheet retains earlier completion when multiple proofs resolve`() = test {
         pubkyPublicKey.value = testPublicKey
         runCurrent()
