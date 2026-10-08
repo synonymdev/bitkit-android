@@ -153,7 +153,7 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun reconcileReservedReceiveIndexes(): Result<Unit> =
         addressReservationRepo.reconcileReservedIndexesWithLdk()
 
-    suspend fun hasPrivatePaymentAccess(): Boolean = hasPrivatePaymentAccessForCurrentProfile()
+    suspend fun hasPrivatePaymentAccess(): Boolean = paykitSdkService.hasPrivatePaymentAccess()
 
     suspend fun prepareSavedContacts(
         publicKeys: Collection<String>,

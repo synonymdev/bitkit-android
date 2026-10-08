@@ -260,17 +260,19 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `hasPrivatePaymentAccess returns false when the SDK check fails`() = test {
-        var accessFails = true
-        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenAnswer {
-            check(!accessFails) { "Paykit unavailable" }
-            true
+    fun `hasPrivatePaymentAccess propagates SDK errors and cancellation`() = test {
+        val failures = listOf(AppError("Paykit unavailable"), CancellationException("Cancelled"))
+        var failure: Throwable = failures.first()
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenAnswer { throw failure }
+        for (nextFailure in failures) {
+            failure = nextFailure
+            assertEquals(failure, assertFailsWith<Throwable> { sut.hasPrivatePaymentAccess() })
         }
+    }
 
-        assertFalse(sut.hasPrivatePaymentAccess())
-
+    @Test
+    fun `prepareSavedContacts propagates identity errors and cancellation`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
-        accessFails = false
         val failures = listOf(AppError("Identity unavailable"), CancellationException("Cancelled"))
         var failure: Throwable = failures.first()
         whenever(paykitSdkService.identityStatus()).thenAnswer { throw failure }
