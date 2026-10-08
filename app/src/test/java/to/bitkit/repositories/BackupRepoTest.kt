@@ -513,6 +513,23 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `invalid unrelated proof fails restore before installing the guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        val invalid = state.pendingProofs.first().copy(
+            requestId = state.pendingProofs.first().requestId.copy(paymentRequestId = "550e8400-e29b-41d4-a716-446655440099"),
+            kind = "unsupported-proof",
+        )
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = state.pendingProofs + invalid))
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
     fun `active guard uses captured backup namespace index instead of assuming index zero`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)

@@ -832,6 +832,8 @@ class BackupRepo @Inject constructor(
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         var restoredAttempt: OnchainSendAttempt? = null
         parsed.paykitPaymentState?.let {
+            // Validate every proof before writing a guard or replacing existing payment state.
+            it.pendingProofs.forEach { proof -> proof.restored() }
             val walletIndex = backupWalletIndex()
             it.activeOnchainAttempt?.let { wire ->
                 validateActiveProof(wire, it.pendingProofs)
