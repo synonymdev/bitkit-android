@@ -102,9 +102,10 @@ data class ActiveOnchainAttemptBackup(
             require(orderId != null)
             val originalFee = unsigned(it.originalOrderFeeSats)
             val recipientAmount = unsigned(amountSats)
+            require(recipientAmount <= unsigned(it.txTotalSats))
             require(
                 if (isMaxAmount) {
-                    recipientAmount >= originalFee && recipientAmount <= unsigned(it.txTotalSats)
+                    recipientAmount >= originalFee
                 } else {
                     recipientAmount == originalFee
                 }

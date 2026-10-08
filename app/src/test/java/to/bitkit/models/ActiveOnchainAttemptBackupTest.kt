@@ -102,6 +102,10 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
                 wire.copy(amountSats = amount).restored("regtest", binding, "wallet0", 0)
             }
         }
+        assertFailsWith<IllegalArgumentException> {
+            wire.copy(amountSats = "1000", transfer = wire.transfer?.copy(txTotalSats = "1"))
+                .restored("regtest", binding, "wallet0", 0)
+        }
         val restored = wire.copy(amountSats = "1000").restored("regtest", binding, "wallet0", 0)
         assertEquals(1000uL, restored.amountSats)
         assertEquals(restored.amountSats, restored.transferContext?.originalOrderFeeSats)
