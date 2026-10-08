@@ -244,7 +244,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
 
     @Test
     fun `restored exact candidate with contact observes without resend and acknowledges`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
             .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
         val state = requireNotNull(backup.paykitPaymentState)
@@ -277,7 +277,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
 
     @Test
     fun `restoring same accepted operation preserves progressed fee and completion`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val wire = requireNotNull(
             kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                 .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
@@ -306,7 +306,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
 
     @Test
     fun `restored supported accepted context resets acknowledgement and finishes idempotently`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
             .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
         val wire = requireNotNull(backup.paykitPaymentState?.activeOnchainAttempt)

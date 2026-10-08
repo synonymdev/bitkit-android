@@ -16,9 +16,9 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     private val binding = "fe843546f607f38ba7b1e8fe479c3103139ebea5b83628cbaa465e41cf6cb6c0"
 
     private fun golden(): WalletBackupV1 {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        assertEquals("42bd135dbc91aa0b2004f2633f6f8b28c46dddf8da3c6f949cf2ff036c07e0a6", hash)
+        assertEquals("8487f073ee55b9049aeed241819055138c82af8a596104bc2eada95b6ce96aa7", hash)
         return json.decodeFromString(bytes.decodeToString())
     }
 
@@ -66,10 +66,37 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
         }
         val original = wire.copy(txid = wire.candidateTxids.first()).restored("regtest", binding, "wallet0", 0)
         assertEquals(wire.feeRateSatsPerVByte.toULong(), original.winningFeeRateSatsPerVByte)
-        if (wire.candidateTxids.size > 1) {
-            val successor = wire.copy(txid = wire.candidateTxids.last()).restored("regtest", binding, "wallet0", 0)
-            assertFailsWith<IllegalStateException> { successor.winningFeeRateSatsPerVByte }
+        val successor = wire.copy(txid = wire.candidateTxids.last()).restored("regtest", binding, "wallet0", 0)
+        assertEquals(4uL, successor.winningFeeRateSatsPerVByte)
+    }
+
+    @Test
+    fun `every retained successor needs a fee rate regardless of current outcome`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
+        val original = wire.candidateTxids.first()
+        val successor = wire.candidateTxids.last()
+        val later = "12".repeat(32)
+        for (status in listOf("pending", "unknown", "rejected", "accepted")) {
+            val candidate = wire.copy(status = status, txid = original, candidateTxids = listOf(original, successor, later))
+            for (rates in listOf(null, emptyMap(), mapOf(successor to "4"), mapOf(later to "5"))) {
+                assertFailsWith<IllegalArgumentException> {
+                    candidate.copy(candidateFeeRates = rates).restored("regtest", binding, "wallet0", 0)
+                }
+            }
+            val restored = candidate.copy(candidateFeeRates = mapOf(successor to "4", later to "5"))
+                .restored("regtest", binding, "wallet0", 0)
+            assertEquals(wire.feeRateSatsPerVByte.toULong(), restored.winningFeeRateSatsPerVByte)
+            assertEquals(4uL, restored.copy(txid = successor).winningFeeRateSatsPerVByte)
+            assertEquals(5uL, restored.copy(txid = later).winningFeeRateSatsPerVByte)
         }
+    }
+
+    @Test
+    fun `incomplete historical fixture cannot install a restored guard`() {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val backup = json.decodeFromString<WalletBackupV1>(bytes.decodeToString())
+        val wire = requireNotNull(backup.paykitPaymentState?.activeOnchainAttempt)
+        assertFailsWith<IllegalArgumentException> { wire.restored("regtest", binding, "wallet0", 0) }
     }
 
     @Test
@@ -86,7 +113,7 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
         val restored = accepted.copy(candidateFeeRates = mapOf(successor to "4"))
             .restored("regtest", binding, "wallet0", 0)
         assertEquals(4uL, restored.winningFeeRateSatsPerVByte)
-        val firstWinner = accepted.copy(txid = original, candidateFeeRates = null)
+        val firstWinner = accepted.copy(txid = original, candidateFeeRates = mapOf(successor to "4"))
             .restored("regtest", binding, "wallet0", 0)
         assertEquals(wire.feeRateSatsPerVByte.toULong(), firstWinner.winningFeeRateSatsPerVByte)
     }

@@ -297,7 +297,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `restored accepted funding resumes after all original context is installed without a node transition`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val originalWire = requireNotNull(state.activeOnchainAttempt)
         val original = originalWire.restored("regtest", originalWire.wallet.binding, WalletScope.default, 0)
@@ -346,7 +346,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `restored accepted ordinary payment resumes after original context without another node event`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val originalWire = requireNotNull(state.activeOnchainAttempt)
         val original = originalWire.restored("regtest", originalWire.wallet.binding, WalletScope.default, 0)
@@ -372,7 +372,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `older unresolved backup resumes accepted merged ordinary guard`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val originalWire = requireNotNull(state.activeOnchainAttempt)
         val wire = originalWire.copy(requestId = null, payerIdentity = null)
@@ -428,7 +428,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `restored accepted Shop reconciles after proof and private state`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val originalWire = requireNotNull(state.activeOnchainAttempt)
         val wire = originalWire.copy(status = "accepted",
@@ -445,7 +445,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `wallet backup defers the entire never prepared Shop snapshot`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         val attempt = wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0).copy(
@@ -464,7 +464,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `wallet backup defers unsigned ordinary and transfer snapshots`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         val attempt = wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0).copy(
@@ -491,7 +491,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `wallet backup exports and restores shared active guard before original proof`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val golden = json.decodeFromString<WalletBackupV1>(bytes.decodeToString())
         val state = requireNotNull(golden.paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
@@ -513,7 +513,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `active guard uses captured backup namespace index instead of assuming index zero`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         whenever(db.configDao().getAll()).thenReturn(MutableStateFlow(listOf(to.bitkit.data.entities.ConfigEntity(2))))
@@ -530,8 +530,21 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `missing successor fee blocks restore before installing the guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire.copy(candidateFeeRates = null)))
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
     fun `malformed active contact fails restore before installing the guard`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
@@ -546,7 +559,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `wrong active binding or proof blocks restore without clearing guard or publishing empty backup`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn("00".repeat(32))
@@ -570,7 +583,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `missing active followup blocks restore before installing a wallet guard`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)

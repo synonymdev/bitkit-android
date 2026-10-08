@@ -1012,7 +1012,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `shared golden restored software proof authorizes and completes exact observed successor`() = test {
-        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
             .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
         val state = requireNotNull(backup.paykitPaymentState)
