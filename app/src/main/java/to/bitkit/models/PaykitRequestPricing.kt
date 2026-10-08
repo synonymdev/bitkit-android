@@ -57,7 +57,12 @@ data class PaykitRequestPricing(
         var selected: PaymentConversionQuoteRecord? = null
         val rates = when (val terms = conversion) {
             is PaymentConversion.Fixed -> {
-                if (quoteId != null) throw PaykitAmountError.InvalidAmount
+                if (
+                    quoteId != null || terms.rates.isEmpty() ||
+                    terms.rates.distinctBy { it.asset }.size != terms.rates.size
+                ) {
+                    throw PaykitAmountError.InvalidAmount
+                }
                 terms.rates
             }
             PaymentConversion.PerPeriod -> {

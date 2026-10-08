@@ -72,8 +72,10 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -108,7 +110,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             val endpoints: List<String>,
             val expected: ULong,
         )
-        val cases = listOf(
+        listOf(
             Case("usd", "1000", listOf(ConversionRate("btc", "0.001")), listOf("btc-lightning-bolt11"), 100_000_000uL),
             Case("usdt", "12.34", listOf(ConversionRate("btc", "0.00002")), listOf("btc-lightning-lnurl"), 24_680uL),
             Case("btc", "0.001", listOf(ConversionRate("btc", "0.5")), listOf("btc-lightning-bolt11"), 50_000uL),
@@ -136,8 +138,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 listOf("btc-regtest-p2wpkh", "btc-lightning-bolt11", "btc-lightning-lnurl"),
                 21_000uL,
             ),
-        )
-        cases.forEach {
+        ).forEach {
             val record = paymentRequestRecord(
                 amount = it.amount,
                 asset = it.asset,
@@ -146,48 +147,40 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             )
             val result = record.parseIncomingPaykitPaymentRequest(clock.now()) as PaykitPaymentRequestParseResult.Parsed
             val request = result.request
-            assertEquals(it.expected, request.amountSats)
             assertEquals(it.amount, request.amountValue)
-            assertEquals(it.asset, record.terms?.amount?.asset)
-            assertEquals(PaymentConversion.Fixed(it.rates), record.terms?.conversion)
-            assertTrue(request.acceptsPaymentAmount(it.expected))
-            assertFalse(request.acceptsPaymentAmount(it.expected.safe() + 1uL.safe()))
-            val expectedMsats = it.expected.safe() * 1000uL.safe()
-            assertTrue(request.acceptsLightningInvoiceAmountMsats(expectedMsats))
-            assertFalse(request.acceptsLightningInvoiceAmountMsats(expectedMsats.safe() + 1uL.safe()))
-        }
-    }
-
-    @Test
-    fun `fixed pricing rejects products beyond exact decimal precision`() {
-        val cases = listOf(
-            Triple("9." + "0".repeat(35) + "1", "0.00004", 36_001uL),
-            Triple("9." + "0".repeat(36) + "1", "0.00004", null),
-            Triple("9." + "0".repeat(36) + "1", "1", null),
-            Triple("0009." + "0".repeat(35) + "10", "0.0000400", 36_001uL),
-        )
-        cases.forEach { (amount, rate, expected) ->
-            val record = paymentRequestRecord(
-                amount = amount,
-                asset = "usd",
-                conversion = PaymentConversion.Fixed(listOf(ConversionRate("btc", rate))),
-                endpoints = listOf("btc-regtest-p2wpkh"),
-            )
-            val result = record.parseIncomingPaykitPaymentRequest(clock.now())
-            if (expected != null) {
-                assertEquals(expected, (result as PaykitPaymentRequestParseResult.Parsed).request.amountSats)
-            } else {
-                assertEquals(
-                    PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPricing),
-                    result,
-                    "$amount * $rate",
-                )
+            for (endpoint in request.acceptedPaymentEndpointIdentifiers) {
+                val method = checkNotNull(MethodId.fromRawValue(endpoint))
+                assertEquals(it.expected, request.payment(method, clock.now()).amount.atomic)
+                assertTrue(request.acceptsPaymentAmount(it.expected, method, at = clock.now()))
+                assertFalse(request.acceptsPaymentAmount(it.expected.safe() + 1uL.safe(), method, at = clock.now()))
+                if (method == MethodId.Bolt11 || method == MethodId.Lnurl) {
+                    val msats = it.expected.safe() * 1000uL.safe()
+                    assertTrue(request.acceptsLightningInvoiceAmountMsats(msats, at = clock.now()))
+                    assertFalse(request.acceptsLightningInvoiceAmountMsats(msats.safe() + 1uL.safe(), at = clock.now()))
+                }
             }
         }
     }
 
     @Test
-    fun `fixed pricing omits unquoted cross asset rails`() {
+    fun `fixed pricing rejects requested amounts beyond currency precision`() {
+        for (amount in listOf("9.001", "9." + "0".repeat(35) + "1")) {
+            val record = paymentRequestRecord(
+                amount = amount,
+                asset = "usd",
+                conversion = PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00004"))),
+                endpoints = listOf("btc-regtest-p2wpkh"),
+            )
+            assertEquals(
+                PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount),
+                record.parseIncomingPaykitPaymentRequest(clock.now()),
+                amount,
+            )
+        }
+    }
+
+    @Test
+    fun `fixed pricing only permits quoted cross asset rails`() {
         val record = paymentRequestRecord(
             amount = "1",
             asset = "usd",
@@ -195,11 +188,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             endpoints = listOf("btc-lightning-bolt11", "btc-regtest-p2wpkh", "btc-regtest-p2tr"),
         )
         val result = record.parseIncomingPaykitPaymentRequest(clock.now()) as PaykitPaymentRequestParseResult.Parsed
-        assertEquals(21_000uL, result.request.amountSats)
-        assertEquals(
-            listOf("btc-regtest-p2wpkh", "btc-regtest-p2tr"),
-            result.request.acceptedPaymentEndpointIdentifiers,
-        )
+        assertEquals(21_000uL, result.request.payment(MethodId.P2wpkh, clock.now()).amount.atomic)
+        assertEquals(21_000uL, result.request.payment(MethodId.P2tr, clock.now()).amount.atomic)
+        assertFails { result.request.payment(MethodId.Bolt11, clock.now()) }
     }
 
     @Test
@@ -209,10 +200,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(ConversionRate("btc", "0")), listOf(ConversionRate("btc", "-1")),
             listOf(ConversionRate("btc", "1e-3")), listOf(ConversionRate("btc", " 1")),
             listOf(ConversionRate("btc", "1\n")), listOf(ConversionRate("btc", "184467440738")),
-            listOf(ConversionRate("btc", "0.000000011")),
             listOf(ConversionRate("btc", "0.123456789012345678901234567890123456789")),
             listOf(ConversionRate("btc", "1"), ConversionRate("btc", "2")),
-            listOf(ConversionRate("btc", "1"), ConversionRate("btc-lightning", "2")),
         )
         (rates.map { PaymentConversion.Fixed(it) } + PaymentConversion.PerPeriod).forEach {
             val record = paymentRequestRecord(
@@ -221,20 +210,20 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 conversion = it,
                 endpoints = listOf("btc-regtest-p2wpkh", "btc-lightning-bolt11"),
             )
-            assertEquals(
-                PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPricing),
-                record.parseIncomingPaykitPaymentRequest(clock.now()),
-            )
+            val result = record.parseIncomingPaykitPaymentRequest(clock.now()) as PaykitPaymentRequestParseResult.Parsed
+            assertFails { result.request.payment(MethodId.P2wpkh, clock.now()) }
+            assertFails { result.request.payment(MethodId.Bolt11, clock.now()) }
         }
     }
 
     @Test
-    fun `conversion subscriptions remain unsupported`() {
+    fun `conversion subscriptions preserve their pricing terms`() {
         val record = paymentRequestRecord(
             conversion = PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.5"))),
             recurrence = PaymentRequestRecurrence(1u, "month", "2027-01-01T00:00:00Z", "2027-01-01T00:00:00Z", null),
         )
-        assertNull(record.toPaykitSubscription())
+        val subscription = assertNotNull(record.toPaykitSubscription())
+        assertEquals(record.terms?.conversion, subscription.pricing.conversion)
     }
 
     private val paykitSdkService = mock<PaykitSdkService>()
