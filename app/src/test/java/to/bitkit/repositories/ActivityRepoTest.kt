@@ -163,6 +163,7 @@ class ActivityRepoTest : BaseUnitTest() {
         val txid = "ab".repeat(32)
         val wallet = "original-hardware-wallet"
         val original = baseOnchainActivity.copy(walletId = wallet, txId = txid)
+        whenever(coreService.activity.restoreSentOnchainTags(txid, wallet)).thenReturn(false)
         whenever(coreService.activity.getOnchainActivityByTxId(txid, wallet))
             .thenReturn(null)
             .thenReturn(original.copy(walletId = "different-wallet"))
@@ -178,6 +179,7 @@ class ActivityRepoTest : BaseUnitTest() {
         sut.completeObservedHardwarePayment(wallet, txid, original.address, original.value,
             original.fee, original.feeRate).getOrThrow()
         assertTrue(sut.activitiesChanged.value > before)
+        verify(coreService.activity).restoreSentOnchainTags(txid, wallet)
         verify(coreService.activity, times(3)).createSentOnchainActivityFromSendResult(
             txid, original.address, original.value, original.fee, original.feeRate, false, null, wallet,
         )

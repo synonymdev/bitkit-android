@@ -228,7 +228,9 @@ class ActivityRepo @Inject constructor(
             val activity = getOnchainActivityByTxId(txid, walletId)
             check(activity?.walletId == walletId && activity.txId.equals(txid, true) &&
                 activity.txType == PaymentType.SENT) { "Original hardware payment activity is not durable" }
+            val tagsChanged = coreService.activity.restoreSentOnchainTags(txid, walletId)
             notifyPaymentActivityChanged()
+            if (tagsChanged) notifyActivitiesChanged(tagsChanged = true)
         }
     }
 

@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.PaymentType
 import org.junit.Test
 import org.mockito.ArgumentMatchers.any
@@ -115,6 +116,72 @@ class ActivityServiceTest : BaseUnitTest() {
             }
         }
     }
+
+    @Test
+    fun `observed hardware tags use original wallet once and preserve later edits`() = test {
+        ServiceQueue.CORE.background {
+            val getByTx = binding.getMethod("getActivityByTxId", String::class.java, String::class.java)
+            val getMetadata = binding.getMethod("getAllPreActivityMetadata")
+            val getTags = binding.getMethod("getTags", String::class.java, String::class.java)
+            val addTags = binding.getMethod("addTags", String::class.java, String::class.java, List::class.java)
+            val upsertMetadata = binding.getMethod("upsertPreActivityMetadata", List::class.java)
+            val original = tagMetadata(WALLET_ID)
+            val foreign = tagMetadata("another-wallet").copy(tags = listOf("foreign"))
+            var metadata = listOf(original, foreign)
+            var tags = listOf("existing")
+            mockStatic(binding).use { native ->
+                native.`when`<Any?> { getByTx.invoke(null, WALLET_ID, ACTIVITY_ID) }
+                    .thenReturn(activity().v1.copy(txType = PaymentType.SENT))
+                native.`when`<Any?> { getMetadata.invoke(null) }.thenAnswer { metadata }
+                native.`when`<Any?> { getTags.invoke(null, WALLET_ID, ACTIVITY_ID) }.thenAnswer { tags }
+                native.`when`<Any?> {
+                    addTags.invoke(null, WALLET_ID, ACTIVITY_ID, listOf("original"))
+                }.thenAnswer { tags = tags + "original"; Unit }
+                native.`when`<Any?> { upsertMetadata.invoke(null, any(List::class.java)) }.thenAnswer {
+                    val updated = it.getArgument<List<PreActivityMetadata>>(0)
+                    metadata = metadata.map { row ->
+                        updated.firstOrNull { it.walletId == row.walletId && it.paymentId == row.paymentId } ?: row
+                    }
+                    Unit
+                }
+
+                kotlin.test.assertTrue(sut.restoreSentOnchainTags(ACTIVITY_ID, WALLET_ID))
+                kotlin.test.assertEquals(listOf("existing", "original"), tags)
+                kotlin.test.assertEquals(original.copy(tags = emptyList()), metadata.first())
+                kotlin.test.assertEquals(foreign, metadata.last())
+                tags = listOf("later-edit")
+                kotlin.test.assertFalse(sut.restoreSentOnchainTags(ACTIVITY_ID, WALLET_ID))
+                kotlin.test.assertEquals(listOf("later-edit"), tags)
+            }
+        }
+    }
+
+    @Test
+    fun `failed hardware tag write retains saved tags for recovery`() = test {
+        ServiceQueue.CORE.background {
+            val getByTx = binding.getMethod("getActivityByTxId", String::class.java, String::class.java)
+            val getMetadata = binding.getMethod("getAllPreActivityMetadata")
+            val getTags = binding.getMethod("getTags", String::class.java, String::class.java)
+            val addTags = binding.getMethod("addTags", String::class.java, String::class.java, List::class.java)
+            val upsertMetadata = binding.getMethod("upsertPreActivityMetadata", List::class.java)
+            mockStatic(binding).use { native ->
+                native.`when`<Any?> { getByTx.invoke(null, WALLET_ID, ACTIVITY_ID) }
+                    .thenReturn(activity().v1.copy(txType = PaymentType.SENT))
+                native.`when`<Any?> { getMetadata.invoke(null) }.thenReturn(listOf(tagMetadata(WALLET_ID)))
+                native.`when`<Any?> { getTags.invoke(null, WALLET_ID, ACTIVITY_ID) }.thenReturn(emptyList<String>())
+                native.`when`<Any?> { addTags.invoke(null, WALLET_ID, ACTIVITY_ID, listOf("original")) }
+                    .thenThrow(IllegalStateException("tag write failed"))
+                kotlin.test.assertFails { sut.restoreSentOnchainTags(ACTIVITY_ID, WALLET_ID) }
+                native.verify({ upsertMetadata.invoke(null, any(List::class.java)) }, never())
+            }
+        }
+    }
+
+    private fun tagMetadata(walletId: String) = PreActivityMetadata(
+        walletId = walletId, paymentId = ACTIVITY_ID, tags = listOf("original"),
+        paymentHash = null, txId = ACTIVITY_ID, address = "address", isReceive = false,
+        feeRate = 0uL, isTransfer = false, channelId = null, createdAt = 1uL,
+    )
 
     private fun activity() = Activity.Onchain(
         OnchainActivity.create(
