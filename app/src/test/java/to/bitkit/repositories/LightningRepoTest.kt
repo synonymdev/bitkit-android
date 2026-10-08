@@ -2216,6 +2216,28 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `observed ordinary send retries transient followup without another node event`() = test {
+        val txid = "ab".repeat(32)
+        var attempt = pendingSendAttempt().copy(evidence = OnchainSendEvidence.Observed, txid = txid)
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.observeExactTransaction(txid, isConfirmed = false)).thenReturn(attempt)
+        whenever(onchainSendAttemptStore.current()).doSuspendableAnswer { attempt }
+        whenever(onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex))
+            .doSuspendableAnswer { attempt = attempt.copy(localFollowupComplete = true) }
+        val handler = startNodeAndCaptureEvents()
+        handler(Event.OnchainTransactionReceived(txid = txid, details = mock()))
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        testScheduler.advanceTimeBy(1_001)
+        runCurrent()
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        verify(lightningService, never()).prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(),
+            paymentDeadlineAt = anyOrNull())
+    }
+
+    @Test
     fun `registerForNotifications should fail when node is not running`() = test {
         val result = sut.registerForNotifications()
         assertTrue(result.isFailure)

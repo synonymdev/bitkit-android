@@ -17,6 +17,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -161,6 +162,7 @@ class LightningRepo @Inject constructor(
     private val syncMutex = Mutex()
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
+    private val ordinaryFollowupRetryJob = AtomicReference<Job?>(null)
     private val pendingStopJob = AtomicReference<Job?>(null)
     private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
@@ -194,6 +196,7 @@ class LightningRepo @Inject constructor(
 
                     if (_lightningState.value.nodeLifecycleState.isRunning()) {
                         connectToTrustedPeers()
+                        scheduleOrdinaryFollowupRetry()
                     }
 
                     // Start retry loop if sync is failing
@@ -514,6 +517,7 @@ class LightningRepo @Inject constructor(
 
     private suspend fun adoptRunningNode(): Result<Unit> {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+        scheduleOrdinaryFollowupRetry()
         return lightningService.startEventListener(::onEvent).onFailure {
             Logger.warn("Failed to start event listener", it, context = TAG)
         }
@@ -576,7 +580,10 @@ class LightningRepo @Inject constructor(
                     onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
                 }
             }
-                .onFailure { Logger.warn("Failed to record exact on-chain transaction observation", it, context = TAG) }
+                .onFailure {
+                    Logger.warn("Failed to record exact on-chain transaction observation", it, context = TAG)
+                    scheduleOrdinaryFollowupRetry()
+                }
         }
         handleLdkEvent(event)
         recordProbeOutcome(event)
@@ -1790,6 +1797,23 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    private fun scheduleOrdinaryFollowupRetry() {
+        val previous = ordinaryFollowupRetryJob.get()
+        if (previous?.isActive == true) return
+        val retry = scope.launch(start = CoroutineStart.LAZY) {
+            repeat(3) {
+                delay(1.seconds)
+                if (!_lightningState.value.nodeLifecycleState.isRunning()) return@launch
+                val attempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull() ?: return@launch
+                if (!attempt.hasPositiveEvidence || attempt.localFollowupComplete ||
+                    attempt.isTransfer || attempt.requestId != null
+                ) return@launch
+                completeAcceptedOrdinaryFollowup(requireNotNull(attempt.txid))
+            }
+        }
+        if (ordinaryFollowupRetryJob.compareAndSet(previous, retry)) retry.start() else retry.cancel()
+    }
+
     suspend fun completeAcceptedOrdinaryFollowup(txid: String) {
         val attempt = onchainSendAttemptStore.current()
         if (attempt != null && !attempt.isTransfer && attempt.requestId == null &&
@@ -2026,6 +2050,7 @@ class LightningRepo @Inject constructor(
                 balances = getBalances(),
             )
         }
+        if (_lightningState.value.nodeLifecycleState.isRunning()) scheduleOrdinaryFollowupRetry()
     }
 
     private fun logNodeSupportSummary(reason: String) {
