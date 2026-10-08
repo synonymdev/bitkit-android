@@ -89,6 +89,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val hwWalletStore = mock<HwWalletStore>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
+    private val coreService = mock<to.bitkit.services.CoreService>()
     private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val paykitSdkService = mock<PaykitSdkService>()
@@ -118,6 +119,12 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = test {
+        whenever(coreService.validateBitcoinAddress(any())).thenAnswer {
+            com.synonym.bitkitcore.ValidationResult(
+                address = it.getArgument(0), network = com.synonym.bitkitcore.NetworkType.REGTEST,
+                addressType = com.synonym.bitkitcore.AddressType.P2WPKH,
+            )
+        }
         whenever(paykitSdkService.isPaymentSubmissionActive).thenReturn(paymentSubmissionActive)
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(1_000))
         whenever(db.transferDao()).thenReturn(transferDao)
@@ -631,6 +638,36 @@ class BackupRepoTest : BaseUnitTest() {
         verify(onchainSendAttemptStore, never()).restoreActive(any())
         verify(paykitPaymentProofRepo, never()).restoreBackup(any())
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+    }
+
+    @Test
+    fun `invalid restored recipient cannot install a blocking wallet guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        whenever(coreService.validateBitcoinAddress(wire.address)).thenThrow(IllegalArgumentException("invalid address"))
+        stubWalletBackup(paykitPaymentState = state)
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+    }
+
+    @Test
+    fun `wrong network restored recipient cannot install a blocking wallet guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        whenever(coreService.validateBitcoinAddress(wire.address)).thenReturn(
+            com.synonym.bitkitcore.ValidationResult(
+                wire.address, com.synonym.bitkitcore.NetworkType.BITCOIN, com.synonym.bitkitcore.AddressType.P2WPKH,
+            )
+        )
+        stubWalletBackup(paykitPaymentState = state)
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
     }
 
     @Test
@@ -1679,6 +1716,7 @@ class BackupRepoTest : BaseUnitTest() {
         hwWalletStore = hwWalletStore,
         blocktankRepo = blocktankRepo,
         activityRepo = activityRepo,
+        coreService = coreService,
         pubkyRepo = pubkyRepo,
         paykitSdkService = paykitSdkService,
         privatePaykitRepo = Provider { privatePaykitRepo },

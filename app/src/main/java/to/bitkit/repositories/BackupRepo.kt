@@ -61,10 +61,13 @@ import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.WidgetsBackupV1
+import to.bitkit.models.toLdkNetwork
+import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
+import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -105,6 +108,7 @@ class BackupRepo @Inject constructor(
     private val hwWalletStore: HwWalletStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
+    private val coreService: CoreService,
     private val pubkyRepo: PubkyRepo,
     private val paykitSdkService: PaykitSdkService,
     private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
@@ -843,6 +847,10 @@ class BackupRepo @Inject constructor(
                     WalletScope.default,
                     walletIndex,
                 )
+                val recipient = coreService.validateBitcoinAddress(attempt.address)
+                require(!NetworkValidationHelper.isNetworkMismatch(recipient.network.toLdkNetwork(), Env.network)) {
+                    "Restored payment recipient is on another network"
+                }
                 check(backupWalletIndex() == walletIndex) { "Backup wallet changed during restore" }
                 onchainSendAttemptStore.restoreActive(attempt)
                 restoredAttempt = attempt
