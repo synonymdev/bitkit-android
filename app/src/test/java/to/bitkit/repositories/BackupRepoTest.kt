@@ -305,6 +305,7 @@ class BackupRepoTest : BaseUnitTest() {
             requestId = null,
             payerIdentity = null,
             orderId = "original-order",
+            amountSats = 1_000uL,
             isTransfer = true,
             evidence = OnchainSendEvidence.Accepted,
             candidateFeeRates = mapOf(requireNotNull(original.txid) to 4uL),
@@ -527,6 +528,26 @@ class BackupRepoTest : BaseUnitTest() {
             onchainSendAttemptStore,
             never()
         ).restoreActive(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
+    }
+
+    @Test
+    fun `mismatched funding amount fails restore before installing the guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val original = requireNotNull(state.activeOnchainAttempt)
+        val wire = original.copy(
+            requestId = null,
+            payerIdentity = null,
+            orderId = "original-order",
+            transfer = to.bitkit.models.ActiveOnchainAttemptBackup.Transfer("2000", "3000", "900", "1000"),
+        )
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire))
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+        verify(transferRepo, never()).resumeAcceptedFunding(any())
+        verify(vssBackupClient, never()).putObject(any(), any())
     }
 
     @Test

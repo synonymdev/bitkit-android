@@ -71,6 +71,25 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restored funding amount must equal its original order fee`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt).copy(
+            requestId = null,
+            payerIdentity = null,
+            orderId = "original-order",
+            transfer = ActiveOnchainAttemptBackup.Transfer("2000", "3000", "900", "1000"),
+        )
+        for (amount in listOf("999", "1001", "1234")) {
+            assertFailsWith<IllegalArgumentException> {
+                wire.copy(amountSats = amount).restored("regtest", binding, "wallet0", 0)
+            }
+        }
+        val restored = wire.copy(amountSats = "1000").restored("regtest", binding, "wallet0", 0)
+        assertEquals(1000uL, restored.amountSats)
+        assertEquals(restored.amountSats, restored.transferContext?.originalOrderFeeSats)
+        assertEquals(wire.copy(amountSats = "1000"), ActiveOnchainAttemptBackup.from(restored, "regtest", binding))
+    }
+
+    @Test
     fun `every retained successor needs a fee rate regardless of current outcome`() {
         val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
         val original = wire.candidateTxids.first()

@@ -98,7 +98,7 @@ data class ActiveOnchainAttemptBackup(
             }
         }
         val transferContext = transfer?.let {
-            require(orderId != null)
+            require(orderId != null && unsigned(amountSats) == unsigned(it.originalOrderFeeSats))
             OnchainTransferContext(
                 unsigned(it.txTotalSats),
                 unsigned(it.preTransferOnchainSats),
