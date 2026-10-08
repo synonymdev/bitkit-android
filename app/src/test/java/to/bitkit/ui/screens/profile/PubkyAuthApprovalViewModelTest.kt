@@ -72,6 +72,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
+        whenever(context.getString(R.string.profile__auth_approval_services_separator)).thenReturn(" and ")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
         whenever(
             context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")

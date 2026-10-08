@@ -41,6 +41,7 @@ internal fun ColumnScope.UsdtReceiveContent(
     uri: String,
     error: Int?,
     network: String,
+    isDefaultNetwork: Boolean,
     onEdit: () -> Unit,
     onNetwork: () -> Unit,
 ) {
@@ -82,7 +83,10 @@ internal fun ColumnScope.UsdtReceiveContent(
         }
     }
     SecondaryButton(
-        text = stringResource(R.string.usdt__receive_network, network),
+        text = stringResource(
+            R.string.usdt__receive_network,
+            if (isDefaultNetwork) stringResource(R.string.common__default) else network
+        ),
         onClick = onNetwork,
         size = ButtonSize.Small,
         icon = {

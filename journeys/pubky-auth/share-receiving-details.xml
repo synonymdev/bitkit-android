@@ -10,7 +10,9 @@
     <action>Repeat with x-bitkit-claim=watch-only-account-v1; verify only Bitcoin is requested, then cancel</action>
     <action>With USDT unavailable, verify sharing is off and authorization remains enabled; turn USDT sharing on and verify authorization is disabled until Retry loads the address</action>
     <action>Open the setup fixture with x-bitkit-claim=paykit-access-v1.watch-only-account-v1.usdt-address-v1</action>
-    <action>Continue to authorization; verify the Bitcoin account, Paykit access, and optional USDT sharing toggle are shown</action>
+    <action>Continue to authorization; verify the named requester, exact requested permission paths and access, Bitcoin account, Paykit Details explanation, and optional USDT sharing toggle are shown</action>
+    <action>Verify Before You Continue explains trusting the service, browser, and device. Verify the compact horizontal profile card (id "PubkyAuthProfile") shows the correct identity and name, with Cancel and Authorize reachable without overlap.</action>
     <action>Turn off PubkyAuthShareUsdt; verify authorization remains enabled, then cancel</action>
+    <action>Open the auth fixture with only x-bitkit-claim=paykit-access-v1; verify Paykit permissions and Details are shown without an empty Payment Details to Share section, then cancel.</action>
   </actions>
 </journey>

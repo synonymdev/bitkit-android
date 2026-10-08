@@ -91,7 +91,6 @@ fun NewTransactionSheetView(
     onCloseClick: () -> Unit,
     onDetailClick: () -> Unit,
     modifier: Modifier = Modifier,
-    usdtNetwork: String = "Arbitrum One",
     hideBalance: Boolean = false,
 ) {
     Box(modifier = modifier) {
@@ -174,7 +173,6 @@ fun NewTransactionSheetView(
             if (details.usdtAmount != null) {
                 UsdtAmountHeader(
                     amount = usdtFormatAmount(details.usdtAmount),
-                    network = usdtNetwork,
                     hideBalance = hideBalance,
                     modifier = Modifier.testTag("ReceivedTransaction")
                 )

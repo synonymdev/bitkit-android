@@ -96,7 +96,6 @@ internal fun UsdtActivityDetail(transfer: UsdtTransfer, hideBalance: Boolean, on
             Row(verticalAlignment = Alignment.Bottom) {
                 UsdtAmountHeader(
                     usdtFormatAmount(transfer.activityAmount),
-                    transfer.destination.label,
                     hideBalance = hideBalance,
                     prefix = if (transfer.isIncoming) "+" else "−",
                     modifier = Modifier.weight(1f)

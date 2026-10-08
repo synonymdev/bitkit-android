@@ -33,6 +33,7 @@ class PubkyAuthApprovalRetryTest : BaseUnitTest() {
     @Test
     fun `relay timeout restores consent and requires local auth for retry`() = test {
         whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
+        whenever(context.getString(R.string.profile__auth_approval_services_separator)).thenReturn(" and ")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
         val authUrl = "pubkyring://signup?hs=homeserver" +
             "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw"

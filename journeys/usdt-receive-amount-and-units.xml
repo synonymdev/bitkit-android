@@ -2,11 +2,10 @@
   <description>Use an onboarded wallet with USDT configured and a fresh BTC/USD rate. No payment is submitted. Cross-network estimates require a live enabled provider and are covered by the manual USDT checks.</description>
   <actions>
     <action>Open USDT from Home. Verify the USDT balance, teal Tether icon and existing activity rows.</action>
-    <action>Open Receive. Verify Receive Dollars, the USDT tab and Network: Arbitrum One.</action>
-    <action>Tap Edit. Enter 3.5 in USD mode. Verify the dollar amount and BTC equivalent are displayed. Check that the unit toggle stays near the amount, the keypad follows the divider, and Continue stays at the bottom without overlap.</action>
-    <action>Tap the unit toggle (id "ReceiveNumberPadUnit"). Verify BTC input and the USD equivalent. Toggle back and verify the USD amount is still exactly 3.5.</action>
+    <action>Open Receive. Verify Receive Dollars, the USDT tab and Network: Default.</action>
+    <action>Tap Edit. Enter 3.5. Verify the dollar amount and BTC equivalent are displayed, there is no input-unit toggle, the keypad follows the divider, and Continue stays at the bottom without overlap.</action>
     <action>Continue to the QR. Verify it requests the Arbitrum USDT token, the wallet address and uint256=3500000, never Bitcoin.</action>
-    <action>Open Show Details. Verify the same Arbitrum address and teal Copy control. Return to the QR.</action>
+    <action>Open Show Details. Verify the same Arbitrum address and teal Copy control. Open Network and verify Arbitrum is marked Default and all enabled bridge networks remain available. Return to the QR.</action>
     <action>Select Savings. Verify Receive Bitcoin and a Bitcoin QR. Select USDT and verify Receive Dollars and the Arbitrum USDT QR.</action>
     <action>Close Receive and return Home. Open a USDT activity row, then Show All. Verify USDT details and mixed activity remain reachable.</action>
   </actions>
