@@ -1,5 +1,11 @@
 # Contacts
 
+`link-contact-after-resume.xml` checks saving a new contact, leaving and reopening Bitkit, and
+reaching Request or Pay without re-adding the contact. It is mirrored on iOS and requires two
+disposable, request-capable identities. Record readiness timing separately from a pass/fail result.
+A natural run may finish linking before backgrounding; the controlled pending-operation checks
+below are still needed to verify that pending work resumes.
+
 `delete-newly-saved-contact.xml` checks deletion directly from Contact Saved and adding that
 contact again. It is mirrored on iOS. Deleted contact screens must not remain in Back history.
 

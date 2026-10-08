@@ -396,6 +396,68 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `explicit publication retries queue failures after its priority window expires`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(clock.now()).thenAnswer {
+            Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
+        }
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        val completion = CompletableDeferred<Unit>()
+        var publications = 0
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).doSuspendableAnswer {
+            when (++publications) {
+                1 -> {
+                    completion.await()
+                    throw PaykitException.Transport("offline", "Unavailable homeserver")
+                }
+                2 -> privateListDeliveryReport(failedToQueue = listOf(privateListSyncChange(CONTACT_KEY)))
+                else -> privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY))
+            }
+        }
+
+        try {
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            assertEquals(1, publications)
+            advanceTimeBy(30_000)
+            completion.complete(Unit)
+            runCurrent()
+            advanceTimeBy(1_000)
+            runCurrent()
+            assertEquals(2, publications)
+            advanceTimeBy(3_000)
+            runCurrent()
+            assertEquals(3, publications)
+            advanceTimeBy(120_000)
+            runCurrent()
+            assertEquals(3, publications)
+        } finally {
+            completion.complete(Unit)
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `blocked peer retires an unpublished explicit retry`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.BLOCKED)))
+
+        try {
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            advanceTimeBy(1_000)
+            runCurrent()
+            verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+            clearInvocations(paykitSdkService)
+            advanceTimeBy(120_000)
+            runCurrent()
+            verify(paykitSdkService, never()).identityStatus(any())
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
     fun `repeated refreshes preserve pending link retry backoff`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
@@ -2617,12 +2679,12 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verifyBlocking(paykitSdkService) { retainRecoveryBackup(backup) }
     }
 
-    private suspend fun stubContactPreparationPriorities() {
+    private fun stubContactPreparationPriorities() {
         for (priority in listOf(Priority.Background, Priority.Interactive)) {
-            whenever(paykitSdkService.ensureLinkWithPeer(any(), any(), eq(priority)))
+            whenever { paykitSdkService.ensureLinkWithPeer(any(), any(), eq(priority)) }
                 .doSuspendableAnswer { paykitSdkService.ensureLinkWithPeer(it.getArgument(0)) }
         }
-        whenever(paykitSdkService.identityStatus(any())).doSuspendableAnswer { paykitSdkService.identityStatus() }
+        whenever { paykitSdkService.identityStatus(any()) }.doSuspendableAnswer { paykitSdkService.identityStatus() }
     }
 
     private fun createSut(publicPaykitRepo: PublicPaykitRepo = this.publicPaykitRepo) = PrivatePaykitRepo(

@@ -139,6 +139,21 @@ class PrivatePaykitRepo @Inject constructor(
         var interactiveUntil: KotlinInstant? = null
         var prepareEndpoints = false
         var refreshReadiness = false
+
+        fun recordQueuedPublication(report: PrivatePaymentListDeliveryReport, publicationWindow: KotlinInstant?) {
+            if (interactiveUntil == publicationWindow &&
+                report.queued.any { PubkyPublicKeyFormat.matches(it.counterparty, publicKey) }
+            ) {
+                prepareEndpoints = false
+            }
+        }
+
+        fun stopIfBlocked(state: LinkedPeerState?) {
+            if (state == LinkedPeerState.BLOCKED) {
+                prepareEndpoints = false
+                refreshReadiness = false
+            }
+        }
     }
 
     private data class PrivateLinkPreparation(
@@ -867,8 +882,10 @@ class PrivatePaykitRepo @Inject constructor(
             val keys = publicKeys.mapNotNull { normalizedPublicKey(it) }.distinct()
             if (keys.isEmpty()) return@runSuspendCatching
             val generation = preparationGeneration
-            val identity = currentCoroutineContext()[PrivateMessageDrainRetry]?.identity
-                ?: pubkyService.currentPublicKey() ?: throw PublicPaykitError.SessionNotActive
+            val retry = currentCoroutineContext()[PrivateMessageDrainRetry]
+            val identity = retry?.identity ?: pubkyService.currentPublicKey()
+                ?: throw PublicPaykitError.SessionNotActive
+            val publicationWindow = retry?.interactiveUntil
             val links = preparePrivateLinks(
                 publicKeys = keys,
                 reason = reason,
@@ -906,18 +923,14 @@ class PrivatePaykitRepo @Inject constructor(
                         updates = publication.updates,
                         clearUnlistedLinkedPeers = false,
                     )
-                    val deliveryError = applyPrivatePaymentListDeliveryReport(report, reason)
+                    val deliveryError = applyPrivatePaymentListDeliveryReport(report, reason, publicationWindow)
                     val firstError = publication.firstError ?: deliveryError
                     val retryKeys = (links.linkRetryKeys + privatePaymentListDeliveryRetryKeys(report)).distinct()
                     schedulePendingPrivateMessageDrainRetries(reason, retryKeys, identity = identity)
 
                     if (firstError != null) {
                         if (requireImmediatePublication) throw firstError
-                        Logger.warn(
-                            "Deferred private Paykit endpoint publish during '$reason'",
-                            firstError,
-                            context = TAG,
-                        )
+                        Logger.warn("Deferred private endpoint publication during '$reason'", firstError, context = TAG)
                     }
                 }
             }.onFailure {
@@ -992,6 +1005,9 @@ class PrivatePaykitRepo @Inject constructor(
         if (generation != preparationGeneration) return PrivateLinkPreparation(emptyList(), emptyList())
         val peerStates = paykitSdkService.linkedPeers(contactPreparationPriority(priority))
             .associate { it.counterparty to it.state }
+        currentCoroutineContext()[PrivateMessageDrainRetry]?.let { retry ->
+            retry.stopIfBlocked(peerStates[retry.publicKey])
+        }
         for (publicKey in publicKeys.distinct()) {
             awaitContactPreparationActive(priority)
             if (generation != preparationGeneration) break
@@ -1131,7 +1147,9 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun applyPrivatePaymentListDeliveryReport(
         report: PrivatePaymentListDeliveryReport,
         reason: String,
+        publicationWindow: KotlinInstant?,
     ): Throwable? {
+        currentCoroutineContext()[PrivateMessageDrainRetry]?.recordQueuedPublication(report, publicationWindow)
         logPrivatePaymentListDeliveryFailures(report, reason)
 
         var didUpdateCache = false
@@ -1305,7 +1323,7 @@ class PrivatePaykitRepo @Inject constructor(
     private fun promoteExplicitLinkRetry(retry: PrivateMessageDrainRetry) {
         if (retry.interactiveUntil?.let { it > clock.now() } == true) return
         retry.interactiveUntil = clock.now() + explicitLinkRetryWindow
-        retry.prepareEndpoints = retry.publicKey !in activePreparationKeys
+        retry.prepareEndpoints = retry.prepareEndpoints || retry.publicKey !in activePreparationKeys
         retry.refreshReadiness = true
         unavailableLinkRetryAt.remove(retry.publicKey)
         retry.wake.trySend(Unit)
@@ -1325,7 +1343,6 @@ class PrivatePaykitRepo @Inject constructor(
                 Priority.Interactive
             } else {
                 retry.refreshReadiness = false
-                retry.prepareEndpoints = false
                 Priority.Background
             }
             val keepRetrying = runSuspendCatching { drainPrivateMessageRetry(retry, reason, priority) }
@@ -1345,16 +1362,17 @@ class PrivatePaykitRepo @Inject constructor(
         if (!PubkyPublicKeyFormat.matches(status?.publicKey, retry.identity) ||
             status?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
         ) {
+            retry.prepareEndpoints = false
             return false
         }
         awaitContactPreparationActive(priority)
         val keys = listOf(retry.publicKey)
         if (retry.prepareEndpoints) {
-            retry.prepareEndpoints = false
             if (canPublishPrivateEndpoints(status)) {
                 publishLocalEndpoints(keys, reason, priority = priority).getOrThrow()
                 return true
             }
+            retry.prepareEndpoints = false
         }
         val pendingKeys = pendingPrivateMessageDrainKeys(
             keys,
