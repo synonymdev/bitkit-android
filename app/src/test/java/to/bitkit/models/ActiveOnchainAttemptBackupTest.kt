@@ -90,6 +90,28 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restored transfer totals must fit the activity database range`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt).copy(
+            requestId = null, payerIdentity = null, orderId = "original-order", amountSats = "1000",
+            transfer = ActiveOnchainAttemptBackup.Transfer("2000", "3000", "900", "1000"),
+        )
+        val overflow = (Long.MAX_VALUE.toULong() + 1uL).toString()
+        for (transfer in listOf(
+            requireNotNull(wire.transfer).copy(txTotalSats = overflow),
+            requireNotNull(wire.transfer).copy(preTransferOnchainSats = overflow),
+        )) {
+            assertFailsWith<IllegalArgumentException> {
+                wire.copy(transfer = transfer).restored("regtest", binding, "wallet0", 0)
+            }
+        }
+        val maximum = Long.MAX_VALUE.toString()
+        val accepted = wire.copy(transfer = wire.transfer?.copy(txTotalSats = maximum, preTransferOnchainSats = maximum))
+            .restored("regtest", binding, "wallet0", 0)
+        assertEquals(Long.MAX_VALUE.toULong(), accepted.transferContext?.txTotalSats)
+        assertEquals(Long.MAX_VALUE.toULong(), accepted.transferContext?.preTransferOnchainSats)
+    }
+
+    @Test
     fun `restored funding amount must equal its original order fee`() {
         val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt).copy(
             requestId = null,

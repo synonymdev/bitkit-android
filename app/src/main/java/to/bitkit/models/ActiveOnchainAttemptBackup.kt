@@ -100,6 +100,8 @@ data class ActiveOnchainAttemptBackup(
         }
         val transferContext = transfer?.let {
             require(orderId != null)
+            require(unsigned(it.txTotalSats) <= Long.MAX_VALUE.toULong())
+            require(unsigned(it.preTransferOnchainSats) <= Long.MAX_VALUE.toULong())
             val originalFee = unsigned(it.originalOrderFeeSats)
             val recipientAmount = unsigned(amountSats)
             require(recipientAmount <= unsigned(it.txTotalSats))
