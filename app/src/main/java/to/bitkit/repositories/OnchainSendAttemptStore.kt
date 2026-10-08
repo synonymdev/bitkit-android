@@ -142,12 +142,14 @@ class OnchainSendAttemptStore @Inject constructor(
     private val firstSubmissions = mutableSetOf<String>()
 
     suspend fun current(): OnchainSendAttempt? = withContext(ioDispatcher) {
-        mutex.withLock { loadWithRetainedAccepted(lightningService.currentWalletIndex) }
+        mutex.withLock {
+            releaseInterruptedUnsignedPreparation(loadWithRetainedAccepted(lightningService.currentWalletIndex))
+        }
     }
 
     /** Read only restart-safe evidence, excluding a positive result retained after a failed write. */
     suspend fun currentDurable(): OnchainSendAttempt? = withContext(ioDispatcher) {
-        mutex.withLock { load(lightningService.currentWalletIndex) }
+        mutex.withLock { releaseInterruptedUnsignedPreparation(load(lightningService.currentWalletIndex)) }
     }
 
     @Suppress("LongParameterList")
@@ -169,7 +171,7 @@ class OnchainSendAttemptStore @Inject constructor(
     ): OnchainSendAttempt = withContext(ioDispatcher) {
         mutex.withLock {
             val walletIndex = lightningService.currentWalletIndex
-            val previous = load(walletIndex)
+            val previous = releaseInterruptedUnsignedPreparation(load(walletIndex))
             if (previous != null && (
                     previous.walletId != walletId ||
                         previous.blocksNextSend ||
@@ -214,6 +216,17 @@ class OnchainSendAttemptStore @Inject constructor(
             }
             attempt
         }
+    }
+
+    private suspend fun releaseInterruptedUnsignedPreparation(current: OnchainSendAttempt?): OnchainSendAttempt? {
+        if (current == null || current.attemptId in inFlightPreparations || current.restoredFromBackup ||
+            current.walletId != WalletScope.default || current.requestId != null ||
+            current.evidence != OnchainSendEvidence.Pending || current.txid != null ||
+            current.candidateTxids.isNotEmpty() || current.originalInputs != null
+        ) return current
+        keychain.delete(KEY, current.walletIndex)
+        _backupStateVersion.update { it + 1 }
+        return null
     }
 
     suspend fun releaseInterruptedShopPreparation(
@@ -417,7 +430,8 @@ class OnchainSendAttemptStore @Inject constructor(
         captureProofs: suspend () -> List<PaykitPaymentStateBackup.Proof>,
     ): Pair<OnchainSendAttempt?, List<PaykitPaymentStateBackup.Proof>> = withContext(ioDispatcher) {
         mutex.withLock {
-            loadWithRetainedAccepted(walletIndex)?.takeIf { it.blocksNextSend } to captureProofs()
+            val attempt = releaseInterruptedUnsignedPreparation(loadWithRetainedAccepted(walletIndex))
+            attempt?.takeIf { it.blocksNextSend } to captureProofs()
         }
     }
 

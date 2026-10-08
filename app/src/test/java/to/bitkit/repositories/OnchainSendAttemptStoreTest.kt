@@ -12,6 +12,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.WalletScope
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
@@ -173,6 +174,32 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         store.releaseBeforeDispatch(original.attemptId, 0)
         assertEquals(retained, store.current())
         assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
+    }
+
+    @Test
+    fun `restart releases unsigned ordinary sends and transfers but keeps live preparation`() = test {
+        for (isTransfer in listOf(false, true)) {
+            var saved: String? = null
+            val keychain = mock<Keychain>()
+            whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+            whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+            whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+            val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+            val original = store.admit(
+                walletId = WalletScope.default,
+                requestId = null, orderId = if (isTransfer) "original-order" else null,
+                address = "bcrt1qrecipient", amountSats = 1_000uL, isMaxAmount = false,
+                feeRateSatsPerVByte = 1uL, isTransfer = isTransfer, channelId = null,
+                tags = emptyList(), beforeSendAttempt = {},
+            )
+            assertEquals(original, store.current(), "Current process must retain its live preparation")
+            val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+            val snapshot = reopened.backupSnapshot(0) { emptyList() }
+            assertNull(snapshot.first, "An unsigned abandoned attempt must not stall wallet backup")
+            assertNull(reopened.current(), "An unsigned crash guard cannot represent a dispatched transaction")
+            assertNull(saved)
+            reopened.admitForTest()
+        }
     }
 
     @Test
