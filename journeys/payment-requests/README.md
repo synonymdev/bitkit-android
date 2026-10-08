@@ -4,9 +4,26 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 [`docs/paykit-issuer-interoperability.md`](../../docs/paykit-issuer-interoperability.md) and
 [`app/src/test/resources/paykit-issuer-interoperability.json`](../../app/src/test/resources/paykit-issuer-interoperability.json).
 
+`fixed-price-bitcoin.xml` verifies a USD-denominated request settled in BTC and an explicit
+same-asset rail price. The confirmation amount uses the issuer's fixed rate; the displayed fiat
+estimate uses Bitkit's own market rate. The flow stops before broadcasting. Differing rail prices,
+fractional-satoshi Lightning payments, and dynamic quotes remain unsupported.
+
 ## Setup
 
 Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save and link the fixture issuer as a contact, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. Its App ID is `paykit-server`; Bitkit uses `bitkit`.
+
+`fixed-price-bitcoin.xml` additionally requires an issuer built with Paykit rc71 or newer
+that can send `conversion.fixed` terms. The basic BTC request fixture and Bitkit's Request UI
+cannot create these quotes. Use the standalone `tools/paykit-fixture-sender` documented in
+[bitkit-e2e-tests #269](https://github.com/synonymdev/bitkit-e2e-tests/pull/269), or an equivalent
+conversion-capable issuer, and follow its setup and linking instructions.
+
+`unpayable-endpoint.xml` requires an issuer that can bind a new request to a one-time address
+already recorded as paid by this payer, then send another request with a fresh unused address.
+Prepare that paid-address fixture separately; the journey itself sends no additional payment.
+If the required issuer or paid-address state is unavailable, report the corresponding journey
+as blocked, not as an app failure or a pass.
 
 The accepted journey uses:
 
@@ -137,6 +154,10 @@ must explain that its payment details are unsupported and offer no Subscribe con
 
 Incoming preparation uses the existing Send confirmation sheet with saved sender, amount and note.
 Its payment control stays disabled and loading until fresh resolution and wallet validation finish.
+An endpoint rejected as `endpoint_not_payable`, including an already-paid one-time address,
+ends preparation immediately with `PaymentRequestUnavailableToast`. The request stays pending
+for manual retry, but does not automatically reopen during the current identity's app session.
+`unpayable-endpoint.xml` checks this using an address already recorded as paid by the payer.
 Closing during preparation leaves the request pending and suppresses automatic reopening for the
 current identity's app session; Pay from the request list or details explicitly retries it.
 An unfunded wallet can verify loading followed by native rejection, not an enabled payment control.

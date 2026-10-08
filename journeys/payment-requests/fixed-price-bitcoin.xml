@@ -1,0 +1,17 @@
+<journey name="fixed price bitcoin requests">
+  <description>
+    Verifies fixed-price requests use the issuer's BTC quote while fiat display uses Bitkit's own exchange rate. Requires a linked Paykit rc71-or-newer issuer capable of sending conversion.fixed terms and a regtest wallet funded for at least 100,000 sats plus fees, as described in README.md. The basic BTC fixture is insufficient; report this journey as blocked if the conversion-capable issuer is unavailable. This journey stops before broadcasting.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled and the fixture issuer saved as a contact and linked as identities</action>
+    <action>Have the issuer publish a current regtest P2WPKH address under identifier "btc-regtest-p2wpkh" with JSON payload {"value":"&lt;current address&gt;"}</action>
+    <action>Have the issuer send a new one-time request for amount "10", asset "usd", accepted identifier "btc-regtest-p2wpkh", and fixed conversion rate "btc" equal to "0.000021"</action>
+    <action>Verify the Payment Request confirmation screen (id "PaymentRequestConfirm") shows 21,000 sats, not 10 BTC</action>
+    <action>Wait for fresh validation and wallet preparation to finish; verify the same sheet stays open and its payment swipe control (id "GRAB") stops showing progress</action>
+    <action>Verify the fiat estimate equals Bitkit's current local valuation of 21,000 sats, rather than being forced to the issuer's 10 USD denomination</action>
+    <action>Dismiss the Payment Request confirmation screen without paying</action>
+    <action>Have the issuer send a new one-time request for amount "0.001", asset "btc", accepted identifier "btc-regtest-p2wpkh", and fixed rates "btc" equal to "2" and "btc-regtest" equal to "0.5"</action>
+    <action>Verify the Payment Request confirmation screen (id "PaymentRequestConfirm") shows 50,000 sats, not 100,000 or 200,000 sats</action>
+    <action>Dismiss the Payment Request confirmation screen without paying</action>
+  </actions>
+</journey>

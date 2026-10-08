@@ -3240,6 +3240,76 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unpayable request closes preparation with feedback and allows manual retry`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(privatePaykitRepo.beginPaymentRequest(request))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.NotOpened))
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+
+            assertNull(sut.currentSheet.value)
+            assertNull(activeContactPaymentContext())
+            verify(privatePaykitRepo).beginPaymentRequest(request)
+            val toastCaptor = argumentCaptor<Toast>()
+            verify(toastManager).enqueue(toastCaptor.capture())
+            assertEquals("PaymentRequestUnavailableToast", toastCaptor.lastValue.testTag)
+            assertEquals(Toast.ToastType.ERROR, toastCaptor.lastValue.type)
+            verify(paykitPaymentRequestRepo, never()).markPresented(request)
+
+            sut.showPaymentRequests()
+            sut.openIncomingPaymentRequest(request.id)
+            advanceTimeBy(TRANSITION_SCREEN_MS)
+            runCurrent()
+
+            assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+            assertNull(sut.requestedPaymentRequestId.value)
+            verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+            verify(toastManager, times(2)).enqueue(toastCaptor.capture())
+            assertEquals("PaymentRequestUnavailableToast", toastCaptor.lastValue.testTag)
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `unpayable request does not block a later payable request`() = test {
+        sut.setIsAuthenticated(true)
+        val unavailableRequest = paymentRequest()
+        val payableRequest = unavailableRequest.copy(paymentRequestId = "payable-request")
+        val bolt11 = "lnbcrt1payablerequest"
+        whenever(privatePaykitRepo.beginPaymentRequest(unavailableRequest))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.NotOpened))
+        stubOpenedPaymentRequest(payableRequest, bolt11)
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(unavailableRequest, payableRequest)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+
+            verify(privatePaykitRepo).beginPaymentRequest(unavailableRequest)
+            verify(privatePaykitRepo).beginPaymentRequest(payableRequest)
+            assertEquals(payableRequest, activeContactPaymentContext()?.incomingPaymentRequest)
+            assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
     fun `closing unavailable request preparation admits a later payable request`() = test {
         sut.setIsAuthenticated(true)
         val unavailableRequest = paymentRequest()
