@@ -24,11 +24,11 @@ Create, review, pay, cancel and delete recurring Paykit Payment Requests between
 ## Code
 
 - `app/src/main/java/to/bitkit/ui/screens/subscriptions/SubscriptionsScreen.kt`: `SubscriptionsScreen`/`SubscriptionsContent` (tabs, sections, pinned header and footer), `SubscriptionDetailScreen`, `SubscriptionSheet` (Review, Success, Details, Cancel), status and frequency text, next-transition timer.
-- `.../subscriptions/CreateSubscriptionScreen.kt`: `CreateSubscriptionSheet` steps Details, Amount, Recipient, Sent. `SubscriptionRow.kt`: row.
+- `app/src/main/java/to/bitkit/ui/screens/subscriptions/CreateSubscriptionScreen.kt`: `CreateSubscriptionSheet` steps Details, Amount, Recipient, Sent. `SubscriptionRow.kt`: row.
 - `app/src/main/java/to/bitkit/repositories/PaykitSubscription.kt`: model, recurrence and billing-period math, lifecycle predicates (`isPayer`, `canCancel`, `runsUntilPaidThrough`).
-- `.../repositories/PaykitSubscriptionProposal.kt`: proposal size check. `PaykitPaymentRequestRepo.kt`: `proposeSubscription`, `accept(subscription)`, `cancel`, `subscriptionProposals`.
-- `.../repositories/PaykitSubscriptionNotificationScheduler.kt`: WorkManager reminders. `.../repositories/PaykitPaymentRequestPresentationStore.kt`: subscription presentation state (also in backups via `models/PaykitPaymentStateBackup.kt`).
-- `.../viewmodels/AppViewModel.kt`: `showSubscriptionCreator`, `createSubscription`, `acceptSubscriptionAndStartPayment`, `cancelSubscription`, `onPaykitSubscriptionNotificationTapped`.
+- `app/src/main/java/to/bitkit/repositories/PaykitSubscriptionProposal.kt`: proposal size check. `PaykitPaymentRequestRepo.kt`: `proposeSubscription`, `accept(subscription)`, `cancel`, `subscriptionProposals`.
+- `app/src/main/java/to/bitkit/repositories/PaykitSubscriptionNotificationScheduler.kt`: WorkManager reminders. `app/src/main/java/to/bitkit/repositories/PaykitPaymentRequestPresentationStore.kt`: subscription presentation state (also in backups via `models/PaykitPaymentStateBackup.kt`).
+- `app/src/main/java/to/bitkit/viewmodels/AppViewModel.kt`: `showSubscriptionCreator`, `createSubscription`, `acceptSubscriptionAndStartPayment`, `cancelSubscription`, `onPaykitSubscriptionNotificationTapped`.
 - `app/src/main/java/to/bitkit/utils/SubscriptionClockOffset.kt`: debug-only day offset for scheduling; set in Dev Settings (`SubscriptionClockOffset`, `SubscriptionClockOffset-<days>`; presets 0, 1, 7, 30, 31, 62, 365 days). `utils/SubscriptionIcon.kt`: icon choices. `ui/components/DrawerMenu.kt`: drawer entry; `SheetHost.kt`: `SubscriptionRoute`.
 
 ## How to drive it
@@ -36,11 +36,11 @@ Create, review, pay, cancel and delete recurring Paykit Payment Requests between
 Backend: regtest, two Bitkit instances with Pubky identities saved as each other's contacts and linked (creator and payer); payer funded for the amount. Setup in `journeys/subscriptions/README.md` (uses `Journey Sub`, 5,000 sats, Monthly).
 
 - `journeys/subscriptions/create-and-propose.xml`: creator builds and proposes; 600-letter description is rejected, shorter one sent; row in CREATED.
-- `.../review-and-subscribe.xml`: payer sees PROPOSALS row, Review and Subscribe, swipe, first payment or Subscribed, Close.
-- `.../cancel-and-delete.xml`: payer cancels an active subscription; creator deletes a pending proposal (separate subscription).
-- `.../payments-tab.xml`: Payments tab badge, incoming Dismiss and Pay, outgoing pending row, detail screen.
-- `.../fixed-onchain-destination.xml`: issuer-proposed monthly request with fixed P2WPKH address; address reuse does not block a period; a paid period cannot be paid again.
-- `.../cancellation-during-confirmation.xml`: issuer cancels while the confirmation is open.
+- `journeys/subscriptions/review-and-subscribe.xml`: payer sees PROPOSALS row, Review and Subscribe, swipe, first payment or Subscribed, Close.
+- `journeys/subscriptions/cancel-and-delete.xml`: payer cancels an active subscription; creator deletes a pending proposal (separate subscription).
+- `journeys/subscriptions/payments-tab.xml`: Payments tab badge, incoming Dismiss and Pay, outgoing pending row, detail screen.
+- `journeys/subscriptions/fixed-onchain-destination.xml`: issuer-proposed monthly request with fixed P2WPKH address; address reuse does not block a period; a paid period cannot be paid again.
+- `journeys/subscriptions/cancellation-during-confirmation.xml`: issuer cancels while the confirmation is open.
 - Related: `journeys/payment-requests/delete-contact-with-active-subscription.xml`, `payment-deadline-history.xml`; `journeys/paykit-clock-changes.md` for reminders, timezones and daylight saving.
 - E2E: none. `bitkit-e2e-tests/test/specs/paykit.e2e.ts` does not touch subscriptions. Unit tests: `PaykitSubscriptionTest.kt`, `PaykitSubscriptionProposalTest.kt`, `PaykitPaymentRequestRepoSubscriptionTest.kt`, `PaykitSubscriptionNotificationSchedulerTest.kt` under `app/src/test/java/to/bitkit/repositories/`.
 

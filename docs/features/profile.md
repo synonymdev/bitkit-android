@@ -22,12 +22,12 @@ The user's Pubky identity and public profile: create one in Bitkit or adopt one 
 
 ## Code
 - `app/src/main/java/to/bitkit/ui/screens/profile/ProfileIntroScreen.kt`: intro.
-- `.../PubkyChoiceScreen.kt` + `PubkyChoiceViewModel.kt`: Ring identity rows, adoption, create option.
-- `.../CreateProfileScreen.kt` + `CreateProfileViewModel.kt`: create or restore form.
-- `.../PayContactsScreen.kt` + `PayContactsViewModel.kt`: enables contact payments through `repositories/ContactPaymentSettingsRepo.kt`.
-- `.../ProfileScreen.kt` + `ProfileViewModel.kt`: display, cached header, tags, copy, share, disconnect.
-- `.../EditProfileScreen.kt` + `EditProfileViewModel.kt`: edit, delete with retry or disconnect (shared form `ui/components/ProfileEditForm.kt`, `AddLinkSheet.kt`, `AddTagSheet.kt`).
-- `.../PubkyAuthApprovalSheet.kt` + `PubkyAuthApprovalViewModel.kt`: approval sheet and flow; `ui/utils/PubkyAuthErrorMessage.kt` maps errors.
+- `app/src/main/java/to/bitkit/ui/screens/profile/PubkyChoiceScreen.kt` + `PubkyChoiceViewModel.kt`: Ring identity rows, adoption, create option.
+- `app/src/main/java/to/bitkit/ui/screens/profile/CreateProfileScreen.kt` + `CreateProfileViewModel.kt`: create or restore form.
+- `app/src/main/java/to/bitkit/ui/screens/profile/PayContactsScreen.kt` + `PayContactsViewModel.kt`: enables contact payments through `repositories/ContactPaymentSettingsRepo.kt`.
+- `app/src/main/java/to/bitkit/ui/screens/profile/ProfileScreen.kt` + `ProfileViewModel.kt`: display, cached header, tags, copy, share, disconnect.
+- `app/src/main/java/to/bitkit/ui/screens/profile/EditProfileScreen.kt` + `EditProfileViewModel.kt`: edit, delete with retry or disconnect (shared form `ui/components/ProfileEditForm.kt`, `AddLinkSheet.kt`, `AddTagSheet.kt`).
+- `app/src/main/java/to/bitkit/ui/screens/profile/PubkyAuthApprovalSheet.kt` + `PubkyAuthApprovalViewModel.kt`: approval sheet and flow; `ui/utils/PubkyAuthErrorMessage.kt` maps errors.
 - `app/src/main/java/to/bitkit/repositories/PubkyRepo.kt`: session lifecycle, `adoptRingIdentity`, `createIdentity`, `loadProfile`, `saveProfile`, `deleteProfile`, `signOut`, `parseAuthUrl`, `approveAuth`, `approveAuthWithCompanionClaim`, `approveSignupAuth`.
 - `app/src/main/java/to/bitkit/services/PubkyService.kt` and `PaykitSdkService.kt`: wrappers over `com.synonym:paykit-android`.
 - `app/src/main/java/to/bitkit/data/sharedpubky/SharedPubkyClient.kt`, `SharedPubkyContract.kt`, `SharedPubkyProvider.kt`: reads Ring's provider (permission `to.pubky.ring.permission.READ_SHARED_PUBKY`) and exposes Bitkit's own provider.
@@ -51,7 +51,7 @@ The user's Pubky identity and public profile: create one in Bitkit or adopt one 
   - `@pubky_profile_5`: after creating a profile, scan prompt with `pubkyauth://direct_signup?...` shows "Already signed in" and neither `CreateProfileUsername` nor `PubkyAuthAuthorize`.
 - CI: all run in the `pubky_paykit` shard (`@pubky_staging`) of `.github/workflows/e2e-staging.yml` (nightly and manual dispatch, `BACKEND=regtest`, app built for the network backend). Not in local-backend shards of `e2e.yml`. `bitkit-e2e-tests/AGENTS.md` lists the tag table.
 - Helpers: `bitkit-e2e-tests/test/helpers/profile.ts` (`createProfile`, `openEditProfile`, `updateMyProfile`, `deleteProfile`, `verifyMyProfileDetails`). Avatar fixtures: `./scripts/push-fixture-media-to-devices.sh` in the e2e repo.
-- Manual charters: `bitkit-e2e-tests/docs/pubky-profile-manual-e2e.md` (sections A to H), `docs/public-contact-payments-manual-qa.md` (S1, S2, T7, T8: endpoint publishing and lifecycle).
+- Manual charters: `bitkit-e2e-tests/docs/pubky-profile-manual-e2e.md` (sections A to H), `bitkit-e2e-tests/docs/public-contact-payments-manual-qa.md` (S1, S2, T7, T8: endpoint publishing and lifecycle).
 - Preconditions: Homegate and staging Pubky reachable (`Env.homegateUrl` in `env/Env.kt`: staging off mainnet, `E2E_HOMEGATE_URL` for local e2e), PIN off for the journeys, no funds needed. A QA wallet with a profile: `BACKEND=regtest ./scripts/qa-fixture.sh android pubky` in the e2e repo.
 
 ## What proves it

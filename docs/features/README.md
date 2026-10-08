@@ -1,6 +1,6 @@
 # Feature map
 
-Read `docs/features/<feature>.md` before changing or testing that feature. A PR that changes a flow, a screen route, a `testTag`, a journey or an e2e spec updates the file of that feature in the same PR. The files tell an agent what a feature does, how to reach it on a device, which code owns it, how to drive it (journeys and e2e specs), what proves it worked, what no test covers, and the traps already found.
+Read `docs/features/<feature>.md` before changing or testing that feature. A PR that changes a flow, a screen route, a `testTag`, a journey or an e2e spec updates the file of that feature in the same PR; `FeatureMapTest` (unit tests) fails when a file names a repository path that no longer exists. The files tell an agent what a feature does, how to reach it on a device, which code owns it, how to drive it (journeys and e2e specs), what proves it worked, what no test covers, and the traps already found.
 
 ## How the files are shaped
 

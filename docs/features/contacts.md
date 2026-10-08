@@ -25,12 +25,12 @@ Saved Pubky contacts: list, search, add by key or QR, detail, edit, delete, per-
 
 ## Code
 - `app/src/main/java/to/bitkit/ui/screens/contacts/ContactsIntroScreen.kt`: intro, sets `hasSeenContactsIntro`.
-- `.../ContactsScreen.kt` + `ContactsViewModel.kt`: list, search, add sheet host; reloads via `PubkyRepo.loadContacts()` on open.
-- `.../AddContactScreen.kt` + `AddContactViewModel.kt` + `ContactImportFlow.kt`: add sheet (`AddContactSheet`), full add screen, key validation (`resolveAddContactValidation`), pay-before-save.
-- `.../ContactDetailScreen.kt` + `ContactDetailViewModel.kt`: detail, tags, copy, share, delete, Pay and Request-or-Pay sheet.
-- `.../EditContactScreen.kt` + `EditContactViewModel.kt`: edit form (shared `ui/components/ProfileEditForm.kt`) and delete.
-- `.../ContactActivityScreen.kt` + `ContactActivityViewModel.kt`: activity list via `ActivityRepo.contactActivities`; row prefix `ContactActivity`.
-- `.../ContactImportOverviewScreen.kt` + `ContactImportOverviewViewModel.kt`, `ContactImportSelectScreen.kt` + `ContactImportSelectViewModel.kt`: import UI. `shouldDiscardPendingImport` drops a pending import when the user leaves.
+- `app/src/main/java/to/bitkit/ui/screens/contacts/ContactsScreen.kt` + `ContactsViewModel.kt`: list, search, add sheet host; reloads via `PubkyRepo.loadContacts()` on open.
+- `app/src/main/java/to/bitkit/ui/screens/contacts/AddContactScreen.kt` + `AddContactViewModel.kt` + `ContactImportFlow.kt`: add sheet (`AddContactSheet`), full add screen, key validation (`resolveAddContactValidation`), pay-before-save.
+- `app/src/main/java/to/bitkit/ui/screens/contacts/ContactDetailScreen.kt` + `ContactDetailViewModel.kt`: detail, tags, copy, share, delete, Pay and Request-or-Pay sheet.
+- `app/src/main/java/to/bitkit/ui/screens/contacts/EditContactScreen.kt` + `EditContactViewModel.kt`: edit form (shared `ui/components/ProfileEditForm.kt`) and delete.
+- `app/src/main/java/to/bitkit/ui/screens/contacts/ContactActivityScreen.kt` + `ContactActivityViewModel.kt`: activity list via `ActivityRepo.contactActivities`; row prefix `ContactActivity`.
+- `app/src/main/java/to/bitkit/ui/screens/contacts/ContactImportOverviewScreen.kt` + `ContactImportOverviewViewModel.kt`, `ContactImportSelectScreen.kt` + `ContactImportSelectViewModel.kt`: import UI. `shouldDiscardPendingImport` drops a pending import when the user leaves.
 - `app/src/main/java/to/bitkit/repositories/PubkyRepo.kt`: `loadContacts`, `fetchContactProfile`, `addContact`, `updateContact`, `removeContact`, `prepareImport`, `importContacts`, `discardPendingImport`.
 - `app/src/main/java/to/bitkit/repositories/ContactPaymentSettingsRepo.kt`: sharing on/off; uses `PublicPaykitRepo.kt` and `PrivatePaykitRepo.kt`.
 - `app/src/main/java/to/bitkit/usecases/RefreshContactPaykitLinkUseCase.kt`: refreshes a saved contact's Paykit link.
@@ -57,7 +57,7 @@ Saved Pubky contacts: list, search, add by key or QR, detail, edit, delete, per-
 - `bitkit-e2e-tests/test/specs/paykit.e2e.ts` (`@paykit_1`, `@pubky @paykit @pubky_staging`) pays and views activity of a saved contact: see `payment-requests.md`.
 - CI: `pubky-profile.e2e.ts` and `paykit.e2e.ts` run in the `pubky_paykit` shard (`@pubky_staging`) of `.github/workflows/e2e-staging.yml` (nightly 04:00 and manual dispatch, `BACKEND=regtest`). They are not in the local-backend shards of `e2e.yml`.
 - Helpers: `bitkit-e2e-tests/test/helpers/profile.ts` (`addContact`, `deleteContact`, `updateContactProfile`, `verifyContactRowDisplayed`), fixtures in `test/helpers/fixtures.ts` (`STAGING_TEST_CONTACTS`, `STAGING_PAYKIT_CONTACTS`).
-- Manual charters in `bitkit-e2e-tests/docs/pubky-profile-manual-e2e.md` (sections B.4 to B.7) and `docs/public-contact-payments-manual-qa.md` (payments to contacts, endpoint lifecycle).
+- Manual charters in `bitkit-e2e-tests/docs/pubky-profile-manual-e2e.md` (sections B.4 to B.7) and `bitkit-e2e-tests/docs/public-contact-payments-manual-qa.md` (payments to contacts, endpoint lifecycle).
 - Preconditions: staging Pubky (Homegate) reachable for profile creation, no funds for contact management; paying a contact needs funds (`send.md`).
 
 ## What proves it

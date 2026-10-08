@@ -32,7 +32,7 @@ Release-feed checks (blocking critical update screen, optional update sheet) and
   - Routine: `@migration_rn_restore` (RN 1.1.6 wallet, uninstall, install native, restore phrase), `@migration_rn_upgrade` (install native over RN, expects text `MIGRATING`), `@migration_native_restore`, `@migration_native_upgrade` (previous native release, pinned in `config/migration-baselines.json`). All check savings and spending balances, activity, tags, relaunch; native cases also receive a 1000 sat Lightning payment.
   - Extended (`extended_rn` input or `MIGRATION_EXTENDED=true`): `@migration_3` (RN with passphrase), `@migration_4` (RN legacy p2pkh funds).
   - Setup only (`MIGRATION_SETUP_WALLET` set, Android): `@migration_setup_standard`, `@migration_setup_passphrase`, `@migration_setup_sweep` prepare RN wallets for iOS runs.
-- Preconditions: RN APK `v1.1.6` and previous native APK downloaded with `scripts/download-migration-app.py`, regtest funds via the spec helpers, a dedicated emulator.
+- Preconditions: RN APK `v1.1.6` and previous native APK downloaded with `bitkit-e2e-tests/scripts/download-migration-app.py`, regtest funds via the spec helpers, a dedicated emulator.
 - Unit tests: `app/src/test/java/to/bitkit/services/MigrationServiceTest.kt`, `utils/timedsheets/sheets/AppUpdateTimedSheetTest.kt`; routing: `app/src/androidTest/java/to/bitkit/ui/RootDestinationTest.kt`.
 
 ## What proves it

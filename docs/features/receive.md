@@ -41,7 +41,7 @@ The Receive sheet shows an on-chain address, a Lightning invoice or a unified QR
 - `bitkit-e2e-tests/test/specs/onchain.e2e.ts` (`@onchain_1/_2/_3`, shard `onchain_boost_receive_widgets`): receive on-chain, tag receive addresses, received sheet via `acknowledgeReceivedPayment`.
 - `bitkit-e2e-tests/test/specs/numberpad.e2e.ts` (`@numberpad_1`, `_3`): Receive number pad in modern and classic units (shard `onboarding_backup_numberpad`).
 - `bitkit-e2e-tests/test/specs/receive-ln-payments.e2e.ts`: utility, no tags, in no CI shard. Attaches to an installed app and pays N invoices read from `QRCode` (`PAYMENT_COUNT`, `PAYMENT_AMOUNT`, `BACKEND=regtest`).
-- `bitkit-e2e-tests/test/specs/mainnet/cjit.e2e.ts` (`@cjit_mainnet`, `@cjit_1`): smokes CJIT order on mainnet: restores `CJIT_SEED`, Receive, `Tab-spending`, `ShowDetails`, min amount, fee text check, Continue, `QRCode`. Not in any CI shard of the app repo (`docs/mainnet-nightly.md` in the e2e repo says a private `bitkit-nightly` repo runs mainnet tags; only the probe suite is documented there). `send_2`/`send_3` and `lnurl_1` also receive Lightning funds as setup.
+- `bitkit-e2e-tests/test/specs/mainnet/cjit.e2e.ts` (`@cjit_mainnet`, `@cjit_1`): smokes CJIT order on mainnet: restores `CJIT_SEED`, Receive, `Tab-spending`, `ShowDetails`, min amount, fee text check, Continue, `QRCode`. Not in any CI shard of the app repo (`bitkit-e2e-tests/docs/mainnet-nightly.md` in the e2e repo says a private `bitkit-nightly` repo runs mainnet tags; only the probe suite is documented there). `send_2`/`send_3` and `lnurl_1` also receive Lightning funds as setup.
 
 ## What proves it
 - Receive sheet `ReceiveScreen` visible; `QRCode` text starts with `bitcoin:bcrt1` (regtest) and, on Auto, contains `lightning=ln`.

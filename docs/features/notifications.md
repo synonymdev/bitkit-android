@@ -27,15 +27,15 @@ Local and push notifications for received payments, channel events and subscript
 ## Code
 
 - `app/src/main/java/to/bitkit/ui/Notifications.kt`: channels, `pushNotification`, `openNotificationSettings`, `areNotificationsEnabled`, subscription extras.
-- `.../fcm/FcmService.kt`: receives FCM, decrypts the Blocktank payload (`PUSH_NOTIFICATION_PRIVATE_KEY`), enqueues `WakeNodeWorker`. `.../fcm/WakeNodeWorker.kt`: 2 minute node wake, LDK event to notification mapping, `isHandledInProcess`.
-- `.../androidServices/LightningNodeService.kt`: foreground service (`ACTION_START_SERVICE`, `ACTION_STOP_SERVICE_AND_APP`), starts node with its own event handler; `services/NodeServiceFgState`.
+- `app/src/main/java/to/bitkit/fcm/FcmService.kt`: receives FCM, decrypts the Blocktank payload (`PUSH_NOTIFICATION_PRIVATE_KEY`), enqueues `WakeNodeWorker`. `app/src/main/java/to/bitkit/fcm/WakeNodeWorker.kt`: 2 minute node wake, LDK event to notification mapping, `isHandledInProcess`.
+- `app/src/main/java/to/bitkit/androidServices/LightningNodeService.kt`: foreground service (`ACTION_START_SERVICE`, `ACTION_STOP_SERVICE_AND_APP`), starts node with its own event handler; `services/NodeServiceFgState`.
 - `.../domain/commands/`: `NotifyPaymentReceived*`, `NotifyChannelReady*`, `NotifyPendingPaymentResolved*`, `ReceivedNotificationContent`.
-- `.../services/LspNotificationsService.kt`, `models/BlocktankNotificationType.kt`: device registration, push types.
-- `.../ui/MainActivity.kt`: creates channels; starts or stops the service when wallet exists, `notificationsGranted` and `keepBitkitActiveInBackground` are all true and restore is idle; handles the reminder intent.
-- `.../ui/utils/RequestNotificationPermissions.kt`: `RequestNotificationPermissions`, `rememberRequestNotificationPermission`, `rememberNotificationToggleClick`. `viewmodels/SettingsViewModel.kt`: `setNotificationPreference`, `setKeepBitkitActiveInBackground`; settings fields in `data/SettingsStore.kt` (both default false).
-- `.../ui/settings/backgroundPayments/BackgroundPaymentsSettings.kt`, `BackgroundPaymentsIntroScreen.kt`; `ui/sheets/BackgroundPaymentsIntroSheet.kt`; `utils/timedsheets/sheets/NotificationsTimedSheet.kt`.
-- `.../ui/screens/transfer/SpendingConfirmScreen.kt`, `ui/screens/wallets/receive/ReceiveConfirmScreen.kt`, `ReceiveLiquidityScreen.kt`: the toggles.
-- `.../repositories/PaykitSubscriptionNotificationScheduler.kt`: WorkManager reminders (up to 32, cancelled when notifications are off).
+- `app/src/main/java/to/bitkit/services/LspNotificationsService.kt`, `models/BlocktankNotificationType.kt`: device registration, push types.
+- `app/src/main/java/to/bitkit/ui/MainActivity.kt`: creates channels; starts or stops the service when wallet exists, `notificationsGranted` and `keepBitkitActiveInBackground` are all true and restore is idle; handles the reminder intent.
+- `app/src/main/java/to/bitkit/ui/utils/RequestNotificationPermissions.kt`: `RequestNotificationPermissions`, `rememberRequestNotificationPermission`, `rememberNotificationToggleClick`. `viewmodels/SettingsViewModel.kt`: `setNotificationPreference`, `setKeepBitkitActiveInBackground`; settings fields in `data/SettingsStore.kt` (both default false).
+- `app/src/main/java/to/bitkit/ui/settings/backgroundPayments/BackgroundPaymentsSettings.kt`, `BackgroundPaymentsIntroScreen.kt`; `ui/sheets/BackgroundPaymentsIntroSheet.kt`; `utils/timedsheets/sheets/NotificationsTimedSheet.kt`.
+- `app/src/main/java/to/bitkit/ui/screens/transfer/SpendingConfirmScreen.kt`, `ui/screens/wallets/receive/ReceiveConfirmScreen.kt`, `ReceiveLiquidityScreen.kt`: the toggles.
+- `app/src/main/java/to/bitkit/repositories/PaykitSubscriptionNotificationScheduler.kt`: WorkManager reminders (up to 32, cancelled when notifications are off).
 
 ## How to drive it
 

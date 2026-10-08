@@ -40,7 +40,7 @@ In-app widgets on the Home widgets page (gallery sheet, per-widget preview and s
   - `@widgets_2` add and delete Blocks, Headlines, Facts, Weather, Calculator.
   - `@widgets_3` Widgets settings: reset restores Price and Calculator, `ShowWidgets` off hides `WidgetsEdit`, on restores.
 - Other specs: `backup.e2e.ts` (`@backup`, shard `onboarding_backup_numberpad`) adds Price and checks it after restore; `settings.e2e.ts` `@settings_12` uses `ResetSuggestions`; `hardware-wallet.e2e.ts` opens the widgets page through `openHomeWidgets()` in `helpers/navigation.ts`.
-- Unit and instrumented tests exist for widget code (`app/src/test/.../appwidget`, `app/src/androidTest/.../ui/screens/widgets`), not journeys.
+- Unit and instrumented tests exist for widget code (`app/src/test/java/to/bitkit/appwidget`, `app/src/androidTest/java/to/bitkit/ui/screens/widgets`), not journeys.
 - Preconditions: onboarded wallet, network for widget data. Specs start from a default widget set and delete it first (`deleteAllDefaultWidgets`).
 
 ## What proves it

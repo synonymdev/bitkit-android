@@ -28,35 +28,35 @@ Send and receive one-time Paykit Payment Requests between linked Pubky contacts,
 ## Code
 
 - `app/src/main/java/to/bitkit/ui/screens/paymentrequests/CreatePaymentRequestScreen.kt`: amount, details, recipient and sent screens, shown inside the Receive sheet (`ui/screens/wallets/receive/ReceiveSheet.kt`).
-- `.../paymentrequests/PaymentRequestsScreen.kt`: `PaymentRequestsSheet` (bell sheet), `PaymentRequestsScreen` (Payments tab body), `PaymentRequestCard` (Dismiss and Pay).
-- `.../paymentrequests/IncomingPaymentRequestDetailsScreen.kt`: detail screen, status, pay, tags.
+- `app/src/main/java/to/bitkit/ui/screens/paymentrequests/PaymentRequestsScreen.kt`: `PaymentRequestsSheet` (bell sheet), `PaymentRequestsScreen` (Payments tab body), `PaymentRequestCard` (Dismiss and Pay).
+- `app/src/main/java/to/bitkit/ui/screens/paymentrequests/IncomingPaymentRequestDetailsScreen.kt`: detail screen, status, pay, tags.
 - `app/src/main/java/to/bitkit/repositories/PaykitPaymentRequestRepo.kt`: request lists, parse gate, `propose`, `accept`, `reject`, `dismiss`, refresh, presentation state.
-- `.../repositories/PaykitPaymentRequestPresentationStore.kt`: persisted presented/accepted ids per identity.
-- `.../repositories/PaykitPaymentProofRepo.kt`, `PaykitPaymentProofStore.kt`: proof preparation, completion, failure; included in wallet backups via `models/PaykitPaymentStateBackup.kt`.
-- `.../repositories/PaykitIssuerInterop.kt`: endpoint identifiers and payload parsing. `PaykitReceivedPaymentContacts.kt`: maps received payments to contacts.
-- `.../repositories/PublicPaykitRepo.kt`: publishes own public endpoints, resolves and begins public contact payments.
-- `.../repositories/PrivatePaykitRepo.kt`, `PrivatePaykitAddressReservationRepo.kt`, `PrivatePaykitContactResolver.kt`, `PrivatePaykitErrorClassifier.kt`, `PrivatePaykitModels.kt`: private links and endpoints per saved contact, reserved receive addresses; stores in `data/PrivatePaykitStores.kt`.
-- `.../repositories/ContactPaymentSettingsRepo.kt`: contact payments on/off and endpoint reconcile. `usecases/RefreshContactPaykitLinkUseCase.kt`: link refresh.
-- `.../services/PaykitSdkService.kt`: wraps the Paykit SDK. `PaykitSdkOperationLock.kt` serializes SDK calls.
-- `.../viewmodels/AppViewModel.kt`: polling (`startPaykitPaymentRequestPolling`), automatic presentation, `showPaymentRequests`, `openIncomingPaymentRequest`, `createPaymentRequest`.
-- `.../ui/screens/wallets/send/SendConfirmScreen.kt`: request summary (`PaymentRequestFrom`, `PaymentRequestFor`, `PaymentRequestInvoiceNote`). `ui/screens/contacts/ContactDetailScreen.kt` and `ContactDetailViewModel.kt`: `ContactPay`, `RequestOrPaySheet`.
-- `.../ui/screens/profile/PubkyAuthApprovalSheet.kt`, `PubkyAuthApprovalViewModel.kt`, `models/PubkyAuthClaimCodec.kt`, `models/PubkyAuthRequest.kt`: marketplace consent; `docs/pubky-auth-companion-claims.md` is the claim contract.
-- `.../flags/PaykitFeatureFlags.kt`: feature gate. `ui/screens/wallets/HomeScreen.kt`: bell.
+- `app/src/main/java/to/bitkit/repositories/PaykitPaymentRequestPresentationStore.kt`: persisted presented/accepted ids per identity.
+- `app/src/main/java/to/bitkit/repositories/PaykitPaymentProofRepo.kt`, `PaykitPaymentProofStore.kt`: proof preparation, completion, failure; included in wallet backups via `models/PaykitPaymentStateBackup.kt`.
+- `app/src/main/java/to/bitkit/repositories/PaykitIssuerInterop.kt`: endpoint identifiers and payload parsing. `PaykitReceivedPaymentContacts.kt`: maps received payments to contacts.
+- `app/src/main/java/to/bitkit/repositories/PublicPaykitRepo.kt`: publishes own public endpoints, resolves and begins public contact payments.
+- `app/src/main/java/to/bitkit/repositories/PrivatePaykitRepo.kt`, `PrivatePaykitAddressReservationRepo.kt`, `PrivatePaykitContactResolver.kt`, `PrivatePaykitErrorClassifier.kt`, `PrivatePaykitModels.kt`: private links and endpoints per saved contact, reserved receive addresses; stores in `data/PrivatePaykitStores.kt`.
+- `app/src/main/java/to/bitkit/repositories/ContactPaymentSettingsRepo.kt`: contact payments on/off and endpoint reconcile. `usecases/RefreshContactPaykitLinkUseCase.kt`: link refresh.
+- `app/src/main/java/to/bitkit/services/PaykitSdkService.kt`: wraps the Paykit SDK. `PaykitSdkOperationLock.kt` serializes SDK calls.
+- `app/src/main/java/to/bitkit/viewmodels/AppViewModel.kt`: polling (`startPaykitPaymentRequestPolling`), automatic presentation, `showPaymentRequests`, `openIncomingPaymentRequest`, `createPaymentRequest`.
+- `app/src/main/java/to/bitkit/ui/screens/wallets/send/SendConfirmScreen.kt`: request summary (`PaymentRequestFrom`, `PaymentRequestFor`, `PaymentRequestInvoiceNote`). `ui/screens/contacts/ContactDetailScreen.kt` and `ContactDetailViewModel.kt`: `ContactPay`, `RequestOrPaySheet`.
+- `app/src/main/java/to/bitkit/ui/screens/profile/PubkyAuthApprovalSheet.kt`, `PubkyAuthApprovalViewModel.kt`, `models/PubkyAuthClaimCodec.kt`, `models/PubkyAuthRequest.kt`: marketplace consent; `docs/pubky-auth-companion-claims.md` is the claim contract.
+- `app/src/main/java/to/bitkit/flags/PaykitFeatureFlags.kt`: feature gate. `ui/screens/wallets/HomeScreen.kt`: bell.
 
 ## How to drive it
 
 Backend: regtest. Two Bitkit instances (or one plus a fixture issuer) with Pubky identities, saved as each other's contacts and linked; payer funded (on-chain or spending). Setup details: `journeys/payment-requests/README.md`.
 
 - `journeys/payment-requests/request-summary.xml`: collapsed confirmation shows From and For; Sent receipt subtitle follows protocol history.
-- `.../automatic-presentation.xml`: request opens automatically in foreground, waits for another sheet, not reopened after review.
-- `.../confirmation-controls.xml`: fixed amount and swipe footer at 360 dp and 1.3 font scale.
-- `.../contact-request-or-pay.xml`: Request or Pay sheet from Contact Detail (open with the `bitkit://contact` deeplink).
-- `.../issuer-interoperability.xml`: canonical regtest P2WPKH fixture from a `paykit-server` issuer opens confirmation.
-- `.../definite-pre-broadcast-retry.xml`: failing LNURL callback, then retry pays the same request.
-- `.../accepted-device-ownership.xml`: two installs, one identity; only the accepting install retries.
-- `.../requested-resolution-failure.xml`: explicit Pay shows terminal toast after retries; request stays.
-- `.../absolute-payment-deadline.xml`, `payment-deadline-history.xml`: absolute `At` deadlines and expired history.
-- `.../delete-and-readd-contact.xml`, `delete-contact-with-active-subscription.xml`: contact deletion revokes private requests; active subscription blocks deletion.
+- `journeys/payment-requests/automatic-presentation.xml`: request opens automatically in foreground, waits for another sheet, not reopened after review.
+- `journeys/payment-requests/confirmation-controls.xml`: fixed amount and swipe footer at 360 dp and 1.3 font scale.
+- `journeys/payment-requests/contact-request-or-pay.xml`: Request or Pay sheet from Contact Detail (open with the `bitkit://contact` deeplink).
+- `journeys/payment-requests/issuer-interoperability.xml`: canonical regtest P2WPKH fixture from a `paykit-server` issuer opens confirmation.
+- `journeys/payment-requests/definite-pre-broadcast-retry.xml`: failing LNURL callback, then retry pays the same request.
+- `journeys/payment-requests/accepted-device-ownership.xml`: two installs, one identity; only the accepting install retries.
+- `journeys/payment-requests/requested-resolution-failure.xml`: explicit Pay shows terminal toast after retries; request stays.
+- `journeys/payment-requests/absolute-payment-deadline.xml`, `payment-deadline-history.xml`: absolute `At` deadlines and expired history.
+- `journeys/payment-requests/delete-and-readd-contact.xml`, `delete-contact-with-active-subscription.xml`: contact deletion revokes private requests; active subscription blocks deletion.
 - `journeys/pubky-marketplace/` (`README.md` has the fixture runtime and evidence table): `wallet-leg.xml` seller grant, buyer receives, pays, confirms; `paykit-only-approval.xml` and `paykit-reconnect.xml` consent and cancel checks.
 - `journeys/paykit-clock-changes.md`: manual clock, timezone, connection-loss and reminder checks; needs a device clock that can change.
 - E2E: `bitkit-e2e-tests/test/specs/paykit.e2e.ts` tags `@pubky @paykit @pubky_staging @staging`, test `@paykit_1`. Runs in the staging shard `pubky_paykit` (`@pubky_staging`, `.github/workflows/e2e-staging.yml`), real staging Pubky contacts `STAGING_PAYKIT_CONTACTS`. Covers only public on-chain contact payment: unsaved pubky routes to Add Contact, add contact, `ContactPay`, 10 000 sats on-chain, `SendSuccess`, contact activity shows "Sent to".

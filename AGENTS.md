@@ -103,7 +103,7 @@ next. `journeys/README.md` lists what needs a screenshot instead.
 
 `docs/features/` has one file per feature: what it does, how a user reaches it, the code that owns it, the journeys and
 e2e specs that drive it, what proves it and what no test covers. Read `docs/features/<feature>.md` before changing or
-testing a feature, and update it in the same PR when a flow, route, `testTag` or precondition changes. The index is
+testing a feature, and update it in the same PR when a flow, route, `testTag` or precondition changes. `FeatureMapTest` fails when a file names a path that no longer exists. The index is
 `docs/features/README.md`; file names match the iOS repo's `Docs/features/`.
 
 ## Journeys
