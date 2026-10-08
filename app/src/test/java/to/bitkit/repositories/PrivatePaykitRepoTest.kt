@@ -23,6 +23,7 @@ import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -71,6 +73,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -97,6 +100,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val lightningRepo = mock<LightningRepo>()
     private val walletRepo = mock<WalletRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
+    private val paymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val coreService = mock<CoreService>()
     private val clock = mock<Clock>()
 
@@ -143,8 +147,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever { paykitSdkService.ensureLinkWithPeer(any(), any(), eq(Priority.Ordered)) }.thenAnswer {
             LinkedPeerHandshakeReport(it.getArgument(0), LinkedPeerState.LINKED, 1uL, null)
         }
-        whenever(paykitSdkService.ensureLinkWithPeer(any(), any(), eq(Priority.Background)))
-            .doSuspendableAnswer { paykitSdkService.ensureLinkWithPeer(it.getArgument(0)) }
+        stubContactPreparationPriorities()
         whenever { paykitSdkService.pendingOutboundPrivateCounterparties() }.thenReturn(emptyList())
         whenever(paykitSdkService.linkedPeers(any())).doSuspendableAnswer { paykitSdkService.linkedPeers() }
         whenever(paykitSdkService.pendingOutboundPrivateCounterparties(any())).doSuspendableAnswer {
@@ -163,6 +166,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(Result.success(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic")))
         whenever { publicPaykitRepo.payableEndpoints(any()) }.thenAnswer { it.getArgument<List<Endpoint>>(0) }
         whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { paymentRequestRepo.refreshEligibleTarget(any()) }
+            .thenReturn(Result.success(PaykitPaymentRequestTargetCheck(null, isComplete = true)))
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
 
         PublicPaykitRepo.lightningRouteHintsValidator = { true }
@@ -381,6 +386,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertTrue(sut.prepareSavedContacts(listOf(CONTACT_KEY)).isFailure)
             advanceTimeBy(1_000)
             runCurrent()
+            linkPrepared = false
+            advanceTimeBy(3_000)
+            runCurrent()
             verify(paykitSdkService, times(2)).ensureLinkWithPeer(CONTACT_KEY)
         } finally {
             sut.closeAndClear()
@@ -403,6 +411,292 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         advanceTimeBy(1_000)
         runCurrent()
         verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `new peer retries independently of a peer at maximum backoff`() = test {
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(CONTACT_KEY, OTHER_CONTACT_KEY).map { linkedPeer(it, LinkedPeerState.LINKING) },
+        )
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        advanceTimeBy(167_000)
+        runCurrent()
+        clearInvocations(paykitSdkService)
+
+        sut.prepareSavedContacts(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
+        verify(paykitSdkService).ensureLinkWithPeer(OTHER_CONTACT_KEY)
+        advanceTimeBy(1_000)
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(OTHER_CONTACT_KEY, priority = Priority.Background)
+        verify(paykitSdkService, never()).ensureLinkWithPeer(eq(CONTACT_KEY), any(), any())
+
+        advanceTimeBy(89_000)
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY, priority = Priority.Background)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `explicit peer wakes promptly and duplicate intent does not extend interactive retries`() = test {
+        whenever(clock.now()).thenAnswer {
+            Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
+        }
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(CONTACT_KEY, OTHER_CONTACT_KEY).map { linkedPeer(it, LinkedPeerState.LINKING) },
+        )
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        advanceTimeBy(167_000)
+        runCurrent()
+        clearInvocations(paykitSdkService)
+
+        sut.refreshSavedContactEndpoints(OTHER_CONTACT_KEY, listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        advanceTimeBy(12_000)
+        runCurrent()
+        sut.refreshSavedContactEndpoints(OTHER_CONTACT_KEY, listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService, times(4)).ensureLinkWithPeer(OTHER_CONTACT_KEY, 1u, Priority.Interactive)
+        verify(paykitSdkService, never()).ensureLinkWithPeer(eq(CONTACT_KEY), any(), any())
+
+        advanceTimeBy(20_000)
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(OTHER_CONTACT_KEY, 1u, Priority.Background)
+        verify(paykitSdkService, times(4)).ensureLinkWithPeer(OTHER_CONTACT_KEY, 1u, Priority.Interactive)
+        verify(paykitSdkService, never()).ensureLinkWithPeer(eq(CONTACT_KEY), any(), any())
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `waking an explicit peer does not cancel another admitted advance`() = test {
+        val completion = CompletableDeferred<Unit>()
+        var finished = false
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(CONTACT_KEY, OTHER_CONTACT_KEY).map { linkedPeer(it, LinkedPeerState.LINKING) },
+        )
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
+            completion.await()
+            finished = true
+            LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKING, 1uL, null)
+        }
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        sut.refreshSavedContactEndpoints(OTHER_CONTACT_KEY, listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(OTHER_CONTACT_KEY, 1u, Priority.Interactive)
+        assertFalse(finished)
+        completion.complete(Unit)
+        runCurrent()
+        assertTrue(finished)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `explicit refresh joins admitted maintenance and refreshes only that linked target`() = test {
+        val completion = CompletableDeferred<Unit>()
+        var peerState = LinkedPeerState.LINKING
+        whenever(paykitSdkService.linkedPeers()).thenAnswer { listOf(linkedPeer(CONTACT_KEY, peerState)) }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
+            completion.await()
+            peerState = LinkedPeerState.LINKED
+            LinkedPeerHandshakeReport(CONTACT_KEY, peerState, 1uL, null)
+        }
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        repeat(2) { sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow() }
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+
+        completion.complete(Unit)
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        verify(paymentRequestRepo).refreshEligibleTarget(CONTACT_KEY)
+        verify(paymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+        verify(publicPaykitRepo, never()).beginPayment(any())
+        advanceTimeBy(120_000)
+        runCurrent()
+        verify(paymentRequestRepo).refreshEligibleTarget(CONTACT_KEY)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `explicit linked readiness retries transient intake failure without pending outbound`() = test {
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        whenever(paykitSdkService.receivePrivateMessages(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.Transport("offline", "Unavailable homeserver") }
+            .thenReturn(mock())
+
+        try {
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            verifyNoInteractions(paymentRequestRepo)
+            advanceTimeBy(1_000)
+            runCurrent()
+
+            verify(paykitSdkService, times(2)).receivePrivateMessages(CONTACT_KEY, Priority.Interactive)
+            verify(paymentRequestRepo).refreshEligibleTarget(CONTACT_KEY)
+            advanceTimeBy(120_000)
+            runCurrent()
+            verify(paymentRequestRepo).refreshEligibleTarget(CONTACT_KEY)
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `explicit readiness retries failed or incomplete discovery only within active window`() = test {
+        whenever(clock.now()).thenAnswer {
+            Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
+        }
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        whenever(paymentRequestRepo.refreshEligibleTarget(CONTACT_KEY)).thenReturn(
+            Result.failure(AppError("Discovery unavailable")),
+            Result.success(PaykitPaymentRequestTargetCheck(null, isComplete = false)),
+            Result.success(PaykitPaymentRequestTargetCheck(null, isComplete = true)),
+        )
+
+        try {
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            advanceTimeBy(1_000)
+            runCurrent()
+            verify(paymentRequestRepo, times(2)).refreshEligibleTarget(CONTACT_KEY)
+            advanceTimeBy(3_000)
+            runCurrent()
+            verify(paymentRequestRepo, times(3)).refreshEligibleTarget(CONTACT_KEY)
+            advanceTimeBy(120_000)
+            runCurrent()
+            verify(paymentRequestRepo, times(3)).refreshEligibleTarget(CONTACT_KEY)
+
+            clearInvocations(paymentRequestRepo)
+            whenever(paymentRequestRepo.refreshEligibleTarget(CONTACT_KEY))
+                .thenReturn(Result.failure(AppError("Discovery unavailable")))
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            advanceTimeBy(120_000)
+            runCurrent()
+            verify(paymentRequestRepo, times(4)).refreshEligibleTarget(CONTACT_KEY)
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `explicit admitted write finishes in background and resumes at ordinary priority after expiry`() = test {
+        whenever(clock.now()).thenAnswer {
+            Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
+        }
+        val completion = CompletableDeferred<Unit>()
+        var peerState = LinkedPeerState.LINKING
+        var finished = false
+        whenever(paykitSdkService.linkedPeers()).thenAnswer { listOf(linkedPeer(CONTACT_KEY, peerState)) }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
+            withContext(NonCancellable) { completion.await() }
+            finished = true
+            peerState = LinkedPeerState.LINKED
+            LinkedPeerHandshakeReport(CONTACT_KEY, peerState, 1uL, null)
+        }
+        sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY, 1u, Priority.Interactive)
+        sut.setContactPreparationActive(false)
+        clearInvocations(paykitSdkService)
+        completion.complete(Unit)
+        runCurrent()
+        assertTrue(finished)
+        advanceTimeBy(30_000)
+        runCurrent()
+        verify(paykitSdkService, never()).pendingOutboundPrivateCounterparties(any())
+        verifyNoInteractions(paymentRequestRepo)
+
+        sut.setContactPreparationActive(true)
+        runCurrent()
+        verify(paykitSdkService).receivePrivateMessages(CONTACT_KEY, Priority.Background)
+        verify(paykitSdkService, never()).receivePrivateMessages(CONTACT_KEY, Priority.Interactive)
+        verifyNoInteractions(paymentRequestRepo)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `backgrounding queued retry publication does not block explicit publication`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        val completion = CompletableDeferred<Unit>()
+        var firstLookup = true
+        whenever(paykitSdkService.identityStatus()).doSuspendableAnswer {
+            if (firstLookup) {
+                firstLookup = false
+                completion.await()
+            }
+            IdentityStatus(OWN_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        val initialPublication = async { sut.prepareSavedContacts(listOf(CONTACT_KEY)) }
+        runCurrent()
+        assertFalse(initialPublication.isCompleted)
+        sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+
+        try {
+            sut.setContactPreparationActive(false)
+            completion.complete(Unit)
+            runCurrent()
+            initialPublication.await().getOrThrow()
+            val explicitPublication = async {
+                sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
+            }
+            runCurrent()
+
+            assertTrue(explicitPublication.isCompleted)
+            explicitPublication.await().getOrThrow()
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `explicit retries discard a changed identity before another advance`() = test {
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        clearInvocations(paykitSdkService)
+        whenever(paykitSdkService.identityStatus())
+            .thenReturn(IdentityStatus(OTHER_CONTACT_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+
+        advanceTimeBy(120_000)
+        runCurrent()
+        verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
+        verify(paykitSdkService, never()).receivePrivateMessages(any(), any())
+        verifyNoInteractions(paymentRequestRepo)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `profile deletion invalidates an explicit admitted advance before followup work`() = test {
+        val completion = CompletableDeferred<Unit>()
+        var finished = false
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
+            withContext(NonCancellable) {
+                completion.await()
+                finished = true
+            }
+            LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKED, 1uL, null)
+        }
+        sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        sut.beginProfileDeletion()
+        clearInvocations(paykitSdkService)
+        completion.complete(Unit)
+        advanceTimeBy(120_000)
+        runCurrent()
+
+        assertTrue(finished)
+        verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
+        verify(paykitSdkService, never()).receivePrivateMessages(any(), any())
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
+        verifyNoInteractions(paymentRequestRepo)
         sut.closeAndClear()
     }
 
@@ -2323,6 +2617,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verifyBlocking(paykitSdkService) { retainRecoveryBackup(backup) }
     }
 
+    private suspend fun stubContactPreparationPriorities() {
+        for (priority in listOf(Priority.Background, Priority.Interactive)) {
+            whenever(paykitSdkService.ensureLinkWithPeer(any(), any(), eq(priority)))
+                .doSuspendableAnswer { paykitSdkService.ensureLinkWithPeer(it.getArgument(0)) }
+        }
+        whenever(paykitSdkService.identityStatus(any())).doSuspendableAnswer { paykitSdkService.identityStatus() }
+    }
+
     private fun createSut(publicPaykitRepo: PublicPaykitRepo = this.publicPaykitRepo) = PrivatePaykitRepo(
         ioDispatcher = testDispatcher,
         paykitSdkService = paykitSdkService,
@@ -2333,6 +2635,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         lightningRepo = lightningRepo,
         walletRepo = walletRepo,
         publicPaykitRepo = publicPaykitRepo,
+        paymentRequestRepo = paymentRequestRepo,
         coreService = coreService,
         clock = clock,
     ).also { it.setContactPreparationActive(true) }
