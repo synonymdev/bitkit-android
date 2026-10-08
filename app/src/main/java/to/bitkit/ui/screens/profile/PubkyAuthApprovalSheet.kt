@@ -69,6 +69,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
+import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
@@ -459,31 +460,35 @@ private fun ColumnScope.SuccessContent(
     uiState: PubkyAuthApprovalUiState,
     onDismiss: () -> Unit,
 ) {
-    VerticalSpacer(16.dp)
+    BoxWithConstraints(modifier = Modifier.weight(1f)) {
+        Column(
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+        ) {
+            SuccessDescriptionText(
+                clientId = uiState.clientId,
+                serviceName = uiState.serviceName,
+                truncatedKey = uiState.profile?.authDisplayPublicKey.orEmpty(),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+            )
 
-    SuccessDescriptionText(
-        clientId = uiState.clientId,
-        serviceName = uiState.serviceName,
-        truncatedKey = uiState.profile?.authDisplayPublicKey.orEmpty(),
-        modifier = Modifier.padding(horizontal = 16.dp)
-    )
-    VerticalSpacer(16.dp)
+            Image(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(256.dp)
+                    .graphicsLayer {
+                        scaleX = CHECK_SCALE
+                        scaleY = CHECK_SCALE
+                    },
+            )
 
-    FillHeight()
-
-    Image(
-        painter = painterResource(R.drawable.check),
-        contentDescription = null,
-        modifier = Modifier
-            .size(256.dp)
-            .align(Alignment.CenterHorizontally)
-            .graphicsLayer {
-                scaleX = CHECK_SCALE
-                scaleY = CHECK_SCALE
-            },
-    )
-
-    FillHeight()
+            VerticalSpacer(16.dp)
+        }
+    }
 
     PrimaryButton(
         text = stringResource(R.string.profile__auth_approval_ok),
@@ -495,10 +500,12 @@ private fun ColumnScope.SuccessContent(
 
 @Composable
 private fun DescriptionText(clientId: String, serviceName: String) {
-    val text = if (clientId.isNotBlank()) {
-        stringResource(R.string.profile__auth_approval_service_named, clientId, serviceName)
+    val requester = clientId.withoutAccentMarkup()
+    val service = serviceName.withoutAccentMarkup()
+    val text = if (requester.isNotBlank()) {
+        stringResource(R.string.profile__auth_approval_service_named, requester, service)
     } else {
-        stringResource(R.string.profile__auth_approval_service, serviceName)
+        stringResource(R.string.profile__auth_approval_service, service)
     }
     BodyM(text = text.withAccentBoldBright(), color = Colors.White64)
 }
@@ -510,10 +517,12 @@ private fun SuccessDescriptionText(
     truncatedKey: String,
     modifier: Modifier = Modifier,
 ) {
-    val text = if (clientId.isNotBlank()) {
-        stringResource(R.string.profile__auth_approval_success_detail_named, truncatedKey, clientId, serviceName)
+    val requester = clientId.withoutAccentMarkup()
+    val service = serviceName.withoutAccentMarkup()
+    val text = if (requester.isNotBlank()) {
+        stringResource(R.string.profile__auth_approval_success_detail_named, truncatedKey, requester, service)
     } else {
-        stringResource(R.string.profile__auth_approval_success_detail, truncatedKey, serviceName)
+        stringResource(R.string.profile__auth_approval_success_detail, truncatedKey, service)
     }
     BodyM(text = text.withAccentBoldBright(), color = Colors.White64, modifier = modifier)
 }
@@ -627,6 +636,10 @@ private const val CHECK_SCALE = 274f / 256f
 
 private val PubkyProfile.authDisplayPublicKey: String
     get() = pubkyAuthDisplayPublicKey(publicKey)
+
+/** Request data is shown literally: accent tags inside it must not be read as markup by [withAccentBoldBright]. */
+internal fun String.withoutAccentMarkup(): String =
+    generateSequence(this) { current -> current.removeAccentTags().takeIf { it != current } }.last()
 
 internal fun pubkyAuthDisplayPublicKey(publicKey: String): String {
     val rawKey = publicKey.removePrefix("pubky")

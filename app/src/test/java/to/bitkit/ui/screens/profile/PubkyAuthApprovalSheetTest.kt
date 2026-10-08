@@ -48,4 +48,11 @@ class PubkyAuthApprovalSheetTest {
 
         assertEquals(PubkyApprovalLocalAuthMode.None, result)
     }
+
+    @Test
+    fun `request text loses accent markup even when tags are nested`() {
+        assertEquals("evil.app", "<accent>evil</accent>.app".withoutAccentMarkup())
+        assertEquals("evil.app", "<acc<accent>ent>evil</acc</accent>ent>.app".withoutAccentMarkup())
+        assertEquals("app.paykit.server", "app.paykit.server".withoutAccentMarkup())
+    }
 }
