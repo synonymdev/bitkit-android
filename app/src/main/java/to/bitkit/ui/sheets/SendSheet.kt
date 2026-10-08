@@ -156,11 +156,30 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
+            fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String) {
+                appViewModel.onSendSuccess(
+                    details = NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.ONCHAIN,
+                        direction = NewTransactionSheetDirection.SENT,
+                        paymentHashOrTxId = txId,
+                        activityWalletId = walletId,
+                        sats = amountSats.toLong(),
+                    ),
+                    walletId = walletId,
+                    navigate = false,
+                )
+                appViewModel.clearClipboardForAutoRead()
+                navController.navigateTo(SendRoute.Success) {
+                    popUpTo(navController.graph.id) { inclusive = true }
+                }
+            }
             LaunchedEffect(appViewModel, hwSendViewModel) {
                 appViewModel.resolvedHardwarePayments.collect { resolutions ->
                     resolutions.values.forEach { resolution ->
                         if (appViewModel.resolvedHardwarePaymentFor(resolution.walletId, resolution.transactionId) == resolution &&
-                            hwSendViewModel.completeReconciledBroadcast(resolution.walletId, resolution.transactionId)
+                            hwSendViewModel.completeReconciledBroadcast(resolution.walletId, resolution.transactionId) {
+                                showHardwareSuccess(it.txId, it.amountSats, it.walletId)
+                            }
                         ) {
                             appViewModel.consumeResolvedHardwarePayment(resolution)
                         }
@@ -175,6 +194,7 @@ fun SendSheet(
                         )
                     ) {
                         appViewModel.consumeResolvedHardwarePayment(resolved)
+                        showHardwareSuccess(result.txId, result.amountSats, result.walletId)
                         return@collect
                     }
                     val proofComplete = appViewModel.completeHardwareContactPayment(
@@ -194,21 +214,7 @@ fun SendSheet(
                         // and retain the signed operation so another request cannot sign or broadcast.
                         return@collect
                     }
-                    appViewModel.onSendSuccess(
-                        details = NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.ONCHAIN,
-                            direction = NewTransactionSheetDirection.SENT,
-                            paymentHashOrTxId = result.txId,
-                            activityWalletId = result.walletId,
-                            sats = result.amountSats.toLong(),
-                        ),
-                        walletId = result.walletId,
-                        navigate = false,
-                    )
-                    appViewModel.clearClipboardForAutoRead()
-                    navController.navigateTo(SendRoute.Success) {
-                        popUpTo(navController.graph.id) { inclusive = true }
-                    }
+                    showHardwareSuccess(result.txId, result.amountSats, result.walletId)
                     hwSendViewModel.completeBroadcast()
                 }
             }

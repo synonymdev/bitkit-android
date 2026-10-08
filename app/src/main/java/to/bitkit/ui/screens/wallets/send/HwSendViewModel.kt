@@ -310,10 +310,23 @@ class HwSendViewModel @Inject constructor(
         viewModelScope.launch { hwWalletRepo.disconnectStaleSession(walletId) }
     }
 
-    fun completeReconciledBroadcast(walletId: String?, txid: String?): Boolean {
-        val result = pendingResult.value ?: return false
-        if (result.walletId != walletId || !result.txId.equals(txid, ignoreCase = true)) return false
+    fun completeReconciledBroadcast(
+        walletId: String?,
+        txid: String?,
+        onCompleted: (HwSendResult) -> Unit = {},
+    ): Boolean {
+        val result = pendingResult.value?.takeIf {
+            it.walletId == walletId && it.txId.equals(txid, ignoreCase = true)
+        } ?: pendingBroadcast?.takeIf {
+            pendingResult.value == null && it.hasAttemptedBroadcast && it.request.paymentRequestId != null &&
+                it.request.walletId == walletId &&
+                SignedTransactionId.fromHex(it.signedTx.serializedTx).equals(txid, ignoreCase = true)
+        }?.let {
+            HwSendResult(it.request.walletId, requireNotNull(txid).lowercase(), it.request.amountSats,
+                it.request.paymentRequestId, it.request.paymentIdentity)
+        } ?: return false
         completeBroadcast()
+        onCompleted(result)
         return true
     }
 

@@ -959,6 +959,41 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `exact asynchronous completion clears a timed out Shop broadcast without a result`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val timeout = runCatching { withTimeout(Duration.ZERO) { Unit } }
+            .exceptionOrNull() as TimeoutCancellationException
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(timeout))
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("original", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        val txid = "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e"
+        assertFalse(sut.completeReconciledBroadcast("other-wallet", txid))
+        assertFalse(sut.completeReconciledBroadcast(WALLET_ID, "other-tx"))
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        var completed: HwSendResult? = null
+        assertTrue(sut.completeReconciledBroadcast(WALLET_ID, txid.uppercase()) { completed = it })
+        assertEquals(HwSendResult(WALLET_ID, txid, original.amountSats,
+            original.paymentRequestId, original.paymentIdentity), completed)
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+        assertFalse(sut.completeReconciledBroadcast(WALLET_ID, txid))
+
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.success(fixture.broadcast))
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
     fun `matching asynchronous completion consumes retained result and permits the next hardware send`() = test {
         val fixture = stubSuccessfulPayment()
         sut.signAndBroadcast(request().copy(paymentRequestId = PaykitPaymentRequestId("original", "counterparty")))
