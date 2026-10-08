@@ -41,9 +41,11 @@ import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.OnchainRecoveryFeeRate
+import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PendingPaymentResolution
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
@@ -59,6 +61,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
+import to.bitkit.viewmodels.SanityWarning
 
 const val RECOVERY_PIN_CHECK_RESULT_KEY = "RECOVERY_PIN_CHECK_RESULT_KEY"
 
@@ -75,7 +78,7 @@ fun SendPendingScreen(
     viewModel: SendPendingViewModel,
     walletId: String = WalletScope.default,
     refusalReason: String? = null,
-    retryOriginal: suspend (OnchainSendAttempt, ULong) -> Result<OnchainSendOutcome>,
+    retryOriginal: suspend (OnchainSendAttempt, ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Result<OnchainSendOutcome>,
     onRecovered: (String, Long) -> Unit,
     savedStateHandle: SavedStateHandle,
     onNavigateToPin: () -> Unit,
@@ -115,7 +118,8 @@ fun SendPendingScreen(
         uiState,
         savedStateHandle,
         onNavigateToPin,
-        { viewModel.retryOriginal(it, retryOriginal) },
+        viewModel,
+        { rate, approve -> viewModel.retryOriginal(rate) { attempt, fee -> retryOriginal(attempt, fee, approve) } },
     ) { onRetry ->
         SendPendingContent(
             amount = if (observeResolution || isOnchain) uiState.amount else amount,
@@ -149,56 +153,75 @@ private fun RecoveryAuthorization(
     uiState: SendPendingUiState,
     savedStateHandle: SavedStateHandle,
     onNavigateToPin: () -> Unit,
-    retryOriginal: (ULong) -> Unit,
+    viewModel: SendPendingViewModel,
+    retryOriginal: (ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Unit,
     content: @Composable (() -> Unit) -> Unit,
 ) {
     var showFeeApproval by remember { mutableStateOf(false) }
     var feeInput by rememberSaveable { mutableStateOf("") }
-    var approvedRate by rememberSaveable { mutableStateOf<String?>(null) }
-    var showBiometrics by remember { mutableStateOf(false) }
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
-    fun submitAuthorizedRetry() {
-        val rate = approvedRate?.let(OnchainRecoveryFeeRate::parse) ?: return
-        approvedRate = null
-        retryOriginal(rate)
-    }
     LaunchedEffect(savedStateHandle) {
         savedStateHandle.getStateFlow<Boolean?>(RECOVERY_PIN_CHECK_RESULT_KEY, null)
             .filterNotNull().collect { successful ->
                 savedStateHandle.remove<Boolean>(RECOVERY_PIN_CHECK_RESULT_KEY)
-                if (successful) submitAuthorizedRetry() else approvedRate = null
+                viewModel.answerRecoveryPin(successful)
             }
     }
-    if (showBiometrics) {
-        BiometricsView(
-            onSuccess = {
-                showBiometrics = false
-                submitAuthorizedRetry()
+    LaunchedEffect(uiState.recoveryApproval) {
+        if (viewModel.openRecoveryPin()) onNavigateToPin()
+    }
+    when (val approval = uiState.recoveryApproval) {
+        is RecoveryApproval.Fee -> AlertDialog(
+            onDismissRequest = { viewModel.answerRecoveryApproval(false) },
+            title = { BodyM(stringResource(R.string.wallet__send_pending__retry_title)) },
+            text = {
+                Column {
+                    SelectionContainer { BodyM(approval.receipt.address, color = Colors.White64) }
+                    BalanceHeaderView(sats = approval.receipt.amountSats.toLong())
+                    VerticalSpacer(16.dp)
+                    BodyM(stringResource(R.string.wallet__send_fee_total)
+                        .replace("{feeSats}", requireNotNull(approval.receipt.miningFeeSats).toString()))
+                    BodyM("${approval.receipt.feeRateSatsPerVByte} " + stringResource(R.string.common__sat_vbyte))
+                }
             },
-            onFailure = {
-                showBiometrics = false
-                onNavigateToPin()
+            confirmButton = {
+                PrimaryButton(text = stringResource(R.string.wallet__send_pending__retry_authorize),
+                    onClick = { viewModel.answerRecoveryApproval(true) })
+            },
+            dismissButton = {
+                SecondaryButton(text = stringResource(R.string.common__cancel),
+                    onClick = { viewModel.answerRecoveryApproval(false) })
             },
         )
+        is RecoveryApproval.Warning -> AppAlertDialog(
+            title = stringResource(R.string.common__are_you_sure),
+            text = stringResource(approval.warning.message),
+            confirmText = stringResource(R.string.wallet__send_yes),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = { viewModel.answerRecoveryApproval(true) },
+            onDismiss = { viewModel.answerRecoveryApproval(false) },
+        )
+        RecoveryApproval.Biometrics -> BiometricsView(
+            onSuccess = { viewModel.answerRecoveryApproval(true) },
+            onFailure = { viewModel.useRecoveryPin() },
+        )
+        else -> Unit
     }
     if (showFeeApproval) {
         uiState.recoveryAttempt?.let { original ->
             RecoveryFeeDialog(original, feeInput, { feeInput = it }, { showFeeApproval = false }) { rate ->
                 showFeeApproval = false
-                approvedRate = rate.toString()
-                if (isPinEnabled && pinForPayments) {
-                    if (isBiometricEnabled && isBiometrySupported) showBiometrics = true else onNavigateToPin()
-                } else {
-                    submitAuthorizedRetry()
+                retryOriginal(rate) { receipt, warnings ->
+                    viewModel.approveRecoveryFee(receipt, warnings, isPinEnabled && pinForPayments,
+                        isBiometricEnabled && isBiometrySupported)
                 }
             }
         }
     }
-
     content {
         feeInput = uiState.recoveryAttempt?.feeRateSatsPerVByte?.toString().orEmpty()
         showFeeApproval = true
@@ -241,7 +264,7 @@ private fun RecoveryFeeDialog(
         },
         confirmButton = {
             PrimaryButton(
-                text = stringResource(R.string.wallet__send_pending__retry_authorize),
+                text = stringResource(R.string.common__continue),
                 enabled = OnchainRecoveryFeeRate.parse(feeInput) != null,
                 onClick = {
                     val rate = OnchainRecoveryFeeRate.parse(feeInput) ?: return@PrimaryButton

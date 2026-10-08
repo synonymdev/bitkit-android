@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
@@ -10,17 +11,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainRecoveryFeeRate
+import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.utils.Logger
+import to.bitkit.viewmodels.SanityWarning
 import javax.inject.Inject
 
 @HiltViewModel
@@ -37,6 +44,8 @@ class SendPendingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SendPendingUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var recoveryApproval: CompletableDeferred<Boolean>? = null
+    private var recoveryPinOpened = false
     private var isInitialized = false
 
     fun init(paymentHash: String, amount: Long) {
@@ -158,7 +167,56 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
+    suspend fun approveRecoveryFee(
+        receipt: OnchainPreparedReceipt,
+        warnings: List<SanityWarning>,
+        requiresPin: Boolean,
+        useBiometrics: Boolean,
+    ) = withContext(Dispatchers.Main.immediate) {
+        requireNotNull(receipt.miningFeeSats)
+        requestRecoveryApproval(RecoveryApproval.Fee(receipt))
+        warnings.forEach { requestRecoveryApproval(RecoveryApproval.Warning(it)) }
+        if (requiresPin) {
+            requestRecoveryApproval(if (useBiometrics) RecoveryApproval.Biometrics else RecoveryApproval.Pin)
+        }
+    }
+
+    private suspend fun requestRecoveryApproval(step: RecoveryApproval) {
+        val answer = CompletableDeferred<Boolean>()
+        recoveryApproval = answer
+        recoveryPinOpened = false
+        _uiState.update { it.copy(recoveryApproval = step) }
+        try {
+            if (!answer.await()) throw CancellationException("Original payment retry cancelled")
+        } finally {
+            if (recoveryApproval === answer) {
+                recoveryApproval = null
+                _uiState.update { it.copy(recoveryApproval = null) }
+            }
+        }
+    }
+
+    fun answerRecoveryApproval(approved: Boolean) {
+        recoveryApproval?.complete(approved)
+    }
+
+    fun answerRecoveryPin(approved: Boolean) {
+        if (_uiState.value.recoveryApproval == RecoveryApproval.Pin) answerRecoveryApproval(approved)
+    }
+
+    fun useRecoveryPin() {
+        recoveryPinOpened = false
+        _uiState.update { it.copy(recoveryApproval = RecoveryApproval.Pin) }
+    }
+
+    fun openRecoveryPin(): Boolean {
+        if (_uiState.value.recoveryApproval != RecoveryApproval.Pin || recoveryPinOpened) return false
+        recoveryPinOpened = true
+        return true
+    }
+
     override fun onCleared() {
+        recoveryApproval?.cancel()
         pendingPaymentRepo.setActiveHash(null)
     }
 
@@ -193,15 +251,24 @@ class SendPendingViewModel @Inject constructor(
     }
 }
 
+@Stable
 data class SendPendingUiState(
     val amount: Long = 0L,
     val activityId: String? = null,
     val resolution: PendingPaymentResolution? = null,
     val recoveryAttempt: OnchainSendAttempt? = null,
     val isRecovering: Boolean = false,
+    val recoveryApproval: RecoveryApproval? = null,
     val invalidFeeRate: Boolean = false,
     val recoveryError: String? = null,
     val currentTxid: String? = null,
     val recoveredTxid: String? = null,
     val recoveredTransfer: OnchainSendAttempt? = null,
 )
+
+sealed interface RecoveryApproval {
+    data class Fee(val receipt: OnchainPreparedReceipt) : RecoveryApproval
+    data class Warning(val warning: SanityWarning) : RecoveryApproval
+    data object Biometrics : RecoveryApproval
+    data object Pin : RecoveryApproval
+}

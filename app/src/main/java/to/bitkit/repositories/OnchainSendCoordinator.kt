@@ -11,8 +11,8 @@ import to.bitkit.ext.runSuspendCatching
 
 /** Rust converts sat/vB to sat/kwu by multiplying by 250; validate before the unchecked FFI factory. */
 object OnchainRecoveryFeeRate {
-    // Native sat/vB conversion multiplies by 250; shared backup/iOS fees also require UInt32.
-    val maximum: ULong = minOf(ULong.MAX_VALUE / 250uL, UInt.MAX_VALUE.toULong())
+    // Match the normal custom-fee field and iOS ceiling.
+    val maximum: ULong = 999uL
 
     fun isValid(rate: ULong): Boolean = rate > 0uL && rate <= maximum
 
@@ -132,6 +132,7 @@ class OnchainSendCoordinator(
         walletId: String,
         feeRateSatsPerVByte: ULong,
         paymentDeadlineAt: Instant? = null,
+        approvePrepared: suspend (OnchainPreparedReceipt) -> Unit = {},
         authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
     ): Result<OnchainSendOutcome> = withContext(ioDispatcher) {
         val result = runSuspendCatching {
@@ -150,6 +151,7 @@ class OnchainSendCoordinator(
                 }
                 require(OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte))
                 val prepared = sender.prepareRecovery(attempt, feeRateSatsPerVByte, paymentDeadlineAt)
+                approvePrepared(prepared.receipt.copy(feeRateSatsPerVByte = feeRateSatsPerVByte))
                 val retained = store.retainPreparedReceipt(
                     attempt.attemptId,
                     attempt.walletIndex,

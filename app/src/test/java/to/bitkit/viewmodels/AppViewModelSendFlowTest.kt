@@ -9842,8 +9842,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             evidence = OnchainSendEvidence.Unknown,
         )
         var dispatched = 0
-        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any())).doSuspendableAnswer { invocation ->
-            val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(4)
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())).doSuspendableAnswer { invocation ->
+            val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
             runCatching {
                 authorize(original)
                 dispatched += 1

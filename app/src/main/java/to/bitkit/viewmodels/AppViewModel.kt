@@ -160,6 +160,7 @@ import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
 import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
@@ -4710,6 +4711,7 @@ class AppViewModel @Inject constructor(
     suspend fun retryOriginalOnchainSend(
         original: OnchainSendAttempt,
         feeRateSatsPerVByte: ULong,
+        approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit = { _, _ -> },
     ): Result<OnchainSendOutcome> {
         val request = original.requestId?.let { id ->
             (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
@@ -4723,6 +4725,16 @@ class AppViewModel @Inject constructor(
             original.walletId,
             feeRateSatsPerVByte,
             paymentDeadlineAt = request?.paymentDeadlineAt,
+            approvePrepared = { receipt ->
+                val fee = requireNotNull(receipt.miningFeeSats)
+                check(fee <= Long.MAX_VALUE.toULong())
+                val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrThrow()
+                val warnings = buildList {
+                    if (fee > original.amountSats / 2uL) add(SanityWarning.FEE_OVER_HALF_VALUE)
+                    if (feeInUsd.value > BigDecimal(TEN_USD)) add(SanityWarning.FEE_OVER_10_USD)
+                }
+                approvePrepared(receipt, warnings)
+            },
         ) { attempt ->
             check(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&

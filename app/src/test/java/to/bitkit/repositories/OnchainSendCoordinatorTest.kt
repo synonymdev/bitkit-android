@@ -72,6 +72,34 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `retry fee approval uses the exact prepared object before retention and dispatch`() = test {
+        val f = Fixture()
+        val original = f.unresolved()
+        var preparations = 0
+        var broadcasts = 0
+        val receipt = f.receipt(nextTxid)
+        val sender = object : OnchainPreparedSender {
+            override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend = error("unused")
+            override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong,
+                paymentDeadlineAt: Instant?): PreparedOnchainSend {
+                preparations++
+                return PreparedOnchainSend(receipt) { broadcasts++; OnchainSendOutcome.Unknown(nextTxid) }
+            }
+        }
+        val coordinator = OnchainSendCoordinator(f.store, sender, testDispatcher)
+        var approved = false
+        coordinator.retryOriginal(original.attemptId, original.walletId, 4uL,
+            approvePrepared = { preview ->
+                assertEquals(receipt.copy(feeRateSatsPerVByte = 4uL), preview)
+                assertEquals(listOf(firstTxid), f.store.current()?.candidateTxids)
+                assertEquals(0, broadcasts)
+                approved = true
+            }) { assertTrue(approved) }.getOrThrow()
+        assertEquals(1, preparations)
+        assertEquals(1, broadcasts)
+    }
+
+    @Test
     fun `accepted retry without durable acceptance stays pending after restart`() = test {
         val f = Fixture()
         val original = f.unresolved()
@@ -588,7 +616,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
 
     @Test
     fun `overflowing authorized recovery fee never reaches native preparation`() = test {
-        assertEquals(UInt.MAX_VALUE.toULong(), OnchainRecoveryFeeRate.maximum)
+        assertEquals(999uL, OnchainRecoveryFeeRate.maximum)
         assertEquals(null, OnchainRecoveryFeeRate.parse("4294967296"))
         assertEquals(
             OnchainRecoveryFeeRate.maximum,

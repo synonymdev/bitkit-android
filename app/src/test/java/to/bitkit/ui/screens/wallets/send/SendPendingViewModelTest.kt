@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendInput
@@ -25,6 +27,7 @@ import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.viewmodels.SanityWarning
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -52,6 +55,34 @@ class SendPendingViewModelTest : BaseUnitTest() {
             .thenReturn(Result.failure(Exception("not found")))
         whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
         sut = createViewModel()
+    }
+
+    @Test
+    fun `exact prepared fee and warnings precede original retry payment authentication`() = test {
+        val receipt = OnchainPreparedReceipt("ab".repeat(32), emptyList(), "original", 1_000uL,
+            feeRateSatsPerVByte = 10uL, miningFeeSats = 600uL)
+        val authorization = async {
+            sut.approveRecoveryFee(receipt, listOf(SanityWarning.FEE_OVER_HALF_VALUE, SanityWarning.FEE_OVER_10_USD),
+                requiresPin = true, useBiometrics = true)
+        }
+        advanceUntilIdle()
+        assertEquals(RecoveryApproval.Fee(receipt), sut.uiState.value.recoveryApproval)
+        sut.answerRecoveryApproval(true)
+        advanceUntilIdle()
+        assertEquals(RecoveryApproval.Warning(SanityWarning.FEE_OVER_HALF_VALUE), sut.uiState.value.recoveryApproval)
+        sut.answerRecoveryApproval(true)
+        advanceUntilIdle()
+        assertEquals(RecoveryApproval.Warning(SanityWarning.FEE_OVER_10_USD), sut.uiState.value.recoveryApproval)
+        sut.answerRecoveryApproval(true)
+        advanceUntilIdle()
+        assertEquals(RecoveryApproval.Biometrics, sut.uiState.value.recoveryApproval)
+        sut.useRecoveryPin()
+        assertEquals(true, sut.openRecoveryPin())
+        assertEquals(false, sut.openRecoveryPin(), "Returning from PIN must not navigate to PIN again")
+        sut.answerRecoveryPin(true)
+        advanceUntilIdle()
+        authorization.await()
+        assertNull(sut.uiState.value.recoveryApproval)
     }
 
     @Test

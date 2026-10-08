@@ -1717,9 +1717,12 @@ class LightningRepo @Inject constructor(
         walletId: String,
         feeRateSatsPerVByte: ULong,
         paymentDeadlineAt: Instant? = null,
+        approvePrepared: suspend (OnchainPreparedReceipt) -> Unit = {},
         authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("retryOriginalOnchainSend") {
-        val result = recoveryCoordinator.retryOriginal(attemptId, walletId, feeRateSatsPerVByte, paymentDeadlineAt, authorizeOriginal)
+        val result = recoveryCoordinator.retryOriginal(
+            attemptId, walletId, feeRateSatsPerVByte, paymentDeadlineAt, approvePrepared, authorizeOriginal,
+        )
         val accepted = result.getOrNull() as? OnchainSendOutcome.Accepted
         if (accepted != null) {
             runSuspendCatching {
