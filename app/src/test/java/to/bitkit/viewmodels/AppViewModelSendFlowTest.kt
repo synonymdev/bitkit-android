@@ -9693,6 +9693,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `late hardware Shop success preserves a newer active contact`() = test {
+        val txid = "ef".repeat(32)
+        setActiveContactPaymentContext(testPublicKey)
+        sut.onSendSuccess(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.SENT,
+                paymentHashOrTxId = txid,
+                sats = 1_000,
+            ),
+            walletId = "hardware-original",
+            navigate = false,
+            syncContact = false,
+        )
+        advanceUntilIdle()
+        assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
+        verify(activityRepo, never()).setContact(any(), eq(txid), any(), any())
+        assertEquals(txid, sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
     fun `blocked new contact cannot be assigned to recovered older payment`() = test {
         val txid = "ef".repeat(32)
         val previous = OnchainSendAttempt(

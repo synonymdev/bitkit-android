@@ -156,7 +156,7 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
-            fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String) {
+            fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
                 appViewModel.onSendSuccess(
                     details = NewTransactionSheetDetails(
                         type = NewTransactionSheetType.ONCHAIN,
@@ -167,6 +167,7 @@ fun SendSheet(
                     ),
                     walletId = walletId,
                     navigate = false,
+                    syncContact = !isShopPayment,
                 )
                 appViewModel.clearClipboardForAutoRead()
                 navController.navigateTo(SendRoute.Success) {
@@ -178,7 +179,7 @@ fun SendSheet(
                     resolutions.values.forEach { resolution ->
                         if (appViewModel.resolvedHardwarePaymentFor(resolution.walletId, resolution.transactionId) == resolution &&
                             hwSendViewModel.completeReconciledBroadcast(resolution.walletId, resolution.transactionId) {
-                                showHardwareSuccess(it.txId, it.amountSats, it.walletId)
+                                showHardwareSuccess(it.txId, it.amountSats, it.walletId, it.paymentRequestId != null)
                             }
                         ) {
                             appViewModel.consumeResolvedHardwarePayment(resolution)
@@ -194,7 +195,7 @@ fun SendSheet(
                         )
                     ) {
                         appViewModel.consumeResolvedHardwarePayment(resolved)
-                        showHardwareSuccess(result.txId, result.amountSats, result.walletId)
+                        showHardwareSuccess(result.txId, result.amountSats, result.walletId, result.paymentRequestId != null)
                         return@collect
                     }
                     val proofComplete = appViewModel.completeHardwareContactPayment(
@@ -214,7 +215,7 @@ fun SendSheet(
                         // and retain the signed operation so another request cannot sign or broadcast.
                         return@collect
                     }
-                    showHardwareSuccess(result.txId, result.amountSats, result.walletId)
+                    showHardwareSuccess(result.txId, result.amountSats, result.walletId, result.paymentRequestId != null)
                     hwSendViewModel.completeBroadcast()
                 }
             }

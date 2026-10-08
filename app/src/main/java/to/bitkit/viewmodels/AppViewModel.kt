@@ -6089,13 +6089,14 @@ class AppViewModel @Inject constructor(
         allowDuplicateHash: Boolean = false,
         walletId: String = WalletScope.default,
         navigate: Boolean = true,
+        syncContact: Boolean = true,
     ) {
         details.paymentHashOrTxId?.let {
             val isNewPayment = synchronized(processedPaymentsLock) {
                 processedPayments.add(it)
             }
             when {
-                isNewPayment -> syncContactForActivity(it, walletId)
+                isNewPayment -> if (syncContact) syncContactForActivity(it, walletId)
                 !allowDuplicateHash -> {
                     Logger.debug("Skipped duplicate processed payment '$it'", context = TAG)
                     return
