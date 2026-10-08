@@ -86,6 +86,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                     },
                     clientId = request.clientId,
                     homeserverPublicKey = request.homeserverPublicKey,
+                    createsIdentity = request.requiresIdentityCreation(pubkyRepo.publicKey.value != null),
                     serviceName = serviceName,
                     permissions = request.permissions.toImmutableList(),
                     bitkitClaim = request.bitkitClaim,
@@ -170,10 +171,10 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             handleApprovalFailure(PubkyAuthRequestError.RequesterChanged, authUrl)
             return
         }
-        if (!approveRequest(request, authUrl)) return
+        if (!approveRequest(request, authUrl, approvalState.createsIdentity)) return
 
         Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
-        if (request.isSignup) {
+        if (approvalState.createsIdentity) {
             _effects.emit(PubkyAuthApprovalEffect.Dismiss)
             return
         }
@@ -185,7 +186,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private suspend fun approveRequest(
         request: PubkyAuthRequest,
         authUrl: String,
-    ): Boolean = if (request.isSignup) {
+        createsIdentity: Boolean,
+    ): Boolean = if (createsIdentity) {
         pubkyRepo.approveSignupAuth(request).fold(
             onSuccess = { true },
             onFailure = {
@@ -341,6 +343,7 @@ data class PubkyAuthApprovalUiState(
     val state: ApprovalState = ApprovalState.Loading,
     val clientId: String = "",
     val homeserverPublicKey: String? = null,
+    val createsIdentity: Boolean = false,
     val serviceName: String = "",
     val permissions: ImmutableList<PubkyAuthPermission> = persistentListOf(),
     val bitkitClaim: PubkyAuthClaim? = null,

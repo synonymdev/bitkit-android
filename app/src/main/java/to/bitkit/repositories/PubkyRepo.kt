@@ -178,10 +178,17 @@ class PubkyRepo @Inject constructor(
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
     private val signInGeneration = AtomicLong(0L)
+    private val readOnlyProfileGeneration = AtomicLong(0L)
+    private val readOnlyProfileLock = Any()
     private var isServiceInitialized = false
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
     val profile: StateFlow<PubkyProfile?> = _profile.asStateFlow()
+
+    private val _readOnlyProfile = MutableStateFlow<PubkyProfile?>(null)
+
+    /** Public display data for the saved key, not an authenticated session or permission to edit. */
+    val readOnlyProfile: StateFlow<PubkyProfile?> = _readOnlyProfile.asStateFlow()
 
     private val _publicKey = MutableStateFlow<String?>(null)
     val publicKey: StateFlow<String?> = _publicKey.asStateFlow()
@@ -759,7 +766,7 @@ class PubkyRepo @Inject constructor(
     // region Profile loading
 
     suspend fun loadProfile() {
-        val signIn = currentSignIn() ?: return
+        val signIn = currentSignIn() ?: return loadReadOnlyProfile()
         val version = completedProfileLoadVersion.get()
         loadProfileMutex.withLock {
             if (!isCurrent(signIn)) return
@@ -788,6 +795,7 @@ class PubkyRepo @Inject constructor(
                         Logger.debug("Skipped stale profile load for '${redacted(signIn.publicKey)}'", context = TAG)
                         return@onSuccess
                     }
+                    invalidateReadOnlyProfile()
                     cacheMetadata(loadedProfile, isCurrentLoad)
                 }.onFailure {
                     Logger.error("Failed to load profile", it, context = TAG)
@@ -795,6 +803,32 @@ class PubkyRepo @Inject constructor(
                 completedProfileSignInGeneration = signIn.generation
                 completedProfileWriteGeneration = writeGeneration
                 completedProfileLoadVersion.incrementAndGet()
+            } finally {
+                _isLoadingProfile.update { false }
+            }
+        }
+    }
+
+    private suspend fun loadReadOnlyProfile() = withContext(ioDispatcher) {
+        awaitInitialization()
+        val generation = readOnlyProfileGeneration.get()
+        loadProfileMutex.withLock {
+            val isCurrentLoad = { readOnlyProfileGeneration.get() == generation && _publicKey.value == null }
+            if (!isCurrentLoad()) return@withLock
+            _isLoadingProfile.update { true }
+            try {
+                runSuspendCatching {
+                    val secret = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+                        ?: adoptedSecretKeyHex() ?: return@runSuspendCatching null
+                    val owner = pubkyService.publicKeyFromSecret(secret).ensurePubkyPrefix()
+                    resolveContactProfile(owner, retry = false).getOrThrow()
+                }.onSuccess { loaded ->
+                    synchronized(readOnlyProfileLock) {
+                        if (isCurrentLoad()) _readOnlyProfile.update { loaded }
+                    }
+                }.onFailure {
+                    Logger.warn("Failed to load saved identity's public profile", it, context = TAG)
+                }
             } finally {
                 _isLoadingProfile.update { false }
             }
@@ -1450,7 +1484,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {
         withContext(ioDispatcher) {
-            if (PubkyAuthRequest.isSignupUrl(authUrl)) {
+            if (PubkyAuthRequest.isSignupUrl(authUrl) && !PubkyAuthRequest.isGrantSignupUrl(authUrl)) {
                 val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
                 pubkyService.validateSignupRequest(
                     authorizationUrl = request.authorizationUrl,
@@ -1460,6 +1494,15 @@ class PubkyRepo @Inject constructor(
             }
 
             val details = pubkyService.parseAuthUrl(authUrl)
+            if (PubkyAuthRequest.isGrantSignupUrl(authUrl)) {
+                return@withContext PubkyAuthRequest.parseGrantSignup(
+                    rawUrl = authUrl,
+                    clientId = details.clientId.orEmpty(),
+                    relay = details.relayUrl.orEmpty(),
+                    capabilities = details.capabilities.orEmpty(),
+                    homeserverPublicKey = details.homeserverPublicKey,
+                ).getOrThrow()
+            }
             PubkyAuthRequest.parse(
                 rawUrl = authUrl,
                 clientId = details.clientId.orEmpty(),
@@ -1473,6 +1516,7 @@ class PubkyRepo @Inject constructor(
         runSuspendCatching {
             withContext(ioDispatcher) {
                 require(request.isSignup) { "Not a Pubky signup request" }
+                require(request.bitkitClaim == null) { "Pubky signup does not support Bitkit companion claims" }
                 if (hasIdentity()) throw PubkyAlreadySignedInError
 
                 val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
@@ -1485,7 +1529,13 @@ class PubkyRepo @Inject constructor(
                     homeserverZ32 = requireNotNull(request.homeserverPublicKey),
                     signupCode = request.signupToken,
                 )
-                request.authorizationUrl?.let { pubkyService.approveRingAuth(it, secretKeyHex) }
+                request.authorizationUrl?.let {
+                    if (request.isGrantSignup) {
+                        pubkyService.approveAuth(it, request.capabilities, request.clientId, secretKeyHex)
+                    } else {
+                        pubkyService.approveRingAuth(it, secretKeyHex)
+                    }
+                }
                 var activated = false
                 try {
                     pubkyService.activateRegisteredIdentity(registeredSession)
@@ -1996,12 +2046,18 @@ class PubkyRepo @Inject constructor(
     private fun startSignIn(publicKey: String) {
         // First, so the sign-in it replaces has ended before the key is published, even when it is the same identity.
         signInGeneration.incrementAndGet()
+        invalidateReadOnlyProfile(keepingPublicKey = publicKey)
         _publicKey.update { publicKey }
     }
 
     private fun continueSignIn(publicKey: String) {
         // Restoring or refreshing the session already signed in keeps its sign-in, so an edit under way still saves.
         if (_publicKey.value != publicKey) startSignIn(publicKey)
+    }
+
+    private fun invalidateReadOnlyProfile(keepingPublicKey: String? = null) = synchronized(readOnlyProfileLock) {
+        readOnlyProfileGeneration.incrementAndGet()
+        _readOnlyProfile.update { profile -> profile?.takeIf { it.publicKey == keepingPublicKey } }
     }
 
     private suspend fun clearAuthenticatedState(
@@ -2011,6 +2067,7 @@ class PubkyRepo @Inject constructor(
         // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
         signInGeneration.incrementAndGet()
         if (clearCachedProfile) {
+            invalidateReadOnlyProfile()
             evictPubkyImages()
             profileWriteGeneration.incrementAndGet()
             runSuspendCatching { pubkyStore.reset() }

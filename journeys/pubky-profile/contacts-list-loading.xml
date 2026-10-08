@@ -18,10 +18,10 @@
     A warm network can resolve every profile before the first inspection; report "already resolved"
     rather than failing. To slow the lookups on an emulator, run adb emu network delay gprs and adb
     emu network speed edge before the first step, and adb emu network delay none and adb emu network
-    speed full after the last. If the Pubky session is still restoring when Contacts is tapped, the
-    menu opens the contacts intro or the Pubky choice screen instead, and the choice screen moves on
-    to Profile by itself once the session is back: return to the home screen, wait a moment and open
-    Contacts from the menu again. That is the session restore, not the contacts list. The edit form
+    speed full after the last. If the saved Pubky session is still restoring when Contacts is tapped,
+    Profile recovery appears first on both platforms. Android can first show the contacts intro if
+    it has not been completed and no contacts are loaded. Return Home and reopen Contacts after
+    restoration. That is the session restore, not the contacts list. The edit form
     labels the bio field "Bio". See README.md.
   </description>
   <actions>

@@ -46,11 +46,11 @@ private const val HW_DEVICE_LEDGER_BLEED_RATIO = 53f / 375f
 /** Vertical stagger between the two device illustrations, as a fraction of the sheet width. */
 private const val HW_DEVICE_STAGGER_RATIO = 12f / 375f
 
-/** The device illustration shown for a vendor; the Jade one is a placeholder until design supplies the asset. */
+/** The device illustration shown for a vendor across the hardware wallet flow. */
 @DrawableRes
 fun HwWalletVendor.illustrationRes(): Int = when (this) {
     HwWalletVendor.TREZOR -> R.drawable.trezor
-    HwWalletVendor.BLOCKSTREAM -> R.drawable.jade_placeholder
+    HwWalletVendor.BLOCKSTREAM -> R.drawable.jade
 }
 
 @StringRes

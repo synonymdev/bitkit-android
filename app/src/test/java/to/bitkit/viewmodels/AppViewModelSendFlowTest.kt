@@ -294,6 +294,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val legacyAuthorizedSignupAuthUrl = signupAuthUrl.replace("pubkyring://", "pubkyauth://")
     private val directSignupAuthUrl = "pubkyauth://direct_signup?hs=homeserver&st=invite"
     private val legacyDirectSignupAuthUrl = "pubkyauth://signup?hs=homeserver&st=invite"
+    private val grantSignupAuthUrl = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
 
     private val timedSheetManager = mock<TimedSheetManager>()
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
@@ -4395,26 +4396,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `cold pubky auth deeplink waits for a session retry after a failed startup restore`() = test {
         enablePaykitUi()
         advanceUntilIdle()
-        val retry = CompletableDeferred<Unit>()
         whenever(pubkyRepo.hasIdentity()).thenReturn(true)
         whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        var retry = CompletableDeferred<Unit>()
         whenever(pubkyRepo.awaitIdentityReady()).doSuspendableAnswer {
             retry.await()
             pubkyPublicKey.value = testPublicKey
             PubkyIdentityReadiness.Ready
         }
-        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+        listOf("pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw", grantSignupAuthUrl).forEach { authUrl ->
+            sut.hideSheet()
+            pubkyPublicKey.value = null
+            retry = CompletableDeferred()
 
-        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
-        runCurrent()
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            runCurrent()
 
-        assertNull(sut.currentSheet.value)
-        verify(toastManager, never()).enqueue(any())
-        retry.complete(Unit)
-        advanceUntilIdle()
+            assertNull(sut.currentSheet.value)
+            verify(toastManager, never()).enqueue(any())
+            retry.complete(Unit)
+            advanceUntilIdle()
 
-        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
-        verify(toastManager, never()).enqueue(any())
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            verify(toastManager, never()).enqueue(any())
+        }
     }
 
     @Test
@@ -4428,19 +4433,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn("Check your connection and try again.")
         advanceUntilIdle()
 
-        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
-        advanceUntilIdle()
+        listOf("pubkyauth://signin_grant", grantSignupAuthUrl).forEach { authUrl ->
+            clearInvocations(pubkyRepo, toastManager)
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
 
-        assertNull(sut.currentSheet.value)
-        verify(pubkyRepo).awaitIdentityReady()
-        verify(context, never()).getString(R.string.pubky_auth__no_identity)
-        verify(toastManager).enqueue(
-            check {
-                assertEquals(Toast.ToastType.ERROR, it.type)
-                assertEquals("Couldn't Load Your Pubky Profile", it.title)
-                assertEquals("Check your connection and try again.", it.description)
-            }
-        )
+            assertNull(sut.currentSheet.value)
+            verify(pubkyRepo).awaitIdentityReady()
+            verify(context, never()).getString(R.string.pubky_auth__no_identity)
+            verify(context, never()).getString(R.string.pubky_auth__already_signed_in)
+            verify(toastManager).enqueue(
+                check {
+                    assertEquals(Toast.ToastType.ERROR, it.type)
+                    assertEquals("Couldn't Load Your Pubky Profile", it.title)
+                    assertEquals("Check your connection and try again.", it.description)
+                }
+            )
+        }
     }
 
     @Test
@@ -4451,13 +4460,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn("Couldn't Load Your Pubky Profile")
         advanceUntilIdle()
 
-        sut.showScannerSheet()
-        advanceUntilIdle()
-        sut.onScannerSheetResult("pubkyauth://auth?caps=/pub/paykit/v0/:rw")
-        advanceUntilIdle()
+        listOf("pubkyauth://auth?caps=/pub/paykit/v0/:rw", grantSignupAuthUrl).forEach { authUrl ->
+            clearInvocations(toastManager)
+            sut.showScannerSheet()
+            advanceUntilIdle()
+            sut.onScannerSheetResult(authUrl)
+            advanceUntilIdle()
 
-        verify(context, never()).getString(R.string.pubky_auth__no_identity)
-        verify(toastManager).enqueue(check { assertEquals("Couldn't Load Your Pubky Profile", it.title) })
+            verify(context, never()).getString(R.string.pubky_auth__no_identity)
+            verify(context, never()).getString(R.string.pubky_auth__already_signed_in)
+            verify(toastManager).enqueue(check { assertEquals("Couldn't Load Your Pubky Profile", it.title) })
+        }
     }
 
     @Test
@@ -4541,7 +4554,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `global scanner accepts authorized signup without an existing identity`() = test {
         enablePaykitUi()
 
-        listOf(signupAuthUrl, legacyAuthorizedSignupAuthUrl).forEach { authUrl ->
+        listOf(signupAuthUrl, legacyAuthorizedSignupAuthUrl, grantSignupAuthUrl).forEach { authUrl ->
             scanSignup(authUrl)
             assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
         }
@@ -4562,7 +4575,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `signup deeplinks wait for unlock then require approval`() = test {
         enablePaykitUi()
-        listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl, signupAuthUrl).forEach { authUrl ->
+        listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl, signupAuthUrl, grantSignupAuthUrl).forEach { authUrl ->
             sut.hideSheet()
             settingsData.value = SettingsData(isPinEnabled = true)
             sut.resetIsAuthenticatedState()
@@ -4760,6 +4773,255 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swipe after switching to savings opens manual coin selection`() = test {
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        balanceState.value = BalanceState(
+            maxSendOnchainSats = 100_000u,
+            maxSendLightningSats = 100_000u,
+        )
+        setUnifiedState(amount = 1_000u, payMethod = SendMethod.LIGHTNING)
+        sut.addTagToSelected("manual")
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceUntilIdle()
+            expectNoEvents()
+
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            assertEquals(SendEffect.NavigateToCoinSelection, awaitItem())
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+            assertEquals(1_000uL, sut.sendUiState.value.amount)
+            assertEquals(persistentListOf("manual"), sut.sendUiState.value.selectedTags)
+            assertNull(sut.sendUiState.value.selectedUtxos)
+            assertFalse(sut.sendUiState.value.shouldConfirmPay)
+        }
+    }
+
+    @Test
+    fun `manual funding switch keeps amount entry and empty savings hardware cycle`() = test {
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(48_000uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+
+        for (amount in listOf(0uL, 1_000uL)) {
+            setUnifiedState(amount = amount, payMethod = SendMethod.LIGHTNING)
+            sut.sendEffect.test {
+                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                advanceUntilIdle()
+
+                assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+                assertEquals(amount, sut.sendUiState.value.amount)
+                assertNull(sut.sendUiState.value.hardwareWalletId)
+                assertFalse(sut.sendUiState.value.isAmountInputValid)
+                expectNoEvents()
+
+                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                advanceUntilIdle()
+
+                assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+                assertEquals(amount, sut.sendUiState.value.amount)
+                expectNoEvents()
+            }
+        }
+    }
+
+    @Test
+    fun `manual send requires coin selection before confirmation`() = test {
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+            )
+        )
+        val selectedUtxos = persistentListOf(mock<SpendableUtxo>())
+
+        sut.sendEffect.test {
+            repeat(2) {
+                sut.setSendEvent(SendEvent.SwipeToPay)
+                assertEquals(SendEffect.NavigateToCoinSelection, awaitItem())
+                assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            }
+
+            sut.setSendEvent(SendEvent.CoinSelectionContinue(selectedUtxos))
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            sut.addTagToSelected("selected")
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+
+            assertEquals(selectedUtxos, sut.sendUiState.value.selectedUtxos)
+            assertTrue(sut.sendUiState.value.shouldConfirmPay)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `manual amount continue clears the previous coin selection`() = test {
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                selectedUtxos = persistentListOf(mock<SpendableUtxo>()),
+            )
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountChange(2_000u))
+            sut.setSendEvent(SendEvent.AmountContinue)
+
+            assertEquals(SendEffect.NavigateToCoinSelection, awaitItem())
+            assertEquals(2_000uL, sut.sendUiState.value.amount)
+            assertNull(sut.sendUiState.value.selectedUtxos)
+        }
+    }
+
+    @Test
+    fun `automatic savings switch keeps preparing coins while tags change`() = test {
+        val selectionStarted = CompletableDeferred<Unit>()
+        val finishSelection = CompletableDeferred<Unit>()
+        val selectedUtxos = persistentListOf(mock<SpendableUtxo>())
+        whenever(lightningRepo.determineUtxosToSpend(any(), any())).doSuspendableAnswer {
+            selectionStarted.complete(Unit)
+            finishSelection.await()
+            selectedUtxos
+        }
+        balanceState.value = BalanceState(
+            maxSendOnchainSats = 100_000u,
+            maxSendLightningSats = 100_000u,
+        )
+        setUnifiedState(amount = 1_000u, payMethod = SendMethod.LIGHTNING)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            selectionStarted.await()
+            sut.addTagToSelected("automatic")
+            finishSelection.complete(Unit)
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+
+            assertEquals(selectedUtxos, sut.sendUiState.value.selectedUtxos)
+            assertEquals(persistentListOf("automatic"), sut.sendUiState.value.selectedTags)
+            assertTrue(sut.sendUiState.value.shouldConfirmPay)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `reset dismissed or replaced send does not open pending coin selection`() = test {
+        balanceState.value = BalanceState(
+            maxSendOnchainSats = 100_000u,
+            maxSendLightningSats = 100_000u,
+        )
+        for (action in listOf("reset", "dismiss", "replace")) {
+            sut.showSheet(Sheet.Send(SendRoute.Confirm))
+            advanceUntilIdle()
+            setSendState(
+                SendUiState(address = REGTEST_ADDRESS, amount = 1_000u, isAmountInputValid = true)
+            )
+            val settingsReadStarted = CompletableDeferred<Unit>()
+            val finishSettingsRead = CompletableDeferred<Unit>()
+            var holdNextRead = true
+            whenever(settingsStore.data).thenReturn(
+                flow {
+                    if (holdNextRead) {
+                        holdNextRead = false
+                        settingsReadStarted.complete(Unit)
+                        finishSettingsRead.await()
+                    }
+                    emit(SettingsData(coinSelectAuto = false))
+                }
+            )
+
+            sut.sendEffect.test {
+                sut.setSendEvent(SendEvent.SwipeToPay)
+                settingsReadStarted.await()
+                when (action) {
+                    "reset" -> sut.resetSendState()
+                    "dismiss" -> sut.hideSheet()
+                    "replace" -> sut.showSheet(Sheet.Send(SendRoute.Recipient))
+                }
+                advanceUntilIdle()
+                finishSettingsRead.complete(Unit)
+                advanceUntilIdle()
+
+                assertFalse(sut.sendUiState.value.shouldConfirmPay)
+                expectNoEvents()
+            }
+        }
+    }
+
+    @Test
+    fun `funding changes abandon a swipe waiting for coin selection settings`() = test {
+        balanceState.value = BalanceState(
+            maxSendOnchainSats = 100_000u,
+            maxSendLightningSats = 100_000u,
+        )
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(48_000uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+
+        for (coinSelectAuto in listOf(false, true)) {
+            for (destination in listOf("spending", "hardware", "savings")) {
+                hwWallets.value = if (destination == "hardware") {
+                    persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+                } else {
+                    persistentListOf()
+                }
+                setSendState(
+                    SendUiState(
+                        address = REGTEST_ADDRESS,
+                        amount = 1_000u,
+                        isUnified = true,
+                        isAmountInputValid = true,
+                    )
+                )
+                advanceUntilIdle()
+                val settingsReadStarted = CompletableDeferred<Unit>()
+                val finishSettingsRead = CompletableDeferred<Unit>()
+                var holdNextRead = true
+                whenever(settingsStore.data).thenReturn(
+                    flow {
+                        if (holdNextRead) {
+                            holdNextRead = false
+                            settingsReadStarted.complete(Unit)
+                            finishSettingsRead.await()
+                        }
+                        emit(SettingsData(coinSelectAuto = coinSelectAuto))
+                    }
+                )
+
+                sut.sendEffect.test {
+                    sut.setSendEvent(SendEvent.SwipeToPay)
+                    settingsReadStarted.await()
+                    repeat(if (destination == "savings") 2 else 1) {
+                        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                        advanceUntilIdle()
+                    }
+                    val current = sut.sendUiState.value
+                    assertEquals(
+                        if (destination == "spending") SendMethod.LIGHTNING else SendMethod.ONCHAIN,
+                        current.payMethod,
+                    )
+                    assertEquals(HARDWARE_WALLET_ID.takeIf { destination == "hardware" }, current.hardwareWalletId)
+
+                    finishSettingsRead.complete(Unit)
+                    advanceUntilIdle()
+
+                    assertFalse(sut.sendUiState.value.shouldConfirmPay)
+                    expectNoEvents()
+                }
+            }
+        }
+    }
+
+    @Test
     fun `switch from lightning to onchain resets confirmedWarnings`() = test {
         balanceState.value = BalanceState(
             maxSendOnchainSats = 100_000u,
@@ -4925,6 +5187,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `missing hardware fee does not block confirmation`() = test {
+        settingsData.value = SettingsData(coinSelectAuto = false)
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
             Result.success(
                 ConvertedAmount(

@@ -91,6 +91,11 @@ data class PubkyAuthRequest(
     val isSignup: Boolean
         get() = isSignupUrl(rawUrl)
 
+    val isGrantSignup: Boolean
+        get() = isGrantSignupUrl(rawUrl)
+
+    fun requiresIdentityCreation(hasIdentity: Boolean): Boolean = isSignup && (!isGrantSignup || !hasIdentity)
+
     companion object {
         @Suppress("LongParameterList")
         fun parse(
@@ -128,9 +133,38 @@ data class PubkyAuthRequest(
 
         fun isSignupUrl(rawUrl: String): Boolean = runCatching { URI(rawUrl).isSignupRequest() }.getOrDefault(false)
 
+        fun isGrantSignupUrl(rawUrl: String): Boolean = runCatching {
+            val uri = URI(rawUrl)
+            uri.scheme.equals("pubkyauth", ignoreCase = true) &&
+                (uri.host ?: uri.rawAuthority).equals("signup_grant", ignoreCase = true)
+        }.getOrDefault(false)
+
+        fun parseGrantSignup(
+            rawUrl: String,
+            clientId: String,
+            relay: String,
+            capabilities: String,
+            homeserverPublicKey: String?,
+        ): Result<PubkyAuthRequest> = runCatching {
+            require(isGrantSignupUrl(rawUrl)) { "Not a Pubky grant signup request" }
+            val query = parseQuery(URI(rawUrl))
+            query.requiredSingle("hs")
+            parse(
+                rawUrl = rawUrl,
+                clientId = clientId,
+                relay = relay,
+                capabilities = capabilities,
+                homeserverPublicKey = requireNotNull(homeserverPublicKey),
+                signupToken = query.optionalSingle("st"),
+            ).getOrThrow()
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(PubkyAuthRequestError.InvalidUrl(it)) },
+        )
+
         fun parseSignup(rawUrl: String): Result<PubkyAuthRequest> = runCatching {
             val uri = URI(rawUrl)
-            require(uri.isSignupRequest()) { "Unsupported Pubky signup URL" }
+            require(uri.isSignupRequest() && !isGrantSignupUrl(rawUrl)) { "Unsupported Pubky signup URL" }
             val query = parseQuery(uri)
             val homeserver = query.requiredSingle("hs")
             val authorizesApp = uri.authorizesApp(query)
@@ -161,7 +195,7 @@ data class PubkyAuthRequest(
 
         private fun URI.isSignupRequest(): Boolean = when (scheme?.lowercase()) {
             "pubkyring" -> host.equals("signup", ignoreCase = true)
-            "pubkyauth" -> isDirectSignupRequest()
+            "pubkyauth" -> isDirectSignupRequest() || (host ?: rawAuthority).equals("signup_grant", ignoreCase = true)
             else -> false
         }
 

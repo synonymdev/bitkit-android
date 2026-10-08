@@ -325,50 +325,86 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `signup requires consent and local auth before registration`() = test {
-        listOf("pubkyauth://direct_signup", "pubkyauth://signup", "pubkyring://signup").forEach { prefix ->
-            val authUrl = "$prefix?hs=homeserver" +
-                if (prefix.startsWith("pubkyring")) {
-                    "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw"
+        listOf("pubkyauth://direct_signup", "pubkyauth://signup", "pubkyring://signup", "pubkyauth://signup_grant")
+            .forEach { prefix ->
+                val authUrl = "$prefix?hs=homeserver" +
+                    if (prefix.startsWith("pubkyring")) {
+                        "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw"
+                    } else {
+                        ""
+                    }
+                val request = if (prefix.endsWith("signup_grant")) {
+                    PubkyAuthRequest.parseGrantSignup(
+                        rawUrl = authUrl,
+                        clientId = clientId,
+                        relay = "https://relay.example",
+                        capabilities = "/pub/example/:rw",
+                        homeserverPublicKey = "homeserver",
+                    )
                 } else {
-                    ""
+                    PubkyAuthRequest.parseSignup(authUrl)
+                }.getOrThrow()
+                whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+                whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(Result.success(Unit))
+                val sut = createSut()
+
+                sut.effects.test {
+                    sut.load(authUrl)
+                    advanceUntilIdle()
+                    assertEquals("homeserver", sut.uiState.value.homeserverPublicKey)
+                    verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
+
+                    sut.requestAuthorize(authUrl)
+                    advanceUntilIdle()
+                    assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
+                    val authenticatingState = sut.uiState.value
+                    sut.load(authUrl)
+                    sut.requestAuthorize(authUrl)
+                    advanceUntilIdle()
+                    assertEquals(authenticatingState, sut.uiState.value)
+                    expectNoEvents()
+                    verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
+                    sut.cancelLocalAuth(authUrl)
+                    assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+                    sut.load(authUrl)
+                    advanceUntilIdle()
+                    assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+                    verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
+
+                    sut.requestAuthorize(authUrl)
+                    advanceUntilIdle()
+                    assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
+                    sut.confirmAuthorize(authUrl)
+                    advanceUntilIdle()
+                    verifyBlocking(pubkyRepo) { approveSignupAuth(request) }
+                    assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
                 }
-            val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
-            whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
-            whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(Result.success(Unit))
-            val sut = createSut()
-
-            sut.effects.test {
-                sut.load(authUrl)
-                advanceUntilIdle()
-                assertEquals("homeserver", sut.uiState.value.homeserverPublicKey)
-                verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
-
-                sut.requestAuthorize(authUrl)
-                advanceUntilIdle()
-                assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
-                val authenticatingState = sut.uiState.value
-                sut.load(authUrl)
-                sut.requestAuthorize(authUrl)
-                advanceUntilIdle()
-                assertEquals(authenticatingState, sut.uiState.value)
-                expectNoEvents()
-                verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
-                sut.cancelLocalAuth(authUrl)
-                assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
-                sut.load(authUrl)
-                advanceUntilIdle()
-                assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
-                verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
-
-                sut.requestAuthorize(authUrl)
-                advanceUntilIdle()
-                assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
-                sut.confirmAuthorize(authUrl)
-                advanceUntilIdle()
-                verifyBlocking(pubkyRepo) { approveSignupAuth(request) }
-                assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
             }
-        }
+    }
+
+    @Test
+    fun `grant signup with an existing identity authorizes without opening profile setup`() = test {
+        val authUrl = "pubkyauth://signup_grant?hs=homeserver"
+        val request = PubkyAuthRequest.parseGrantSignup(
+            rawUrl = authUrl,
+            clientId = clientId,
+            relay = "https://relay.example",
+            capabilities = "/pub/example/:rw",
+            homeserverPublicKey = "homeserver",
+        ).getOrThrow()
+        publicKeyFlow.value = "pubky_existing"
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+        whenever(pubkyRepo.approveAuth(authUrl, request.capabilities, clientId)).thenReturn(Result.success(Unit))
+        val sut = createSut()
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo) { approveAuth(authUrl, request.capabilities, clientId) }
+        verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
     }
 
     @Test

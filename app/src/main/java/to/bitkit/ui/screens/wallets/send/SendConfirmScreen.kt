@@ -111,7 +111,7 @@ import kotlin.time.Duration.Companion.seconds
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val SWIPE_ROTATION_DEGREES = 14f
 private const val IMAGE_FILL_PERCENTAGE = 0.8f
-const val HARDWARE_SIGN_CANCELLED_RESULT_KEY = "HARDWARE_SIGN_CANCELLED_RESULT_KEY"
+const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
 
 @Suppress("MagicNumber")
 @Composable
@@ -152,11 +152,11 @@ fun SendConfirmScreen(
     }
 
     LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow(HARDWARE_SIGN_CANCELLED_RESULT_KEY, false)
+        savedStateHandle.getStateFlow(SEND_CONFIRM_RESET_RESULT_KEY, false)
             .collect {
                 if (!it) return@collect
                 isLoading = false
-                savedStateHandle.remove<Boolean>(HARDWARE_SIGN_CANCELLED_RESULT_KEY)
+                savedStateHandle.remove<Boolean>(SEND_CONFIRM_RESET_RESULT_KEY)
             }
     }
 
@@ -381,7 +381,7 @@ private fun ContentRunning(
                         SendMethod.ONCHAIN -> {
                             OnChainDetails(
                                 uiState = uiState,
-                                interactionsEnabled = !isHardwareFeeLoading,
+                                interactionsEnabled = !isLoading && !isHardwareFeeLoading,
                                 onEvent = onEvent,
                             )
                             VerticalSpacer(16.dp)
@@ -395,6 +395,7 @@ private fun ContentRunning(
                         SendMethod.LIGHTNING -> {
                             LightningDetails(
                                 uiState = uiState,
+                                interactionsEnabled = !isLoading,
                                 onEvent = onEvent,
                                 onClickTag = onClickTag,
                                 onClickAddTag = onClickAddTag,
@@ -564,7 +565,7 @@ private fun OnChainDetails(
                         stringResource(R.string.wallet__savings__title)
                     },
                     color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
-                    enabled = uiState.canSwitchFundingSource,
+                    enabled = uiState.canSwitchFundingSource && interactionsEnabled,
                     isLoading = uiState.isFundingSourceLoading,
                     clickable = interactionsEnabled,
                     icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
@@ -681,6 +682,7 @@ private fun OnChainDetails(
 @Composable
 private fun LightningDetails(
     uiState: SendUiState,
+    interactionsEnabled: Boolean,
     onEvent: (SendEvent) -> Unit,
     onClickTag: (String) -> Unit,
     onClickAddTag: () -> Unit,
@@ -709,7 +711,7 @@ private fun LightningDetails(
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__spending__title),
                     color = Colors.Purple,
-                    enabled = uiState.canSwitchFundingSource,
+                    enabled = uiState.canSwitchFundingSource && interactionsEnabled,
                     isLoading = uiState.isFundingSourceLoading,
                     icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },

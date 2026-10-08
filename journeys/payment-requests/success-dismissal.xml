@@ -1,0 +1,18 @@
+<journey name="Payment Request Success Dismissal">
+  <description>
+    Verifies that dismissing a successful Lightning Payment Request closes the send sheet without an error toast or duplicate payment, and that dismissing a later unpaid request does not send it. Requires two linked disposable regtest wallets, with the payer funded for 11,007 sats plus fees and channel reserves so 5,000 sats remain spendable after the first payment. Never use real funds. Run only when regtest payments are authorized. The same journey runs on iOS; only the confirmation implementation differs. Observe or record the screen during dismissal because a transient toast may disappear before the next UI snapshot.
+  </description>
+  <actions>
+    <action>On the requester, send the payer a Lightning Payment Request for 6,007 sats</action>
+    <action>On the payer, verify the Payment Request confirmation screen (id "PaymentRequestConfirm") shows 6,007 sats and Spending is selected</action>
+    <action>Swipe to pay using the control with id "GRAB" and complete authorization if requested</action>
+    <action>Verify the success screen (id "SendSuccess") is visible</action>
+    <action>Tap Close and observe the screen for five seconds</action>
+    <action>Verify the send sheet is closed and no send error toast appears</action>
+    <action>Verify the payer's Activity contains exactly one outgoing payment for this request</action>
+    <action>On the requester, send the payer a new Lightning Payment Request for 5,000 sats</action>
+    <action>On the payer, verify the Payment Request confirmation screen (id "PaymentRequestConfirm") shows the new amount and Spending is selected</action>
+    <action>Close the confirmation without paying and observe the screen for five seconds</action>
+    <action>Verify the send sheet stays closed, no send error toast appears, and no payment was made for the second request</action>
+  </actions>
+</journey>

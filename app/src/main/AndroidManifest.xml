@@ -194,6 +194,7 @@
                 <data android:scheme="pubkyauth" />
                 <data android:host="signup" />
                 <data android:host="direct_signup" />
+                <data android:host="signup_grant" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

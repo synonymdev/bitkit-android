@@ -337,6 +337,7 @@ class AppViewModel @Inject constructor(
     private var amountContinuePending = false
     private var fundingSourceSwitchPending = false
     private var onchainSendRefreshJob: Job? = null
+    private var sendStateGeneration = 0L
 
     fun setSendEvent(event: SendEvent) {
         if ((currentSheet.value as? Sheet.Send)?.preparingRequest != null) return
@@ -2781,10 +2782,13 @@ class AppViewModel @Inject constructor(
         if (source != ScanSource.DEEPLINK) return true
         val uri = Uri.parse(data)
         val isContactLink = PubkyContactLink.matches(uri)
-        if (isContactLink && PubkyContactLink.publicKey(uri) == null) return true
-        if (!isContactLink && (!allowPubkyAuth || !PubkyAuthRequest.isProtocolUrl(data))) return true
+        if (isContactLink) {
+            if (PubkyContactLink.publicKey(uri) == null) return true
+        } else if (!allowPubkyAuth || !PubkyAuthRequest.isProtocolUrl(data)) {
+            return true
+        }
 
-        if (!PubkyAuthRequest.isSignupUrl(data)) {
+        if (!PubkyAuthRequest.isSignupUrl(data) || PubkyAuthRequest.isGrantSignupUrl(data)) {
             val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
                 pubkyRepo.awaitInitialization()
                 if (!isContactLink) pubkyRepo.awaitIdentityReady()
@@ -3016,6 +3020,7 @@ class AppViewModel @Inject constructor(
         val current = _sendUiState.value
         val sources = availableFundingSources(current)
         if (sources.size < 2) return
+        sendStateGeneration++
         onchainSendRefreshJob?.cancel()
         val selected = current.selectedFundingSource()
         val selectedIndex = sources.indexOf(selected).takeIf { it >= 0 } ?: 0
@@ -3112,6 +3117,7 @@ class AppViewModel @Inject constructor(
 
     fun switchToLightning() {
         viewModelScope.launch {
+            sendStateGeneration++
             _sendUiState.update {
                 it.copy(
                     payMethod = SendMethod.LIGHTNING,
@@ -3135,14 +3141,7 @@ class AppViewModel @Inject constructor(
             )
         }
 
-        if (
-            _sendUiState.value.hardwareWalletId == null &&
-            _sendUiState.value.payMethod != SendMethod.LIGHTNING &&
-            !settingsStore.data.first().coinSelectAuto
-        ) {
-            setSendEffect(SendEffect.NavigateToCoinSelection)
-            return
-        }
+        if (!prepareCoinSelection()) return
 
         val lnurl = _sendUiState.value.lnurl
         if (lnurl is LnurlParams.LnurlPay) {
@@ -3201,6 +3200,31 @@ class AppViewModel @Inject constructor(
             )
         }
         return true
+    }
+
+    private suspend fun prepareCoinSelection(): Boolean {
+        val state = _sendUiState.value
+        val generation = sendStateGeneration
+        val sheet = currentSheet.value
+        if (
+            state.hardwareWalletId != null ||
+            state.payMethod == SendMethod.LIGHTNING ||
+            state.selectedUtxos != null
+        ) {
+            return true
+        }
+
+        val coinSelectAuto = settingsStore.data.first().coinSelectAuto
+        val current = _sendUiState.value
+        val paymentChanged = current.selectedFundingSource() != state.selectedFundingSource() ||
+            current.address != state.address || current.amount != state.amount
+        val manualCoinsChanged = !coinSelectAuto && current.selectedUtxos != state.selectedUtxos
+        val sendInvalidated = generation != sendStateGeneration || currentSheet.value !== sheet
+        if (sendInvalidated || paymentChanged || manualCoinsChanged) return false
+        if (coinSelectAuto) return true
+
+        _sendEffect.emit(SendEffect.NavigateToCoinSelection)
+        return false
     }
 
     private suspend fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
@@ -4297,6 +4321,7 @@ class AppViewModel @Inject constructor(
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
         if (!_sendUiState.value.isAmountInputValid) return
         viewModelScope.launch {
+            if (!prepareCoinSelection()) return@launch
             val amount = _sendUiState.value.amount
 
             handleSanityChecks(amount)
@@ -5476,6 +5501,7 @@ class AppViewModel @Inject constructor(
         incomingPaymentRequestId: PaykitPaymentRequestId? = null,
         selectedTags: ImmutableList<String> = persistentListOf(),
     ) {
+        sendStateGeneration++
         addressValidationJob?.cancel()
         val speed = settingsStore.data.first().defaultTransactionSpeed
         val rates = let {
@@ -5695,6 +5721,7 @@ class AppViewModel @Inject constructor(
             clearPaymentRequestPresentationRetry(it.request.id)
         }
         if (_currentSheet.value is Sheet.Send) {
+            sendStateGeneration++
             cancelHardwarePaymentRequestIfNeeded()
             resetQuickPay()
             quickPayRepo.detachAll()
@@ -6623,14 +6650,23 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handlePubkyAuth(authUrl: String) {
         val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
-        if (isSignup && rejectPubkySignupForExistingIdentity()) return
+        val createsIdentity = isSignup &&
+            (
+                !PubkyAuthRequest.isGrantSignupUrl(authUrl) ||
+                    !runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(true)
+                )
+        if (createsIdentity) {
+            if (rejectPubkySignupForExistingIdentity()) return
+            showSheet(Sheet.PubkyAuth(authUrl))
+            return
+        }
 
-        if (!isSignup && pubkyRepo.publicKey.value == null) {
+        if (pubkyRepo.publicKey.value == null) {
             showPubkyIdentityUnavailableToast()
             return
         }
 
-        if (!isSignup && !pubkyRepo.hasSecretKey()) {
+        if (!pubkyRepo.hasSecretKey()) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.pubky_auth__use_ring),

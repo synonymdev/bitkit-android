@@ -12,6 +12,7 @@ import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.ProfileSource
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkyAuthDetails
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicationStatus
 import io.ktor.client.HttpClient
@@ -308,6 +309,55 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
         assertFalse(profileSetupPending.value)
         assertNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `grant signup retries app authorization before activating profile setup`() = test {
+        val url = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
+        val request = PubkyAuthRequest.parseGrantSignup(
+            rawUrl = url,
+            clientId = "shop.pubky.app",
+            relay = "https://relay.example",
+            capabilities = "/pub/pubky.app/:rw",
+            homeserverPublicKey = "homeserver",
+        ).getOrThrow()
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        whenever(pubkyService.approveAuth(url, request.capabilities, request.clientId, "secret"))
+            .thenAnswer { throw TestAppError("authorization failed") }
+            .thenReturn(Unit)
+
+        assertTrue(sut.approveSignupAuth(request).isFailure)
+        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
+        assertNull(sut.publicKey.value)
+        assertFalse(profileSetupPending.value)
+
+        assertTrue(sut.approveSignupAuth(request).isSuccess)
+        verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
+        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(profileSetupPending.value)
+    }
+
+    @Test
+    fun `grant signup parsing retains SDK validation and homeserver details`() = test {
+        val url = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
+        val details = mock<PubkyAuthDetails>()
+        whenever(details.clientId).thenReturn("shop.pubky.app")
+        whenever(details.relayUrl).thenReturn("https://relay.example")
+        whenever(details.capabilities).thenReturn("/pub/pubky.app/:rw")
+        whenever(details.homeserverPublicKey).thenReturn("pubky_homeserver")
+        whenever(pubkyService.parseAuthUrl(url)).thenReturn(details)
+
+        val request = sut.parseAuthUrl(url).getOrThrow()
+
+        assertEquals("pubky_homeserver", request.homeserverPublicKey)
+        assertEquals("invite", request.signupToken)
+        assertEquals("shop.pubky.app", request.clientId)
+        assertEquals(url, request.authorizationUrl)
+        verifyBlocking(pubkyService) { parseAuthUrl(url) }
+        verifyBlocking(pubkyService, never()) { registerIdentity(any(), any(), anyOrNull()) }
     }
 
     @Test
@@ -2457,6 +2507,135 @@ class PubkyRepoTest : BaseUnitTest() {
         currentFailure = null
         assertTrue(sut.restoreSessionIfNeeded())
         assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `saved profile load waits for initial restoration without a duplicate public read`() = test {
+        sut.awaitInitialization()
+        val restore = stubSavedSessionRestore()
+        val importGate = CompletableDeferred<Unit>()
+        restore.answer = {
+            importGate.await()
+            VALID_SELF_KEY
+        }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("saved-secret")
+        whenever(pubkyService.publicKeyFromSecret("saved-secret")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice")))
+        sut = createSut()
+
+        val load = launch { sut.loadProfile() }
+        runCurrent()
+        verify(pubkyService, never()).resolveContactProfile(VALID_SELF_KEY, true)
+        importGate.complete(Unit)
+        load.join()
+        advanceUntilIdle()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals("Alice", sut.profile.value?.name)
+        assertNull(sut.readOnlyProfile.value)
+        verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
+    fun `public profile remains readable while private session restore is deferred`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("saved-secret")
+        whenever(pubkyService.publicKeyFromSecret("saved-secret")).thenReturn(VALID_SELF_KEY)
+        val response = CompletableDeferred<Unit>()
+        var profileUnavailable = false
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            response.await()
+            if (profileUnavailable) throw AppError("Profile temporarily unavailable")
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice"))
+        }
+        sut.initialize()
+
+        val load = launch { sut.loadProfile() }
+        runCurrent()
+        assertFalse(sut.restoreSessionIfNeeded())
+        response.complete(Unit)
+        load.join()
+
+        assertEquals("Alice", sut.readOnlyProfile.value?.name)
+        assertEquals(VALID_SELF_KEY, sut.readOnlyProfile.value?.publicKey)
+        assertNull(sut.publicKey.value)
+        assertNull(sut.profile.value)
+        assertFalse(sut.isAuthenticated.value)
+        verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
+
+        restore.answer = { VALID_SELF_KEY }
+        profileUnavailable = true
+        assertTrue(sut.restoreSessionIfNeeded())
+        assertNull(sut.profile.value)
+        assertEquals("Alice", sut.readOnlyProfile.value?.name)
+        assertTrue(sut.isAuthenticated.value)
+
+        profileUnavailable = false
+        sut.loadProfile()
+        assertEquals("Alice", sut.profile.value?.name)
+        assertNull(sut.readOnlyProfile.value)
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `saved public profile uses the adopted Ring credential without authenticating`() = test {
+        val owner = stubRingCredential()
+        adoptedSource = "${SharedPubkyContract.RING_SOURCE_PREFIX}$owner"
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice")))
+
+        sut.loadProfile()
+
+        assertEquals(VALID_SELF_KEY, sut.readOnlyProfile.value?.publicKey)
+        assertFalse(sut.isAuthenticated.value)
+        assertNull(sut.profile.value)
+        verify(pubkyService, never()).signIn(any())
+    }
+
+    @Test
+    fun `saved public profile ignores a late response after forgetting the identity`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("saved-secret")
+        whenever(pubkyService.publicKeyFromSecret("saved-secret")).thenReturn(VALID_SELF_KEY)
+        val response = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            response.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice"))
+        }
+        sut.initialize()
+        val load = launch { sut.loadProfile() }
+        runCurrent()
+
+        assertTrue(sut.forgetUnrestoredIdentity().getOrThrow())
+        response.complete(Unit)
+        load.join()
+
+        assertNull(sut.readOnlyProfile.value)
+        assertNull(sut.publicKey.value)
+        assertNull(sut.profile.value)
+    }
+
+    @Test
+    fun `saved public profile requires the saved credential rather than cached metadata`() = test {
+        whenever(pubkyStore.data).thenReturn(
+            flowOf(
+                PubkyStoreData(
+                    cachedProfileOwner = VALID_SELF_KEY,
+                    cachedName = "Alice",
+                )
+            )
+        )
+        sut = createSut()
+        sut.awaitInitialization()
+        clearInvocations(pubkyService)
+
+        sut.loadProfile()
+
+        assertNull(sut.readOnlyProfile.value)
+        verify(pubkyService, never()).resolveContactProfile(VALID_SELF_KEY, true)
     }
 
     @Test
