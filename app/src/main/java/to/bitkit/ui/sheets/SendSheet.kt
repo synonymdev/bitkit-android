@@ -28,6 +28,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
@@ -95,6 +96,11 @@ private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
 
 /** A peer reconnecting makes a channel usable again without any node event, so the overlay polls. */
 private val CHANNELS_REFRESH_INTERVAL = 1.seconds
+
+internal fun NavController.navigateToCoinSelection() {
+    currentBackStackEntry?.savedStateHandle?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
+    navigateTo(SendRoute.CoinSelection)
+}
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -189,13 +195,7 @@ fun SendSheet(
                         is SendEffect.NavigateToAmount -> navController.navigateTo(SendRoute.Amount)
                         is SendEffect.NavigateToAddress -> navController.navigateTo(SendRoute.Address)
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
-                        is SendEffect.NavigateToCoinSelection -> {
-                            navController.currentBackStackEntry?.savedStateHandle?.set(
-                                SEND_CONFIRM_RESET_RESULT_KEY,
-                                true
-                            )
-                            navController.navigateTo(SendRoute.CoinSelection)
-                        }
+                        is SendEffect.NavigateToCoinSelection -> navController.navigateToCoinSelection()
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
                         is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)

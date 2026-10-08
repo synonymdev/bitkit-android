@@ -2978,6 +2978,7 @@ class AppViewModel @Inject constructor(
         val current = _sendUiState.value
         val sources = availableFundingSources(current)
         if (sources.size < 2) return
+        sendStateGeneration++
         onchainSendRefreshJob?.cancel()
         val selected = current.selectedFundingSource()
         val selectedIndex = sources.indexOf(selected).takeIf { it >= 0 } ?: 0
@@ -3074,6 +3075,7 @@ class AppViewModel @Inject constructor(
 
     fun switchToLightning() {
         viewModelScope.launch {
+            sendStateGeneration++
             _sendUiState.update {
                 it.copy(
                     payMethod = SendMethod.LIGHTNING,
@@ -3171,7 +3173,12 @@ class AppViewModel @Inject constructor(
         }
 
         val coinSelectAuto = settingsStore.data.first().coinSelectAuto
-        if (generation != sendStateGeneration || currentSheet.value !== sheet) return false
+        val current = _sendUiState.value
+        val paymentChanged = current.selectedFundingSource() != state.selectedFundingSource() ||
+            current.address != state.address || current.amount != state.amount
+        val manualCoinsChanged = !coinSelectAuto && current.selectedUtxos != state.selectedUtxos
+        val sendInvalidated = generation != sendStateGeneration || currentSheet.value !== sheet
+        if (sendInvalidated || paymentChanged || manualCoinsChanged) return false
         if (coinSelectAuto) return true
 
         _sendEffect.emit(SendEffect.NavigateToCoinSelection)

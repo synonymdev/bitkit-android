@@ -4904,6 +4904,69 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `funding changes abandon a swipe waiting for coin selection settings`() = test {
+        balanceState.value = BalanceState(
+            maxSendOnchainSats = 100_000u,
+            maxSendLightningSats = 100_000u,
+        )
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(48_000uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+
+        for (coinSelectAuto in listOf(false, true)) {
+            for (destination in listOf("spending", "hardware", "savings")) {
+                hwWallets.value = if (destination == "hardware") {
+                    persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+                } else {
+                    persistentListOf()
+                }
+                setSendState(
+                    SendUiState(
+                        address = REGTEST_ADDRESS,
+                        amount = 1_000u,
+                        isUnified = true,
+                        isAmountInputValid = true,
+                    )
+                )
+                advanceUntilIdle()
+                val settingsReadStarted = CompletableDeferred<Unit>()
+                val finishSettingsRead = CompletableDeferred<Unit>()
+                var holdNextRead = true
+                whenever(settingsStore.data).thenReturn(
+                    flow {
+                        if (holdNextRead) {
+                            holdNextRead = false
+                            settingsReadStarted.complete(Unit)
+                            finishSettingsRead.await()
+                        }
+                        emit(SettingsData(coinSelectAuto = coinSelectAuto))
+                    }
+                )
+
+                sut.sendEffect.test {
+                    sut.setSendEvent(SendEvent.SwipeToPay)
+                    settingsReadStarted.await()
+                    repeat(if (destination == "savings") 2 else 1) {
+                        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                        advanceUntilIdle()
+                    }
+                    val current = sut.sendUiState.value
+                    assertEquals(
+                        if (destination == "spending") SendMethod.LIGHTNING else SendMethod.ONCHAIN,
+                        current.payMethod,
+                    )
+                    assertEquals(HARDWARE_WALLET_ID.takeIf { destination == "hardware" }, current.hardwareWalletId)
+
+                    finishSettingsRead.complete(Unit)
+                    advanceUntilIdle()
+
+                    assertFalse(sut.sendUiState.value.shouldConfirmPay)
+                    expectNoEvents()
+                }
+            }
+        }
+    }
+
+    @Test
     fun `switch from lightning to onchain resets confirmedWarnings`() = test {
         balanceState.value = BalanceState(
             maxSendOnchainSats = 100_000u,
