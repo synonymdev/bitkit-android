@@ -531,6 +531,20 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `conflicting original fee fails restore before installing the guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        val conflicting = requireNotNull(wire.candidateFeeRates) + (wire.candidateTxids.first() to "3")
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire.copy(candidateFeeRates = conflicting)))
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
     fun `mismatched funding amount fails restore before installing the guard`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)

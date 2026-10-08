@@ -90,6 +90,7 @@ data class ActiveOnchainAttemptBackup(
             else -> error("Unsupported active operation status")
         }
         require(candidateTxids.drop(1).all { it in restoredFeeRates })
+        restoredFeeRates[candidateTxids.first()]?.let { require(it == unsigned(feeRateSatsPerVByte)) }
         requireNotNull(followup).let {
             unsigned(it.feeSats)
             unsigned(it.createdAtMillis)
