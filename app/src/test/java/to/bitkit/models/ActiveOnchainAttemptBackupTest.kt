@@ -125,8 +125,12 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
             assertEquals(99000uL, restored.transferContext?.originalOrderFeeSats)
             assertEquals(candidate, ActiveOnchainAttemptBackup.from(restored, "regtest", binding))
         }
-        assertFailsWith<IllegalArgumentException> {
-            wire.copy(amountSats = "98999").restored("regtest", binding, "wallet0", 0)
+        for (status in listOf("pending", "unknown", "rejected", "accepted")) {
+            for (amount in listOf("98999", "100001")) {
+                assertFailsWith<IllegalArgumentException> {
+                    wire.copy(status = status, amountSats = amount).restored("regtest", binding, "wallet0", 0)
+                }
+            }
         }
         assertFailsWith<IllegalArgumentException> {
             wire.copy(isMaxAmount = false).restored("regtest", binding, "wallet0", 0)
