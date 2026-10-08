@@ -1601,6 +1601,7 @@ class LightningRepo @Inject constructor(
             runSuspendCatching { onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex) }
             return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(it))
         }
+        var outcomePersisted = true
         val outcome = runSuspendCatching {
             onchainSendAttemptStore.broadcastPreparedCandidate(
                 attempt.attemptId,
@@ -1619,12 +1620,12 @@ class LightningRepo @Inject constructor(
             if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
                 winner.hasPositiveEvidence
             ) {
+                outcomePersisted = false
                 OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
             } else {
                 return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
             }
         }
-        var outcomePersisted = true
         val recorded = runSuspendCatching {
             onchainSendAttemptStore.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex)
         }.getOrElse { error ->
