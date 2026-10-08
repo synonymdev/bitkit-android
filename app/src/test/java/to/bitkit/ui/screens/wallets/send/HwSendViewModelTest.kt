@@ -3,13 +3,23 @@ package to.bitkit.ui.screens.wallets.send
 import android.content.Context
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.TrezorException
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
@@ -30,22 +40,15 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
-import to.bitkit.repositories.PreActivityMetadataRepo
-import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentProofRepo
+import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
-import kotlin.time.Clock
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwSendViewModelTest : BaseUnitTest() {
@@ -981,6 +984,36 @@ class HwSendViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
         verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `observed Shop completion ignores a late suspended broadcast result`() = test {
+        val fixture = stubSuccessfulPayment()
+        val resume = CompletableDeferred<Unit>()
+        val txid = "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e"
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { resume.await() }
+            Result.success(fixture.broadcast.copy(txId = txid))
+        }
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("original", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        var emitted = 0
+        backgroundScope.launch { sut.results.collect { emitted++ } }
+        sut.signAndBroadcast(original)
+        runCurrent()
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        var completed: HwSendResult? = null
+        assertTrue(sut.completeReconciledBroadcast(WALLET_ID, txid) { completed = it })
+        assertEquals(original.paymentRequestId, completed?.paymentRequestId)
+        resume.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(0, emitted)
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+        assertFalse(sut.uiState.value.isSigning)
+        assertFalse(sut.completeReconciledBroadcast(WALLET_ID, txid))
     }
 
     @Test

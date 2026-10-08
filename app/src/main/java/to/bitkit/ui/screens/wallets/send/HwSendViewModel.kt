@@ -153,8 +153,10 @@ class HwSendViewModel @Inject constructor(
                         return@runCatching
                     }
                     val result = broadcast(payment, onPaymentDeadlineExpired) ?: return@runCatching
+                    if (signingAttempt != attempt) return@runCatching
                     runSuspendCatching { persistResult(request, result) }
                         .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+                    if (signingAttempt != attempt) return@runCatching
                     pendingResult.update {
                         HwSendResult(request.walletId, result.txId, request.amountSats,
                             request.paymentRequestId, request.paymentIdentity)
@@ -343,6 +345,11 @@ class HwSendViewModel @Inject constructor(
             HwSendResult(it.request.walletId, requireNotNull(txid).lowercase(), it.request.amountSats,
                 it.request.paymentRequestId, it.request.paymentIdentity)
         } ?: return false
+        // Exact observation owns completion; a late native response belongs to the old attempt.
+        signingAttempt++
+        signingJob?.cancel()
+        signingJob = null
+        _uiState.update { it.copy(isSigning = false, isConnectingDevice = false) }
         completeBroadcast()
         onCompleted(result)
         return true
