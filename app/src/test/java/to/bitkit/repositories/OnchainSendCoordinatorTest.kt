@@ -139,10 +139,10 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                     feeRateSatsPerVByte: ULong,
                     paymentDeadlineAt: Instant?,
                 ) = PreparedOnchainSend(f.receipt(nextTxid)) {
-                it()
                     if (paymentDeadlineAt != null && dispatchTime > paymentDeadlineAt) {
                         throw PaykitPaymentRequestError.RequestExpired
                     }
+                    it()
                     broadcasts++
                     OnchainSendOutcome.Unknown(nextTxid)
                 }
@@ -157,7 +157,12 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             assertEquals(original.amountSats, retained.amountSats)
             assertEquals(original.originalInputs, retained.originalInputs)
             assertTrue(retained.blocksNextSend)
-            assertTrue(nextTxid in retained.candidateTxids)
+            assertEquals(!expired, nextTxid in retained.candidateTxids)
+            if (expired) {
+                assertEquals(original.candidateTxids, retained.candidateTxids)
+                assertEquals(original.txid, retained.txid)
+                assertEquals(original.evidence, retained.evidence)
+            }
         }
     }
 
@@ -377,7 +382,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
-    fun `original authorization failure retains prepared candidate without broadcasting`() = test {
+    fun `original authorization failure drops only unsent retry candidate`() = test {
         val f = Fixture()
         val unknown = f.unresolved()
         val attempt = f.store.recordOutcome(
@@ -412,7 +417,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertEquals(1, prepares)
         assertEquals(0, broadcasts)
-        assertEquals(listOf(firstTxid, nextTxid), f.store.current()?.candidateTxids)
+        assertEquals(listOf(firstTxid), f.store.current()?.candidateTxids)
         assertEquals(firstTxid, f.store.current()?.txid)
         assertEquals(OnchainSendEvidence.Rejected, f.store.current()?.evidence)
         assertEquals("mempool min fee not met", f.store.current()?.refusalReason)
@@ -458,8 +463,9 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         assertEquals(0, broadcasts)
         assertEquals(1, authorizations)
         val retained = f.store.current()
-        assertEquals(retained, authorizedRecord)
-        assertEquals(listOf(firstTxid, nextTxid), retained?.candidateTxids)
+        assertEquals(retained?.attemptId, authorizedRecord?.attemptId)
+        assertEquals(listOf(firstTxid, nextTxid), authorizedRecord?.candidateTxids)
+        assertEquals(listOf(firstTxid), retained?.candidateTxids)
         assertEquals(original.payerIdentity, retained?.payerIdentity)
         assertEquals(original.requestId, retained?.requestId)
         assertEquals(original.orderId, retained?.orderId)

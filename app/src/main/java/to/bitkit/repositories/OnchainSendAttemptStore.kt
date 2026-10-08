@@ -305,6 +305,29 @@ class OnchainSendAttemptStore @Inject constructor(
         }
     }
 
+    suspend fun discardUnsubmittedRetryCandidate(original: OnchainSendAttempt, txid: String) =
+        withContext(ioDispatcher + NonCancellable) {
+            mutex.withLock {
+                val candidate = txid.lowercase()
+                if (candidate in original.candidateTxids) return@withLock
+                val current = loadWithRetainedAccepted(original.walletIndex)
+                if (current?.attemptId != original.attemptId || current.walletId != original.walletId) {
+                    throw OnchainSendBlockedError(current)
+                }
+                if (candidate !in current.candidateTxids ||
+                    current.hasPositiveEvidence && current.txid.equals(candidate, ignoreCase = true)
+                ) return@withLock
+                check(current.candidateTxids.containsAll(original.candidateTxids))
+                persist(current.copy(
+                    txid = if (current.hasPositiveEvidence) current.txid else original.txid,
+                    evidence = if (current.hasPositiveEvidence) current.evidence else original.evidence,
+                    refusalReason = if (current.hasPositiveEvidence) current.refusalReason else original.refusalReason,
+                    candidateTxids = current.candidateTxids - candidate,
+                    candidateFeeRates = current.candidateFeeRates - candidate,
+                ))
+            }
+        }
+
     suspend fun broadcastPreparedCandidate(
         attemptId: String,
         walletIndex: Int,

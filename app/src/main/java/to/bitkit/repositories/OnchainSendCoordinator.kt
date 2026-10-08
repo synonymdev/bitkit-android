@@ -158,8 +158,13 @@ class OnchainSendCoordinator(
                     prepared.receipt.copy(feeRateSatsPerVByte = feeRateSatsPerVByte),
                     isRecovery = true,
                 )
-                authorizeOriginal(retained)
-                submit(retained, prepared)
+                try {
+                    authorizeOriginal(retained)
+                } catch (error: Throwable) {
+                    store.discardUnsubmittedRetryCandidate(attempt, prepared.receipt.txid)
+                    throw error
+                }
+                submit(retained, prepared, recoveryOriginal = attempt)
             }
         }
         if (result.isFailure) {
@@ -177,15 +182,27 @@ class OnchainSendCoordinator(
         result
     }
 
-    private suspend fun submit(attempt: OnchainSendAttempt, prepared: PreparedOnchainSend): OnchainSendOutcome {
+    private suspend fun submit(
+        attempt: OnchainSendAttempt,
+        prepared: PreparedOnchainSend,
+        recoveryOriginal: OnchainSendAttempt? = null,
+    ): OnchainSendOutcome {
+        var nativeDispatchEntered = false
         val outcome = runSuspendCatching {
             store.broadcastPreparedCandidate(
                 attempt.attemptId,
                 attempt.walletIndex,
                 prepared.receipt.txid,
-                prepared::broadcast,
-            )
+            ) { beforeDispatch ->
+                prepared.broadcast {
+                    beforeDispatch()
+                    nativeDispatchEntered = true
+                }
+            }
         }.getOrElse { error ->
+            if (!nativeDispatchEntered && recoveryOriginal != null) {
+                store.discardUnsubmittedRetryCandidate(recoveryOriginal, prepared.receipt.txid)
+            }
             val winner = runSuspendCatching { store.current() }.getOrNull()
             if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId && winner.hasPositiveEvidence) {
                 return OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
