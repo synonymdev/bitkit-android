@@ -2466,8 +2466,10 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("saved-secret")
         whenever(pubkyService.publicKeyFromSecret("saved-secret")).thenReturn(VALID_SELF_KEY)
         val response = CompletableDeferred<Unit>()
+        var profileUnavailable = false
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
             response.await()
+            if (profileUnavailable) throw AppError("Profile temporarily unavailable")
             createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice"))
         }
         sut.initialize()
@@ -2486,7 +2488,14 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
 
         restore.answer = { VALID_SELF_KEY }
+        profileUnavailable = true
         assertTrue(sut.restoreSessionIfNeeded())
+        assertNull(sut.profile.value)
+        assertEquals("Alice", sut.readOnlyProfile.value?.name)
+        assertTrue(sut.isAuthenticated.value)
+
+        profileUnavailable = false
+        sut.loadProfile()
         assertEquals("Alice", sut.profile.value?.name)
         assertNull(sut.readOnlyProfile.value)
         assertTrue(sut.isAuthenticated.value)

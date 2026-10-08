@@ -795,6 +795,7 @@ class PubkyRepo @Inject constructor(
                         Logger.debug("Skipped stale profile load for '${redacted(signIn.publicKey)}'", context = TAG)
                         return@onSuccess
                     }
+                    invalidateReadOnlyProfile()
                     cacheMetadata(loadedProfile, isCurrentLoad)
                 }.onFailure {
                     Logger.error("Failed to load profile", it, context = TAG)
@@ -2016,7 +2017,7 @@ class PubkyRepo @Inject constructor(
     private fun startSignIn(publicKey: String) {
         // First, so the sign-in it replaces has ended before the key is published, even when it is the same identity.
         signInGeneration.incrementAndGet()
-        clearReadOnlyProfile()
+        invalidateReadOnlyProfile(keepingPublicKey = publicKey)
         _publicKey.update { publicKey }
     }
 
@@ -2025,9 +2026,9 @@ class PubkyRepo @Inject constructor(
         if (_publicKey.value != publicKey) startSignIn(publicKey)
     }
 
-    private fun clearReadOnlyProfile() = synchronized(readOnlyProfileLock) {
+    private fun invalidateReadOnlyProfile(keepingPublicKey: String? = null) = synchronized(readOnlyProfileLock) {
         readOnlyProfileGeneration.incrementAndGet()
-        _readOnlyProfile.update { null }
+        _readOnlyProfile.update { profile -> profile?.takeIf { it.publicKey == keepingPublicKey } }
     }
 
     private suspend fun clearAuthenticatedState(
@@ -2037,7 +2038,7 @@ class PubkyRepo @Inject constructor(
         // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
         signInGeneration.incrementAndGet()
         if (clearCachedProfile) {
-            clearReadOnlyProfile()
+            invalidateReadOnlyProfile()
             evictPubkyImages()
             profileWriteGeneration.incrementAndGet()
             runSuspendCatching { pubkyStore.reset() }

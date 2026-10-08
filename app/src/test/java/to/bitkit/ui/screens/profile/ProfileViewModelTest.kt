@@ -43,9 +43,12 @@ class ProfileViewModelTest : BaseUnitTest() {
     fun `saved public profile is shown without enabling edits while restoration waits`() = test {
         val profile = createProfile()
         val readOnly = MutableStateFlow<PubkyProfile?>(null)
+        val authenticated = MutableStateFlow<PubkyProfile?>(null)
+        val publicKey = MutableStateFlow<String?>(null)
         val restore = CompletableDeferred<Boolean>()
         val sut = createSut(
-            publicKey = null,
+            profileFlow = authenticated,
+            publicKeyFlow = publicKey,
             readOnlyProfileFlow = readOnly,
             onLoadProfile = { readOnly.value = profile },
             onRestore = { restore.await() },
@@ -65,6 +68,13 @@ class ProfileViewModelTest : BaseUnitTest() {
             restore.complete(false)
             advanceUntilIdle()
             assertEquals(profile, expectMostRecentItem().profile)
+
+            publicKey.value = profile.publicKey
+            advanceUntilIdle()
+            assertFalse(sut.uiState.value.canEdit)
+            authenticated.value = profile
+            advanceUntilIdle()
+            assertTrue(expectMostRecentItem().canEdit)
         }
     }
 

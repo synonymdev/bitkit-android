@@ -212,7 +212,7 @@ class ProfileViewModel @Inject constructor(
         profile = profile,
         cachedProfile = cachedProfile?.takeIf { isLoading && it.publicKey == publicKey },
         publicKey = publicKey ?: profile?.publicKey,
-        canEdit = publicKey != null && publicKey == profile?.publicKey,
+        canEdit = publicKey != null && publicKey == pubkyRepo.profile.value?.publicKey,
         isLoading = isLoading,
         showSignOutDialog = controls.showSignOutDialog,
         isSigningOut = controls.isSigningOut,
