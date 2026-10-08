@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -76,7 +77,7 @@ class TransferRepo @Inject constructor(
         }
         repoScope.launch {
             connectivityRepo.isOnline.map { it == ConnectivityState.CONNECTED }.distinctUntilChanged().drop(1)
-                .collect { connected ->
+                .collectLatest { connected ->
                     if (connected && lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
                         resumeAcceptedFunding()
                     }

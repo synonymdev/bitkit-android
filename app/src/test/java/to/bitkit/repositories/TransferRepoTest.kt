@@ -12,6 +12,7 @@ import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -173,6 +174,72 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
         online.value = ConnectivityState.CONNECTED
         runCurrent()
+
+        verify(transferDao).insert(
+            org.mockito.kotlin.check {
+                assertEquals(order.id, it.lspOrderId)
+                assertEquals(txid, it.fundingTxId)
+                assertEquals(99_000L, it.txTotalSats)
+                assertEquals(125_000L, it.preTransferOnchainSats)
+            }
+        )
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        assertNotNull(sut)
+    }
+
+    @Test
+    fun `reconnect during suspended funding recovery starts another attempt`() = test {
+        val order = previewBtOrder()
+        val txid = "ab".repeat(32)
+        val attempt = OnchainSendAttempt(
+            WalletScope.default,
+            "attempt",
+            null,
+            order.id,
+            requireNotNull(order.payment?.onchain?.address),
+            order.feeSat,
+            false,
+            1uL,
+            true,
+            null,
+            emptyList(),
+            OnchainSendEvidence.Accepted,
+            txid,
+            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
+        )
+        setupClockNowMock()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        val firstFetch = CompletableDeferred<Unit>()
+        var fetches = 0
+        whenever(blocktankRepo.fetchOrders(listOf(order.id))).doSuspendableAnswer {
+            fetches += 1
+            if (fetches == 1) {
+                firstFetch.await()
+                Result.failure(AppError("offline"))
+            } else {
+                Result.success(listOf(order))
+            }
+        }
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(
+            nodeLifecycleState = NodeLifecycleState.Running,
+        )))
+        runCurrent()
+        online.value = ConnectivityState.CONNECTED
+        runCurrent()
+        assertEquals(1, fetches)
+        online.value = ConnectivityState.DISCONNECTED
+        runCurrent()
+        online.value = ConnectivityState.CONNECTED
+        runCurrent()
+        firstFetch.complete(Unit)
+        runCurrent()
+        assertEquals(2, fetches)
 
         verify(transferDao).insert(
             org.mockito.kotlin.check {
