@@ -4753,10 +4753,10 @@ class AppViewModel @Inject constructor(
             approvePrepared = { receipt ->
                 val fee = requireNotNull(receipt.miningFeeSats)
                 check(fee <= Long.MAX_VALUE.toULong())
-                val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrThrow()
+                val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrNull()
                 val warnings = buildList {
                     if (fee > original.amountSats / 2uL) add(SanityWarning.FEE_OVER_HALF_VALUE)
-                    if (feeInUsd.value > BigDecimal(TEN_USD)) add(SanityWarning.FEE_OVER_10_USD)
+                    if (feeInUsd != null && feeInUsd.value > BigDecimal(TEN_USD)) add(SanityWarning.FEE_OVER_10_USD)
                 }
                 approvePrepared(receipt, warnings)
             },

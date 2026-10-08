@@ -260,6 +260,74 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `node restart during suspended funding recovery starts another attempt`() = test {
+        val order = previewBtOrder()
+        val txid = "ab".repeat(32)
+        val attempt = OnchainSendAttempt(
+            WalletScope.default,
+            "attempt",
+            null,
+            order.id,
+            requireNotNull(order.payment?.onchain?.address),
+            order.feeSat,
+            false,
+            1uL,
+            true,
+            null,
+            emptyList(),
+            OnchainSendEvidence.Accepted,
+            txid,
+            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
+        )
+        setupClockNowMock()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        val firstFetch = CompletableDeferred<Unit>()
+        var fetches = 0
+        whenever(blocktankRepo.fetchOrders(listOf(order.id))).doSuspendableAnswer {
+            fetches += 1
+            if (fetches == 1) {
+                firstFetch.await()
+                Result.failure(AppError("offline"))
+            } else {
+                Result.success(listOf(order))
+            }
+        }
+        val state = MutableStateFlow(LightningState())
+        whenever(lightningRepo.lightningState).thenReturn(state)
+        val restarted = TransferRepo(
+            testDispatcher, lightningRepo, blocktankRepo, coreService, transferDao, clock, cacheStore, connectivityRepo,
+        )
+        runCurrent()
+        state.value = state.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        runCurrent()
+        assertEquals(1, fetches)
+        state.value = state.value.copy(nodeLifecycleState = NodeLifecycleState.Stopped)
+        runCurrent()
+        state.value = state.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        runCurrent()
+        firstFetch.complete(Unit)
+        runCurrent()
+        assertEquals(2, fetches)
+
+        verify(transferDao).insert(
+            org.mockito.kotlin.check {
+                assertEquals(order.id, it.lspOrderId)
+                assertEquals(txid, it.fundingTxId)
+                assertEquals(99_000L, it.txTotalSats)
+                assertEquals(125_000L, it.preTransferOnchainSats)
+            }
+        )
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        assertNotNull(restarted)
+    }
+
+    @Test
     fun `startup resumes accepted original funding without a confirmation or native resend`() = test {
         val order = previewBtOrder()
         val txid = "ab".repeat(32)

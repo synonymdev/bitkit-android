@@ -66,7 +66,7 @@ class TransferRepo @Inject constructor(
     init {
         repoScope.launch {
             lightningRepo.lightningState.map { it.nodeLifecycleState.isRunning() }.distinctUntilChanged()
-                .collect { running -> if (running) resumeAcceptedFunding() }
+                .collectLatest { running -> if (running) resumeAcceptedFunding() }
         }
         repoScope.launch {
             lightningRepo.nodeEvents.collect { event ->

@@ -10080,6 +10080,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `retry fee approval works without USD rate and keeps the Bitcoin fee warning`() = test {
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original", requestId = null, orderId = null,
+            address = "bcrt1qoriginal", amountSats = 1_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown,
+        )
+        val receipt = to.bitkit.repositories.OnchainPreparedReceipt(
+            txid = "ab".repeat(32), inputs = emptyList(), address = original.address,
+            amountSats = original.amountSats, feeRateSatsPerVByte = 2uL, miningFeeSats = 600uL,
+        )
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
+            .thenReturn(Result.failure(Exception("USD unavailable")))
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { invocation ->
+                val approve = invocation.getArgument<suspend (to.bitkit.repositories.OnchainPreparedReceipt) -> Unit>(4)
+                runCatching {
+                    approve(receipt)
+                    OnchainSendOutcome.Unknown(receipt.txid)
+                }
+            }
+        var approved = false
+        val result = sut.retryOriginalOnchainSend(original, 2uL) { prepared, warnings ->
+            assertEquals(receipt, prepared)
+            assertEquals(listOf(SanityWarning.FEE_OVER_HALF_VALUE), warnings)
+            approved = true
+        }
+        assertTrue(result.isSuccess)
+        assertTrue(approved)
+    }
+
+    @Test
     fun `recovery denies paid expired or changed original Blocktank order before broadcast`() = test {
         val order = to.bitkit.ext.mockOrder().copy(
             orderExpiresAt = (Clock.System.now() + 60.seconds).toString(),
