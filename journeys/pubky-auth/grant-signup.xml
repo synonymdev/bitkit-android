@@ -1,0 +1,22 @@
+<journey name="grant signup">
+  <description>
+    Verifies grant signup using the existing authorization and profile setup screens.
+    Precondition: an isolated unlocked wallet with Paykit enabled and no Pubky identity. A controlled
+    requesting app supplies a fresh signup_grant URL, a reachable homeserver and relay, and a valid
+    signup token when the homeserver requires one. The URL requests ordinary app permissions without
+    a Bitkit companion claim. Record its client ID, homeserver, and requested permissions.
+  </description>
+  <actions>
+    <action>Open the prepared signup_grant URL in Bitkit</action>
+    <action>Verify the authorization sheet shows the recorded requesting app and permissions</action>
+    <action>Verify the requested homeserver is shown (id "PubkySignupHomeserver")</action>
+    <action>Tap Cancel on the authorization sheet</action>
+    <action>Verify the wallet still has no Pubky identity and the requesting app remains unapproved</action>
+    <action>Open a fresh signup_grant URL from the same requesting app in Bitkit</action>
+    <action>Tap Authorize (id "PubkyAuthAuthorize") and complete PIN or biometric approval when enabled</action>
+    <action>Verify the existing Create Profile screen is shown (id "CreateProfileSave")</action>
+    <action>Verify the requesting app receives approval for the same public key that Bitkit registered on the requested homeserver</action>
+    <action>Enter a display name and save the profile (id "CreateProfileSave")</action>
+    <action>Verify the profile is available in Bitkit</action>
+  </actions>
+</journey>

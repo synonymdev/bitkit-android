@@ -6276,14 +6276,20 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handlePubkyAuth(authUrl: String) {
         val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
-        if (isSignup && rejectPubkySignupForExistingIdentity()) return
+        val createsIdentity = isSignup &&
+            (!PubkyAuthRequest.isGrantSignupUrl(authUrl) || pubkyRepo.publicKey.value == null)
+        if (createsIdentity) {
+            if (rejectPubkySignupForExistingIdentity()) return
+            showSheet(Sheet.PubkyAuth(authUrl))
+            return
+        }
 
-        if (!isSignup && pubkyRepo.publicKey.value == null) {
+        if (pubkyRepo.publicKey.value == null) {
             showPubkyIdentityUnavailableToast()
             return
         }
 
-        if (!isSignup && !pubkyRepo.hasSecretKey()) {
+        if (!pubkyRepo.hasSecretKey()) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.pubky_auth__use_ring),

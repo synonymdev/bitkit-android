@@ -1444,7 +1444,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {
         withContext(ioDispatcher) {
-            if (PubkyAuthRequest.isSignupUrl(authUrl)) {
+            if (PubkyAuthRequest.isSignupUrl(authUrl) && !PubkyAuthRequest.isGrantSignupUrl(authUrl)) {
                 val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
                 pubkyService.validateSignupRequest(
                     authorizationUrl = request.authorizationUrl,
@@ -1454,6 +1454,15 @@ class PubkyRepo @Inject constructor(
             }
 
             val details = pubkyService.parseAuthUrl(authUrl)
+            if (PubkyAuthRequest.isGrantSignupUrl(authUrl)) {
+                return@withContext PubkyAuthRequest.parseGrantSignup(
+                    rawUrl = authUrl,
+                    clientId = details.clientId.orEmpty(),
+                    relay = details.relayUrl.orEmpty(),
+                    capabilities = details.capabilities.orEmpty(),
+                    homeserverPublicKey = details.homeserverPublicKey,
+                ).getOrThrow()
+            }
             PubkyAuthRequest.parse(
                 rawUrl = authUrl,
                 clientId = details.clientId.orEmpty(),
@@ -1467,6 +1476,7 @@ class PubkyRepo @Inject constructor(
         runSuspendCatching {
             withContext(ioDispatcher) {
                 require(request.isSignup) { "Not a Pubky signup request" }
+                require(request.bitkitClaim == null) { "Pubky signup does not support Bitkit companion claims" }
                 if (hasIdentity()) throw PubkyAlreadySignedInError
 
                 val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
@@ -1479,7 +1489,13 @@ class PubkyRepo @Inject constructor(
                     homeserverZ32 = requireNotNull(request.homeserverPublicKey),
                     signupCode = request.signupToken,
                 )
-                request.authorizationUrl?.let { pubkyService.approveRingAuth(it, secretKeyHex) }
+                request.authorizationUrl?.let {
+                    if (request.isGrantSignup) {
+                        pubkyService.approveAuth(it, request.capabilities, request.clientId, secretKeyHex)
+                    } else {
+                        pubkyService.approveRingAuth(it, secretKeyHex)
+                    }
+                }
                 var activated = false
                 try {
                     pubkyService.activateRegisteredIdentity(registeredSession)

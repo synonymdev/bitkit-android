@@ -131,6 +131,43 @@ class PubkyAuthRequestTest {
     }
 
     @Test
+    fun `grant signup preserves the requesting app and creates only a missing identity`() {
+        val url = "pubkyauth://signup_grant?hs=homeserver&st=invite%20code&cid=shop.pubky.app"
+        val request = PubkyAuthRequest.parseGrantSignup(
+            rawUrl = url,
+            clientId = "shop.pubky.app",
+            relay = "https://relay.example/inbox/",
+            capabilities = "/pub/pubky.app/:rw",
+            homeserverPublicKey = "homeserver",
+        ).getOrThrow()
+
+        assertTrue(request.isSignup)
+        assertTrue(request.isGrantSignup)
+        assertTrue(request.requiresIdentityCreation(hasIdentity = false))
+        assertFalse(request.requiresIdentityCreation(hasIdentity = true))
+        assertEquals("homeserver", request.homeserverPublicKey)
+        assertEquals("invite code", request.signupToken)
+        assertEquals("shop.pubky.app", request.clientId)
+        assertEquals(url, request.authorizationUrl)
+        assertEquals(listOf(PubkyAuthPermission("/pub/pubky.app/", "rw")), request.permissions)
+    }
+
+    @Test
+    fun `grant signup rejects ambiguous registration parameters`() {
+        listOf("", "hs=homeserver&hs=other", "hs=homeserver&st=one&st=two").forEach { query ->
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parseGrantSignup(
+                    rawUrl = "pubkyauth://signup_grant?$query",
+                    clientId = "shop.pubky.app",
+                    relay = "https://relay.example/inbox/",
+                    capabilities = "/pub/pubky.app/:rw",
+                    homeserverPublicKey = "homeserver",
+                ).exceptionOrNull(),
+            )
+        }
+    }
+
+    @Test
     fun `parse Ring signup rejects missing and duplicate required values`() {
         val invalidUrls = listOf(
             ringSignupUrl().replace("&secret=secret", ""),

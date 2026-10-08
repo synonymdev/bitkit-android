@@ -1,0 +1,18 @@
+<journey name="grant signup existing identity">
+  <description>
+    Verifies that grant signup reuses an existing Pubky identity. Precondition: an isolated unlocked
+    wallet with Paykit enabled and an active locally managed Pubky identity. Record its public key
+    and profile name. A controlled requesting app supplies a fresh signup_grant URL for that identity's
+    homeserver, a reachable relay, and ordinary app permissions without a Bitkit companion claim.
+  </description>
+  <actions>
+    <action>Open the prepared signup_grant URL in Bitkit</action>
+    <action>Verify the authorization sheet shows the recorded requesting app and permissions</action>
+    <action>Tap Authorize (id "PubkyAuthAuthorize") and complete PIN or biometric approval when enabled</action>
+    <action>Verify the existing authorization success state is shown (id "PubkyAuthOK")</action>
+    <action>Verify Create Profile is not opened</action>
+    <action>Tap OK (id "PubkyAuthOK")</action>
+    <action>Verify the profile public key and name match the recorded identity</action>
+    <action>Verify the requesting app receives approval from the recorded public key</action>
+  </actions>
+</journey>

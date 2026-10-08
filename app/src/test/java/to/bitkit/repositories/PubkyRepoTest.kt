@@ -12,6 +12,7 @@ import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.ProfileSource
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkyAuthDetails
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicationStatus
 import io.ktor.client.HttpClient
@@ -308,6 +309,55 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
         assertFalse(profileSetupPending.value)
         assertNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `grant signup retries app authorization before activating profile setup`() = test {
+        val url = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
+        val request = PubkyAuthRequest.parseGrantSignup(
+            rawUrl = url,
+            clientId = "shop.pubky.app",
+            relay = "https://relay.example",
+            capabilities = "/pub/pubky.app/:rw",
+            homeserverPublicKey = "homeserver",
+        ).getOrThrow()
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        whenever(pubkyService.approveAuth(url, request.capabilities, request.clientId, "secret"))
+            .thenAnswer { throw TestAppError("authorization failed") }
+            .thenReturn(Unit)
+
+        assertTrue(sut.approveSignupAuth(request).isFailure)
+        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
+        assertNull(sut.publicKey.value)
+        assertFalse(profileSetupPending.value)
+
+        assertTrue(sut.approveSignupAuth(request).isSuccess)
+        verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
+        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(profileSetupPending.value)
+    }
+
+    @Test
+    fun `grant signup parsing retains SDK validation and homeserver details`() = test {
+        val url = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
+        val details = mock<PubkyAuthDetails>()
+        whenever(details.clientId).thenReturn("shop.pubky.app")
+        whenever(details.relayUrl).thenReturn("https://relay.example")
+        whenever(details.capabilities).thenReturn("/pub/pubky.app/:rw")
+        whenever(details.homeserverPublicKey).thenReturn("pubky_homeserver")
+        whenever(pubkyService.parseAuthUrl(url)).thenReturn(details)
+
+        val request = sut.parseAuthUrl(url).getOrThrow()
+
+        assertEquals("pubky_homeserver", request.homeserverPublicKey)
+        assertEquals("invite", request.signupToken)
+        assertEquals("shop.pubky.app", request.clientId)
+        assertEquals(url, request.authorizationUrl)
+        verifyBlocking(pubkyService) { parseAuthUrl(url) }
+        verifyBlocking(pubkyService, never()) { registerIdentity(any(), any(), anyOrNull()) }
     }
 
     @Test

@@ -287,6 +287,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val legacyAuthorizedSignupAuthUrl = signupAuthUrl.replace("pubkyring://", "pubkyauth://")
     private val directSignupAuthUrl = "pubkyauth://direct_signup?hs=homeserver&st=invite"
     private val legacyDirectSignupAuthUrl = "pubkyauth://signup?hs=homeserver&st=invite"
+    private val grantSignupAuthUrl = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
 
     private val timedSheetManager = mock<TimedSheetManager>()
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
@@ -4499,7 +4500,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `global scanner accepts authorized signup without an existing identity`() = test {
         enablePaykitUi()
 
-        listOf(signupAuthUrl, legacyAuthorizedSignupAuthUrl).forEach { authUrl ->
+        listOf(signupAuthUrl, legacyAuthorizedSignupAuthUrl, grantSignupAuthUrl).forEach { authUrl ->
             scanSignup(authUrl)
             assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
         }
@@ -4520,7 +4521,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `signup deeplinks wait for unlock then require approval`() = test {
         enablePaykitUi()
-        listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl, signupAuthUrl).forEach { authUrl ->
+        listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl, signupAuthUrl, grantSignupAuthUrl).forEach { authUrl ->
             sut.hideSheet()
             settingsData.value = SettingsData(isPinEnabled = true)
             sut.resetIsAuthenticatedState()
