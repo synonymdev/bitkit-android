@@ -14,8 +14,10 @@ import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -30,6 +32,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -126,6 +129,17 @@ class PrivatePaykitRepo @Inject constructor(
     private val unavailableLinkRetryAt = mutableMapOf<String, KotlinInstant>()
     private var state: PrivatePaykitState? = null
     private val pendingMessageDrainRetries = mutableMapOf<String, PrivateMessageDrainRetry>()
+    private var pendingMessageDrainRead: PrivateMessageDrainRead? = null
+
+    private class PrivateMessageDrainRead(val identity: String, val generation: Int) {
+        val retries = mutableSetOf<PrivateMessageDrainRetry>()
+        lateinit var result: Deferred<PrivateMessageDrainState?>
+    }
+
+    private data class PrivateMessageDrainState(
+        val linkedPeers: Map<String, LinkedPeerState>,
+        val pendingOutbound: Set<String>,
+    )
 
     private class PrivateMessageDrainRetry(
         val publicKey: String,
@@ -1358,6 +1372,17 @@ class PrivatePaykitRepo @Inject constructor(
         reason: String,
         priority: Priority,
     ): Boolean {
+        val keys = listOf(retry.publicKey)
+        val pendingKeys = if (retry.prepareEndpoints) {
+            null
+        } else {
+            pendingPrivateMessageDrainKeys(
+                keys,
+                retryMissingPeers = true,
+                priority = priority,
+                receiveLinkedPeers = retry.refreshReadiness,
+            )
+        }
         val status = paykitSdkService.identityStatus(contactPreparationPriority(priority))
         if (!PubkyPublicKeyFormat.matches(status?.publicKey, retry.identity) ||
             status?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
@@ -1366,7 +1391,6 @@ class PrivatePaykitRepo @Inject constructor(
             return false
         }
         awaitContactPreparationActive(priority)
-        val keys = listOf(retry.publicKey)
         if (retry.prepareEndpoints) {
             if (canPublishPrivateEndpoints(status)) {
                 publishLocalEndpoints(keys, reason, priority = priority).getOrThrow()
@@ -1374,13 +1398,13 @@ class PrivatePaykitRepo @Inject constructor(
             }
             retry.prepareEndpoints = false
         }
-        val pendingKeys = pendingPrivateMessageDrainKeys(
+        val drainKeys = pendingKeys ?: pendingPrivateMessageDrainKeys(
             keys,
             retryMissingPeers = true,
             priority = priority,
             receiveLinkedPeers = retry.refreshReadiness,
         )
-        val receivedKeys = drainPendingPrivateMessages(reason, retryKeys = pendingKeys, priority = priority)
+        val receivedKeys = drainPendingPrivateMessages(reason, retryKeys = drainKeys, priority = priority)
         awaitContactPreparationActive(priority)
         if (retry.refreshReadiness && retry.publicKey in receivedKeys &&
             contactPreparationPriority(priority) == Priority.Interactive
@@ -1403,10 +1427,70 @@ class PrivatePaykitRepo @Inject constructor(
         if (retryKeys.isNotEmpty()) awaitContactPreparationActive(priority)
         if (retryKeys.isEmpty() || generation != preparationGeneration) return emptySet()
 
-        val linkedPeers = runSuspendCatching { paykitSdkService.linkedPeers(contactPreparationPriority(priority)) }
+        val state = privateMessageDrainState(priority)
+        awaitContactPreparationActive(priority)
+        if (generation != preparationGeneration) return emptySet()
+        if (state == null) return retryKeys
+        return retryKeys.filterTo(mutableSetOf()) { retryKey ->
+            when (state.linkedPeers[retryKey]) {
+                LinkedPeerState.LINKED -> receiveLinkedPeers || retryKey in state.pendingOutbound
+                null -> retryMissingPeers || retryKey in state.pendingOutbound
+                LinkedPeerState.BLOCKED, LinkedPeerState.UNKNOWN -> false
+                else -> true
+            }
+        }
+    }
+
+    private suspend fun privateMessageDrainState(priority: Priority): PrivateMessageDrainState? {
+        val retry = currentCoroutineContext()[PrivateMessageDrainRetry]
+            ?: return readPrivateMessageDrainState { contactPreparationPriority(priority) }
+        val batch = pendingMessageDrainRead?.takeIf {
+            it.generation == retry.generation && PubkyPublicKeyFormat.matches(it.identity, retry.identity)
+        } ?: PrivateMessageDrainRead(retry.identity, retry.generation).also { read ->
+            pendingMessageDrainRead = read
+            read.result = retryScope.async {
+                try {
+                    yield()
+                    if (pendingMessageDrainRead === read) pendingMessageDrainRead = null
+                    readPrivateMessageDrainState { privateMessageDrainReadPriority(read) }
+                } finally {
+                    if (pendingMessageDrainRead === read) pendingMessageDrainRead = null
+                }
+            }
+        }
+        batch.retries += retry
+        return try {
+            batch.result.await()
+        } finally {
+            batch.retries -= retry
+            if (batch.retries.isEmpty()) {
+                if (pendingMessageDrainRead === batch) pendingMessageDrainRead = null
+                batch.result.cancel()
+            }
+        }
+    }
+
+    private suspend fun privateMessageDrainReadPriority(batch: PrivateMessageDrainRead): Priority {
+        isContactPreparationActive.first { it }
+        currentCoroutineContext().ensureActive()
+        val retries = batch.retries.filter {
+            it.generation == preparationGeneration && pendingMessageDrainRetries[it.publicKey] === it &&
+                it.job?.isActive == true && (it.interactiveUntil == null || it.publicKey in knownSavedContactKeys)
+        }
+        if (retries.isEmpty()) throw CancellationException("Contact preparation invalidated")
+        return if (retries.any { it.interactiveUntil?.let { deadline -> deadline > clock.now() } == true }) {
+            Priority.Interactive
+        } else {
+            Priority.Background
+        }
+    }
+
+    private suspend fun readPrivateMessageDrainState(priority: suspend () -> Priority): PrivateMessageDrainState? {
+        val generation = preparationGeneration
+        val linkedPeers = runSuspendCatching { paykitSdkService.linkedPeers(priority()) }
             .getOrElse {
                 Logger.warn("Failed to inspect private Paykit link state", it, context = TAG)
-                return retryKeys
+                return null
             }
             .mapNotNull { peer ->
                 normalizedPublicKey(peer.counterparty)?.let { publicKey ->
@@ -1414,29 +1498,24 @@ class PrivatePaykitRepo @Inject constructor(
                 }
             }
             .toMap()
-        awaitContactPreparationActive(priority)
-        if (generation != preparationGeneration) return emptySet()
+        val pendingPriority = priority()
+        if (generation != preparationGeneration) return null
         val pendingOutbound = runSuspendCatching {
-            paykitSdkService.pendingOutboundPrivateCounterparties(contactPreparationPriority(priority))
+            paykitSdkService.pendingOutboundPrivateCounterparties(pendingPriority)
         }
             .getOrElse {
                 Logger.warn("Failed to inspect pending private Paykit messages", it, context = TAG)
-                return retryKeys
+                return null
             }
             .mapNotNull(::normalizedPublicKey)
             .toSet()
 
-        return retryKeys.filterTo(mutableSetOf()) { retryKey ->
-            when (linkedPeers[retryKey]) {
-                LinkedPeerState.LINKED -> receiveLinkedPeers || retryKey in pendingOutbound
-                null -> retryMissingPeers || retryKey in pendingOutbound
-                LinkedPeerState.BLOCKED, LinkedPeerState.UNKNOWN -> false
-                else -> true
-            }
-        }
+        return PrivateMessageDrainState(linkedPeers, pendingOutbound)
     }
 
     private fun clearPendingMessageDrainRetries() {
+        pendingMessageDrainRead?.result?.cancel()
+        pendingMessageDrainRead = null
         pendingMessageDrainRetries.values.forEach { it.job?.cancel() }
         pendingMessageDrainRetries.clear()
     }
