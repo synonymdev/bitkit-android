@@ -79,6 +79,9 @@ Saved Pubky contacts: list, search, add by key or QR, detail, edit, delete, per-
 - Paykit UI disabled (`ComingSoonScreen`).
 
 ## Gotchas
+
+- On a fresh wallet the Wallet Backup prompt can open over Contact Detail; dismiss it before driving a contact.
+- The import journeys need a Pubky identity that already follows the contacts to import; on a fresh wallet Contacts shows its onboarding, not an import preview.
 - After `AddContactSave` the detail shows `ContactDelete` instead of `ContactEdit`; after reopening from the list it shows `ContactEdit` (`showDeleteAction` in `ContactDetailScreen.kt`). E2E `deleteContact` goes through Edit.
 - Android has no `AddContactRetrievingTitle`, `AddContactDiscard` or `ContactSavedToast` testTag; `verifyAddContactRoute` accepts any of three states, so it passes on `AddContactSave` or `AddContactPay`.
 - `docs/pubky.md` says the list is alphabetically grouped; the code shows one `CONTACTS` header over a name-sorted list.
