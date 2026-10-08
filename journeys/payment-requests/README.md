@@ -142,6 +142,10 @@ must explain that its payment details are unsupported and offer no Subscribe con
 
 Incoming preparation uses the existing Send confirmation sheet with saved sender, amount and note.
 Its payment control stays disabled and loading until fresh resolution and wallet validation finish.
+An endpoint rejected as `endpoint_not_payable`, including an already-paid one-time address,
+ends preparation immediately with `PaymentRequestUnavailableToast`. The request stays pending
+for manual retry, but does not automatically reopen during the current identity's app session.
+`unpayable-endpoint.xml` checks this using an address already recorded as paid by the payer.
 Closing during preparation leaves the request pending and suppresses automatic reopening for the
 current identity's app session; Pay from the request list or details explicitly retries it.
 An unfunded wallet can verify loading followed by native rejection, not an enabled payment control.

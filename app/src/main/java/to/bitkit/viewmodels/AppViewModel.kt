@@ -1322,6 +1322,11 @@ class AppViewModel @Inject constructor(
         if (result !is PublicPaykitPaymentResult.Opened) {
             if (result == PublicPaykitPaymentResult.PrivateLinkPending) {
                 finishPrivateLinkPendingPaymentRequestPresentation(request)
+            } else if (result == PublicPaykitPaymentResult.NotOpened) {
+                finishUnavailablePaymentRequestPresentation(
+                    request,
+                    IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable,
+                )
             } else {
                 deferPaymentRequestPresentation(
                     request = request,
@@ -1448,20 +1453,23 @@ class AppViewModel @Inject constructor(
         if (restorePaymentRequestSheet && currentSheet.value == null) showSheet(Sheet.PaymentRequests)
     }
 
-    private fun finishUnavailablePaymentRequestPresentation(request: PaykitPaymentRequest) {
-        paykitPaymentRequestDiagnostics.logPresentationRejection(
-            request.counterparty,
-            IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
-        )
+    private fun finishUnavailablePaymentRequestPresentation(
+        request: PaykitPaymentRequest,
+        reason: IncomingPaykitPaymentRequestFailureReason = IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+    ) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(request.counterparty, reason)
+        val endpointNotPayable = reason == IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable
         val restorePaymentRequestSheet =
             requestedPaymentRequestId.value == request.id && shouldRestorePaymentRequestSheet
-        val showUnavailableToast = requestedPaymentRequestId.value == request.id
+        val showUnavailableToast = requestedPaymentRequestId.value == request.id || endpointNotPayable
+        if (endpointNotPayable) dismissedPreparingRequestIds.add(request.id)
         if (requestedPaymentRequestId.value == request.id) {
             invalidatePaymentRequestPresentation()
             clearRequestedPaymentRequest()
         }
         clearPaymentRequestPresentationRetry(request.id)
         if (!showUnavailableToast) return
+        finishPaymentRequestPreparation(paymentRequestPreparation.value)
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.wallet__payment_request),
