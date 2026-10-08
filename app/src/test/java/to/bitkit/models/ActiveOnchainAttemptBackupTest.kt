@@ -92,6 +92,21 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restored active operations require original local followup context`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
+        for (status in listOf("pending", "accepted", "rejected", "unknown")) {
+            val candidate = wire.copy(
+                status = status,
+                txid = wire.candidateTxids.first(),
+                followup = null,
+            )
+            assertFailsWith<IllegalArgumentException> {
+                candidate.restored("regtest", binding, "wallet0", 0)
+            }
+        }
+    }
+
+    @Test
     fun `unsigned active preparation cannot restore a permanent wallet guard`() {
         val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt).copy(
             originalInputs = null,

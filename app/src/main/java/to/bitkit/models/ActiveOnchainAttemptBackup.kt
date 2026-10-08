@@ -91,7 +91,7 @@ data class ActiveOnchainAttemptBackup(
         if (evidence == OnchainSendEvidence.Accepted && txid != candidateTxids.first()) {
             require(txid in restoredFeeRates)
         }
-        followup?.let {
+        requireNotNull(followup).let {
             unsigned(it.feeSats)
             unsigned(it.createdAtMillis)
         }

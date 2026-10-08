@@ -526,6 +526,20 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `missing active followup blocks restore before installing a wallet guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire.copy(followup = null)))
+
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+    }
+
+    @Test
     fun `start observing is skipped while wiping`() = test {
         sut.setWiping(true)
 
