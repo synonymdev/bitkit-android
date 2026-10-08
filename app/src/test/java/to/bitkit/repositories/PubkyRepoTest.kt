@@ -2460,6 +2460,98 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `public profile remains readable while private session restore is deferred`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("saved-secret")
+        whenever(pubkyService.publicKeyFromSecret("saved-secret")).thenReturn(VALID_SELF_KEY)
+        val response = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            response.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice"))
+        }
+        sut.initialize()
+
+        val load = launch { sut.loadProfile() }
+        runCurrent()
+        assertFalse(sut.restoreSessionIfNeeded())
+        response.complete(Unit)
+        load.join()
+
+        assertEquals("Alice", sut.readOnlyProfile.value?.name)
+        assertEquals(VALID_SELF_KEY, sut.readOnlyProfile.value?.publicKey)
+        assertNull(sut.publicKey.value)
+        assertNull(sut.profile.value)
+        assertFalse(sut.isAuthenticated.value)
+        verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
+
+        restore.answer = { VALID_SELF_KEY }
+        assertTrue(sut.restoreSessionIfNeeded())
+        assertEquals("Alice", sut.profile.value?.name)
+        assertNull(sut.readOnlyProfile.value)
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `saved public profile uses the adopted Ring credential without authenticating`() = test {
+        val owner = stubRingCredential()
+        adoptedSource = "${SharedPubkyContract.RING_SOURCE_PREFIX}$owner"
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice")))
+
+        sut.loadProfile()
+
+        assertEquals(VALID_SELF_KEY, sut.readOnlyProfile.value?.publicKey)
+        assertFalse(sut.isAuthenticated.value)
+        assertNull(sut.profile.value)
+        verify(pubkyService, never()).signIn(any())
+    }
+
+    @Test
+    fun `saved public profile ignores a late response after forgetting the identity`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("saved-secret")
+        whenever(pubkyService.publicKeyFromSecret("saved-secret")).thenReturn(VALID_SELF_KEY)
+        val response = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            response.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice"))
+        }
+        sut.initialize()
+        val load = launch { sut.loadProfile() }
+        runCurrent()
+
+        assertTrue(sut.forgetUnrestoredIdentity().getOrThrow())
+        response.complete(Unit)
+        load.join()
+
+        assertNull(sut.readOnlyProfile.value)
+        assertNull(sut.publicKey.value)
+        assertNull(sut.profile.value)
+    }
+
+    @Test
+    fun `saved public profile requires the saved credential rather than cached metadata`() = test {
+        whenever(pubkyStore.data).thenReturn(
+            flowOf(
+                PubkyStoreData(
+                    cachedProfileOwner = VALID_SELF_KEY,
+                    cachedName = "Alice",
+                )
+            )
+        )
+        sut = createSut()
+        sut.awaitInitialization()
+        clearInvocations(pubkyService)
+
+        sut.loadProfile()
+
+        assertNull(sut.readOnlyProfile.value)
+        verify(pubkyService, never()).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
     fun `temporary initial import result does not report an expired session`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
         whenever(pubkyService.initializeAndImportSession("saved_session")).thenReturn(

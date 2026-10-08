@@ -16,9 +16,9 @@
     slow its connection. If the load fails instead, the cached header gives way to the retry state
     (testTag "ProfileRetry"), which is not what this journey covers: relax the throttle and repeat.
 
-    While the session is still restoring, Profile shows a spinner under the "Profile" title with no
-    name (testTag "ProfileLoading"), as iOS shows a bare initialization spinner, and the cached
-    header follows once the session is back. One step differs from iOS: Android also checks the
+    Public profile loading and private session restoration run independently. The full public
+    profile may appear first with Edit disabled; report this as already loaded. A spinner under
+    the "Profile" title (testTag "ProfileLoading") can precede either display. Android also checks the
     cached avatar from a screenshot, because it comes from the Pubky image disk cache, which shows
     it without the network. See README.md.
   </description>
@@ -29,7 +29,7 @@
     <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`</action>
     <action>If the PIN screen appears, unlock the wallet</action>
     <action>As soon as the home screen shows, tap the header profile button (testTag "ProfileButton")</action>
-    <action>If a spinner under the "Profile" title with no name (testTag "ProfileLoading") shows first, wait for it to give way. That is the session restore, which has to finish before the cached header can show</action>
+    <action>If a spinner under the "Profile" title with no name (testTag "ProfileLoading") shows first, wait for the cached header or public profile to appear</action>
     <action>Verify the cached profile header (testTag "ProfileCachedHeader") is visible and its name (testTag "ProfileCachedName") matches the name noted before the relaunch. If the full profile name (testTag "ProfileViewName") is already showing, the load finished first: report "already loaded" and repeat from the force-stop step once rather than failing</action>
     <action>Verify the cached header is read-only: edit (testTag "ProfileEdit"), copy (testTag "ProfileCopy"), share (testTag "ProfileShare"), the QR code (testTag "ProfileQRCode") and add tag (testTag "ProfileAddTag") are all absent</action>
     <action>Take a screenshot and verify the cached header shows the profile's avatar, not the placeholder icon</action>

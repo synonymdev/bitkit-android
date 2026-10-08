@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,9 @@ class ProfileViewModel @Inject constructor(
     private var hideCopiedPopupJob: Job? = null
     private var profileLoadJob: Job? = null
     private val _isRefreshing = MutableStateFlow(true)
+    private val displayProfile = combine(pubkyRepo.profile, pubkyRepo.readOnlyProfile) { profile, readOnly ->
+        profile ?: readOnly
+    }
     private val isLoading = combine(
         pubkyRepo.isLoadingProfile,
         pubkyRepo.isRestoringSession,
@@ -73,7 +77,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<ProfileUiState> = combine(
-        pubkyRepo.profile,
+        displayProfile,
         pubkyRepo.publicKey,
         isLoading,
         pubkyRepo.cachedProfile,
@@ -84,7 +88,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         profileUiState(
-            profile = pubkyRepo.profile.value,
+            profile = pubkyRepo.profile.value ?: pubkyRepo.readOnlyProfile.value,
             publicKey = pubkyRepo.publicKey.value,
             isLoading = pubkyRepo.isLoadingProfile.value || pubkyRepo.isRestoringSession.value || _isRefreshing.value,
             cachedProfile = pubkyRepo.cachedProfile.value,
@@ -96,8 +100,15 @@ class ProfileViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
 
     fun loadProfile() = launchProfileLoad {
-        val restored = pubkyRepo.restoreSessionIfNeeded()
-        if (!restored) pubkyRepo.loadProfile()
+        if (pubkyRepo.publicKey.value == null) {
+            coroutineScope {
+                launch { pubkyRepo.loadProfile() }
+                pubkyRepo.restoreSessionIfNeeded()
+            }
+        } else {
+            val restored = pubkyRepo.restoreSessionIfNeeded()
+            if (!restored) pubkyRepo.loadProfile()
+        }
     }
 
     private fun loadProfileAfterInFlightLoad() = launchProfileLoad {
@@ -176,7 +187,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun copyPublicKey() {
-        val pk = pubkyRepo.publicKey.value ?: return
+        val pk = pubkyRepo.publicKey.value ?: pubkyRepo.readOnlyProfile.value?.publicKey ?: return
         context.setClipboardText(pk, context.getString(R.string.profile__public_key))
         _copiedPublicKey.update { pk }
         hideCopiedPopupJob?.cancel()
@@ -200,7 +211,8 @@ class ProfileViewModel @Inject constructor(
     ) = ProfileUiState(
         profile = profile,
         cachedProfile = cachedProfile?.takeIf { isLoading && it.publicKey == publicKey },
-        publicKey = publicKey,
+        publicKey = publicKey ?: profile?.publicKey,
+        canEdit = publicKey != null && publicKey == profile?.publicKey,
         isLoading = isLoading,
         showSignOutDialog = controls.showSignOutDialog,
         isSigningOut = controls.isSigningOut,
@@ -247,6 +259,7 @@ data class ProfileUiState(
     val profile: PubkyProfile? = null,
     val cachedProfile: PubkyCachedProfile? = null,
     val publicKey: String? = null,
+    val canEdit: Boolean = false,
     val isLoading: Boolean = true,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,

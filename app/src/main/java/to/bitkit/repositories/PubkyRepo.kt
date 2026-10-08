@@ -178,10 +178,17 @@ class PubkyRepo @Inject constructor(
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
     private val signInGeneration = AtomicLong(0L)
+    private val readOnlyProfileGeneration = AtomicLong(0L)
+    private val readOnlyProfileLock = Any()
     private var isServiceInitialized = false
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
     val profile: StateFlow<PubkyProfile?> = _profile.asStateFlow()
+
+    private val _readOnlyProfile = MutableStateFlow<PubkyProfile?>(null)
+
+    /** Public display data for the saved key, not an authenticated session or permission to edit. */
+    val readOnlyProfile: StateFlow<PubkyProfile?> = _readOnlyProfile.asStateFlow()
 
     private val _publicKey = MutableStateFlow<String?>(null)
     val publicKey: StateFlow<String?> = _publicKey.asStateFlow()
@@ -759,7 +766,7 @@ class PubkyRepo @Inject constructor(
     // region Profile loading
 
     suspend fun loadProfile() {
-        val signIn = currentSignIn() ?: return
+        val signIn = currentSignIn() ?: return loadReadOnlyProfile()
         val version = completedProfileLoadVersion.get()
         loadProfileMutex.withLock {
             if (!isCurrent(signIn)) return
@@ -795,6 +802,31 @@ class PubkyRepo @Inject constructor(
                 completedProfileSignInGeneration = signIn.generation
                 completedProfileWriteGeneration = writeGeneration
                 completedProfileLoadVersion.incrementAndGet()
+            } finally {
+                _isLoadingProfile.update { false }
+            }
+        }
+    }
+
+    private suspend fun loadReadOnlyProfile() = withContext(ioDispatcher) {
+        val generation = readOnlyProfileGeneration.get()
+        loadProfileMutex.withLock {
+            val isCurrentLoad = { readOnlyProfileGeneration.get() == generation && _publicKey.value == null }
+            if (!isCurrentLoad()) return@withLock
+            _isLoadingProfile.update { true }
+            try {
+                runSuspendCatching {
+                    val secret = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+                        ?: adoptedSecretKeyHex() ?: return@runSuspendCatching null
+                    val owner = pubkyService.publicKeyFromSecret(secret).ensurePubkyPrefix()
+                    fetchDisplayProfile(owner).getOrThrow()
+                }.onSuccess { loaded ->
+                    synchronized(readOnlyProfileLock) {
+                        if (isCurrentLoad()) _readOnlyProfile.update { loaded }
+                    }
+                }.onFailure {
+                    Logger.warn("Failed to load saved identity's public profile", it, context = TAG)
+                }
             } finally {
                 _isLoadingProfile.update { false }
             }
@@ -1984,12 +2016,18 @@ class PubkyRepo @Inject constructor(
     private fun startSignIn(publicKey: String) {
         // First, so the sign-in it replaces has ended before the key is published, even when it is the same identity.
         signInGeneration.incrementAndGet()
+        clearReadOnlyProfile()
         _publicKey.update { publicKey }
     }
 
     private fun continueSignIn(publicKey: String) {
         // Restoring or refreshing the session already signed in keeps its sign-in, so an edit under way still saves.
         if (_publicKey.value != publicKey) startSignIn(publicKey)
+    }
+
+    private fun clearReadOnlyProfile() = synchronized(readOnlyProfileLock) {
+        readOnlyProfileGeneration.incrementAndGet()
+        _readOnlyProfile.update { null }
     }
 
     private suspend fun clearAuthenticatedState(
@@ -1999,6 +2037,7 @@ class PubkyRepo @Inject constructor(
         // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
         signInGeneration.incrementAndGet()
         if (clearCachedProfile) {
+            clearReadOnlyProfile()
             evictPubkyImages()
             profileWriteGeneration.incrementAndGet()
             runSuspendCatching { pubkyStore.reset() }

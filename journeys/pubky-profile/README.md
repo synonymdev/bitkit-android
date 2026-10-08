@@ -17,6 +17,11 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
   Tags appear only with the loaded profile. A failed load still ends on the retry state
   (`ProfileRetry`). The avatar comes from the Pubky image disk cache, so it shows without the
   network.
+- **Public profile reads do not require private session restoration.** A saved local or Ring
+  credential identifies the public profile. Its name, bio, links, tags, QR code, Copy and Share
+  remain readable while Paykit restoration is deferred. Edit and tag changes stay disabled until
+  the authenticated session is available; Disconnect remains available. `profile-after-restart.xml` checks the saved profile
+  through a restart; injecting a held homeserver lock needs a separate fixture.
 - **Ring rows show at once.** The choice screen lists Ring's identities as soon as the shared pubky
   provider answers. Each row is captioned and titled with its truncated key, and a row's title
   becomes the profile name when that row's lookup finishes, rather than the screen waiting for all
@@ -73,8 +78,9 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
 
 ## Gotchas
 
-- **The session can restore after the profile button is tapped.** Profile then shows a spinner with
-  no name (`ProfileLoading`) until the session is back, and only then the cached header.
+- **Public display and private restoration can finish in either order.** Profile can show the
+  public data with Edit disabled while restoration continues. A spinner (`ProfileLoading`) means
+  neither the public read nor an authenticated cached header is available yet.
 - **Every choice row shares one test tag.** Tell the rows apart by their key caption. iOS gives each
   row its own identifier; see the identifier table in `journeys/README.md`.
 - **The avatar has no text.** Check it from a screenshot rather than `android layout`.
@@ -90,8 +96,8 @@ All four journeys share their file names and journey names with `bitkit-ios`. Ev
 identifiers as testTags rather than iOS ids, drops the iOS `predicate exists` wait argument and runs
 `adb` instead of `xcrun simctl`; the differences below are the rest.
 
-- **Cached profile header while loading.** While the session is still restoring, Android shows a
-  bare spinner on Profile (`ProfileLoading`), as iOS does, so one step differs. Android adds a
+- **Cached profile header while loading.** The public profile can load before private restoration;
+  report that as already loaded rather than requiring a cached-header state. Android adds a
   screenshot check that the cached header shows the profile's avatar: the avatar comes from
   the Pubky image disk cache that synonymdev/bitkit-android#1399 adds, so the check is what shows
   it works without the network. iOS shows the cached avatar too but does not check it.

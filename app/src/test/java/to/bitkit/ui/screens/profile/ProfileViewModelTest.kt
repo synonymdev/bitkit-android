@@ -40,6 +40,35 @@ class ProfileViewModelTest : BaseUnitTest() {
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
 
     @Test
+    fun `saved public profile is shown without enabling edits while restoration waits`() = test {
+        val profile = createProfile()
+        val readOnly = MutableStateFlow<PubkyProfile?>(null)
+        val restore = CompletableDeferred<Boolean>()
+        val sut = createSut(
+            publicKey = null,
+            readOnlyProfileFlow = readOnly,
+            onLoadProfile = { readOnly.value = profile },
+            onRestore = { restore.await() },
+        )
+        sut.uiState.test {
+            advanceUntilIdle()
+            expectMostRecentItem().let {
+                assertEquals(profile, it.profile)
+                assertEquals(profile.publicKey, it.publicKey)
+                assertFalse(it.canEdit)
+            }
+            sut.addTag("Bitcoin")
+            sut.removeTag("Founder")
+            advanceUntilIdle()
+            verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+
+            restore.complete(false)
+            advanceUntilIdle()
+            assertEquals(profile, expectMostRecentItem().profile)
+        }
+    }
+
+    @Test
     fun `init loads the profile unless a profile load is in flight`() = test {
         val loaded = createProfile()
         listOf(
@@ -459,6 +488,7 @@ class ProfileViewModelTest : BaseUnitTest() {
     private fun createSut(
         profile: PubkyProfile? = null,
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),
+        readOnlyProfileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(null),
         publicKey: String? = "pubkyalice",
         publicKeyFlow: MutableStateFlow<String?> = MutableStateFlow(publicKey),
         isLoading: Boolean = false,
@@ -466,15 +496,17 @@ class ProfileViewModelTest : BaseUnitTest() {
         isRestoringFlow: MutableStateFlow<Boolean> = MutableStateFlow(false),
         cachedProfile: PubkyCachedProfile? = null,
         onLoadProfile: () -> Unit = {},
+        onRestore: suspend () -> Boolean = { false },
     ): ProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
+        whenever(pubkyRepo.readOnlyProfile).thenReturn(readOnlyProfileFlow)
         whenever(pubkyRepo.publicKey).thenReturn(publicKeyFlow)
         whenever(pubkyRepo.isLoadingProfile).thenReturn(isLoadingFlow)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringFlow)
         whenever(pubkyRepo.cachedProfile).thenReturn(MutableStateFlow(cachedProfile))
-        whenever { pubkyRepo.restoreSessionIfNeeded() }.thenReturn(false)
+        whenever { pubkyRepo.restoreSessionIfNeeded() }.doSuspendableAnswer { onRestore() }
         whenever { pubkyRepo.loadProfile() }.thenAnswer { onLoadProfile() }
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
