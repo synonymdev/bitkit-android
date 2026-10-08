@@ -612,6 +612,25 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
     }
 
+    @Test
+    fun `verified winning fee remains durable after reopening the attempt store`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val service = mock<LightningService>()
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        val attempt = store.admitForTest()
+        val txid = "ab".repeat(32)
+        store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Accepted(txid), 0)
+        store.retainWinningFee(attempt.attemptId, 0, txid, 281uL)
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
+        val durable = requireNotNull(reopened.current())
+        assertEquals(281uL, durable.verifiedWinningFeeSats)
+        assertEquals("281", durable.backupFollowup?.feeSats)
+        assertEquals(txid, durable.txid)
+    }
+
     private suspend fun OnchainSendAttemptStore.admitForTest(
         contactPublicKey: String? = null,
         beforeSendAttempt: suspend () -> Unit = {

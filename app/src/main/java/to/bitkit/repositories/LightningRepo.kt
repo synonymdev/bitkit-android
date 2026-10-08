@@ -1746,9 +1746,9 @@ class LightningRepo @Inject constructor(
         }
         val txId = requireNotNull(attempt.txid) { "On-chain send has no transaction id" }
         val isSuccessor = attempt.candidateTxids.isNotEmpty() && !txId.equals(attempt.candidateTxids.first(), true)
-        val needsExactFee = isSuccessor ||
-            (attempt.candidateTxids.isNotEmpty() && originalFollowup?.feeSats?.toULongOrNull() == 0uL)
-        val fee = if (needsExactFee) {
+        val needsExactFee = attempt.verifiedWinningFeeSats == null && (isSuccessor ||
+            (attempt.candidateTxids.isNotEmpty() && originalFollowup?.feeSats?.toULongOrNull() == 0uL))
+        val fee = attempt.verifiedWinningFeeSats ?: if (needsExactFee) {
             requireNotNull(lightningService.observedOriginalSendFee(attempt)) {
                 "Winning transaction fee is unavailable"
             }.also { onchainSendAttemptStore.retainWinningFee(attempt.attemptId, attempt.walletIndex, txId, it) }
@@ -1782,7 +1782,7 @@ class LightningRepo @Inject constructor(
         if (originalContact != null) {
             coreService.activity.restoreSentOnchainContact(txId, attempt.walletId, originalContact)
         }
-        if (needsExactFee) {
+        if (needsExactFee || attempt.verifiedWinningFeeSats != null) {
             coreService.activity.repairVerifiedSentOnchainFee(txId, attempt.walletId, fee, attempt.winningFeeRateSatsPerVByte)
         }
         check(coreService.activity.getOnchainActivityByTxId(txId, attempt.walletId) != null) {

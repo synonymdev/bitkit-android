@@ -92,6 +92,7 @@ data class OnchainSendAttempt(
     val backupFollowup: ActiveOnchainAttemptBackup.Followup? = null,
     val restoredFromBackup: Boolean = false,
     val preparationPending: Boolean = false,
+    val verifiedWinningFeeSats: ULong? = null,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -388,7 +389,10 @@ class OnchainSendAttemptStore @Inject constructor(
                 check(current?.attemptId == attemptId && walletIndex == lightningService.currentWalletIndex &&
                     current.hasPositiveEvidence && current.txid.equals(txid, true))
                 val followup = requireNotNull(current.backupFollowup)
-                persist(current.copy(backupFollowup = followup.copy(feeSats = feeSats.toString())))
+                persist(current.copy(
+                    backupFollowup = followup.copy(feeSats = feeSats.toString()),
+                    verifiedWinningFeeSats = feeSats,
+                ))
             }
         }
 
@@ -456,6 +460,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     backupFollowup = existing.backupFollowup?.copy(feeSats = attempt.backupFollowup?.feeSats.orEmpty()),
                     restoredFromBackup = attempt.restoredFromBackup,
                     preparationPending = attempt.preparationPending,
+                    verifiedWinningFeeSats = attempt.verifiedWinningFeeSats,
                 ) == attempt
                 check(sameOperation && existing.candidateTxids.containsAll(attempt.candidateTxids)) {
                     "Cannot change a restored on-chain operation's original context"
