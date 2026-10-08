@@ -105,10 +105,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
-private const val SWIPE_ROTATION_DEGREES = 14f
-private const val IMAGE_FILL_PERCENTAGE = 0.8f
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
-const val HARDWARE_SIGN_CANCELLED_RESULT_KEY = "HARDWARE_SIGN_CANCELLED_RESULT_KEY"
 
 @Suppress("MagicNumber")
 @Composable
