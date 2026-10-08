@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -54,6 +55,7 @@ class TransferRepo @Inject constructor(
     private val transferDao: TransferDao,
     private val clock: Clock,
     private val cacheStore: CacheStore,
+    private val connectivityRepo: ConnectivityRepo,
 ) {
     private val lastOrdersFetchMs = AtomicLong(0L)
 
@@ -71,6 +73,14 @@ class TransferRepo @Inject constructor(
                     resumeAcceptedFunding()
                 }
             }
+        }
+        repoScope.launch {
+            connectivityRepo.isOnline.map { it == ConnectivityState.CONNECTED }.distinctUntilChanged().drop(1)
+                .collect { connected ->
+                    if (connected && lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+                        resumeAcceptedFunding()
+                    }
+                }
         }
     }
 

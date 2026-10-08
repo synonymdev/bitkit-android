@@ -72,6 +72,8 @@ class TransferRepoTest : BaseUnitTest() {
     private val clock = mock<Clock>()
     private val cacheStore = mock<CacheStore>()
     private val nodeEvents = MutableSharedFlow<Event>()
+    private val online = MutableStateFlow(ConnectivityState.DISCONNECTED)
+    private val connectivityRepo = mock<ConnectivityRepo>()
 
     companion object Fixtures {
         private const val ID_ORDER = "test-order-id"
@@ -82,6 +84,7 @@ class TransferRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        whenever(connectivityRepo.isOnline).thenReturn(online)
         whenever(cacheStore.data).thenReturn(MutableStateFlow(AppCacheData()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
@@ -95,6 +98,7 @@ class TransferRepoTest : BaseUnitTest() {
             transferDao = transferDao,
             clock = clock,
             cacheStore = cacheStore,
+            connectivityRepo = connectivityRepo,
         )
     }
 
@@ -137,6 +141,58 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connectivity recovery completes accepted funding without another send`() = test {
+        val order = previewBtOrder()
+        val txid = "ab".repeat(32)
+        val attempt = OnchainSendAttempt(
+            WalletScope.default,
+            "attempt",
+            null,
+            order.id,
+            requireNotNull(order.payment?.onchain?.address),
+            order.feeSat,
+            false,
+            1uL,
+            true,
+            null,
+            emptyList(),
+            OnchainSendEvidence.Accepted,
+            txid,
+            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
+        )
+        setupClockNowMock()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        whenever(blocktankRepo.fetchOrders(listOf(order.id)))
+            .thenReturn(Result.failure(AppError("offline")))
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(
+            nodeLifecycleState = NodeLifecycleState.Running,
+        )))
+        runCurrent()
+        assertTrue(sut.resumeAcceptedFunding().isFailure)
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
+        online.value = ConnectivityState.CONNECTED
+        runCurrent()
+
+        verify(transferDao).insert(
+            org.mockito.kotlin.check {
+                assertEquals(order.id, it.lspOrderId)
+                assertEquals(txid, it.fundingTxId)
+                assertEquals(99_000L, it.txTotalSats)
+                assertEquals(125_000L, it.preTransferOnchainSats)
+            }
+        )
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        assertNotNull(sut)
+    }
+
+    @Test
     fun `startup resumes accepted original funding without a confirmation or native resend`() = test {
         val order = previewBtOrder()
         val txid = "ab".repeat(32)
@@ -163,7 +219,7 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         // Construct after the saved result exists, as on process startup.
         val restarted =
-            TransferRepo(testDispatcher, lightningRepo, blocktankRepo, coreService, transferDao, clock, cacheStore)
+            TransferRepo(testDispatcher, lightningRepo, blocktankRepo, coreService, transferDao, clock, cacheStore, connectivityRepo)
         runCurrent()
         lightningRepo.lightningState.value.let {
             (lightningRepo.lightningState as MutableStateFlow).value = it.copy(
@@ -1763,6 +1819,7 @@ class TransferRepoTest : BaseUnitTest() {
             transferDao = transferDao,
             clock = clock,
             cacheStore = cacheStore,
+            connectivityRepo = connectivityRepo,
         )
 
         testSut.activeTransfers.test {
