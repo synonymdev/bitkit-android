@@ -49,6 +49,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
@@ -341,15 +342,12 @@ fun SendSheet(
                     }
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
-                    val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
-                    val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
-                    val initialSubscription = uiState.incomingPaymentRequestId
+                    val initialSubscriptionId = uiState.incomingPaymentRequestId
                         ?.takeIf { uiState.isInitialSubscriptionPayment }
-                        ?.let { id ->
-                            subscriptions.firstOrNull { sub ->
-                                sub.paymentRequestId == id.paymentRequestId && sub.counterparty == id.counterparty
-                            }
-                        }
+                        ?.let { id -> PaykitSubscriptionId(id.paymentRequestId, id.counterparty) }
+                    val initialSubscription = remember(initialSubscriptionId) {
+                        initialSubscriptionId?.let(appViewModel::subscription)
+                    }
 
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
