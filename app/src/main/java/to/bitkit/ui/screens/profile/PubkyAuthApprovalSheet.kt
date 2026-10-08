@@ -390,7 +390,7 @@ private fun ColumnScope.ApprovalDetails(
     Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
         VerticalSpacer(26.dp)
 
-        if (uiState.homeserverPublicKey != null) {
+        if (uiState.createsIdentity) {
             BodyM(text = stringResource(R.string.pubky_auth__signup_description), color = Colors.White64)
             VerticalSpacer(16.dp)
         }
@@ -422,7 +422,7 @@ private fun ColumnScope.ApprovalDetails(
         TrustWarning()
         VerticalSpacer(16.dp)
 
-        uiState.homeserverPublicKey?.let { homeserver ->
+        uiState.homeserverPublicKey?.takeIf { uiState.createsIdentity }?.let { homeserver ->
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier

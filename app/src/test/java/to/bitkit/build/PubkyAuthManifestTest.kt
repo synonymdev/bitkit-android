@@ -80,8 +80,13 @@ class PubkyAuthManifestTest {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
             PackageManager.DONT_KILL_APP,
         )
-        assertRoutes(packageManager, application.packageName, signupUrls, signupAlias)
-        assertRoutes(packageManager, application.packageName, authUrls + unrelatedUrls, null)
+        assertRoutes(packageManager, application.packageName, signupUrls + authUrls.last(), signupAlias)
+        assertRoutes(
+            packageManager,
+            application.packageName,
+            authUrls.dropLast(1) + unrelatedUrls,
+            null,
+        )
 
         packageManager.setComponentEnabledSetting(
             signupAlias,
