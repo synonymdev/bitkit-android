@@ -967,11 +967,11 @@ class PrivatePaykitRepo @Inject constructor(
                     preparedKeys += publicKey
                 }.onFailure {
                     Logger.warn("Failed to prepare private Paykit link during '$reason'", it, context = TAG)
-                    val hasNoHandshake = it is PaykitException.Transport && runSuspendCatching {
-                        val state = paykitSdkService.linkedPeers().firstOrNull { it.counterparty == publicKey }?.state
-                        state == null || state == LinkedPeerState.NOT_LINKED
-                    }.getOrDefault(false)
-                    if (it is PaykitException.NotFound || hasNoHandshake) {
+                    awaitContactPreparationActive(priority)
+                    if (generation != preparationGeneration) return@onFailure
+                    val isUnavailable = isPrivateLinkUnavailable(publicKey, it, priority)
+                    if (generation != preparationGeneration) return@onFailure
+                    if (isUnavailable) {
                         unavailableLinkRetryAt[publicKey] = clock.now() + unavailableLinkRetryDelay
                     } else if (it is PaykitException.Transport) {
                         unavailableLinkRetryAt.remove(publicKey)
@@ -981,6 +981,19 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
         return PrivateLinkPreparation(preparedKeys, linkRetryKeys)
+    }
+
+    private suspend fun isPrivateLinkUnavailable(
+        publicKey: String,
+        error: Throwable,
+        priority: Priority,
+    ): Boolean = when (error) {
+        is PaykitException.NotFound -> true
+        is PaykitException.Transport -> runSuspendCatching {
+            val state = paykitSdkService.linkedPeers(priority).firstOrNull { it.counterparty == publicKey }?.state
+            state == null || state == LinkedPeerState.NOT_LINKED
+        }.getOrDefault(false)
+        else -> false
     }
 
     private suspend fun advanceLinkIfIdle(

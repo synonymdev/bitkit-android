@@ -50,6 +50,14 @@ fault-injection checks do not establish staging latency or a guaranteed completi
 
 ## Background preparation
 
+Sign in from Pubky Ring with a saved, request-capable contact while holding the selected
+identity's profile lookup. After authentication and contact loading finish, Paykit target
+discovery must run without waiting for the profile lookup or a maintenance poll. Verify the
+Receive contact-request entry point once discovery finishes. Repeat with backgrounding or an
+identity change during contact loading: automatic refresh must not start for an inactive app
+or the previous identity. This requires Pubky Ring and controlled profile lookup timing,
+which are not journey-runner capabilities. Android uses the same authenticated-identity gate.
+
 With contact preparation or a private-message retry in progress, background the app. Let an active
 SDK operation finish; scheduled contact work must pause between operations and retain pending
 contacts. Foreground the app and verify preparation and delivery resume without adding the

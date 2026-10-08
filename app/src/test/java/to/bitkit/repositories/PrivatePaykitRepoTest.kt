@@ -444,6 +444,57 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `transport recovery waits for foreground and preserves background priority`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(paykitSdkService.linkedPeers(any())).thenReturn(emptyList())
+        val completion = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
+            completion.await()
+            throw PaykitException.Transport("offline", "Unavailable homeserver")
+        }
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY, priority = Priority.Background)
+        clearInvocations(paykitSdkService)
+
+        sut.setContactPreparationActive(false)
+        completion.complete(Unit)
+        runCurrent()
+        verify(paykitSdkService, never()).linkedPeers()
+        verify(paykitSdkService, never()).linkedPeers(any())
+
+        sut.setContactPreparationActive(true)
+        runCurrent()
+        verify(paykitSdkService).linkedPeers(Priority.Background)
+        verify(paykitSdkService, never()).linkedPeers(Priority.Ordered)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `profile deletion invalidates paused transport recovery`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(paykitSdkService.linkedPeers(any())).thenReturn(emptyList())
+        val completion = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
+            completion.await()
+            throw PaykitException.Transport("offline", "Unavailable homeserver")
+        }
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        sut.setContactPreparationActive(false)
+        completion.complete(Unit)
+        runCurrent()
+        sut.beginProfileDeletion()
+        clearInvocations(paykitSdkService)
+
+        sut.setContactPreparationActive(true)
+        runCurrent()
+        verify(paykitSdkService, never()).linkedPeers()
+        verify(paykitSdkService, never()).linkedPeers(any())
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `pending retries pause in background and resume with background transport priority`() = test {
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
         sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
