@@ -439,6 +439,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         )
         val receipt = OnchainPreparedReceipt(
             "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, 99_500uL,
+            miningFeeSats = 500uL,
         )
         for (amount in listOf(98_999uL, 100_001uL)) {
             assertFailsWith<IllegalArgumentException> {
@@ -454,6 +455,13 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
                 }
             }
             assertFalse(dispatched)
+        }
+        for (fee in listOf(null, 501uL, ULong.MAX_VALUE)) {
+            assertFailsWith<IllegalArgumentException> {
+                store.retainPreparedReceipt(attempt.attemptId, 0, receipt.copy(miningFeeSats = fee), false)
+            }
+            assertNull(store.current()?.txid)
+            assertTrue(store.current()?.candidateTxids?.isEmpty() == true)
         }
         val retained = store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
         assertEquals(99_500uL, retained.amountSats)

@@ -996,6 +996,7 @@ class LightningService internal constructor(
             prepared.inputs().map { OnchainSendInput(it.txid, it.vout) },
             address,
             prepared.recipientAmountSats(),
+            miningFeeSats = prepared.miningFeeSats(),
         )
         PreparedOnchainSend(receipt) {
             callOnchainSend {

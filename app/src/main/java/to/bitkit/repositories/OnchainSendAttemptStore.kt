@@ -62,6 +62,7 @@ data class OnchainPreparedReceipt(
     val address: String,
     val amountSats: ULong,
     val feeRateSatsPerVByte: ULong? = null,
+    val miningFeeSats: ULong? = null,
 )
 
 @Serializable
@@ -278,7 +279,9 @@ class OnchainSendAttemptStore @Inject constructor(
                 if (current.isTransfer && current.isMaxAmount) {
                     val context = requireNotNull(current.transferContext)
                     val originalFee = requireNotNull(context.originalOrderFeeSats)
-                    require(receipt.amountSats >= originalFee && receipt.amountSats <= context.txTotalSats)
+                    val miningFee = requireNotNull(receipt.miningFeeSats)
+                    require(miningFee <= context.txTotalSats)
+                    require(receipt.amountSats >= originalFee && receipt.amountSats <= context.txTotalSats - miningFee)
                 }
             }
             val feeRate = receipt.feeRateSatsPerVByte ?: current.feeRateSatsPerVByte
