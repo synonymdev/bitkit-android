@@ -530,6 +530,21 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `malformed active contact fails restore before installing the guard`() = test {
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
+        val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
+        val wire = requireNotNull(state.activeOnchainAttempt)
+        whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
+        stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire.copy(
+            followup = requireNotNull(wire.followup).copy(contact = kotlinx.serialization.json.JsonPrimitive(123)),
+        )))
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(onchainSendAttemptStore, never()).restoreActive(any())
+        verify(paykitPaymentProofRepo, never()).restoreBackup(any())
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
     fun `wrong active binding or proof blocks restore without clearing guard or publishing empty backup`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)

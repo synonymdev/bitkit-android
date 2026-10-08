@@ -2,6 +2,7 @@ package to.bitkit.models
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendInput
@@ -94,6 +95,9 @@ data class ActiveOnchainAttemptBackup(
         requireNotNull(followup).let {
             unsigned(it.feeSats)
             unsigned(it.createdAtMillis)
+            it.contact?.let { contact ->
+                require(contact is JsonPrimitive && contact.isString && contact.content.isNotBlank())
+            }
         }
         val transferContext = transfer?.let {
             require(orderId != null)

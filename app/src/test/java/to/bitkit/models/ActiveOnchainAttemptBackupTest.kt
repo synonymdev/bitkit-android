@@ -92,6 +92,31 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restore rejects malformed original contact before installing a guard`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
+        val followup = requireNotNull(wire.followup)
+        val invalidContacts = listOf(
+            kotlinx.serialization.json.JsonPrimitive(""),
+            kotlinx.serialization.json.JsonPrimitive("   "),
+            kotlinx.serialization.json.JsonPrimitive(123),
+            kotlinx.serialization.json.JsonPrimitive(true),
+            kotlinx.serialization.json.JsonNull,
+            kotlinx.serialization.json.JsonObject(emptyMap()),
+            kotlinx.serialization.json.JsonArray(emptyList()),
+        )
+        for (contact in invalidContacts) {
+            assertFailsWith<IllegalArgumentException> {
+                wire.copy(followup = followup.copy(contact = contact)).restored("regtest", binding, "wallet0", 0)
+            }
+        }
+        val missing = wire.copy(followup = followup.copy(contact = null)).restored("regtest", binding, "wallet0", 0)
+        assertNull(missing.backupFollowup?.contact)
+        val validContact = kotlinx.serialization.json.JsonPrimitive("original-contact")
+        val valid = wire.copy(followup = followup.copy(contact = validContact)).restored("regtest", binding, "wallet0", 0)
+        assertEquals(validContact, valid.backupFollowup?.contact)
+    }
+
+    @Test
     fun `restored active operations require original local followup context`() {
         val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
         for (status in listOf("pending", "accepted", "rejected", "unknown")) {
