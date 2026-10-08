@@ -2911,7 +2911,7 @@ class PubkyRepoTest : BaseUnitTest() {
             restoration.await()
 
             assertTrue(loadedWhileProfilePending)
-            assertNotNull(sut.publicKey.value)
+            assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         }
     }
 
