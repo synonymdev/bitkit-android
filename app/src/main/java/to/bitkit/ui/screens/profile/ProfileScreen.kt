@@ -143,12 +143,14 @@ private fun Content(
             ProfileBody(
                 profile = currentProfile,
                 canEdit = uiState.canEdit,
+                isLoading = uiState.isLoading || uiState.isSigningOut,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickShare = onClickShare,
                 onClickAddTag = onClickAddTag,
                 onRemoveTag = onRemoveTag,
                 onClickSignOut = onClickSignOut,
+                onClickRetry = onClickRetry,
             )
             topBar(Modifier.background(TopBarGradient))
             CopiedPopup(
@@ -195,12 +197,14 @@ private fun Content(
 private fun ProfileBody(
     profile: PubkyProfile,
     canEdit: Boolean,
+    isLoading: Boolean,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickShare: () -> Unit,
     onClickAddTag: () -> Unit,
     onRemoveTag: (String) -> Unit,
     onClickSignOut: () -> Unit,
+    onClickRetry: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -328,6 +332,13 @@ private fun ProfileBody(
 
         VerticalSpacer(16.dp)
         if (!canEdit) {
+            SecondaryButton(
+                text = stringResource(R.string.profile__retry_load),
+                onClick = onClickRetry,
+                enabled = !isLoading,
+                modifier = Modifier.testTag("ProfileRetry")
+            )
+            VerticalSpacer(8.dp)
             TextButton(
                 onClick = rememberDebouncedClick(onClick = onClickSignOut),
                 modifier = Modifier.testTag("ProfileSignOut")

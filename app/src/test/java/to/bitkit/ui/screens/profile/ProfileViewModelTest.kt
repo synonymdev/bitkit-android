@@ -46,11 +46,14 @@ class ProfileViewModelTest : BaseUnitTest() {
         val authenticated = MutableStateFlow<PubkyProfile?>(null)
         val publicKey = MutableStateFlow<String?>(null)
         val restore = CompletableDeferred<Boolean>()
+        var profileAvailable = false
         val sut = createSut(
             profileFlow = authenticated,
             publicKeyFlow = publicKey,
             readOnlyProfileFlow = readOnly,
-            onLoadProfile = { readOnly.value = profile },
+            onLoadProfile = {
+                if (profileAvailable) authenticated.value = profile else readOnly.value = profile
+            },
             onRestore = { restore.await() },
         )
         sut.uiState.test {
@@ -72,7 +75,13 @@ class ProfileViewModelTest : BaseUnitTest() {
             publicKey.value = profile.publicKey
             advanceUntilIdle()
             assertFalse(sut.uiState.value.canEdit)
-            authenticated.value = profile
+            sut.loadProfile()
+            advanceUntilIdle()
+            assertEquals(profile, sut.uiState.value.profile)
+            assertFalse(sut.uiState.value.canEdit)
+
+            profileAvailable = true
+            sut.loadProfile()
             advanceUntilIdle()
             assertTrue(expectMostRecentItem().canEdit)
         }

@@ -20,7 +20,8 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
 - **Public profile reads do not require private session restoration.** A saved local or Ring
   credential identifies the public profile. Its name, bio, links, tags, QR code, Copy and Share
   remain readable while Paykit restoration is deferred. Edit and tag changes stay disabled until
-  the authenticated session is available; Disconnect remains available. `profile-after-restart.xml` checks the saved profile
+  the authenticated profile is available. Retry and Disconnect remain available on the read-only
+  profile; these recovery controls disappear when editing becomes available. `profile-after-restart.xml` checks the saved profile
   through a restart; injecting a held homeserver lock needs a separate fixture.
 - **Ring rows show at once.** The choice screen lists Ring's identities as soon as the shared pubky
   provider answers. Each row is captioned and titled with its truncated key, and a row's title
@@ -84,15 +85,16 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
 - **Every choice row shares one test tag.** Tell the rows apart by their key caption. iOS gives each
   row its own identifier; see the identifier table in `journeys/README.md`.
 - **The avatar has no text.** Check it from a screenshot rather than `android layout`.
-- **Contacts can open the wrong screen right after a relaunch.** While the session is still
-  restoring, the menu's Contacts item opens the contacts intro or Profile instead. Return to the
-  home screen and open Contacts again.
+- **Contacts can show recovery right after a relaunch.** While the saved session is still
+  restoring, the menu's Contacts item opens Profile instead. Android can first show the contacts
+  intro if it has not been completed and no contacts are loaded. Return Home and open Contacts
+  again after restoration.
 - **The edit form calls the notes field "Bio".** `contacts-list-loading.xml` keeps the iOS wording;
   the field carries `ProfileEditBio`.
 
 ## Android vs iOS
 
-All four journeys share their file names and journey names with `bitkit-ios`. Every step names
+All five journeys share their file names and journey names with `bitkit-ios`. Every step names
 identifiers as testTags rather than iOS ids, drops the iOS `predicate exists` wait argument and runs
 `adb` instead of `xcrun simctl`; the differences below are the rest.
 
@@ -120,15 +122,17 @@ identifiers as testTags rather than iOS ids, drops the iOS `predicate exists` wa
   import testTag the journeys use; Back is the shared `NavigationBack`. See the Identifiers table
   in [`journeys/README.md`](../README.md#identifiers). Both platforms save the import only to the
   device.
-- **Contacts list loading.** `contacts-list-loading.xml` has the same file, journey name and steps
-  on both platforms; only the relaunch commands differ.
+- **Contacts list loading.** Both platforms route a saved identity through Profile recovery during
+  deferred restoration. Android can first show the contacts intro if it has not been completed and
+  no contacts are loaded. Return Home and reopen Contacts after restoration. The remaining steps
+  differ only in platform commands and identifiers.
 
 ## Test tags used
 
 - Home: `ProfileButton`.
 - Profile, cached: `ProfileCachedHeader`, `ProfileCachedName`.
 - Profile, loaded: `ProfileViewName`, `ProfileEdit`, `ProfileCopy`, `ProfileShare`, `ProfileQRCode`,
-  `ProfileAddTag`; failed load `ProfileRetry`.
+  `ProfileAddTag`; read-only recovery `ProfileRetry` and `ProfileSignOut`.
 - Profile intro: `ProfileIntro`, `ProfileIntro-button`.
 - Pubky choice: `PubkyChoiceIdentity` for each Ring row, `PubkyChoiceIdentityLookup` for a row's
   lookup spinner and `PubkyContactAvatar` for the avatar that replaces it, `PubkyChoiceCreate` when

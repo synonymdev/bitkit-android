@@ -810,6 +810,7 @@ class PubkyRepo @Inject constructor(
     }
 
     private suspend fun loadReadOnlyProfile() = withContext(ioDispatcher) {
+        awaitInitialization()
         val generation = readOnlyProfileGeneration.get()
         loadProfileMutex.withLock {
             val isCurrentLoad = { readOnlyProfileGeneration.get() == generation && _publicKey.value == null }

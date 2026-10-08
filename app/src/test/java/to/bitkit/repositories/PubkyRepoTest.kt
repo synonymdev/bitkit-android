@@ -2460,6 +2460,34 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saved profile load waits for initial restoration without a duplicate public read`() = test {
+        sut.awaitInitialization()
+        val restore = stubSavedSessionRestore()
+        val importGate = CompletableDeferred<Unit>()
+        restore.answer = {
+            importGate.await()
+            VALID_SELF_KEY
+        }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("saved-secret")
+        whenever(pubkyService.publicKeyFromSecret("saved-secret")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
+            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Alice")))
+        sut = createSut()
+
+        val load = launch { sut.loadProfile() }
+        runCurrent()
+        verify(pubkyService, never()).resolveContactProfile(VALID_SELF_KEY, true)
+        importGate.complete(Unit)
+        load.join()
+        advanceUntilIdle()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals("Alice", sut.profile.value?.name)
+        assertNull(sut.readOnlyProfile.value)
+        verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
     fun `public profile remains readable while private session restore is deferred`() = test {
         val restore = stubSavedSessionRestore()
         restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
