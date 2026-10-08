@@ -7207,7 +7207,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
-        )
+                contactPublicKey = anyOrNull(),
+            )
         verify(
             paykitPaymentProofRepo
         ).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue, "bitkit", OnchainSendOutcome.Accepted("txid"))
@@ -7358,7 +7359,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
-        )
+                contactPublicKey = anyOrNull(),
+            )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
             any(),
             any(),
@@ -8262,6 +8264,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
     }
 
@@ -8371,6 +8374,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
     }
 
@@ -8426,6 +8430,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
     }
 
@@ -9056,7 +9061,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
-        )
+                contactPublicKey = anyOrNull(),
+            )
     }
 
     @Test
@@ -9101,7 +9107,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
-        )
+                contactPublicKey = anyOrNull(),
+            )
     }
 
     @Test
@@ -9166,7 +9173,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
-        )
+                contactPublicKey = anyOrNull(),
+            )
     }
 
     @Test
@@ -9276,7 +9284,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
-        )
+                contactPublicKey = anyOrNull(),
+            )
     }
 
     @Test
@@ -10344,6 +10353,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 transferContext = anyOrNull(),
                 payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)

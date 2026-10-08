@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
@@ -164,6 +165,7 @@ class OnchainSendAttemptStore @Inject constructor(
         transferContext: OnchainTransferContext? = null,
         beforeSendAttempt: suspend () -> Unit,
         payerIdentity: String? = null,
+        contactPublicKey: String? = null,
     ): OnchainSendAttempt = withContext(ioDispatcher) {
         mutex.withLock {
             val walletIndex = lightningService.currentWalletIndex
@@ -198,6 +200,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     tags = tags,
                     createdAtMillis = nowMillis(clock).toString(),
                     channelId = channelId,
+                    contact = contactPublicKey?.let(::JsonPrimitive),
                 ),
             )
             persist(attempt)

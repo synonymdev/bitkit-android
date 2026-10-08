@@ -218,6 +218,22 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `original contact is durable before dispatch and survives reopening`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val contact = "original-contact"
+        val attempt = store.admitForTest(contactPublicKey = contact) {
+            assertTrue(requireNotNull(saved).contains(contact), "original contact must be saved before dispatch")
+        }
+        assertEquals(contact, (attempt.backupFollowup?.contact as? kotlinx.serialization.json.JsonPrimitive)?.content)
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        assertEquals(attempt.backupFollowup?.contact, reopened.current()?.backupFollowup?.contact)
+    }
+
+    @Test
     fun `admission followup timestamp uses the injected clock`() = test {
         val keychain = mock<Keychain>()
         val clock = mock<kotlin.time.Clock>()
@@ -498,6 +514,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     private suspend fun OnchainSendAttemptStore.admitForTest(
+        contactPublicKey: String? = null,
         beforeSendAttempt: suspend () -> Unit = {
         }
     ): OnchainSendAttempt = admit(
@@ -512,5 +529,6 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         channelId = null,
         tags = emptyList(),
         beforeSendAttempt = beforeSendAttempt,
+        contactPublicKey = contactPublicKey,
     )
 }

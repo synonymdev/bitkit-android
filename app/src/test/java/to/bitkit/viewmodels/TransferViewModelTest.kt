@@ -1178,6 +1178,7 @@ class TransferViewModelTest : BaseUnitTest() {
             ),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(blocktankRepo, times(1)).createOrder(eq(order.clientBalanceSat), eq(order.lspBalanceSat), any())
@@ -1228,6 +1229,7 @@ class TransferViewModelTest : BaseUnitTest() {
             ),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1246,6 +1248,7 @@ class TransferViewModelTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
     }
@@ -1281,6 +1284,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
 
@@ -1308,6 +1312,7 @@ class TransferViewModelTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1326,6 +1331,7 @@ class TransferViewModelTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -1527,6 +1533,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 transferContext = anyOrNull(),
                 payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             ),
         ).thenReturn(Result.success(OnchainSendOutcome.Unknown(TXID)))
         quoteOrder(order)
@@ -1604,6 +1611,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             ),
         ).thenReturn(
             Result.failure(AppError("Coin selection failed")),
@@ -1869,6 +1877,7 @@ class TransferViewModelTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
     }
 
@@ -2055,6 +2064,7 @@ class TransferViewModelTest : BaseUnitTest() {
             anyOrNull(),
             payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -2086,6 +2096,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
         quoteOrder(order)
@@ -2237,6 +2248,7 @@ class TransferViewModelTest : BaseUnitTest() {
             anyOrNull(),
             payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
         verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
     }
@@ -3558,6 +3570,7 @@ class TransferViewModelTest : BaseUnitTest() {
             transferContext = anyOrNull(),
             payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
     }
 
@@ -3714,6 +3727,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 payerIdentity = anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             ),
         )
         fun typed(value: Result<String>) = value.map { OnchainSendOutcome.Accepted(it) }

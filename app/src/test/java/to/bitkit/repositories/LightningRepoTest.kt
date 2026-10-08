@@ -1577,6 +1577,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore.admit(
                 any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
                 anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
         }
             .thenReturn(attempt)
@@ -1755,7 +1756,9 @@ class LightningRepoTest : BaseUnitTest() {
 
         val blocked = assertIs<OnchainSendBlockedError>(result.exceptionOrNull())
         assertEquals(original, blocked.attempt)
-        verify(onchainSendAttemptStore, never()).admit(any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(), anyOrNull())
+        verify(onchainSendAttemptStore, never()).admit(any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
     }
 
     private fun pendingSendAttempt() = OnchainSendAttempt(
@@ -1772,6 +1775,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore.admit(
                 any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
                 anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
         ).thenReturn(attempt)
         startNodeForTesting()
@@ -2154,7 +2158,8 @@ class LightningRepoTest : BaseUnitTest() {
                 verify(onchainSendAttemptStore).admit(
                     any(), isNull(), eq("order-1"), any(), any(), any(), any(), eq(true), anyOrNull(), any(),
                     eq(context), any(), anyOrNull(),
-                )
+                contactPublicKey = anyOrNull(),
+            )
                 preparedOutcome(OnchainSendOutcome.Unknown("ab".repeat(32)))
             }
         whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))

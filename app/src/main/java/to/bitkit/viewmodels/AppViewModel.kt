@@ -4511,6 +4511,7 @@ class AppViewModel @Inject constructor(
             tags = tags,
             requestId = incomingPaymentRequest?.id,
             payerIdentity = originalPayer,
+            contactPublicKey = contactPaymentContext?.publicKey,
             paymentDeadlineAt = incomingPaymentRequest?.paymentDeadlineAt,
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
@@ -5204,6 +5205,7 @@ class AppViewModel @Inject constructor(
         tags: List<String> = emptyList(),
         requestId: PaykitPaymentRequestId? = null,
         payerIdentity: String? = null,
+        contactPublicKey: String? = null,
         paymentDeadlineAt: Instant? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
@@ -5217,6 +5219,7 @@ class AppViewModel @Inject constructor(
         tags = tags,
         requestId = requestId,
         payerIdentity = payerIdentity,
+        contactPublicKey = contactPublicKey,
         paymentDeadlineAt = paymentDeadlineAt,
         beforeSendAttempt = beforeSendAttempt,
         onBroadcast = onBroadcast,

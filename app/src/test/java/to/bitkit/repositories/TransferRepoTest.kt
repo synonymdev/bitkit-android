@@ -131,6 +131,7 @@ class TransferRepoTest : BaseUnitTest() {
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
         assertEquals(attempt, lightningRepo.currentOnchainSendAttempt())
     }
@@ -184,6 +185,7 @@ class TransferRepoTest : BaseUnitTest() {
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
         assertNotNull(restarted)
     }
@@ -239,6 +241,7 @@ class TransferRepoTest : BaseUnitTest() {
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
                 paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             )
     }
 

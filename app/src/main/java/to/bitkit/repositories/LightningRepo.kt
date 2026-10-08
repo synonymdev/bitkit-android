@@ -1504,6 +1504,7 @@ class LightningRepo @Inject constructor(
         transferContext: OnchainTransferContext? = null,
         payerIdentity: String? = null,
         paymentDeadlineAt: Instant? = null,
+        contactPublicKey: String? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
@@ -1551,6 +1552,7 @@ class LightningRepo @Inject constructor(
                 transferContext = transferContext,
                 beforeSendAttempt = beforeSendAttempt,
                 payerIdentity = payerIdentity,
+                contactPublicKey = contactPublicKey,
             )
         }.getOrElse {
             val error = if (it is OnchainSendBlockedError || it is OnchainSendAttemptUnreadableError) {
