@@ -73,6 +73,25 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     }
 
     @Test
+    fun `accepted successor restore requires its own valid fee rate`() {
+        val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
+        val original = wire.candidateTxids.first()
+        val successor = wire.candidateTxids.last()
+        val accepted = wire.copy(status = "accepted", txid = successor)
+        for (rates in listOf(null, emptyMap(), mapOf(original to "2"))) {
+            assertFailsWith<IllegalArgumentException> {
+                accepted.copy(candidateFeeRates = rates).restored("regtest", binding, "wallet0", 0)
+            }
+        }
+        val restored = accepted.copy(candidateFeeRates = mapOf(successor to "4"))
+            .restored("regtest", binding, "wallet0", 0)
+        assertEquals(4uL, restored.winningFeeRateSatsPerVByte)
+        val firstWinner = accepted.copy(txid = original, candidateFeeRates = null)
+            .restored("regtest", binding, "wallet0", 0)
+        assertEquals(wire.feeRateSatsPerVByte.toULong(), firstWinner.winningFeeRateSatsPerVByte)
+    }
+
+    @Test
     fun `unsigned active preparation cannot restore a permanent wallet guard`() {
         val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt).copy(
             originalInputs = null,
@@ -163,7 +182,7 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
                 feeRateSatsPerVByte = "0"
             ).restored("regtest", binding, "wallet0", 0)
         }
-        val accepted = wire.copy(status = "accepted").restored("regtest", binding, "wallet0", 0)
+        val accepted = wire.copy(status = "accepted", candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4")).restored("regtest", binding, "wallet0", 0)
         assertEquals(OnchainSendEvidence.Accepted, accepted.evidence)
         assertFalse(accepted.localFollowupComplete)
     }

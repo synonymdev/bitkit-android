@@ -267,7 +267,8 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
                 .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
                 .paykitPaymentState?.activeOnchainAttempt,
         )
-        val accepted = wire.copy(status = "accepted", followup = wire.followup?.copy(contact = null))
+        val accepted = wire.copy(status = "accepted", candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4"),
+            followup = wire.followup?.copy(contact = null))
             .restored("regtest", wire.wallet.binding, "wallet0", 0)
         var saved: String? = null
         val keychain = mock<Keychain>()
@@ -293,7 +294,8 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
             .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
         val wire = requireNotNull(backup.paykitPaymentState?.activeOnchainAttempt)
-        val accepted = wire.copy(status = "accepted", followup = wire.followup?.copy(contact = null))
+        val accepted = wire.copy(status = "accepted", candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4"),
+            followup = wire.followup?.copy(contact = null))
             .restored("regtest", wire.wallet.binding, "wallet0", 0)
         var saved: String? = null
         val keychain = mock<Keychain>()

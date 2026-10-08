@@ -307,6 +307,7 @@ class BackupRepoTest : BaseUnitTest() {
             orderId = "original-order",
             isTransfer = true,
             evidence = OnchainSendEvidence.Accepted,
+            candidateFeeRates = mapOf(requireNotNull(original.txid) to 4uL),
             transferContext = OnchainTransferContext(2_000uL, 3_000uL, 900uL, 1_000uL),
             backupFollowup = requireNotNull(original.backupFollowup).copy(contact = null),
         )
@@ -350,6 +351,7 @@ class BackupRepoTest : BaseUnitTest() {
         val ordinary = original.copy(
             requestId = null, payerIdentity = null, orderId = null, isTransfer = false,
             evidence = OnchainSendEvidence.Accepted,
+            candidateFeeRates = mapOf(requireNotNull(original.txid) to 4uL),
         )
         val wire = to.bitkit.models.ActiveOnchainAttemptBackup.from(ordinary, "regtest", originalWire.wallet.binding)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(originalWire.wallet.binding)
@@ -401,7 +403,9 @@ class BackupRepoTest : BaseUnitTest() {
     fun `restored accepted Shop reconciles after proof and private state`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/active-onchain-attempt-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
-        val wire = requireNotNull(state.activeOnchainAttempt).copy(status = "accepted")
+        val originalWire = requireNotNull(state.activeOnchainAttempt)
+        val wire = originalWire.copy(status = "accepted",
+            candidateFeeRates = mapOf(requireNotNull(originalWire.txid) to "4"))
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
         stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire))
         sut.performFullRestoreFromLatestBackup().getOrThrow()

@@ -88,6 +88,9 @@ data class ActiveOnchainAttemptBackup(
             "unknown" -> OnchainSendEvidence.Unknown
             else -> error("Unsupported active operation status")
         }
+        if (evidence == OnchainSendEvidence.Accepted && txid != candidateTxids.first()) {
+            require(txid in restoredFeeRates)
+        }
         followup?.let {
             unsigned(it.feeSats)
             unsigned(it.createdAtMillis)
