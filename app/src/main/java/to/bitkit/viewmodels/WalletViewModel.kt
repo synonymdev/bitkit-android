@@ -181,8 +181,13 @@ class WalletViewModel @Inject constructor(
                     pendingWalletStart = true
                     return@launch
                 }
-                val channelMigration = buildChannelMigrationIfAvailable()
-                startNode(0, channelMigration)
+                migrationService.lockChannelMigration()
+                try {
+                    val channelMigration = buildChannelMigrationIfAvailable()
+                    startNode(0, channelMigration)
+                } finally {
+                    migrationService.unlockChannelMigration()
+                }
             } else {
                 migrationService.setShowingMigrationLoading(false)
             }
@@ -289,7 +294,22 @@ class WalletViewModel @Inject constructor(
     fun onRestoreRetry() = viewModelScope.launch(bgDispatcher) {
         _restoreState.update { it.countRetry() }
         setInitNodeLifecycleState()
-        lightningRepo.restartNode()
+        migrationService.lockChannelMigration()
+        try {
+            val channelMigration = buildChannelMigrationIfAvailable()
+            if (channelMigration == null) {
+                lightningRepo.restartNode()
+            } else {
+                lightningRepo.stop().onSuccess {
+                    startNode(0, channelMigration)
+                }.onFailure {
+                    Logger.error("Failed to stop node during restore retry", it, context = TAG)
+                    ToastEventBus.send(it)
+                }
+            }
+        } finally {
+            migrationService.unlockChannelMigration()
+        }
     }
 
     fun onBackupRestoreRetry() = viewModelScope.launch(bgDispatcher) {

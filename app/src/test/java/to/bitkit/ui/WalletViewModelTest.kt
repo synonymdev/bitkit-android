@@ -11,9 +11,11 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.PeerDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -39,6 +41,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.PendingChannelMigration
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
@@ -704,6 +707,114 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verifyNodeStarted(testLightningRepo)
+    }
+
+    @Test
+    fun `restore retry rebuilds the node with the pending channel file`() = test {
+        val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
+        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
+        stubSuccessfulNodeStart(lightningRepo)
+
+        sut.onRestoreRetry()
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).restartNode()
+        val migration = argumentCaptor<ChannelDataMigration>()
+        verify(lightningRepo).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            migration.capture(),
+            any(),
+        )
+        assertEquals(listOf(1.toUByte()), migration.firstValue.channelManager)
+        assertEquals(listOf(listOf(2.toUByte())), migration.firstValue.channelMonitors)
+        inOrder(migrationService) {
+            verify(migrationService).lockChannelMigration()
+            verify(migrationService).peekPendingChannelMigration()
+            verify(migrationService).consumePendingChannelMigration()
+            verify(migrationService).unlockChannelMigration()
+        }
+    }
+
+    @Test
+    fun `restore retry keeps pending channels when stop fails`() = test {
+        val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
+        whenever(lightningRepo.stop()).thenReturn(Result.failure(AppError("stop failed")))
+
+        sut.onRestoreRetry()
+        advanceUntilIdle()
+
+        verifyNodeNotStarted(lightningRepo)
+        verify(lightningRepo, never()).restartNode()
+        verify(migrationService, never()).consumePendingChannelMigration()
+        verify(migrationService).unlockChannelMigration()
+    }
+
+    @Test
+    fun `restore retry keeps pending channels when start fails`() = test {
+        val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
+        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
+        whenever(
+            lightningRepo.start(
+                any(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+            ),
+        ).thenReturn(Result.failure(AppError("start failed")))
+
+        sut.onRestoreRetry()
+        advanceUntilIdle()
+
+        verifyNodeStarted(lightningRepo)
+        verify(lightningRepo, never()).restartNode()
+        verify(migrationService, never()).consumePendingChannelMigration()
+        verify(migrationService).unlockChannelMigration()
+    }
+
+    @Test
+    fun `rn local migration start holds the channel migration lock until consumption`() = test {
+        advanceUntilIdle()
+        val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        stubSuccessfulNodeStart(lightningRepo)
+
+        WalletViewModel(
+            context = context,
+            bgDispatcher = testDispatcher,
+            walletRepo = walletRepo,
+            lightningRepo = lightningRepo,
+            settingsStore = settingsStore,
+            backupRepo = backupRepo,
+            blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
+            migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
+        )
+        advanceUntilIdle()
+
+        verifyNodeStarted(lightningRepo)
+        inOrder(migrationService) {
+            verify(migrationService).lockChannelMigration()
+            verify(migrationService).peekPendingChannelMigration()
+            verify(migrationService).consumePendingChannelMigration()
+            verify(migrationService).unlockChannelMigration()
+        }
     }
 
     private suspend fun stubSuccessfulNodeStart(repo: LightningRepo) {
