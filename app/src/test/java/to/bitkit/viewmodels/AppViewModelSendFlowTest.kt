@@ -2196,11 +2196,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `duplicated bip21 request target leaves terminal feedback visible`() = test {
+    fun `core rejected bip21 request target leaves terminal feedback visible`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
         val first = "bitcoin:bcrt1qfirst?amount=0.00000001"
         val duplicatedBip21 = first + "bitcoin:bcrt1qsecond?amount=0.00000001"
+        whenever(coreService.decode(duplicatedBip21)).doSuspendableAnswer { throw AppError("Invalid payment URI") }
         whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
         whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
         whenever(context.getString(R.string.wallet__payment_request_unavailable)).thenReturn(
@@ -6650,6 +6651,65 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `manual bip21 with bitcoin text delegates to core and stays valid`() = test {
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.000035&message=bitcoin:donation"
+        stubBip21Scan(uri)
+
+        sut.setSendEvent(SendEvent.AddressChange(uri))
+        advanceUntilIdle()
+
+        verify(coreService).decode(uri)
+        assertTrue(sut.sendUiState.value.isAddressInputValid)
+        assertTrue(sut.canDecodeClipboard(uri))
+    }
+
+    @Test
+    fun `manual bip21 rejected by core stays invalid`() = test {
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.000035&amount=0.00005"
+        whenever(coreService.decode(uri)).doSuspendableAnswer { throw AppError("Invalid payment URI") }
+        clearInvocations(toastManager)
+
+        sut.setSendEvent(SendEvent.AddressChange(uri))
+        advanceUntilIdle()
+
+        verify(coreService).decode(uri)
+        assertFalse(sut.sendUiState.value.isAddressInputValid)
+        verify(toastManager).enqueue(check { assertEquals("InvalidAddressToast", it.testTag) })
+    }
+
+    @Test
+    fun `scanned bip21 with bitcoin text reaches send state`() = test {
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.000035&message=bitcoin:donation"
+        stubBip21Scan(uri)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        verify(coreService).decode(uri)
+        assertEquals(REGTEST_ADDRESS, sut.sendUiState.value.address)
+        assertEquals(uri, sut.sendUiState.value.addressInput)
+        assertEquals(3500uL, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `scanned concatenated bip21 rejected by core clears previous payment`() = test {
+        val first = "bitcoin:$REGTEST_ADDRESS?amount=0.000035&message=Bitkit"
+        val uri = first + "bitcoin:$REGTEST_ADDRESS?amount=0.00005&message=Bitkit"
+        whenever(coreService.decode(uri)).doSuspendableAnswer { throw AppError("Invalid payment URI") }
+        setSendState(SendUiState(address = REGTEST_ADDRESS, amount = 3500uL))
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        verify(coreService).decode(uri)
+        assertEquals("", sut.sendUiState.value.address)
+        assertEquals(0uL, sut.sendUiState.value.amount)
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
     fun `manual input of unified own lightning invoice with no savings shows self payment toast`() = test {
         val bolt11 = "lnbcrt1ownunifiedmanual"
         val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
@@ -10324,6 +10384,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
         )
         stubLightningScan(bolt11 = bolt11, amountSats = amountSats, payeeNodeId = payeeNodeId)
+    }
+
+    private suspend fun stubBip21Scan(uri: String) {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        whenever { coreService.decode(uri) }.thenReturn(
+            Scanner.OnChain(
+                OnChainInvoice(
+                    address = REGTEST_ADDRESS,
+                    amountSatoshis = 3500uL,
+                    label = null,
+                    message = "bitcoin:donation",
+                    params = mapOf("message" to "bitcoin:donation"),
+                )
+            )
+        )
+        whenever(coreService.validateBitcoinAddress(REGTEST_ADDRESS)).thenReturn(
+            ValidationResult(
+                address = REGTEST_ADDRESS,
+                network = NetworkType.REGTEST,
+                addressType = AddressType.P2WPKH,
+            )
+        )
     }
 
     private fun nonOnchainPaymentScans() = listOf(
