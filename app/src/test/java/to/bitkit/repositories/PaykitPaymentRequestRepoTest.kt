@@ -2542,6 +2542,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
 
         assertEquals(requestId, sut.pendingRequests.value.single().id)
+        assertTrue(sut.pendingRequests.value.single().isPaymentInFlight)
+        assertFalse(sut.pendingRequests.value.single().canDismiss)
+        assertFalse(sut.paymentRequestHistory.value.single { it.id == requestId }.canDismiss)
+        assertTrue(sut.pendingRequests.value.single().copy(isPaymentInFlight = false).canDismiss)
         sut.ensurePaymentAllowed(sut.pendingRequests.value.single()).getOrThrow()
         assertEquals(listOf(proof), reopened.load())
         assertEquals(setOf(requestId), reopened.inFlightRequestIds(LOCAL_IDENTITY))

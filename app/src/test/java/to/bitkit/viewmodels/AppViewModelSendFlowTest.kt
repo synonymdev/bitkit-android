@@ -1470,45 +1470,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `reopened refused hardware request uses original receipt without new payment preparation`() = test {
-        sut.setIsAuthenticated(true)
-        val request = paymentRequest().copy(
-            lifecycleState = PaymentRequestLifecycleState.ACCEPTED,
-            amountSats = 1_000uL,
-            amountValue = "0.00001000",
-        )
-        val signed = hardwareSignedReceipt()
-        val proof = to.bitkit.repositories.PendingPaykitPaymentProof(
-            identity = testPublicKey,
-            requestId = request.id,
-            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
-            paymentAppId = "bitkit",
-            kind = PaykitPaymentProofKind.Onchain,
-            paymentStarted = true,
-            paymentIdentifier = to.bitkit.utils.SignedTransactionId.fromHex(signed.serializedTx),
-            onchainAddress = REGTEST_ADDRESS,
-            onchainAmountSats = request.amountSats,
-            onchainWalletId = HARDWARE_WALLET_ID,
-            hardwareDispatchAttempted = true,
-            hardwareRefusedForNavigation = true,
-            hardwareSignedTransaction = signed.serializedTx,
-            hardwareMiningFeeSats = signed.miningFeeSats,
-            hardwareFeeRate = signed.feeRate,
-            hardwareTotalSpent = signed.totalSpent,
-        )
-        whenever(paykitPaymentProofRepo.retainedHardwareOnchainRequest(request)).thenReturn(proof)
-        whenever(privatePaykitRepo.beginPaymentRequest(request))
-            .thenReturn(Result.failure(PaykitPaymentRequestError.OperationInProgress))
-        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 0uL))
-        pendingPaykitPaymentRequests.value = listOf(request)
-        surfacedPaykitPaymentRequestIds += request.id
-        enablePaykitUi()
-        pubkyPublicKey.value = testPublicKey
-        runCurrent()
-        sut.showPaymentRequests()
-        sut.openIncomingPaymentRequest(request.id)
-        advanceTimeBy(TRANSITION_SCREEN_MS)
-        runCurrent()
-
+        val (request, signed) = reopenRetainedHardwareRequest(balanceSats = 0uL)
         assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
         assertEquals(REGTEST_ADDRESS, sut.sendUiState.value.address)
         assertEquals(request.amountSats, sut.sendUiState.value.amount)
@@ -1518,6 +1480,46 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(signed.miningFeeSats.toLong(), sut.sendUiState.value.onchainFeeUi.sats)
         verify(privatePaykitRepo, never()).beginPaymentRequest(request)
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+        sut.resetSendState(hardwareWalletId = null)
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
+    }
+
+    @Test
+    fun `reopened refused hardware request locks terms and reaches hardware sign on swipe`() = test {
+        reopenRetainedHardwareRequest(balanceSats = 1_000_000uL, amountSats = 30_000uL)
+        val sheet = sut.currentSheet.value
+        assertEquals(Sheet.Send(SendRoute.Confirm, hardwareWalletId = HARDWARE_WALLET_ID), sheet)
+        sut.onSheetVisible(sheet)
+        clearInvocations(toastManager)
+        val original = sut.sendUiState.value
+        assertTrue(original.isRetainedHardwarePayment)
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SpeedAndFee)
+            sut.onSelectSpeed(TransactionSpeed.Custom(0u))
+            sut.onSelectSpeed(TransactionSpeed.Fast)
+            sut.setTransactionSpeed(TransactionSpeed.Fast)
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceUntilIdle()
+            assertEquals(original, sut.sendUiState.value, "Retained fee, wallet and exact payment terms stay fixed")
+            expectNoEvents()
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertNull(sut.sendUiState.value.showSanityWarningDialog)
+            assertTrue(sut.sendUiState.value.shouldConfirmPay)
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val toasts = argumentCaptor<Toast>()
+            verify(toastManager, atLeast(0)).enqueue(toasts.capture())
+            assertEquals(emptyList(), toasts.allValues, "Reopened payment must preserve request context on swipe")
+            assertEquals(SendEffect.NavigateToHardwareSign, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(privatePaykitRepo, never()).beginPaymentRequest(any())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any())
         verify(hwWalletRepo, never()).signFunding(any(), any())
     }
@@ -11356,6 +11358,52 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         creatorIdentity = testPublicKey,
         wasPublishedToActiveState = wasPublishedToActiveState,
     )
+
+    private suspend fun TestScope.reopenRetainedHardwareRequest(
+        balanceSats: ULong,
+        amountSats: ULong = 1_000uL,
+    ): Pair<PaykitPaymentRequest, HwFundingSignedTx> {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest().copy(
+            lifecycleState = PaymentRequestLifecycleState.ACCEPTED,
+            amountSats = amountSats,
+            amountValue = java.math.BigDecimal(amountSats.toString()).movePointLeft(8).toPlainString(),
+        )
+        val signed = hardwareSignedReceipt()
+        val proof = to.bitkit.repositories.PendingPaykitPaymentProof(
+            identity = testPublicKey,
+            requestId = request.id,
+            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+            paymentAppId = "bitkit",
+            kind = PaykitPaymentProofKind.Onchain,
+            paymentStarted = true,
+            paymentIdentifier = to.bitkit.utils.SignedTransactionId.fromHex(signed.serializedTx),
+            onchainAddress = REGTEST_ADDRESS,
+            onchainAmountSats = request.amountSats,
+            onchainWalletId = HARDWARE_WALLET_ID,
+            hardwareDispatchAttempted = true,
+            hardwareRefusedForNavigation = true,
+            hardwareSignedTransaction = signed.serializedTx,
+            hardwareMiningFeeSats = signed.miningFeeSats,
+            hardwareFeeRate = signed.feeRate,
+            hardwareTotalSpent = signed.totalSpent,
+        )
+        whenever(paykitPaymentProofRepo.retainedHardwareOnchainRequest(request)).thenReturn(proof)
+        whenever(privatePaykitRepo.beginPaymentRequest(request))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.OperationInProgress))
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = balanceSats))
+        pendingPaykitPaymentRequests.value = listOf(request)
+        surfacedPaykitPaymentRequestIds += request.id
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+
+        return request to signed
+    }
 
     private fun hardwareSignedReceipt() = HwFundingSignedTx(
         requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))

@@ -94,6 +94,7 @@ data class PaykitPaymentRequest(
     val billingPeriod: PaykitBillingPeriod? = null,
     val paymentProofKind: PaykitPaymentProofKind? = null,
     val paymentDeadlineAt: Instant? = null,
+    val isPaymentInFlight: Boolean = false,
 ) {
     enum class ParseFailure(
         val logValue: String,
@@ -122,6 +123,9 @@ data class PaykitPaymentRequest(
             counterparty,
             billingPeriod?.startsAt?.toString(),
         )
+
+    val canDismiss: Boolean
+        get() = !isPaymentInFlight
 
     val requiresAcceptance: Boolean
         get() = billingPeriod == null && lifecycleState == PaymentRequestLifecycleState.PROPOSED
@@ -1255,7 +1259,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                     )
         }
-        val incoming = (dueRequests + oneTimeIncoming).sortedBy { it.createdAt }
+        val incoming = (dueRequests + oneTimeIncoming)
+            .map { it.copy(isPaymentInFlight = it.id in locallyInFlightRequestIds) }
+            .sortedBy { it.createdAt }
         val oneTimeHistory = records.mapNotNull { it.toPaykitPaymentRequestHistory(now) }.map { request ->
             val proofKind = locallyCompletedProofKinds[request.id] ?: return@map request
             request.copy(
@@ -1264,6 +1270,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
             )
         }
         val history = (recurringHistory + oneTimeHistory)
+            .map {
+                it.copy(
+                    isPaymentInFlight = it.direction == PaykitPaymentRequestDirection.Incoming &&
+                        it.id in locallyInFlightRequestIds,
+                )
+            }
             .sortedByDescending { it.createdAt }
         if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return
         pruneAcceptedOneTimeRequestIds(records, expectedIdentity, generation)

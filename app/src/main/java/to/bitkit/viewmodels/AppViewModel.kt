@@ -1368,6 +1368,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 contactPaymentProfile = activeContactPaymentProfile(),
+                isRetainedHardwarePayment = true,
                 address = requireNotNull(proof.onchainAddress),
                 addressInput = requireNotNull(proof.onchainAddress),
                 isAddressInputValid = true,
@@ -1381,6 +1382,7 @@ class AppViewModel @Inject constructor(
                 ),
             )
         }
+        preparation?.let { paymentRequestPreparation.compareAndSet(it, null) }
         showSheet(Sheet.Send(SendRoute.Confirm, hardwareWalletId = proof.onchainWalletId))
         return true
     }
@@ -2436,6 +2438,7 @@ class AppViewModel @Inject constructor(
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
                     SendEvent.SpeedAndFee -> {
+                        if (_sendUiState.value.isRetainedHardwarePayment) return@collect
                         if (_sendUiState.value.onchainFeeUi.estimates.isEmpty()) {
                             viewModelScope.launch {
                                 refreshOnchainFeeUi()
@@ -3010,6 +3013,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun onSelectSpeed(speed: TransactionSpeed) {
+        if (_sendUiState.value.isRetainedHardwarePayment) return
         if (speed is TransactionSpeed.Custom && speed.satsPerVByte == 0u) {
             setSendEffect(SendEffect.NavigateToFeeCustom)
         } else {
@@ -3018,6 +3022,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun setTransactionSpeed(speed: TransactionSpeed) {
+        if (_sendUiState.value.isRetainedHardwarePayment) return
         onchainSendRefreshJob?.cancel()
         val previous = _sendUiState.value
         _sendUiState.update {
@@ -3077,6 +3082,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun onPaymentMethodSwitch() {
         val current = _sendUiState.value
+        if (current.isRetainedHardwarePayment) return
         val sources = availableFundingSources(current)
         if (sources.size < 2) return
         sendStateGeneration++
@@ -3997,6 +4003,10 @@ class AppViewModel @Inject constructor(
         if (hardwareWalletId == null) maxOf(selectedMax, maximumHardwareFundingBalanceSats()) else selectedMax
 
     private fun availableFundingSources(state: SendUiState): List<SendFundingSource> = buildList {
+        if (state.isRetainedHardwarePayment) {
+            state.hardwareWalletId?.let { add(SendFundingSource.Hardware(it)) }
+            return@buildList
+        }
         if (state.isUnified || state.decodedInvoice != null) add(SendFundingSource.Spending)
         if (state.address.isNotEmpty()) {
             add(SendFundingSource.Savings)
@@ -5397,6 +5407,7 @@ class AppViewModel @Inject constructor(
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(): Job? {
         val currentState = _sendUiState.value
+        if (currentState.isRetainedHardwarePayment) return null
         if (currentState.payMethod != SendMethod.ONCHAIN ||
             currentState.amount == 0uL ||
             currentState.address.isEmpty()
@@ -5436,6 +5447,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshOnchainFeeUi() = withContext(bgDispatcher) {
         val currentState = _sendUiState.value
+        if (currentState.isRetainedHardwarePayment) return@withContext
         updateOnchainFeeUi { it.copy(isLoading = true) }
 
         val speeds = listOf(
@@ -5471,7 +5483,7 @@ class AppViewModel @Inject constructor(
 
     private fun updateOnchainFeeUi(transform: (OnchainFeeUi) -> OnchainFeeUi) {
         _sendUiState.update {
-            it.copy(onchainFeeUi = transform(it.onchainFeeUi))
+            if (it.isRetainedHardwarePayment) it else it.copy(onchainFeeUi = transform(it.onchainFeeUi))
         }
     }
 
@@ -6914,6 +6926,7 @@ data class SendUiState(
     val paymentRequestNote: String? = null,
     val hardwareWalletId: String? = null,
     val resolvedHardwarePaymentTxId: String? = null,
+    val isRetainedHardwarePayment: Boolean = false,
     val hardwareWalletName: String? = null,
     val hardwareAvailableSats: ULong = 0uL,
     val isSubscriptionPayment: Boolean = false,
