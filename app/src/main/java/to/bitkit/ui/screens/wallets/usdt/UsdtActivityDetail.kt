@@ -62,7 +62,7 @@ internal fun UsdtActivityRow(transfer: UsdtTransfer, hideBalance: Boolean, onCli
         }
         HorizontalSpacer(16.dp)
         AmountViewContent(
-            title = usdtFormatAmount(transfer.activityAmount),
+            title = usdtOverviewAmount(transfer.activityAmount),
             titlePrefix = if (transfer.isIncoming) "+" else "−",
             subtitle = "$ " + usdtOverviewAmount(transfer.activityAmount),
             hideBalance = hideBalance

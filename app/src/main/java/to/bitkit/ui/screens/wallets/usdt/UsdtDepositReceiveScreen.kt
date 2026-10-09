@@ -359,7 +359,6 @@ private fun ColumnScope.Content(
                 uri = state.address?.uri ?: uri,
                 error = receiveError,
                 network = state.network?.label ?: "Arbitrum One",
-                isDefaultNetwork = state.network == null,
                 onEdit = onRefresh,
                 onNetwork = { onPage(ReceivePage.NETWORKS) },
             )

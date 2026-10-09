@@ -41,11 +41,12 @@ internal fun ColumnScope.UsdtReceiveContent(
     uri: String,
     error: Int?,
     network: String,
-    isDefaultNetwork: Boolean,
     onEdit: () -> Unit,
     onNetwork: () -> Unit,
 ) {
     var showDetails by rememberSaveable { mutableStateOf(false) }
+    val networkTitle = stringResource(R.string.usdt__receive_network, network)
+    val shareContent = "$networkTitle\n$uri"
     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
         if (uri.isNotEmpty()) {
             if (showDetails) {
@@ -61,6 +62,7 @@ internal fun ColumnScope.UsdtReceiveContent(
                         onClickEditInvoice = null,
                         testTag = "UsdtReceiveAddress",
                         accentColor = Colors.Usdt,
+                        shareContent = shareContent,
                     )
                 }
             } else {
@@ -70,7 +72,7 @@ internal fun ColumnScope.UsdtReceiveContent(
                     qrLogoPainter = painterResource(R.drawable.tether_circle),
                     onClickEditInvoice = onEdit,
                     accentColor = Colors.Usdt,
-                    shareContent = uri,
+                    shareContent = shareContent,
                     modifier = Modifier.fillMaxWidth().height(
                         minOf(maxHeight, maxWidth + ButtonSize.Small.height + 32.dp)
                     )
@@ -83,10 +85,7 @@ internal fun ColumnScope.UsdtReceiveContent(
         }
     }
     SecondaryButton(
-        text = stringResource(
-            R.string.usdt__receive_network,
-            if (isDefaultNetwork) stringResource(R.string.common__default) else network
-        ),
+        text = networkTitle,
         onClick = onNetwork,
         size = ButtonSize.Small,
         icon = {

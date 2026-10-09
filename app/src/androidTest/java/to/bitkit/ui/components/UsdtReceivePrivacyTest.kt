@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -15,10 +16,13 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.sheets.NewTransactionSheetView
 import to.bitkit.ui.theme.AppThemeSurface
+import java.util.Locale
 
 @HiltAndroidTest
 @ComposeUi
 class UsdtReceivePrivacyTest {
+    private val originalLocale = Locale.getDefault()
+
     @get:Rule
     val hiltRule = HiltAndroidRule(this)
 
@@ -27,7 +31,13 @@ class UsdtReceivePrivacyTest {
 
     @Before
     fun setup() {
+        Locale.setDefault(Locale.US)
         hiltRule.inject()
+    }
+
+    @After
+    fun teardown() {
+        Locale.setDefault(originalLocale)
     }
 
     @Test
@@ -47,8 +57,8 @@ class UsdtReceivePrivacyTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText("123.456789").assertDoesNotExist()
+        composeTestRule.onNodeWithText("123.46").assertDoesNotExist()
         composeTestRule.runOnIdle { hidden.value = false }
-        composeTestRule.onNodeWithText("123.456789").assertIsDisplayed()
+        composeTestRule.onNodeWithText("123.46").assertIsDisplayed()
     }
 }

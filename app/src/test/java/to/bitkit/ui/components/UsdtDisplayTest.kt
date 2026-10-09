@@ -2,6 +2,7 @@ package to.bitkit.ui.components
 
 import org.junit.Test
 import to.bitkit.models.PaykitExchangeRate
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -19,9 +20,19 @@ class UsdtDisplayTest {
     }
 
     @Test
-    fun `small nonzero balances remain visible`() {
-        assertEquals("0", usdtOverviewAmount(0uL))
-        assertEquals("<0.01", usdtOverviewAmount(1uL))
-        assertEquals("<0.01", usdtOverviewAmount(9999uL))
+    fun `overview amounts round to cents without hiding small balances`() {
+        listOf(
+            0uL to "0",
+            1uL to "<0.01",
+            9999uL to "<0.01",
+            10000uL to "0.01",
+            123456789uL to "123.46",
+            1025000uL to "1.03",
+            1234567890uL to "1,234.57",
+        ).forEach { (amount, expected) ->
+            assertEquals(expected, usdtOverviewAmount(amount, Locale.US), "amount: $amount")
+        }
+        assertEquals("<0,01", usdtOverviewAmount(1uL, Locale.GERMANY))
+        assertEquals("1.234,57", usdtOverviewAmount(1234567890uL, Locale.GERMANY))
     }
 }

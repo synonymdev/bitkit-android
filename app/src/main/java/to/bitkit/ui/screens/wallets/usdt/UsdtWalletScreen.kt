@@ -321,6 +321,7 @@ private fun UsdtWalletContent(
                     VerticalSpacer(16.dp)
                     UsdtAmountHeader(
                         amount = wallet.balance?.let { usdtFormatAmount(it) } ?: "—",
+                        displayAmount = wallet.balance?.let { usdtOverviewAmount(it) },
                         hideBalance = hideBalance,
                         onToggleHide = if (allowSwipe) ({ settings?.setHideBalance(!hideBalance) }) else null,
                         modifier = Modifier.testTag("UsdtBalance")

@@ -77,6 +77,7 @@ import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.HourglassAnimation
@@ -206,7 +207,7 @@ private fun ColumnScope.UsdtSubmittedContent(
     onDetails: () -> Unit,
     onDone: () -> Unit,
 ) {
-    quote?.let { UsdtAmountHeader(usdtFormatAmount(it.amount)) }
+    quote?.let { UsdtAmountHeader(usdtFormatAmount(it.amount), displayAmount = usdtOverviewAmount(it.amount)) }
     VerticalSpacer(32.dp)
     BodyM(
         stringResource(
