@@ -158,6 +158,7 @@ class AddContactViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             pubkyRepo.addContact(profile.publicKey, profile)
                 .onSuccess {
+                    refreshContactPaykitLink(profile.publicKey)
                     _effects.emit(AddContactEffect.ContactSaved(profile.publicKey))
                 }
                 .onFailure {

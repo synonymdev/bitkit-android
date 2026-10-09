@@ -1,10 +1,17 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.AddressType
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -59,6 +66,80 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
             coreService = coreService,
             lightningRepo = lightningRepo,
         )
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `contact cleanup rechecks snapshot after ledger load and lock handoff`() = test {
+        for (clearUnlisted in listOf(false, true)) {
+            val assignment = PrivatePaykitStoredAssignmentData("nativeSegwit", 1, PRIVATE_ADDRESS)
+            val initial = PrivatePaykitReservationData(
+                contactAssignments = mapOf(CONTACT_KEY to assignment),
+                contactAssignmentHistory = mapOf(CONTACT_KEY to listOf(assignment)),
+            )
+            reservationData.update { initial }
+            val loadStarted = CompletableDeferred<Unit>()
+            val resumeLoad = CompletableDeferred<Unit>()
+            whenever(reservationStore.data).thenReturn(
+                flow {
+                    loadStarted.complete(Unit)
+                    resumeLoad.await()
+                    emit(reservationData.value)
+                },
+            )
+            sut = PrivatePaykitAddressReservationRepo(
+                testDispatcher, reservationStore, settingsStore, coreService, lightningRepo,
+            )
+            var isCurrent = true
+            val loading = async { sut.backupSnapshot().getOrThrow() }
+            loadStarted.await()
+            val cleanup = async {
+                if (clearUnlisted) {
+                    sut.clearContactAssignments(emptyList()) { isCurrent }
+                } else {
+                    sut.removeContactAssignments(listOf(CONTACT_KEY)) { isCurrent }
+                }
+            }
+            runCurrent()
+            assertFalse(cleanup.isCompleted)
+            isCurrent = false
+            resumeLoad.complete(Unit)
+            loading.await()
+            cleanup.await()
+
+            assertEquals(initial, reservationData.value)
+            if (clearUnlisted) {
+                sut.clearContactAssignments(emptyList()) { true }
+            } else {
+                sut.removeContactAssignments(listOf(CONTACT_KEY)) { true }
+            }
+            assertTrue(reservationData.value.contactAssignments.isEmpty())
+            assertTrue(reservationData.value.contactAssignmentHistory.isEmpty())
+        }
+    }
+
+    @Test
+    fun `admitted assignment removal finishes when snapshot changes during persistence`() = test {
+        val assignment = PrivatePaykitStoredAssignmentData("nativeSegwit", 1, PRIVATE_ADDRESS)
+        reservationData.update {
+            PrivatePaykitReservationData(contactAssignments = mapOf(CONTACT_KEY to assignment))
+        }
+        val writeStarted = CompletableDeferred<Unit>()
+        val resumeWrite = CompletableDeferred<Unit>()
+        var isCurrent = true
+        whenever(reservationStore.update(any())).doSuspendableAnswer {
+            val transform = it.getArgument<(PrivatePaykitReservationData) -> PrivatePaykitReservationData>(0)
+            writeStarted.complete(Unit)
+            resumeWrite.await()
+            reservationData.update(transform)
+        }
+        val cleanup = async { sut.removeContactAssignments(listOf(CONTACT_KEY)) { isCurrent } }
+        writeStarted.await()
+        isCurrent = false
+        resumeWrite.complete(Unit)
+        cleanup.await()
+
+        assertTrue(reservationData.value.contactAssignments.isEmpty())
     }
 
     @Test

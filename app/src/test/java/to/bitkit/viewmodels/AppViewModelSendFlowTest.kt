@@ -164,6 +164,7 @@ import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayCompletionKind
@@ -183,6 +184,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
+import to.bitkit.services.PendingChannelMigration
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
@@ -429,6 +431,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
+        whenever(pubkyRepo.currentSignIn()).thenAnswer { pubkyPublicKey.value?.let { PubkySignIn(it, 0L) } }
+        whenever(pubkyRepo.isCurrent(any())).thenAnswer {
+            pubkyPublicKey.value == it.getArgument<PubkySignIn>(0).publicKey
+        }
         whenever { pubkyRepo.republishIdentityIfNeeded() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.hasIdentity() }.thenAnswer { pubkyPublicKey.value != null }
         whenever { pubkyRepo.awaitIdentityReady() }.thenAnswer {
@@ -495,9 +501,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
         }.thenReturn(Result.success(Unit))
         whenever { activityRepo.setContact(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.scheduleSavedContactPreparation(any<Collection<String>>()) }
+        whenever { privatePaykitRepo.scheduleSavedContactPreparation(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>()) }
+        whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any()) }
             .thenReturn(Result.success(Unit))
@@ -508,7 +514,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removeSavedContact(any()) }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.removeSavedContacts(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.removeSavedContacts(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.reconcileReceivedPayments() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.handleOnchainActivity(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
@@ -6213,6 +6219,75 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `background tag retry does not sweep new activities or restart the node`() = test {
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(false)
+        whenever(migrationService.hasPendingMigrationRetries()).thenReturn(true)
+        whenever(migrationService.canCleanupAfterMigration).thenReturn(false)
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(migrationService).reapplyMetadataAfterSync()
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
+        verify(lightningRepo, never()).stop()
+        verify(migrationService, never()).cleanupAfterMigration()
+    }
+
+    @Test
+    fun `migration completion rechecks pending channels after startup releases the lock`() = test {
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
+        val startup = CompletableDeferred<Unit>()
+        whenever(migrationService.lockChannelMigration()).doSuspendableAnswer { startup.await() }
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(activityRepo.markAllUnseenActivitiesAsSeen()).thenReturn(Result.success(Unit))
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(
+            PendingChannelMigration(byteArrayOf(1), listOf(byteArrayOf(2))),
+        )
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        runCurrent()
+        verify(lightningRepo, never()).stop()
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(null)
+        whenever(walletRepo.syncNodeAndWallet()).thenReturn(Result.success(Unit))
+        startup.complete(Unit)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).stop()
+        verify(migrationService).unlockChannelMigration()
+        verify(migrationService).setNeedsPostMigrationSync(false)
+    }
+
+    @Test
+    fun `pending channel migration is kept when the node stays running after stop`() = test {
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
+        whenever(activityRepo.markAllUnseenActivitiesAsSeen()).thenReturn(Result.success(Unit))
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(
+            PendingChannelMigration(byteArrayOf(1), listOf(byteArrayOf(2))),
+        )
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
+        verify(migrationService, never()).consumePendingChannelMigration()
+    }
+
+    @Test
     fun `onchain sync without a pending restore leaves unseen activities untouched`() = test {
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
         advanceUntilIdle()
@@ -10667,21 +10742,131 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(publicPaykitRepo).syncPaykitApp()
-        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any<Collection<String>>())
-        verify(privatePaykitRepo, never()).pruneUnsavedContactState(any<Collection<String>>())
+        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any<Collection<String>>(), any())
+        verify(privatePaykitRepo, never()).pruneUnsavedContactState(any<Collection<String>>(), any())
 
         val prepared = CompletableDeferred<Unit>()
         whenever(privatePaykitRepo.awaitContactPreparation()).doSuspendableAnswer { prepared.await() }
-        clearInvocations(paykitPaymentRequestRepo)
+        clearInvocations(paykitPaymentRequestRepo, publicPaykitRepo)
         pubkyContactsLoadVersion.value = 1L
         runCurrent()
         assertFalse(prepared.isCompleted)
         verify(privatePaykitRepo, never()).awaitContactPreparation()
         advanceUntilIdle()
 
-        verify(privatePaykitRepo).scheduleSavedContactPreparation(any<Collection<String>>())
-        verify(privatePaykitRepo).pruneUnsavedContactState(any<Collection<String>>())
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(any<Collection<String>>(), any())
+        verify(privatePaykitRepo).pruneUnsavedContactState(any<Collection<String>>(), any())
         verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+    }
+
+    @Test
+    fun `contact sync retries a failed app registration without repeating a successful one`() = test {
+        enablePaykitUi()
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        advanceUntilIdle()
+        clearInvocations(publicPaykitRepo)
+        whenever(publicPaykitRepo.syncPaykitApp()).thenReturn(
+            Result.failure(IllegalStateException("network unavailable")),
+            Result.success(Unit),
+        )
+
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+        verify(publicPaykitRepo).syncPaykitApp()
+
+        pubkyContactsLoadVersion.value = 1L
+        advanceUntilIdle()
+        verify(publicPaykitRepo, times(2)).syncPaykitApp()
+
+        val contact = PubkyProfile.placeholder("pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg")
+        pubkyContacts.value = listOf(contact)
+        advanceUntilIdle()
+        verify(publicPaykitRepo, times(2)).syncPaykitApp()
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(eq(setOf(contact.publicKey)), any())
+    }
+
+    @Test
+    fun `contact sync discards its old membership after app publication waits`() = test {
+        enablePaykitUi()
+        settingsData.update { it.copy(sharesPrivatePaykitEndpoints = true) }
+        advanceUntilIdle()
+        val publication = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp()).doSuspendableAnswer {
+            publication.await()
+            Result.success(Unit)
+        }
+        pubkyContactsLoadVersion.update { 1L }
+        advanceUntilIdle()
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        verify(publicPaykitRepo).syncPaykitApp()
+
+        val contact = PubkyProfile.placeholder("pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg")
+        pubkyContacts.update { listOf(contact) }
+        runCurrent()
+        publication.complete(Unit)
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(eq(emptySet<String>()), any())
+        verify(privatePaykitRepo, never()).pruneUnsavedContactState(eq(emptySet<String>()), any())
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(eq(setOf(contact.publicKey)), any())
+        verify(privatePaykitRepo).pruneUnsavedContactState(eq(setOf(contact.publicKey)), any())
+    }
+
+    @Test
+    fun `contact sync invalidates cleanup when a removed contact is readded`() = test {
+        enablePaykitUi()
+        val contact = PubkyProfile.placeholder("pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg")
+        pubkyPublicKey.update { testPublicKey }
+        pubkyContacts.update { listOf(contact) }
+        pubkyContactsLoadVersion.update { 1L }
+        advanceUntilIdle()
+        clearInvocations(privatePaykitRepo)
+        val removal = CompletableDeferred<Unit>()
+        var isRemovalCurrent: (() -> Boolean)? = null
+        whenever(privatePaykitRepo.removeSavedContacts(any(), any())).doSuspendableAnswer {
+            isRemovalCurrent = it.getArgument(1)
+            removal.await()
+            Result.success(Unit)
+        }
+
+        pubkyContacts.update { emptyList() }
+        runCurrent()
+        assertTrue(requireNotNull(isRemovalCurrent).invoke())
+        pubkyContacts.update { listOf(contact) }
+        runCurrent()
+        assertFalse(requireNotNull(isRemovalCurrent).invoke())
+        removal.complete(Unit)
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(eq(emptySet<String>()), any())
+        verify(privatePaykitRepo, never()).pruneUnsavedContactState(eq(emptySet<String>()), any())
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(eq(setOf(contact.publicKey)), any())
+    }
+
+    @Test
+    fun `contact sync skips cleanup when its sign in ends during publication`() = test {
+        enablePaykitUi()
+        settingsData.update { it.copy(sharesPrivatePaykitEndpoints = true) }
+        pubkyContactsLoadVersion.update { 1L }
+        advanceUntilIdle()
+        val publication = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp()).doSuspendableAnswer {
+            publication.await()
+            Result.success(Unit)
+        }
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        verify(publicPaykitRepo).syncPaykitApp()
+
+        whenever(pubkyRepo.isCurrent(any())).thenReturn(false)
+        publication.complete(Unit)
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo, never()).removeSavedContacts(any(), any())
+        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any(), any())
+        verify(privatePaykitRepo, never()).pruneUnsavedContactState(any(), any())
     }
 
     @Test
@@ -10693,14 +10878,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyContacts.value = listOf(contact)
         pubkyContactsLoadVersion.value = 1L
         advanceUntilIdle()
-        verify(privatePaykitRepo).scheduleSavedContactPreparation(setOf(contact.publicKey))
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(eq(setOf(contact.publicKey)), any())
         clearInvocations(privatePaykitRepo)
 
         pubkyContacts.value = listOf(contact.copy(name = "Bob", imageUrl = "pubky://avatar"))
         advanceUntilIdle()
 
         verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
-        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any())
+        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any(), any())
     }
 
     @Test
@@ -10726,11 +10911,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyContactsLoadVersion.value = 2L
         advanceUntilIdle()
 
-        verify(privatePaykitRepo).removeSavedContacts(setOf(contact.publicKey))
-        verify(privatePaykitRepo).scheduleSavedContactPreparation(emptySet<String>())
-        verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
+        verify(privatePaykitRepo).removeSavedContacts(eq(setOf(contact.publicKey)), any())
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(eq(emptySet<String>()), any())
+        verify(privatePaykitRepo).pruneUnsavedContactState(eq(emptySet<String>()), any())
         inOrder(privatePaykitRepo, paykitPaymentRequestRepo).apply {
-            verify(privatePaykitRepo).removeSavedContacts(setOf(contact.publicKey))
+            verify(privatePaykitRepo).removeSavedContacts(eq(setOf(contact.publicKey)), any())
             verify(paykitPaymentRequestRepo).refreshAfterStateChange()
         }
         verify(paykitPaymentRequestRepo, never()).refresh(any())
@@ -10742,7 +10927,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.update { testPublicKey }
         runCurrent()
         val contactWork = CompletableDeferred<Unit>()
-        whenever(privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>())).doSuspendableAnswer {
+        whenever(privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>(), any())).doSuspendableAnswer {
             contactWork.await()
             Result.success(Unit)
         }
@@ -10753,7 +10938,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyContactsLoadVersion.update { 1L }
         sut.refreshPrivatePaykitEndpoints()
         runCurrent()
-        verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
+        verify(privatePaykitRepo).pruneUnsavedContactState(eq(emptySet<String>()), any())
         verify(privatePaykitRepo).refreshKnownSavedContactEndpoints("foreground", forceRefreshLightning = false)
 
         sut.stopPaykitPaymentRequestPolling()
