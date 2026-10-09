@@ -1841,7 +1841,7 @@ class AppViewModel @Inject constructor(
 
         when {
             (isShowingLoading || needsPostMigrationSync) && !isCompletingMigration -> completeMigration()
-            isRestoringRemote -> completeRNRemoteBackupRestore()
+            isRestoringRemote && !isCompletingMigration -> completeRNRemoteBackupRestore()
             pendingPrune -> {
                 settingsStore.update { it.copy(pendingRestoreAddressTypePrune = false) }
                 delay(POST_RESTORE_PRUNE_DELAY_MS)
@@ -1849,7 +1849,10 @@ class AppViewModel @Inject constructor(
                 walletRepo.debounceSyncByEvent()
             }
 
-            !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
+            !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> {
+                retryPendingMigrationData()
+                walletRepo.debounceSyncByEvent()
+            }
             else -> Unit
         }
 
@@ -1861,6 +1864,17 @@ class AppViewModel @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to reconcile private Paykit on-chain activity", it, context = TAG)
             }
+    }
+
+    private suspend fun retryPendingMigrationData() {
+        isCompletingMigration = true
+        try {
+            if (!migrationService.hasPendingMigrationRetries()) return
+            migrationService.reapplyMetadataAfterSync()
+            if (migrationService.canCleanupAfterMigration) migrationService.cleanupAfterMigration()
+        } finally {
+            isCompletingMigration = false
+        }
     }
 
     private suspend fun completePendingRestoreActivitySeen(syncedBlockHeight: UInt) {
@@ -1888,36 +1902,29 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun completeRNRemoteBackupRestore() {
-        val channelMigration = buildChannelMigrationIfAvailable()
-
-        if (channelMigration != null) {
-            lightningRepo.stop().onFailure {
-                Logger.error("Failed to stop node during remote restore restart", it, context = TAG)
+        isCompletingMigration = true
+        try {
+            if (!applyPendingChannelMigration()) {
+                finishMigrationWithError()
+                return
             }
-            delay(REMOTE_RESTORE_NODE_RESTART_DELAY_MS)
-            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
-                .onSuccess {
-                    migrationService.consumePendingChannelMigration()
-                    walletRepo.syncNodeAndWallet()
-                    walletRepo.syncBalances()
-                }
-                .onFailure { e ->
-                    Logger.error("Failed to restart node after remote restore: $e", e, context = TAG)
-                }
-        }
 
-        lightningRepo.getPayments().onSuccess { activityRepo.syncLdkNodePayments(it) }
-        migrationService.reapplyMetadataAfterSync()
-        activityRepo.syncActivities()
-        walletRepo.syncBalances()
+            lightningRepo.getPayments().onSuccess { activityRepo.syncLdkNodePayments(it) }
+            migrationService.reapplyMetadataAfterSync()
+            activityRepo.syncActivities()
+            walletRepo.syncBalances()
 
-        if (migrationService.canCleanupAfterMigration) {
-            migrationService.cleanupAfterMigration()
+            migrationService.setNeedsPostMigrationSync(false)
             migrationService.setRestoringFromRNRemoteBackup(false)
-            migrationService.setShowingMigrationLoading(false)
-        } else {
-            Logger.info("Post-migration sync incomplete (remote restore), will retry on next sync", context = TAG)
-            migrationService.setShowingMigrationLoading(false)
+            if (migrationService.canCleanupAfterMigration) {
+                migrationService.cleanupAfterMigration()
+                migrationService.setShowingMigrationLoading(false)
+            } else {
+                Logger.info("Post-migration sync incomplete (remote restore), will retry on next sync", context = TAG)
+                migrationService.setShowingMigrationLoading(false)
+            }
+        } finally {
+            isCompletingMigration = false
         }
     }
 
@@ -1927,6 +1934,35 @@ class AppViewModel @Inject constructor(
             channelManager = migration.channelManager.map { it.toUByte() },
             channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
         )
+    }
+
+    private suspend fun applyPendingChannelMigration(): Boolean {
+        migrationService.lockChannelMigration()
+        try {
+            val channelMigration = buildChannelMigrationIfAvailable() ?: return true
+            lightningRepo.stop().onFailure {
+                Logger.error("Failed to stop node during remote restore restart", it, context = TAG)
+            }
+            if (lightningRepo.lightningState.value.nodeLifecycleState.isRunningOrStarting()) {
+                Logger.error("Node still running, pending channel migration was not applied", context = TAG)
+                return false
+            }
+            delay(REMOTE_RESTORE_NODE_RESTART_DELAY_MS)
+            var applied = false
+            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
+                .onSuccess {
+                    migrationService.consumePendingChannelMigration()
+                    walletRepo.syncNodeAndWallet()
+                    walletRepo.syncBalances()
+                    applied = true
+                }
+                .onFailure { e ->
+                    Logger.error("Failed to restart node after remote restore", e, context = TAG)
+                }
+            return applied
+        } finally {
+            migrationService.unlockChannelMigration()
+        }
     }
 
     private suspend fun completeMigration() {
@@ -1941,7 +1977,10 @@ class AppViewModel @Inject constructor(
             }
             activityRepo.markAllUnseenActivitiesAsSeen()
 
-            migrationService.consumePendingChannelMigration()
+            if (!applyPendingChannelMigration()) {
+                finishMigrationWithError()
+                return@runCatching
+            }
 
             walletRepo.syncNodeAndWallet()
                 .onSuccess { finishMigrationSuccessfully() }
@@ -1964,6 +2003,8 @@ class AppViewModel @Inject constructor(
         transferRepo.syncTransferStates()
         migrationService.reapplyMetadataAfterSync()
 
+        migrationService.setNeedsPostMigrationSync(false)
+        migrationService.setRestoringFromRNRemoteBackup(false)
         if (migrationService.canCleanupAfterMigration) {
             migrationService.cleanupAfterMigration()
             migrationService.setShowingMigrationLoading(false)
@@ -1983,6 +2024,8 @@ class AppViewModel @Inject constructor(
         transferRepo.syncTransferStates()
         migrationService.reapplyMetadataAfterSync()
 
+        migrationService.setNeedsPostMigrationSync(false)
+        migrationService.setRestoringFromRNRemoteBackup(false)
         if (migrationService.canCleanupAfterMigration) {
             migrationService.cleanupAfterMigration()
             migrationService.setShowingMigrationLoading(false)

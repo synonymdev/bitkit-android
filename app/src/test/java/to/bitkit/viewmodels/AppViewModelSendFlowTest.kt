@@ -176,6 +176,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
+import to.bitkit.services.PendingChannelMigration
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
@@ -6186,6 +6187,75 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
         assertTrue(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `background tag retry does not sweep new activities or restart the node`() = test {
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(false)
+        whenever(migrationService.hasPendingMigrationRetries()).thenReturn(true)
+        whenever(migrationService.canCleanupAfterMigration).thenReturn(false)
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(migrationService).reapplyMetadataAfterSync()
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
+        verify(lightningRepo, never()).stop()
+        verify(migrationService, never()).cleanupAfterMigration()
+    }
+
+    @Test
+    fun `migration completion rechecks pending channels after startup releases the lock`() = test {
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
+        val startup = CompletableDeferred<Unit>()
+        whenever(migrationService.lockChannelMigration()).doSuspendableAnswer { startup.await() }
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(activityRepo.markAllUnseenActivitiesAsSeen()).thenReturn(Result.success(Unit))
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(
+            PendingChannelMigration(byteArrayOf(1), listOf(byteArrayOf(2))),
+        )
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        runCurrent()
+        verify(lightningRepo, never()).stop()
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(null)
+        whenever(walletRepo.syncNodeAndWallet()).thenReturn(Result.success(Unit))
+        startup.complete(Unit)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).stop()
+        verify(migrationService).unlockChannelMigration()
+        verify(migrationService).setNeedsPostMigrationSync(false)
+    }
+
+    @Test
+    fun `pending channel migration is kept when the node stays running after stop`() = test {
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
+        whenever(activityRepo.markAllUnseenActivitiesAsSeen()).thenReturn(Result.success(Unit))
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(
+            PendingChannelMigration(byteArrayOf(1), listOf(byteArrayOf(2))),
+        )
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
+        verify(migrationService, never()).consumePendingChannelMigration()
     }
 
     @Test

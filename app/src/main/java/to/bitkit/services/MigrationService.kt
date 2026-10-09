@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -47,6 +48,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
@@ -111,6 +113,12 @@ class MigrationService @Inject constructor(
         /** Max Blocktank order IDs fetched per request. */
         internal const val BLOCKTANK_ORDER_IDS_CHUNK = 20
     }
+
+    private val channelMigrationMutex = Mutex()
+
+    suspend fun lockChannelMigration() = channelMigrationMutex.lock()
+
+    fun unlockChannelMigration() = channelMigrationMutex.unlock()
 
     private val rnMigrationStore = context.rnMigrationDataStore
 
@@ -318,6 +326,11 @@ class MigrationService @Inject constructor(
         Logger.debug("Cleared all persisted migration data", context = TAG)
     }
 
+    suspend fun hasPendingMigrationRetries(): Boolean {
+        loadPersistedMigrationData()
+        return !canCleanupAfterMigration
+    }
+
     val canCleanupAfterMigration: Boolean
         get() {
             if (pendingBlocktankOrderIds != null || pendingRemotePaidOrders != null) {
@@ -326,6 +339,10 @@ class MigrationService @Inject constructor(
             }
             if (pendingRemoteMetadata != null || pendingRemoteTransfers != null || pendingRemoteBoosts != null) {
                 Logger.debug("Cannot cleanup: pending metadata/transfers/boosts exists", context = TAG)
+                return false
+            }
+            if (peekPendingChannelMigration() != null) {
+                Logger.debug("Cannot cleanup: pending channel migration exists", context = TAG)
                 return false
             }
             return true
@@ -941,13 +958,14 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRNMetadata(metadata: RNMetadata) {
+    private suspend fun applyRNMetadata(metadata: RNMetadata): Set<String> {
         val tags = metadata.tags
         if (tags.isNullOrEmpty()) {
             Logger.debug("No tags to apply in metadata", context = TAG)
-            return
+            return emptySet()
         }
 
+        val unapplied = mutableSetOf<String>()
         var applied = 0
         val allTags = tags.mapNotNull { (activityId, tagList) ->
             val onchain = activityRepo.getOnchainActivityByTxId(activityId)
@@ -968,7 +986,8 @@ class MigrationService @Inject constructor(
                         tags = tagList,
                     )
                 } else {
-                    Logger.warn("Activity not found for tags: id=$activityId", context = TAG)
+                    Logger.warn("Activity not found for tags: id='$activityId'", context = TAG)
+                    unapplied += activityId
                     null
                 }
             }
@@ -979,9 +998,11 @@ class MigrationService @Inject constructor(
                 coreService.activity.upsertTags(allTags)
                 Logger.info("Applied $applied/${tags.size} pending tags", context = TAG)
             }.onFailure {
-                Logger.error("Failed to upsert tags: $it", it, context = TAG)
+                Logger.error("Failed to upsert tags", it, context = TAG)
+                unapplied += tags.keys
             }
         }
+        return unapplied
     }
 
     private suspend fun applyRNTodos(todos: RNTodos) {
@@ -1672,7 +1693,7 @@ class MigrationService @Inject constructor(
         loadPersistedMigrationData()
 
         // Handle MMKV (local) migration data - apply activities FIRST, then metadata
-        if (hasRNMmkvData()) {
+        if (needsPostMigrationSync() && hasRNMmkvData()) {
             loadRNMmkvData()?.let { mmkvData ->
                 extractRNActivities(mmkvData)?.let { activities ->
                     Logger.info("Applying ${activities.size} MMKV activities", context = TAG)
@@ -1682,18 +1703,12 @@ class MigrationService @Inject constructor(
                 extractRNWalletBackup(mmkvData)?.let { (transfers, boosts) ->
                     if (transfers.isNotEmpty()) {
                         Logger.info("Applying ${transfers.size} local transfer markers", context = TAG)
-                        applyRemoteTransfers(transfers)
+                        persistTransfers(pendingRemoteTransfers.orEmpty() + transfers)
                     }
                     if (boosts.isNotEmpty()) {
                         Logger.info("Applying ${boosts.size} local boost markers", context = TAG)
-                        applyBoostTransactions(boosts)
+                        persistBoosts(pendingRemoteBoosts.orEmpty() + boosts)
                     }
-                }
-
-                // Apply MMKV metadata (tags) AFTER activities are created
-                extractRNMetadata(mmkvData)?.let { metadata ->
-                    Logger.info("Applying MMKV metadata (tags: ${metadata.tags?.size})", context = TAG)
-                    applyRNMetadata(metadata)
                 }
             }
         }
@@ -1707,21 +1722,25 @@ class MigrationService @Inject constructor(
 
         pendingRemoteTransfers?.let { transfers ->
             Logger.info("Applying ${transfers.size} remote transfer markers", context = TAG)
-            applyRemoteTransfers(transfers)
-            clearPersistedTransfers()
+            val remaining = applyRemoteTransfers(transfers)
+            if (remaining.isEmpty()) clearPersistedTransfers() else persistTransfers(remaining)
         }
 
         pendingRemoteBoosts?.let { boosts ->
             Logger.info("Applying ${boosts.size} remote boost markers", context = TAG)
-            applyBoostTransactions(boosts)
-            clearPersistedBoosts()
+            val remaining = applyBoostTransactions(boosts)
+            if (remaining.isEmpty()) clearPersistedBoosts() else persistBoosts(remaining)
         }
 
         // Apply remote metadata (tags) AFTER activities are created
         pendingRemoteMetadata?.let { metadata ->
             Logger.info("Applying remote metadata (tags: ${metadata.tags?.size})", context = TAG)
-            applyRNMetadata(metadata)
-            clearPersistedMetadata()
+            val remaining = unappliedRnMetadata(metadata, applyRNMetadata(metadata))
+            if (remaining == null) {
+                clearPersistedMetadata()
+            } else {
+                persistMetadata(remaining)
+            }
         }
 
         var blocktankFetchFailed = false
@@ -1775,15 +1794,20 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRemoteTransfers(transfers: Map<String, String>) {
+    internal suspend fun applyRemoteTransfers(transfers: Map<String, String>): Map<String, String> {
+        val remaining = transfers.toMutableMap()
         transfers.forEach { (txId, channelId) ->
             val onchain = activityRepo.getOnchainActivityByTxId(txId) ?: return@forEach
             val updated = onchain.copy(isTransfer = true, channelId = channelId)
-            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated))
+            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated)).onSuccess {
+                remaining.remove(txId)
+            }
         }
+        return remaining
     }
 
-    private suspend fun applyBoostTransactions(boosts: Map<String, String>) {
+    internal suspend fun applyBoostTransactions(boosts: Map<String, String>): Map<String, String> {
+        val remaining = boosts.toMutableMap()
         var applied = 0
 
         boosts.forEach { (oldTxId, newTxId) ->
@@ -1807,9 +1831,10 @@ class MigrationService @Inject constructor(
                     boostTxIds = newOnchain.boostTxIds.filter { it != oldTxId },
                 )
 
-                runCatching {
-                    activityRepo.updateActivity(parentOnchain.id, Activity.Onchain(parentOnchain))
-                    activityRepo.updateActivity(updatedNewOnchain.id, Activity.Onchain(updatedNewOnchain))
+                runSuspendCatching {
+                    activityRepo.updateActivity(parentOnchain.id, Activity.Onchain(parentOnchain)).getOrThrow()
+                    activityRepo.updateActivity(updatedNewOnchain.id, Activity.Onchain(updatedNewOnchain)).getOrThrow()
+                    remaining.remove(oldTxId)
                     applied++
                 }.onFailure { e ->
                     Logger.error(
@@ -1829,8 +1854,9 @@ class MigrationService @Inject constructor(
                     boostTxIds = updatedBoostTxIds,
                 )
 
-                runCatching {
-                    activityRepo.updateActivity(updated.id, Activity.Onchain(updated))
+                runSuspendCatching {
+                    activityRepo.updateActivity(updated.id, Activity.Onchain(updated)).getOrThrow()
+                    remaining.remove(oldTxId)
                     applied++
                 }.onFailure { e ->
                     Logger.error("Failed to apply RBF boost for tx $newTxId: $e", e, context = TAG)
@@ -1839,6 +1865,7 @@ class MigrationService @Inject constructor(
         }
 
         Logger.info("Applied $applied/${boosts.size} boost markers", context = TAG)
+        return remaining
     }
 
     private suspend fun applyBoostedParents(boostedParents: List<String>, txId: String) {
@@ -2200,6 +2227,13 @@ data class RNMetadata(
     val tags: Map<String, List<String>>? = null,
     val lastUsedTags: List<String>? = null,
 )
+
+internal fun unappliedRnMetadata(metadata: RNMetadata, unappliedActivityIds: Set<String>): RNMetadata? {
+    if (unappliedActivityIds.isEmpty()) return null
+    val remaining = metadata.tags.orEmpty().filterKeys { it in unappliedActivityIds }
+    if (remaining.isEmpty()) return null
+    return metadata.copy(tags = remaining, lastUsedTags = null)
+}
 
 @Serializable
 data class RNTodos(

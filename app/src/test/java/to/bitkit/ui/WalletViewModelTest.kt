@@ -7,12 +7,15 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.PeerDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -32,12 +35,14 @@ import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.PendingChannelMigration
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
@@ -46,6 +51,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletViewModelTest : BaseUnitTest() {
@@ -75,6 +81,8 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
         whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
+        whenever(migrationService.isShowingMigrationLoading).thenReturn(MutableStateFlow(false))
         whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
         whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(null)
         whenever { backupRepo.hasPendingWalletRestore() }.thenReturn(false)
@@ -659,6 +667,179 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(testWalletRepo, never()).refreshBip21()
+    }
+
+    @Test
+    fun `start waits out an rn remote restore instead of opening the node`() = test {
+        val testWalletRepo: WalletRepo = mock()
+        val testLightningRepo: LightningRepo = mock()
+        val testWalletState = MutableStateFlow(WalletState(walletExists = true))
+
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(true))
+        whenever(testWalletRepo.walletState).thenReturn(testWalletState)
+        whenever(testWalletRepo.balanceState).thenReturn(balanceState)
+        whenever(testWalletRepo.walletExists()).thenReturn(true)
+        whenever(testWalletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(testLightningRepo.lightningState).thenReturn(lightningState)
+        whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
+        stubSuccessfulNodeStart(testLightningRepo)
+
+        val testSut = WalletViewModel(
+            context = context,
+            bgDispatcher = testDispatcher,
+            walletRepo = testWalletRepo,
+            lightningRepo = testLightningRepo,
+            settingsStore = settingsStore,
+            backupRepo = backupRepo,
+            blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
+            migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
+        )
+
+        testSut.restoreWallet("mnemonic", null)
+        testSut.start()
+        advanceTimeBy(31.seconds)
+
+        verifyNodeNotStarted(testLightningRepo)
+
+        testSut.onRestoreContinue()
+        advanceUntilIdle()
+
+        verifyNodeStarted(testLightningRepo)
+    }
+
+    @Test
+    fun `restore retry rebuilds the node with the pending channel file`() = test {
+        val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
+        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(Result.success(Unit))
+
+        sut.onRestoreRetry()
+        advanceUntilIdle()
+
+        verifyNodeNotStarted(lightningRepo)
+        val migration = argumentCaptor<ChannelDataMigration>()
+        verify(lightningRepo).restartNode(migration.capture())
+        assertEquals(listOf(1.toUByte()), migration.firstValue.channelManager)
+        assertEquals(listOf(listOf(2.toUByte())), migration.firstValue.channelMonitors)
+        inOrder(migrationService) {
+            verify(migrationService).lockChannelMigration()
+            verify(migrationService).peekPendingChannelMigration()
+            verify(migrationService).consumePendingChannelMigration()
+            verify(migrationService).unlockChannelMigration()
+        }
+    }
+
+    @Test
+    fun `restore retry keeps pending channels when restart fails`() = test {
+        val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
+        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(Result.failure(AppError("restart failed")))
+
+        sut.onRestoreRetry()
+        advanceUntilIdle()
+
+        verifyNodeNotStarted(lightningRepo)
+        verify(lightningRepo).restartNode(anyOrNull())
+        verify(migrationService, never()).consumePendingChannelMigration()
+        verify(migrationService).unlockChannelMigration()
+    }
+
+    @Test
+    fun `restore retry keeps pending channels when restart yields to background stop`() = test {
+        val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
+        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(
+            Result.failure(NodeStartYieldedToStopError(AppError("start failed"))),
+        )
+
+        sut.onRestoreRetry()
+        advanceUntilIdle()
+
+        verifyNodeNotStarted(lightningRepo)
+        verify(lightningRepo).restartNode(anyOrNull())
+        verify(migrationService, never()).consumePendingChannelMigration()
+        verify(migrationService).unlockChannelMigration()
+    }
+
+    @Test
+    fun `rn local migration start holds the channel migration lock until consumption`() = test {
+        advanceUntilIdle()
+        val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        stubSuccessfulNodeStart(lightningRepo)
+
+        WalletViewModel(
+            context = context,
+            bgDispatcher = testDispatcher,
+            walletRepo = walletRepo,
+            lightningRepo = lightningRepo,
+            settingsStore = settingsStore,
+            backupRepo = backupRepo,
+            blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
+            migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
+        )
+        advanceUntilIdle()
+
+        verifyNodeStarted(lightningRepo)
+        inOrder(migrationService) {
+            verify(migrationService).lockChannelMigration()
+            verify(migrationService).peekPendingChannelMigration()
+            verify(migrationService).consumePendingChannelMigration()
+            verify(migrationService).unlockChannelMigration()
+        }
+    }
+
+    private suspend fun stubSuccessfulNodeStart(repo: LightningRepo) {
+        whenever(
+            repo.start(
+                any(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+            ),
+        ).thenReturn(Result.success(Unit))
+    }
+
+    private suspend fun verifyNodeNotStarted(repo: LightningRepo) {
+        verify(
+            repo,
+            never(),
+        ).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
+    }
+
+    private suspend fun verifyNodeStarted(repo: LightningRepo) {
+        verify(repo).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
     }
 
     private fun stubSettingsUpdate(): MutableStateFlow<SettingsData> {

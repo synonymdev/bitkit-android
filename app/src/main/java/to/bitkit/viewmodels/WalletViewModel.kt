@@ -39,6 +39,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
@@ -181,8 +182,13 @@ class WalletViewModel @Inject constructor(
                     pendingWalletStart = true
                     return@launch
                 }
-                val channelMigration = buildChannelMigrationIfAvailable()
-                startNode(0, channelMigration)
+                migrationService.lockChannelMigration()
+                try {
+                    val channelMigration = buildChannelMigrationIfAvailable()
+                    startNode(0, channelMigration)
+                } finally {
+                    migrationService.unlockChannelMigration()
+                }
             } else {
                 migrationService.setShowingMigrationLoading(false)
             }
@@ -289,7 +295,17 @@ class WalletViewModel @Inject constructor(
     fun onRestoreRetry() = viewModelScope.launch(bgDispatcher) {
         _restoreState.update { it.countRetry() }
         setInitNodeLifecycleState()
-        lightningRepo.restartNode()
+        migrationService.lockChannelMigration()
+        try {
+            val channelMigration = buildChannelMigrationIfAvailable()
+            if (channelMigration == null) {
+                lightningRepo.restartNode()
+            } else {
+                startNode(0, channelMigration, isRestoreRetry = true)
+            }
+        } finally {
+            migrationService.unlockChannelMigration()
+        }
     }
 
     fun onBackupRestoreRetry() = viewModelScope.launch(bgDispatcher) {
@@ -332,8 +348,13 @@ class WalletViewModel @Inject constructor(
 
                 waitForRestoreIfNeeded()
 
-                val channelMigration = buildChannelMigrationIfAvailable()
-                startNode(walletIndex, channelMigration)
+                migrationService.lockChannelMigration()
+                try {
+                    val channelMigration = buildChannelMigrationIfAvailable()
+                    startNode(walletIndex, channelMigration)
+                } finally {
+                    migrationService.unlockChannelMigration()
+                }
             } finally {
                 isStarting = false
             }
@@ -342,9 +363,16 @@ class WalletViewModel @Inject constructor(
 
     private suspend fun waitForRestoreIfNeeded() {
         if (!_restoreState.value.isOngoing()) return
-        withTimeoutOrNull(TIMEOUT_RESTORE_WAIT) {
+        val finished = withTimeoutOrNull(TIMEOUT_RESTORE_WAIT) {
             _restoreState.first { !it.isOngoing() }
-        } ?: Logger.warn("waitForRestoreIfNeeded timeout, proceeding anyway", context = TAG)
+        }
+        if (finished != null) return
+        if (migrationService.isRestoringFromRNRemoteBackup.value) {
+            Logger.warn("RN remote restore still running, waiting for channel state", context = TAG)
+            _restoreState.first { !it.isOngoing() }
+            return
+        }
+        Logger.warn("waitForRestoreIfNeeded timeout, proceeding anyway", context = TAG)
     }
 
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? =
@@ -358,8 +386,14 @@ class WalletViewModel @Inject constructor(
     private suspend fun startNode(
         walletIndex: Int = 0,
         channelMigration: ChannelDataMigration?,
+        isRestoreRetry: Boolean = false,
     ) {
-        lightningRepo.start(walletIndex, channelMigration = channelMigration)
+        val result = if (isRestoreRetry) {
+            lightningRepo.restartNode(channelMigration)
+        } else {
+            lightningRepo.start(walletIndex, channelMigration = channelMigration)
+        }
+        result
             .onSuccess {
                 if (channelMigration != null) {
                     migrationService.consumePendingChannelMigration()
@@ -375,7 +409,7 @@ class WalletViewModel @Inject constructor(
                 // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
-                if (it is RecoveryModeError || it is WipeInProgressError) {
+                if (it is RecoveryModeError || it is WipeInProgressError || it is NodeStartYieldedToStopError) {
                     Logger.debug("Skipped node start: '${it.message}'", context = TAG)
                     return@onFailure
                 }
