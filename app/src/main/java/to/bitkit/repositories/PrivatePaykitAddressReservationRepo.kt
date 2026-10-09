@@ -199,9 +199,13 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         return lightningRepo.getAddressBalance(address).getOrDefault(0u) > 0u
     }
 
-    suspend fun clearContactAssignments(excludingPublicKeys: Collection<String>) = withContext(ioDispatcher) {
+    suspend fun clearContactAssignments(
+        excludingPublicKeys: Collection<String>,
+        isStillCurrent: (() -> Boolean)? = null,
+    ) = withContext(ioDispatcher) {
         val savedKeys = excludingPublicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
         locked { current ->
+            if (isStillCurrent?.invoke() == false) return@locked
             val next = current.copy(
                 contactAssignments = current.contactAssignments.filterKeys {
                     it in savedKeys
@@ -217,9 +221,13 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }
     }
 
-    suspend fun removeContactAssignments(publicKeys: Collection<String>) = withContext(ioDispatcher) {
+    suspend fun removeContactAssignments(
+        publicKeys: Collection<String>,
+        isStillCurrent: (() -> Boolean)? = null,
+    ) = withContext(ioDispatcher) {
         val removedKeys = publicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
         locked { current ->
+            if (isStillCurrent?.invoke() == false) return@locked
             val next = current.copy(
                 contactAssignments = current.contactAssignments.filterKeys { it !in removedKeys },
                 contactAssignmentHistory = current.contactAssignmentHistory.filterKeys { it !in removedKeys },

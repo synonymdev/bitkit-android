@@ -180,6 +180,7 @@ import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayPaymentFailedError
@@ -777,6 +778,9 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        val signIn = pubkyRepo.currentSignIn()
+        if (signIn == null || !PubkyPublicKeyFormat.matches(signIn.publicKey, state.publicKey)) return
+        val isStillCurrent = { isCurrentPaykitContactSync(state, signIn) }
         val identityChanged = !PubkyPublicKeyFormat.matches(paymentRequestIdentity, state.publicKey)
         if (identityChanged) {
             paykitPaymentProofRepo.clearOnchainPaymentResolutions()
@@ -789,23 +793,10 @@ class AppViewModel @Inject constructor(
         isPaymentRequestIdentityActivating = true
         val requestRefresh = try {
             paykitPaymentRequestRepo.activate(state.publicKey)
-            if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
+            if (!pubkyRepo.isCurrent(signIn)) return
             paymentRequestIdentity = state.publicKey
             refreshPrivateOnlyPaykitApp("contact sync", onlyIfNeeded = !identityChanged)
-            if (!state.contactsLoaded) return
-
-            val removedKeys = lastPrivatePaykitContactKeys - state.contactKeys
-            if (removedKeys.isNotEmpty()) {
-                privatePaykitRepo.removeSavedContacts(removedKeys)
-                    .onFailure { Logger.warn("Failed to remove private Paykit contacts", it, context = TAG) }
-            }
-
-            privatePaykitRepo.scheduleSavedContactPreparation(state.contactKeys)
-                .onFailure { Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG) }
-            privatePaykitRepo.pruneUnsavedContactState(state.contactKeys)
-                .onFailure { Logger.warn("Failed to prune private Paykit contact state", it, context = TAG) }
-            if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
-            lastPrivatePaykitContactKeys = state.contactKeys
+            if (!state.contactsLoaded || !synchronizeSavedPaykitContacts(state.contactKeys, isStillCurrent)) return
             if (isPaymentRequestPollingStopped.value) return
             val result = refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
             if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
@@ -816,6 +807,32 @@ class AppViewModel @Inject constructor(
             }
         }
         requestRefresh.onSuccess { presentNextIncomingPaykitPaymentRequest() }
+    }
+
+    private fun isCurrentPaykitContactSync(state: PaykitContactSyncState, signIn: PubkySignIn): Boolean =
+        pubkyRepo.isCurrent(signIn) && isPaykitEnabled.value &&
+            (pubkyRepo.contactsLoadVersion.value > 0L) == state.contactsLoaded &&
+            pubkyRepo.contacts.value.map { it.publicKey }.toSet() == state.contactKeys
+
+    private suspend fun synchronizeSavedPaykitContacts(
+        contactKeys: Set<String>,
+        isStillCurrent: () -> Boolean,
+    ): Boolean {
+        if (!isStillCurrent()) return false
+        val removedKeys = lastPrivatePaykitContactKeys - contactKeys
+        if (removedKeys.isNotEmpty()) {
+            privatePaykitRepo.removeSavedContacts(removedKeys, isStillCurrent)
+                .onFailure { Logger.warn("Failed to remove private Paykit contacts", it, context = TAG) }
+        }
+        if (!isStillCurrent()) return false
+        privatePaykitRepo.scheduleSavedContactPreparation(contactKeys, isStillCurrent)
+            .onFailure { Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG) }
+        if (!isStillCurrent()) return false
+        privatePaykitRepo.pruneUnsavedContactState(contactKeys, isStillCurrent)
+            .onFailure { Logger.warn("Failed to prune private Paykit contact state", it, context = TAG) }
+        if (!isStillCurrent()) return false
+        lastPrivatePaykitContactKeys = contactKeys
+        return true
     }
 
     private suspend fun refreshPrivatePaykitEndpointsIfEnabled(

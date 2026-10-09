@@ -75,6 +75,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
     }
 
     private suspend fun enable(contacts: List<String>): Result<Unit> {
+        val signIn = pubkyRepo.currentSignIn()
         val previous = settingsStore.data.first()
         val canUsePrivateContactPayments = runSuspendCatching {
             privatePaykitRepo.hasPrivatePaymentAccess()
@@ -92,16 +93,23 @@ class ContactPaymentSettingsRepo @Inject constructor(
             publicPaykitRepo.syncPublishedEndpoints(publish = true).getOrThrow()
 
             if (canUsePrivateContactPayments) {
-                privatePaykitRepo.enableSharingAndPrepareSavedContacts(
-                    publicKeys = contacts,
-                ).getOrThrow()
+                prepareCurrentSavedContacts(signIn).getOrThrow()
             }
-        }.onFailure { rollbackEnabled(previous, contacts, it) }
+        }.onFailure { rollbackEnabled(previous, contacts, signIn, it) }
+    }
+
+    private suspend fun prepareCurrentSavedContacts(signIn: PubkySignIn?): Result<Unit> {
+        if (signIn == null || !pubkyRepo.isCurrent(signIn)) return Result.success(Unit)
+        val contacts = pubkyRepo.contacts.value.map { it.publicKey }.toSet()
+        return privatePaykitRepo.enableSharingAndPrepareSavedContacts(contacts) {
+            pubkyRepo.isCurrent(signIn) && pubkyRepo.contacts.value.map { it.publicKey }.toSet() == contacts
+        }
     }
 
     private suspend fun rollbackEnabled(
         previous: SettingsData,
         contacts: List<String>,
+        signIn: PubkySignIn?,
         error: Throwable,
     ) {
         runSuspendCatching {
@@ -128,9 +136,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
                 markPublicPaykitRetry(error)
             }
         if (previous.sharesPrivatePaykitEndpoints) {
-            privatePaykitRepo.enableSharingAndPrepareSavedContacts(
-                publicKeys = contacts,
-            ).onFailure(error::addSuppressed)
+            prepareCurrentSavedContacts(signIn).onFailure(error::addSuppressed)
         }
     }
 

@@ -54,6 +54,20 @@ with one withdrawal failing: OFF remains immediate, cleanup remains pending on f
 publication starts. Record action-to-result time separately from SDK lock and network waits; these
 fault-injection checks do not establish staging latency or a guaranteed completion deadline.
 
+## Contact synchronization overlap
+
+Hold contact synchronization before private preparation or cleanup, then save a new contact and
+start its explicit link retry. Release synchronization and verify that the contact stays saved,
+its retry retains the original priority deadline, and the older contact list does not withdraw
+its payment endpoints. On Android, hold the startup app-registry refresh; on iOS, hold public
+publication while enabling contact payments and leave Settings to save the contact.
+
+Repeat by removing and re-adding a contact while synchronization's cleanup is queued, then by changing identity.
+Obsolete cleanup must not cancel the new retry or remove its assignments. A deletion that stays
+current must still remove the contact. These checks require controlled operation blocking and
+retry-state inspection, which the standard journey runner does not provide; record timing
+separately from the correctness result.
+
 ## Background preparation
 
 Sign in from Pubky Ring with a saved, request-capable contact while holding the selected
