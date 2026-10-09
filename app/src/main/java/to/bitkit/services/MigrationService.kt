@@ -48,6 +48,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
@@ -1702,11 +1703,11 @@ class MigrationService @Inject constructor(
                 extractRNWalletBackup(mmkvData)?.let { (transfers, boosts) ->
                     if (transfers.isNotEmpty()) {
                         Logger.info("Applying ${transfers.size} local transfer markers", context = TAG)
-                        applyRemoteTransfers(transfers)
+                        persistTransfers(pendingRemoteTransfers.orEmpty() + transfers)
                     }
                     if (boosts.isNotEmpty()) {
                         Logger.info("Applying ${boosts.size} local boost markers", context = TAG)
-                        applyBoostTransactions(boosts)
+                        persistBoosts(pendingRemoteBoosts.orEmpty() + boosts)
                     }
                 }
             }
@@ -1721,14 +1722,14 @@ class MigrationService @Inject constructor(
 
         pendingRemoteTransfers?.let { transfers ->
             Logger.info("Applying ${transfers.size} remote transfer markers", context = TAG)
-            applyRemoteTransfers(transfers)
-            clearPersistedTransfers()
+            val remaining = applyRemoteTransfers(transfers)
+            if (remaining.isEmpty()) clearPersistedTransfers() else persistTransfers(remaining)
         }
 
         pendingRemoteBoosts?.let { boosts ->
             Logger.info("Applying ${boosts.size} remote boost markers", context = TAG)
-            applyBoostTransactions(boosts)
-            clearPersistedBoosts()
+            val remaining = applyBoostTransactions(boosts)
+            if (remaining.isEmpty()) clearPersistedBoosts() else persistBoosts(remaining)
         }
 
         // Apply remote metadata (tags) AFTER activities are created
@@ -1793,15 +1794,20 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRemoteTransfers(transfers: Map<String, String>) {
+    internal suspend fun applyRemoteTransfers(transfers: Map<String, String>): Map<String, String> {
+        val remaining = transfers.toMutableMap()
         transfers.forEach { (txId, channelId) ->
             val onchain = activityRepo.getOnchainActivityByTxId(txId) ?: return@forEach
             val updated = onchain.copy(isTransfer = true, channelId = channelId)
-            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated))
+            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated)).onSuccess {
+                remaining.remove(txId)
+            }
         }
+        return remaining
     }
 
-    private suspend fun applyBoostTransactions(boosts: Map<String, String>) {
+    internal suspend fun applyBoostTransactions(boosts: Map<String, String>): Map<String, String> {
+        val remaining = boosts.toMutableMap()
         var applied = 0
 
         boosts.forEach { (oldTxId, newTxId) ->
@@ -1825,9 +1831,10 @@ class MigrationService @Inject constructor(
                     boostTxIds = newOnchain.boostTxIds.filter { it != oldTxId },
                 )
 
-                runCatching {
-                    activityRepo.updateActivity(parentOnchain.id, Activity.Onchain(parentOnchain))
-                    activityRepo.updateActivity(updatedNewOnchain.id, Activity.Onchain(updatedNewOnchain))
+                runSuspendCatching {
+                    activityRepo.updateActivity(parentOnchain.id, Activity.Onchain(parentOnchain)).getOrThrow()
+                    activityRepo.updateActivity(updatedNewOnchain.id, Activity.Onchain(updatedNewOnchain)).getOrThrow()
+                    remaining.remove(oldTxId)
                     applied++
                 }.onFailure { e ->
                     Logger.error(
@@ -1847,8 +1854,9 @@ class MigrationService @Inject constructor(
                     boostTxIds = updatedBoostTxIds,
                 )
 
-                runCatching {
-                    activityRepo.updateActivity(updated.id, Activity.Onchain(updated))
+                runSuspendCatching {
+                    activityRepo.updateActivity(updated.id, Activity.Onchain(updated)).getOrThrow()
+                    remaining.remove(oldTxId)
                     applied++
                 }.onFailure { e ->
                     Logger.error("Failed to apply RBF boost for tx $newTxId: $e", e, context = TAG)
@@ -1857,6 +1865,7 @@ class MigrationService @Inject constructor(
         }
 
         Logger.info("Applied $applied/${boosts.size} boost markers", context = TAG)
+        return remaining
     }
 
     private suspend fun applyBoostedParents(boostedParents: List<String>, txId: String) {

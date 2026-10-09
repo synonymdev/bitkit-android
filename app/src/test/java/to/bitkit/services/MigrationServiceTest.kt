@@ -1,15 +1,91 @@
 package to.bitkit.services
 
+import android.content.Context
+import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import to.bitkit.ext.create
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class MigrationServiceTest : BaseUnitTest() {
+
+    @Test
+    fun `missing transfer markers remain pending until their activity exists`() = test {
+        val activityRepo = mock<ActivityRepo>()
+        val service = createService(activityRepo)
+        val markers = mapOf("transfer" to "channel")
+
+        val pending = service.applyRemoteTransfers(markers)
+        assertEquals(markers, pending)
+        verify(activityRepo, never()).updateActivity(any(), any(), any())
+
+        val activity = onchain("transfer")
+        whenever(activityRepo.getOnchainActivityByTxId("transfer")).thenReturn(activity)
+        whenever(activityRepo.updateActivity(any(), any(), any())).thenReturn(Result.success(Unit))
+        assertTrue(service.applyRemoteTransfers(pending).isEmpty())
+        verify(activityRepo).updateActivity(
+            "transfer",
+            Activity.Onchain(activity.copy(isTransfer = true, channelId = "channel")),
+        )
+    }
+
+    @Test
+    fun `missing boost markers remain pending until their activities exist`() = test {
+        val activityRepo = mock<ActivityRepo>()
+        val service = createService(activityRepo)
+        val markers = mapOf("parent" to "child")
+        val pending = service.applyBoostTransactions(markers)
+        assertEquals(markers, pending)
+
+        whenever(activityRepo.getOnchainActivityByTxId("parent")).thenReturn(onchain("parent"))
+        whenever(activityRepo.getOnchainActivityByTxId("child")).thenReturn(onchain("child"))
+        whenever(activityRepo.updateActivity(any(), any(), any())).thenReturn(Result.success(Unit))
+        assertTrue(service.applyBoostTransactions(pending).isEmpty())
+    }
+
+    @Test
+    fun `failed transfer and boost writes remain pending`() = test {
+        val activityRepo = mock<ActivityRepo>()
+        val service = createService(activityRepo)
+        whenever(activityRepo.getOnchainActivityByTxId(any(), any())).thenReturn(onchain("activity"))
+        whenever(activityRepo.updateActivity(any(), any(), any())).thenReturn(Result.failure(AppError("write failed")))
+
+        val transfer = mapOf("transfer" to "channel")
+        val boost = mapOf("parent" to "child")
+        assertEquals(transfer, service.applyRemoteTransfers(transfer))
+        assertEquals(boost, service.applyBoostTransactions(boost))
+    }
+
+    private fun createService(activityRepo: ActivityRepo): MigrationService {
+        val context = mock<Context>()
+        whenever(context.applicationContext).thenReturn(context)
+        return MigrationService(context, mock(), mock(), mock(), mock(), activityRepo, mock(), mock(), mock(), mock())
+    }
+
+    private fun onchain(id: String) = OnchainActivity.create(
+        walletId = "wallet0",
+        id = id,
+        txType = PaymentType.SENT,
+        txId = id,
+        value = 1000uL,
+        fee = 100uL,
+        feeRate = 1uL,
+        address = "address",
+        timestamp = 1uL,
+    )
 
     @Test
     fun `fetchOrdersInChunks should split ids into chunks and concatenate results`() = runTest {
