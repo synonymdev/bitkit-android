@@ -46,4 +46,35 @@ class BroadcastExceptionExtTest {
         )
         assertFalse(AppError("unknown result").isDefiniteHardwarePreBroadcastFailure())
     }
+
+    @Test
+    fun `recognized backend refusals allow navigation without proving no dispatch`() {
+        val reasons = listOf(
+            "min relay fee not met",
+            "mempool min fee not met",
+            "bad-txns-inputs-missingorspent",
+            "txn-mempool-conflict",
+            "non-final",
+        )
+        for (reason in reasons) {
+            val error = AppError(BroadcastException.ElectrumException("broadcast failed: $reason"))
+            assertTrue(error.isHardwareBroadcastRefusalForNavigation())
+            assertFalse(error.isDefiniteHardwarePreBroadcastFailure())
+        }
+    }
+
+    @Test
+    fun `unknown and connectivity errors retain the navigation guard`() {
+        val errors = listOf(
+            "broadcast failed: disconnected",
+            "broadcast failed: unknown refusal",
+            "response lost after dispatch",
+            "min relay fee not met",
+        )
+        for (details in errors) {
+            val error = AppError(BroadcastException.ElectrumException(details))
+            assertFalse(error.isHardwareBroadcastRefusalForNavigation())
+        }
+        assertFalse(AppError("unknown result").isHardwareBroadcastRefusalForNavigation())
+    }
 }

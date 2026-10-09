@@ -6,6 +6,9 @@
     in the original hardware account and match the issuer's delivered proof to that transaction.
     If Core fails after payment has started and returns no transaction ID, dismissing and reopening
     must keep that original request pending; this journey cannot inject that response-loss condition.
+    A recognized backend refusal or invalid transaction permits leaving the sign sheet while retaining
+    the original signed payment and durable wallet guard; reopening may retry only that payment
+    without signing again. Connectivity and unrecognized errors keep navigation guarded.
     This journey does not inject native broadcast faults or prove physical USB/BLE behavior.
   </description>
   <actions>

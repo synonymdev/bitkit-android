@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import to.bitkit.R
 import to.bitkit.ext.isBroadcastConnectivityFailure
-import to.bitkit.ext.isDefiniteHardwarePreBroadcastFailure
+import to.bitkit.ext.isHardwareBroadcastRefusalForNavigation
 import to.bitkit.ext.isHwDeviceBusy
 import to.bitkit.ext.isHwFirmwareError
 import to.bitkit.ext.isHwSessionFailure
@@ -467,7 +467,7 @@ class HwSendViewModel @Inject constructor(
         } == true
         // This changes navigation only: a protocol refusal never releases the durable wallet guard.
         _uiState.update {
-            it.copy(isBroadcastUnresolved = retainedShopPayment && !error.isDefiniteHardwarePreBroadcastFailure())
+            it.copy(isBroadcastUnresolved = retainedShopPayment && !error.isHardwareBroadcastRefusalForNavigation())
         }
         when {
             error.isHwUserCancellation() -> {

@@ -49,6 +49,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.SignedTransactionId
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwSendViewModelTest : BaseUnitTest() {
@@ -397,6 +398,50 @@ class HwSendViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
         assertEquals(original.paymentRequestId, sut.results.first().paymentRequestId)
         assertEquals(original.paymentIdentity, sut.results.first().paymentIdentity)
+    }
+
+    @Test
+    fun `Shop backend refusal allows leaving while retaining original signed payment`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException("broadcast failed: min relay fee not met")),
+        )
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        sut.cancel()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+        verify(proofRepo, times(2)).markHardwareOnchainDispatch(
+            requireNotNull(original.paymentRequestId),
+            WALLET_ID,
+            SignedTransactionId.fromHex(fixture.signedTx.serializedTx),
+            original.paymentIdentity,
+            original.address,
+            original.amountSats,
+        )
+        verify(proofRepo, never()).clearHardwareOnchainCandidateBeforeDispatch(
+            any(),
+            any(),
+            any(),
+            org.mockito.kotlin.anyOrNull(),
+            any(),
+            any(),
+            any(),
+        )
+        assertTrue(sut.uiState.value.canLeave)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
     }
 
     @Test
