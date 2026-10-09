@@ -58,6 +58,7 @@ import org.mockito.kotlin.description
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -206,6 +207,27 @@ class PaykitSdkServiceTest {
         verify(sdk, times(2)).ensureLinkWithPeer(RING_PUBKY, 1u)
         verify(sdk).prepareAndResolvePrivateContactPayment(RING_PUBKY, null, null, 1u)
         verify(sdk).prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null, 1u)
+    }
+
+    @Test
+    fun `private link retries preserve observation and transport failures`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.backupStateRevision()).thenReturn("backup")
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val failures = listOf(
+            PaykitException.Protocol("link_observation_failed", "Invalid link metadata"),
+            PaykitException.Transport("transport_error", "Unavailable homeserver"),
+        )
+
+        for (failure in failures) {
+            doThrow(failure).whenever(sdk).ensureLinkWithPeer(RING_PUBKY, 1u)
+            assertSame(failure, assertFailsWith<PaykitException> { service.ensureLinkWithPeer(RING_PUBKY) })
+        }
+
+        doReturn(LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKED, 1uL, null))
+            .whenever(sdk).ensureLinkWithPeer(RING_PUBKY, 1u)
+        assertEquals(LinkedPeerState.LINKED, service.ensureLinkWithPeer(RING_PUBKY).state)
     }
 
     @Test

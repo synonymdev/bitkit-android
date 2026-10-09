@@ -766,6 +766,35 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `explicit link retry resumes after invalid metadata is corrected`() = test {
+        var peerState = LinkedPeerState.LINKING
+        whenever(paykitSdkService.linkedPeers()).thenAnswer { listOf(linkedPeer(CONTACT_KEY, peerState)) }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.Protocol("link_observation_failed", "Invalid link metadata") }
+            .thenAnswer {
+                peerState = LinkedPeerState.LINKED
+                LinkedPeerHandshakeReport(CONTACT_KEY, peerState, 1uL, null)
+            }
+
+        try {
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            verifyNoInteractions(paymentRequestRepo)
+            verify(paykitSdkService, never()).receivePrivateMessages(any(), any())
+
+            advanceTimeBy(1_000)
+            runCurrent()
+
+            verify(paykitSdkService, times(2)).ensureLinkWithPeer(CONTACT_KEY, priority = Priority.Interactive)
+            verify(paykitSdkService).receivePrivateMessages(CONTACT_KEY, Priority.Interactive)
+            verify(paymentRequestRepo).refreshEligibleTarget(CONTACT_KEY)
+            verify(publicPaykitRepo, never()).beginPayment(any())
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
     fun `explicit linked readiness retries transient intake failure without pending outbound`() = test {
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
         whenever(paykitSdkService.receivePrivateMessages(CONTACT_KEY))
@@ -784,6 +813,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             advanceTimeBy(120_000)
             runCurrent()
             verify(paymentRequestRepo).refreshEligibleTarget(CONTACT_KEY)
+            verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
         } finally {
             sut.closeAndClear()
         }
