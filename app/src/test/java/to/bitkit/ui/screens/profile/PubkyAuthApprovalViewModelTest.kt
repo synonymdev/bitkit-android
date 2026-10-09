@@ -205,12 +205,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `auth display public key omits pubky prefix`() {
-        assertEquals("3rsd...w5xg", pubkyAuthDisplayPublicKey("pubky3rsd123456789w5xg"))
-        assertEquals("3rsd...w5xg", pubkyAuthDisplayPublicKey("3rsd123456789w5xg"))
-    }
-
-    @Test
     fun `confirmAuthorize is ignored when load has not completed`() = test {
         val authUrl = "pubkyauth://signin?caps=/pub/bitkit.to/:rw"
         val capabilities = "/pub/bitkit.to/:rw"

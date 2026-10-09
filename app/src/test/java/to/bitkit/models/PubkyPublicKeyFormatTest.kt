@@ -62,8 +62,30 @@ class PubkyPublicKeyFormatTest {
     }
 
     @Test
+    fun `display never shows the pubky prefix`() {
+        val display = PubkyPublicKeyFormat.display("pubkydeadbeef3rsduhcxpw74snwyct86m38c63j3pq8x4ycqxyo1")
+
+        assertEquals("dead...xyo1", display)
+        assertFalse(display.startsWith("pubky"))
+    }
+
+    @Test
+    fun `display strips a pk prefix`() {
+        assertEquals("dead...xyo1", PubkyPublicKeyFormat.display("pk:deadbeef3rsduhcxpw74snwyct86m38c63j3pq8x4ycqxyo1"))
+    }
+
+    @Test
+    fun `display shortens an unprefixed key`() {
+        assertEquals("dead...xyo1", PubkyPublicKeyFormat.display("deadbeef3rsduhcxpw74snwyct86m38c63j3pq8x4ycqxyo1"))
+    }
+
+    @Test
     fun `display leaves a short raw key unchanged`() {
         assertEquals("short", PubkyPublicKeyFormat.display("pubkyshort"))
+        assertEquals("short", PubkyPublicKeyFormat.display("pk:short"))
+        assertEquals("short", PubkyPublicKeyFormat.display("short"))
+        assertEquals("01234567", PubkyPublicKeyFormat.display("pubky01234567"))
+        assertEquals("", PubkyPublicKeyFormat.display("pubky"))
     }
 
     @Test

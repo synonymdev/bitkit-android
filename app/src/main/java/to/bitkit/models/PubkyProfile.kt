@@ -4,7 +4,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import to.bitkit.ext.ellipsisMiddle
 import com.synonym.paykit.PaykitProfile as SdkPaykitProfile
 import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
 
@@ -24,8 +23,6 @@ data class PubkyProfile(
     val status: String?,
 ) {
     companion object {
-        private const val TRUNCATED_PK_LENGTH = 11
-
         fun fromPubkyProfile(publicKey: String, sdkProfile: SdkPubkyProfile): PubkyProfile {
             return PubkyProfile(
                 publicKey = publicKey,
@@ -43,7 +40,7 @@ data class PubkyProfile(
 
         fun placeholder(publicKey: String) = PubkyProfile(
             publicKey = publicKey,
-            name = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH),
+            name = PubkyPublicKeyFormat.display(publicKey),
             bio = "",
             imageUrl = null,
             links = emptyList(),
@@ -57,7 +54,7 @@ data class PubkyProfile(
             imageUrl: String?,
         ) = PubkyProfile(
             publicKey = publicKey,
-            name = name ?: publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH),
+            name = name ?: PubkyPublicKeyFormat.display(publicKey),
             bio = "",
             imageUrl = imageUrl,
             links = emptyList(),

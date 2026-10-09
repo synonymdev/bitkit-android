@@ -457,7 +457,7 @@ private fun ColumnScope.SuccessContent(
 
     SuccessDescriptionText(
         serviceName = uiState.serviceName,
-        truncatedKey = uiState.profile?.authDisplayPublicKey.orEmpty(),
+        truncatedKey = uiState.profile?.truncatedPublicKey.orEmpty(),
     )
     VerticalSpacer(16.dp)
 
@@ -558,7 +558,7 @@ private fun ProfileCard(profile: PubkyProfile) {
             .padding(24.dp),
     ) {
         Text13Up(
-            text = profile.authDisplayPublicKey,
+            text = profile.truncatedPublicKey,
             color = Colors.White64,
         )
         VerticalSpacer(16.dp)
@@ -589,14 +589,6 @@ private fun ProfileCard(profile: PubkyProfile) {
             modifier = Modifier.fillMaxWidth(),
         )
     }
-}
-
-private val PubkyProfile.authDisplayPublicKey: String
-    get() = pubkyAuthDisplayPublicKey(publicKey)
-
-internal fun pubkyAuthDisplayPublicKey(publicKey: String): String {
-    val rawKey = publicKey.removePrefix("pubky")
-    return if (rawKey.length > 8) "${rawKey.take(4)}...${rawKey.takeLast(4)}" else rawKey
 }
 
 @Preview(showSystemUi = true)
