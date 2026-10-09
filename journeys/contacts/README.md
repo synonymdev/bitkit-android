@@ -53,6 +53,8 @@ other peers must continue. Repeat with an existing unlinked peer record whose re
 authorization is absent. That stored row alone must not keep the retry running. If the same peer
 has queued outbound work, preserve delivery retries until it drains. Inspecting retry retirement
 requires an instrumented fixture.
+If that peer becomes linked while delivery is pending, drain its queue and fail intake once within
+the foreground window: intake must retry and signal readiness only after success.
 
 Hold an unrelated contact's background preparation in progress, then open a saved, linked contact
 and request or pay it. The selected contact must be eligible for its own lookup before the full

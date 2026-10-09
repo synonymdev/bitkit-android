@@ -751,6 +751,107 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `unavailable peer that links during queued delivery retries failed intake`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(clock.now()).thenAnswer {
+            Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
+        }
+        var peerState = LinkedPeerState.NOT_LINKED
+        whenever(paykitSdkService.linkedPeers()).thenAnswer { listOf(linkedPeer(CONTACT_KEY, peerState)) }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.NotFound("not_found", "No App Registry") }
+        var deliveryPending = true
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenAnswer {
+            if (deliveryPending) listOf(CONTACT_KEY) else emptyList()
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(CONTACT_KEY)).thenAnswer {
+            if (peerState != LinkedPeerState.LINKED) {
+                throw PaykitException.Transport("offline", "Unavailable homeserver")
+            }
+            deliveryPending = false
+            mock<OutboundPrivateSendReport>()
+        }
+        whenever(paykitSdkService.receivePrivateMessages(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.Transport("offline", "Unavailable homeserver") }
+            .thenReturn(mock())
+
+        try {
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            advanceTimeBy(1_000)
+            runCurrent()
+            assertTrue(deliveryPending)
+            verify(paykitSdkService).processOutboundPrivateMessages(CONTACT_KEY, Priority.Interactive)
+
+            peerState = LinkedPeerState.LINKED
+            advanceTimeBy(3_000)
+            runCurrent()
+            assertFalse(deliveryPending)
+            verify(paykitSdkService).receivePrivateMessages(CONTACT_KEY, Priority.Interactive)
+            verifyNoInteractions(paymentRequestRepo)
+
+            advanceTimeBy(8_000)
+            runCurrent()
+            verify(paykitSdkService, times(2)).receivePrivateMessages(CONTACT_KEY, Priority.Interactive)
+            verify(paymentRequestRepo).refreshEligibleTarget(CONTACT_KEY)
+            clearInvocations(paykitSdkService, paymentRequestRepo)
+            advanceTimeBy(600_000)
+            runCurrent()
+            verifyNoInteractions(paykitSdkService, paymentRequestRepo)
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `unavailable peer that links after identity check failure retries failed intake`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(clock.now()).thenAnswer {
+            Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
+        }
+        var peerState = LinkedPeerState.NOT_LINKED
+        var failIdentityCheck = false
+        whenever(paykitSdkService.linkedPeers()).thenAnswer { listOf(linkedPeer(CONTACT_KEY, peerState)) }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).thenAnswer {
+            failIdentityCheck = true
+            throw PaykitException.NotFound("not_found", "No App Registry")
+        }
+        whenever(paykitSdkService.identityStatus()).thenAnswer {
+            if (failIdentityCheck) throw PaykitException.Transport("offline", "Unavailable identity")
+            IdentityStatus(OWN_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        whenever(paykitSdkService.receivePrivateMessages(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.Transport("offline", "Unavailable homeserver") }
+            .thenReturn(mock())
+
+        try {
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            assertTrue(failIdentityCheck)
+            verifyNoInteractions(paymentRequestRepo)
+
+            failIdentityCheck = false
+            peerState = LinkedPeerState.LINKED
+            advanceTimeBy(1_000)
+            runCurrent()
+            verify(paykitSdkService).receivePrivateMessages(CONTACT_KEY, Priority.Interactive)
+            verifyNoInteractions(paymentRequestRepo)
+
+            advanceTimeBy(3_000)
+            runCurrent()
+            verify(paykitSdkService, times(2)).receivePrivateMessages(CONTACT_KEY, Priority.Interactive)
+            verify(paymentRequestRepo).refreshEligibleTarget(CONTACT_KEY)
+            verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
+            clearInvocations(paykitSdkService, paymentRequestRepo)
+            advanceTimeBy(600_000)
+            runCurrent()
+            verifyNoInteractions(paykitSdkService, paymentRequestRepo)
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
     fun `blocked peer retires an unpublished explicit retry`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.BLOCKED)))
