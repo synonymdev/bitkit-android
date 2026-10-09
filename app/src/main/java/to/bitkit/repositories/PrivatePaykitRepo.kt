@@ -156,6 +156,13 @@ class PrivatePaykitRepo @Inject constructor(
         var prepareEndpoints = false
         var refreshReadiness = false
 
+        fun stopIfUnavailable(counterparty: String, error: Throwable) {
+            if (publicKey == counterparty && error is PaykitException.NotFound) {
+                prepareEndpoints = false
+                refreshReadiness = false
+            }
+        }
+
         fun recordQueuedPublication(report: PrivatePaymentListDeliveryReport, publicationWindow: KotlinInstant?) {
             if (interactiveUntil == publicationWindow &&
                 report.queued.any { PubkyPublicKeyFormat.matches(it.counterparty, publicKey) }
@@ -346,13 +353,21 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun refreshSavedContactEndpoints(
         publicKey: String,
         savedPublicKeys: Collection<String>,
+        identity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
     ): Result<Unit> =
         withContext(serializedDispatcher) {
-            runSuspendCatching {
-                val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
-                if (isDeletingProfile || isContactSharingCleanupPending()) return@runSuspendCatching
+            runContactSync {
+                val normalizedKey = normalizedPublicKey(publicKey) ?: return@runContactSync
+                if (isDeletingProfile || isContactSharingCleanupPending()) return@runContactSync
+                checkPaykitContactSync(isStillCurrent)
                 rememberSavedContacts(savedPublicKeys + normalizedKey, replacing = false)
-                schedulePendingPrivateMessageDrainRetries("refresh", listOf(normalizedKey), explicit = true)
+                schedulePendingPrivateMessageDrainRetries(
+                    "refresh",
+                    listOf(normalizedKey),
+                    explicit = true,
+                    identity = identity,
+                )
             }
         }
 
@@ -1066,6 +1081,7 @@ class PrivatePaykitRepo @Inject constructor(
                     if (generation != preparationGeneration) return@onFailure
                     if (isUnavailable) {
                         unavailableLinkRetryAt[publicKey] = clock.now() + unavailableLinkRetryDelay
+                        currentCoroutineContext()[PrivateMessageDrainRetry]?.stopIfUnavailable(publicKey, it)
                     } else if (it is PaykitException.Transport) {
                         unavailableLinkRetryAt.remove(publicKey)
                     }
@@ -1416,7 +1432,7 @@ class PrivatePaykitRepo @Inject constructor(
         if (retry.prepareEndpoints) {
             if (canPublishPrivateEndpoints(status)) {
                 publishLocalEndpoints(keys, reason, priority = priority).getOrThrow()
-                return true
+                return hasPendingPrivateMessageRetry(retry, priority)
             }
             retry.prepareEndpoints = false
         }
@@ -1437,6 +1453,10 @@ class PrivatePaykitRepo @Inject constructor(
         val readinessPending = retry.refreshReadiness && retry.interactiveUntil?.let { it > clock.now() } == true
         return readinessPending || pendingPrivateMessageDrainKeys(keys, priority = priority).isNotEmpty()
     }
+
+    private suspend fun hasPendingPrivateMessageRetry(retry: PrivateMessageDrainRetry, priority: Priority): Boolean =
+        retry.prepareEndpoints || retry.refreshReadiness ||
+            pendingPrivateMessageDrainKeys(listOf(retry.publicKey), priority = priority).isNotEmpty()
 
     private suspend fun pendingPrivateMessageDrainKeys(
         retryKeys: Collection<String>,

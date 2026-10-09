@@ -42,6 +42,15 @@ guidance and leave saved contacts intact.
 
 ## Foreground wait isolation
 
+Hold an unrelated SDK operation after saving the contact itself. Contact Saved must appear without
+waiting for the queued identity lookup; leaving Add Contact must not discard its link retry.
+Switch identity while scheduling is held and verify that no linking starts for the previous sign-in.
+These checks require controlled operation blocking, which the journey runner does not provide.
+
+Save a contact with no Paykit records. After its missing-peer result, the explicit retry must retire
+without recurring SDK reads. A later explicit refresh can try again; pending outbound delivery for
+other peers must continue. Inspecting retry retirement requires an instrumented fixture.
+
 Hold an unrelated contact's background preparation in progress, then open a saved, linked contact
 and request or pay it. The selected contact must be eligible for its own lookup before the full
 contact scan finishes. Hold its public capability lookup separately: this public read must not

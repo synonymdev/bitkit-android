@@ -21,8 +21,11 @@ class RefreshContactPaykitLinkUseCase @Inject constructor(
 
     suspend operator fun invoke(publicKey: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
+            val signIn = pubkyRepo.currentSignIn() ?: return@runSuspendCatching
             val savedPublicKeys = (pubkyRepo.contacts.value.map { it.publicKey } + publicKey).distinct()
-            privatePaykitRepo.refreshSavedContactEndpoints(publicKey, savedPublicKeys).getOrThrow()
+            privatePaykitRepo.refreshSavedContactEndpoints(publicKey, savedPublicKeys, signIn.publicKey) {
+                pubkyRepo.isCurrent(signIn)
+            }.getOrThrow()
         }.onFailure {
             Logger.warn(
                 "Failed to refresh the Paykit link for '${PubkyPublicKeyFormat.redacted(publicKey)}'",

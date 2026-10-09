@@ -569,6 +569,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
         val completion = CompletableDeferred<Unit>()
         var publications = 0
+        var deliveryPending = false
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenAnswer {
+            if (deliveryPending) listOf(CONTACT_KEY) else emptyList()
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(CONTACT_KEY)).thenAnswer {
+            deliveryPending = false
+            mock<OutboundPrivateSendReport>()
+        }
         whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).doSuspendableAnswer {
             when (++publications) {
                 1 -> {
@@ -576,7 +584,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                     throw PaykitException.Transport("offline", "Unavailable homeserver")
                 }
                 2 -> privateListDeliveryReport(failedToQueue = listOf(privateListSyncChange(CONTACT_KEY)))
-                else -> privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY))
+                else -> {
+                    deliveryPending = true
+                    privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY))
+                }
             }
         }
 
@@ -596,8 +607,96 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             advanceTimeBy(120_000)
             runCurrent()
             assertEquals(3, publications)
+            assertFalse(deliveryPending)
+            verify(paykitSdkService).processOutboundPrivateMessages(CONTACT_KEY)
         } finally {
             completion.complete(Unit)
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `cached identity schedules without SDK reads and validates before linking`() = test {
+        val identity = CompletableDeferred<IdentityStatus>()
+        whenever(paykitSdkService.identityStatus()).doSuspendableAnswer { identity.await() }
+        whenever(pubkyService.currentPublicKey()).doSuspendableAnswer { awaitCancellation() }
+
+        try {
+            val scheduled = async {
+                sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY), OWN_KEY) { true }
+            }
+            runCurrent()
+            assertTrue(scheduled.isCompleted)
+            scheduled.await().getOrThrow()
+            verify(pubkyService, never()).currentPublicKey()
+            verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
+
+            identity.complete(IdentityStatus(OTHER_CONTACT_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            runCurrent()
+            advanceTimeBy(120_000)
+            runCurrent()
+            verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
+            verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `contact refresh checks sign in after loading cleanup state`() = test {
+        val cleanup = CompletableDeferred<Unit>()
+        var isCurrent = true
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                cleanup.await()
+                emit(PrivatePaykitCacheData())
+            },
+        )
+
+        try {
+            val scheduled = async {
+                sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY), OWN_KEY) { isCurrent }
+            }
+            runCurrent()
+            assertFalse(scheduled.isCompleted)
+            isCurrent = false
+            cleanup.complete(Unit)
+            assertTrue(scheduled.await().isSuccess)
+            advanceTimeBy(120_000)
+            runCurrent()
+            verifyNoInteractions(paykitSdkService, pubkyService)
+        } finally {
+            cleanup.complete(Unit)
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `unavailable peer retires explicit publication until refreshed`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        whenever(clock.now()).thenAnswer {
+            Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
+        }
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.NotFound("not_found", "No App Registry") }
+
+        try {
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            advanceTimeBy(1_000)
+            runCurrent()
+            verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+            verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+            clearInvocations(paykitSdkService)
+
+            advanceTimeBy(600_000)
+            runCurrent()
+            verifyNoInteractions(paykitSdkService)
+
+            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        } finally {
             sut.closeAndClear()
         }
     }
