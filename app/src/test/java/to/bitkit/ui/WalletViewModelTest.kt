@@ -35,6 +35,7 @@ import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
@@ -713,24 +714,14 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `restore retry rebuilds the node with the pending channel file`() = test {
         val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
         whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
-        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
-        stubSuccessfulNodeStart(lightningRepo)
+        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(Result.success(Unit))
 
         sut.onRestoreRetry()
         advanceUntilIdle()
 
-        verify(lightningRepo, never()).restartNode()
+        verifyNodeNotStarted(lightningRepo)
         val migration = argumentCaptor<ChannelDataMigration>()
-        verify(lightningRepo).start(
-            any(),
-            anyOrNull(),
-            any(),
-            anyOrNull(),
-            anyOrNull(),
-            anyOrNull(),
-            migration.capture(),
-            any(),
-        )
+        verify(lightningRepo).restartNode(migration.capture())
         assertEquals(listOf(1.toUByte()), migration.firstValue.channelManager)
         assertEquals(listOf(listOf(2.toUByte())), migration.firstValue.channelMonitors)
         inOrder(migrationService) {
@@ -742,43 +733,33 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restore retry keeps pending channels when stop fails`() = test {
+    fun `restore retry keeps pending channels when restart fails`() = test {
         val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
         whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
-        whenever(lightningRepo.stop()).thenReturn(Result.failure(AppError("stop failed")))
+        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(Result.failure(AppError("restart failed")))
 
         sut.onRestoreRetry()
         advanceUntilIdle()
 
         verifyNodeNotStarted(lightningRepo)
-        verify(lightningRepo, never()).restartNode()
+        verify(lightningRepo).restartNode(anyOrNull())
         verify(migrationService, never()).consumePendingChannelMigration()
         verify(migrationService).unlockChannelMigration()
     }
 
     @Test
-    fun `restore retry keeps pending channels when start fails`() = test {
+    fun `restore retry keeps pending channels when restart yields to background stop`() = test {
         val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
         whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
-        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
-        whenever(
-            lightningRepo.start(
-                any(),
-                anyOrNull(),
-                any(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                any(),
-            ),
-        ).thenReturn(Result.failure(AppError("start failed")))
+        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(
+            Result.failure(NodeStartYieldedToStopError(AppError("start failed"))),
+        )
 
         sut.onRestoreRetry()
         advanceUntilIdle()
 
-        verifyNodeStarted(lightningRepo)
-        verify(lightningRepo, never()).restartNode()
+        verifyNodeNotStarted(lightningRepo)
+        verify(lightningRepo).restartNode(anyOrNull())
         verify(migrationService, never()).consumePendingChannelMigration()
         verify(migrationService).unlockChannelMigration()
     }

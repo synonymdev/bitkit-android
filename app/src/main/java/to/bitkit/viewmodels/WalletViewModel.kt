@@ -39,6 +39,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
@@ -300,12 +301,7 @@ class WalletViewModel @Inject constructor(
             if (channelMigration == null) {
                 lightningRepo.restartNode()
             } else {
-                lightningRepo.stop().onSuccess {
-                    startNode(0, channelMigration)
-                }.onFailure {
-                    Logger.error("Failed to stop node during restore retry", it, context = TAG)
-                    ToastEventBus.send(it)
-                }
+                startNode(0, channelMigration, isRestoreRetry = true)
             }
         } finally {
             migrationService.unlockChannelMigration()
@@ -390,8 +386,14 @@ class WalletViewModel @Inject constructor(
     private suspend fun startNode(
         walletIndex: Int = 0,
         channelMigration: ChannelDataMigration?,
+        isRestoreRetry: Boolean = false,
     ) {
-        lightningRepo.start(walletIndex, channelMigration = channelMigration)
+        val result = if (isRestoreRetry) {
+            lightningRepo.restartNode(channelMigration)
+        } else {
+            lightningRepo.start(walletIndex, channelMigration = channelMigration)
+        }
+        result
             .onSuccess {
                 if (channelMigration != null) {
                     migrationService.consumePendingChannelMigration()
@@ -407,7 +409,7 @@ class WalletViewModel @Inject constructor(
                 // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
-                if (it is RecoveryModeError || it is WipeInProgressError) {
+                if (it is RecoveryModeError || it is WipeInProgressError || it is NodeStartYieldedToStopError) {
                     Logger.debug("Skipped node start: '${it.message}'", context = TAG)
                     return@onFailure
                 }

@@ -29,6 +29,7 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Node
@@ -742,6 +743,41 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `channel migration restart skips the start retry when a stop is requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw error
+            }
+            Unit
+        }
+
+        val result = sut.restartNode(ChannelDataMigration(listOf(1.toUByte()), listOf(listOf(2.toUByte()))))
+
+        val yieldError = assertIs<NodeStartYieldedToStopError>(result.exceptionOrNull())
+        assertEquals(error, yieldError.cause)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        verify(lightningService, times(1)).stop()
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+
+        val foregroundResult = sut.start()
+
+        assertTrue(foregroundResult.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
     fun `restartNode retries when a foreground cancels the stop requested during the failed attempt`() = test {
         stubNodeForRestart()
         var attempts = 0
@@ -784,6 +820,49 @@ class LightningRepoTest : BaseUnitTest() {
         }
 
         val result = sut.restartNode()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `channel migration restart keeps the backup across bounded start attempts`() = test {
+        stubNodeForRestart()
+        whenever(lightningService.node).thenReturn(null)
+        val migration = ChannelDataMigration(listOf(1.toUByte()), listOf(listOf(2.toUByte())))
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("transient start failure")
+            Unit
+        }
+
+        val result = sut.restartNode(migration)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService, times(2)) {
+            setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), eq(migration))
+        }
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `channel migration restart retry does not cancel a stop requested during the retry`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            sut.stopDebounced()
+            Unit
+        }
+
+        val result = sut.restartNode(ChannelDataMigration(listOf(1.toUByte()), listOf(listOf(2.toUByte()))))
 
         assertTrue(result.isSuccess)
         verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }

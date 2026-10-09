@@ -2204,13 +2204,13 @@ class LightningRepo @Inject constructor(
      */
     suspend fun restartNodeDetached(): Result<Unit> = scope.async { restartNode() }.await()
 
-    suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun restartNode(channelMigration: ChannelDataMigration? = null): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Restarting node", context = TAG)
         stop().onFailure {
             Logger.error("Failed to stop node during restart", it, context = TAG)
             return@withContext Result.failure(it)
         }
-        startNode(shouldRetryYieldToStop = true).onFailure {
+        startNode(channelMigration = channelMigration, shouldRetryYieldToStop = true).onFailure {
             if (it is NodeStartYieldedToStopError) {
                 Logger.info("Deferred node restart to a requested stop", context = TAG)
             } else {
