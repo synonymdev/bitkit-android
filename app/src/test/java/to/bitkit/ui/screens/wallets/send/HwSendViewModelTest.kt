@@ -410,7 +410,20 @@ class HwSendViewModelTest : BaseUnitTest() {
             paymentIdentity = "original-identity",
         )
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
-            Result.failure(BroadcastException.ElectrumException("broadcast failed: min relay fee not met")),
+            Result.failure(
+                BroadcastException.ElectrumException(
+                    """Broadcast failed: Electrum server error: "sendrawtransaction RPC error -26: """ +
+                        """insufficient fee, rejecting replacement """ +
+                        """b3f63e62aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; new feerate """ +
+                        """0.00001000 BTC/kvB <= old feerate 0.00001018 BTC/kvB"""",
+                ),
+            ),
+            Result.failure(
+                BroadcastException.ElectrumException(
+                    """Broadcast failed: Electrum server error: "sendrawtransaction RPC error -25: """ +
+                        """bad-txns-inputs-missingorspent"""",
+                ),
+            ),
         )
         sut.signAndBroadcast(original)
         advanceUntilIdle()
@@ -443,6 +456,14 @@ class HwSendViewModelTest : BaseUnitTest() {
         )
         assertTrue(sut.uiState.value.canLeave)
         assertTrue(sut.uiState.value.hasPendingBroadcast)
+        verify(proofRepo, times(2)).markHardwareRefusedForNavigation(
+            requireNotNull(original.paymentRequestId),
+            WALLET_ID,
+            SignedTransactionId.fromHex(fixture.signedTx.serializedTx),
+            original.paymentIdentity,
+            original.address,
+            original.amountSats,
+        )
     }
 
     @Test

@@ -109,4 +109,74 @@ class BroadcastExceptionExtTest {
             assertFalse(BroadcastException.ElectrumException(payload).isHardwareBroadcastRefusalForNavigation())
         }
     }
+
+    @Test
+    fun `reported missing inputs JSON string coded RPC refusal allows navigation only`() {
+        assertReportedRefusal(
+            """Broadcast failed: Electrum server error: "sendrawtransaction RPC error -25: """ +
+                """bad-txns-inputs-missingorspent"""",
+        )
+    }
+
+    @Test
+    fun `reported replacement fee JSON string coded RPC refusal allows navigation only`() {
+        assertReportedRefusal(
+            """Broadcast failed: Electrum server error: "sendrawtransaction RPC error -26: """ +
+                """insufficient fee, rejecting replacement """ +
+                """b3f63e62aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; new feerate """ +
+                """0.00001000 BTC/kvB <= old feerate 0.00001018 BTC/kvB"""",
+        )
+    }
+
+    private fun assertReportedRefusal(payload: String) {
+        val error = BroadcastException.ElectrumException(payload)
+        assertTrue(error.isHardwareBroadcastRefusalForNavigation(), payload)
+        assertFalse(error.isDefiniteHardwarePreBroadcastFailure())
+    }
+
+    @Test
+    fun `coded RPC unknown malformed and replacement lookalikes stay guarded`() {
+        val messages = listOf(
+            "sendrawtransaction RPC error -25: disconnected",
+            "sendrawtransaction RPC error unknown: bad-txns-inputs-missingorspent",
+            "sendrawtransaction RPC error -25 bad-txns-inputs-missingorspent",
+            "sendrawtransaction RPC error -25: bad-txns-inputs-missingorspentish",
+            "sendrawtransaction RPC error -26: insufficient fee information unavailable",
+            "sendrawtransaction RPC error -26: insufficient fee, rejecting replacementish",
+            "sendrawtransaction RPC error -26: unknown result containing insufficient fee, rejecting replacement tx",
+        )
+        for (message in messages) {
+            val payload = kotlinx.serialization.json.JsonPrimitive(message)
+            val error = BroadcastException.ElectrumException("Broadcast failed: Electrum server error: $payload")
+            assertFalse(error.isHardwareBroadcastRefusalForNavigation(), message)
+        }
+        val malformed = "Broadcast failed: Electrum server error: \"sendrawtransaction RPC error -25: " +
+            "bad-txns-inputs-missingorspent"
+        assertFalse(BroadcastException.ElectrumException(malformed).isHardwareBroadcastRefusalForNavigation())
+    }
+
+    @Test
+    fun `replacement refusal requires complete txid and exact feerate grammar`() {
+        val txid = "b3f63e62" + "a".repeat(56)
+        val known = "insufficient fee, rejecting replacement $txid; " +
+            "new feerate 0.00001000 BTC/kvB <= old feerate 0.00001018 BTC/kvB"
+        val messages = listOf(
+            known.replace(txid, txid.dropLast(1)),
+            known.replace(txid, "g" + txid.drop(1)),
+            known.replace(txid, "b3f63e62…"),
+            known.replace("0.00001000", "0.0000100"),
+            known.replace("0.00001018", "0.000010180"),
+            known.replace("0.00001000", "-0.00001000"),
+            known.replace("BTC/kvB", "sats/vB"),
+            known.replace("<=", "<"),
+            "$known disconnected",
+            "$known\nunknown result",
+            "insufficient fee, rejecting replacement disconnected",
+        )
+        for (message in messages) {
+            val payload = kotlinx.serialization.json.JsonPrimitive("sendrawtransaction RPC error -26: $message")
+            val error = BroadcastException.ElectrumException("Broadcast failed: Electrum server error: $payload")
+            assertFalse(error.isHardwareBroadcastRefusalForNavigation(), message)
+        }
+    }
 }
