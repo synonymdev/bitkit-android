@@ -30,6 +30,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.timeout
@@ -48,6 +49,16 @@ import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendAttemptStore
+import to.bitkit.repositories.OnchainSendCoordinator
+import to.bitkit.repositories.OnchainPreparedSender
+import to.bitkit.repositories.PreparedOnchainSend
+import to.bitkit.repositories.OnchainTransferContext
+import to.bitkit.models.ActiveOnchainAttemptBackup
+import to.bitkit.models.WalletScope
+import kotlinx.serialization.json.Json
+import kotlin.time.Instant
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
@@ -190,27 +201,75 @@ class LightningServiceTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initial fixed send accepts confirmed preset above recovery fee ceiling`() = test {
-        val txid = "ab".repeat(32)
-        val native = preparedNative(txid)
-        whenever(node.onchainPayment()).thenReturn(onchainPayment)
-        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
-        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
-        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1_000uL)
-        assertEquals(OnchainSendOutcome.Accepted(txid), prepared.broadcast())
-        verify(native).broadcast()
+    fun `initial fixed preset above 999 dispatches through durable receipt retention`() = test {
+        initialPresetThroughRetention(isMax = false, isTransfer = false)
+        initialPresetThroughRetention(isMax = false, isTransfer = false, feeRate = UInt.MAX_VALUE.toULong())
     }
 
     @Test
-    fun `initial Max send accepts confirmed preset above recovery fee ceiling`() = test {
+    fun `initial send-all preset above 999 dispatches through durable receipt retention`() = test {
+        initialPresetThroughRetention(isMax = true, isTransfer = false)
+    }
+
+    @Test
+    fun `initial Fast transfer preset above 999 dispatches through durable receipt retention`() = test {
+        initialPresetThroughRetention(isMax = true, isTransfer = true)
+    }
+
+    private suspend fun initialPresetThroughRetention(isMax: Boolean, isTransfer: Boolean, feeRate: ULong = 1_000uL) {
+        var saved: String? = null
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, sut, kotlin.time.Clock.System)
         val txid = "ab".repeat(32)
         val native = preparedNative(txid)
+        val amount = if (isMax) 900uL else 1_000uL
+        whenever(native.recipientAmountSats()).thenReturn(amount)
+        whenever(native.miningFeeSats()).thenReturn(50uL)
         whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
         whenever(onchainPayment.prepareSendAllToAddress("address", true, sendFeeRate)).thenReturn(native)
-        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
-        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1_000uL, isMaxAmount = true)
-        assertEquals(OnchainSendOutcome.Accepted(txid), prepared.broadcast())
+        whenever(native.broadcast()).thenAnswer {
+            val retained = Json.decodeFromString<OnchainSendAttempt>(requireNotNull(saved))
+            assertTrue(retained.initialDispatchAttempted)
+            assertEquals(feeRate, retained.candidateFeeRates[txid])
+            assertEquals(amount, retained.amountSats)
+            OnchainSendResult.Accepted(txid)
+        }
+        val attempt = store.admit(
+            walletId = WalletScope.default, requestId = null, orderId = if (isTransfer) "order-1" else null,
+            address = "address", amountSats = 1_000uL, isMaxAmount = isMax, feeRateSatsPerVByte = feeRate,
+            isTransfer = isTransfer, channelId = null, tags = listOf("original-tag"),
+            transferContext = if (isTransfer) OnchainTransferContext(2_000uL, 2_000uL, 900uL, 900uL) else null,
+            beforeSendAttempt = {},
+        )
+        val sender = object : OnchainPreparedSender {
+            override suspend fun prepareInitial(attempt: OnchainSendAttempt) = sut.prepareOnchainSend(
+                attempt.address,
+                attempt.amountSats,
+                attempt.feeRateSatsPerVByte,
+                isMaxAmount = attempt.isMaxAmount,
+            )
+            override suspend fun prepareRecovery(
+                attempt: OnchainSendAttempt,
+                feeRateSatsPerVByte: ULong,
+                paymentDeadlineAt: Instant?,
+            ): PreparedOnchainSend = error("unused")
+        }
+        val coordinator = OnchainSendCoordinator(store, sender, testDispatcher)
+        assertEquals(OnchainSendOutcome.Accepted(txid), coordinator.sendInitial(attempt).getOrThrow())
         verify(native).broadcast()
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, sut, kotlin.time.Clock.System)
+        val recorded = requireNotNull(reopened.current())
+        val wire = ActiveOnchainAttemptBackup.from(recorded, "regtest", "12".repeat(32))
+        val restoredWire = Json.decodeFromString<ActiveOnchainAttemptBackup>(Json.encodeToString(wire))
+        val restored = restoredWire.restored("regtest", wire.wallet.binding, WalletScope.default, 0)
+        assertEquals(feeRate, restored.feeRateSatsPerVByte)
+        assertEquals(mapOf(txid to feeRate), restored.candidateFeeRates)
+        assertEquals(recorded.originalInputs, restored.originalInputs)
+        assertEquals(amount, restored.amountSats)
+        assertEquals(recorded.transferContext, restored.transferContext)
     }
 
     @Test

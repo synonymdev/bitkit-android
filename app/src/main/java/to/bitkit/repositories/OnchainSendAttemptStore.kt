@@ -285,7 +285,11 @@ class OnchainSendAttemptStore @Inject constructor(
                 }
             }
             val feeRate = receipt.feeRateSatsPerVByte ?: current.feeRateSatsPerVByte
-            require(OnchainRecoveryFeeRate.isValid(feeRate))
+            if (isRecovery) {
+                require(OnchainRecoveryFeeRate.isValid(feeRate))
+            } else {
+                require(feeRate > 0uL && feeRate <= UInt.MAX_VALUE.toULong())
+            }
             val existingFeeRate = current.candidateFeeRates[receipt.txid.lowercase()]
             require(existingFeeRate == null || existingFeeRate == feeRate)
             current.copy(

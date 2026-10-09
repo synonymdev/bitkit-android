@@ -634,6 +634,23 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initial retention rejects zero and rates beyond the confirmed UInt32 range`() = test {
+        val f = Fixture()
+        val original = f.admit()
+        for (feeRate in listOf(0uL, UInt.MAX_VALUE.toULong() + 1uL, ULong.MAX_VALUE)) {
+            assertFailsWith<IllegalArgumentException> {
+                f.store.retainPreparedReceipt(
+                    original.attemptId,
+                    0,
+                    f.receipt().copy(feeRateSatsPerVByte = feeRate),
+                    false,
+                )
+            }
+            assertTrue(f.store.current()?.candidateTxids?.isEmpty() == true)
+        }
+    }
+
+    @Test
     fun `overflowing authorized recovery fee never reaches native preparation`() = test {
         assertEquals(999uL, OnchainRecoveryFeeRate.maximum)
         assertEquals(null, OnchainRecoveryFeeRate.parse("4294967296"))
@@ -656,12 +673,20 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
                 return PreparedOnchainSend(f.receipt(nextTxid)) { it(); OnchainSendOutcome.Unknown(nextTxid) }
             }
         }
-        for (invalidRate in listOf(4_294_967_296uL, ULong.MAX_VALUE)) {
+        for (invalidRate in listOf(0uL, 1_000uL, 4_294_967_296uL, ULong.MAX_VALUE)) {
             val result = OnchainSendCoordinator(f.store, sender, testDispatcher)
                 .retryOriginal(original.attemptId, original.walletId, invalidRate) {}
             assertTrue(result.isFailure)
         }
         assertEquals(0, preparations)
+        assertFailsWith<IllegalArgumentException> {
+            f.store.retainPreparedReceipt(
+                original.attemptId,
+                0,
+                f.receipt(nextTxid).copy(feeRateSatsPerVByte = 1_000uL),
+                true,
+            )
+        }
         assertEquals(listOf(firstTxid), f.store.current()?.candidateTxids)
     }
 
