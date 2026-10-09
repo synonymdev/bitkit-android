@@ -49,7 +49,10 @@ These checks require controlled operation blocking, which the journey runner doe
 
 Save a contact with no Paykit records. After its missing-peer result, the explicit retry must retire
 without recurring SDK reads. A later explicit refresh can try again; pending outbound delivery for
-other peers must continue. Inspecting retry retirement requires an instrumented fixture.
+other peers must continue. Repeat with an existing unlinked peer record whose remote Paykit
+authorization is absent. That stored row alone must not keep the retry running. If the same peer
+has queued outbound work, preserve delivery retries until it drains. Inspecting retry retirement
+requires an instrumented fixture.
 
 Hold an unrelated contact's background preparation in progress, then open a saved, linked contact
 and request or pay it. The selected contact must be eligible for its own lookup before the full

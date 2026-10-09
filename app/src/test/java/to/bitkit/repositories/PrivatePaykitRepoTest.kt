@@ -673,29 +673,78 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `unavailable peer retires explicit publication until refreshed`() = test {
+        whenever(clock.now()).thenAnswer {
+            Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
+        }
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.NOT_LINKED)))
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(listOf(OTHER_CONTACT_KEY))
+        whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
+            .thenAnswer { throw PaykitException.NotFound("not_found", "No App Registry") }
+
+        for (sharingEnabled in listOf(true, false)) {
+            settingsData.value = SettingsData(
+                sharesPrivatePaykitEndpoints = sharingEnabled,
+                publicPaykitLightningEnabled = false,
+            )
+            clearInvocations(paykitSdkService)
+            try {
+                sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+                runCurrent()
+                advanceTimeBy(1_000)
+                runCurrent()
+                verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+                verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+                clearInvocations(paykitSdkService)
+
+                advanceTimeBy(600_000)
+                runCurrent()
+                verifyNoInteractions(paykitSdkService)
+
+                sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+                runCurrent()
+                verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+            } finally {
+                sut.closeAndClear()
+            }
+        }
+    }
+
+    @Test
+    fun `unavailable peer retains queued delivery until drained`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
         whenever(clock.now()).thenAnswer {
             Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
         }
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.NOT_LINKED)))
         whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
             .thenAnswer { throw PaykitException.NotFound("not_found", "No App Registry") }
+        var deliveryPending = true
+        var deliveries = 0
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenAnswer {
+            if (deliveryPending) listOf(CONTACT_KEY) else emptyList()
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(CONTACT_KEY)).thenAnswer {
+            if (++deliveries == 1) throw PaykitException.Transport("offline", "Unavailable homeserver")
+            deliveryPending = false
+            mock<OutboundPrivateSendReport>()
+        }
 
         try {
             sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
             runCurrent()
             advanceTimeBy(1_000)
             runCurrent()
-            verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
-            verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
-            clearInvocations(paykitSdkService)
+            assertEquals(1, deliveries)
+            assertTrue(deliveryPending)
 
+            advanceTimeBy(3_000)
+            runCurrent()
+            assertEquals(2, deliveries)
+            assertFalse(deliveryPending)
+            clearInvocations(paykitSdkService)
             advanceTimeBy(600_000)
             runCurrent()
             verifyNoInteractions(paykitSdkService)
-
-            sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
-            runCurrent()
-            verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
         } finally {
             sut.closeAndClear()
         }

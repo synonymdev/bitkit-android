@@ -155,11 +155,13 @@ class PrivatePaykitRepo @Inject constructor(
         var interactiveUntil: KotlinInstant? = null
         var prepareEndpoints = false
         var refreshReadiness = false
+        var isMissing = false
 
         fun stopIfUnavailable(counterparty: String, error: Throwable) {
             if (publicKey == counterparty && error is PaykitException.NotFound) {
                 prepareEndpoints = false
                 refreshReadiness = false
+                isMissing = true
             }
         }
 
@@ -1330,6 +1332,7 @@ class PrivatePaykitRepo @Inject constructor(
             runSuspendCatching {
                 advanceLinkIfIdle(retryKey, priority)
             }.onFailure {
+                currentCoroutineContext()[PrivateMessageDrainRetry]?.stopIfUnavailable(retryKey, it)
                 Logger.warn(
                     "Failed to advance private Paykit link for '${redacted(retryKey)}' during '$reason'",
                     it,
@@ -1377,6 +1380,7 @@ class PrivatePaykitRepo @Inject constructor(
         retry.interactiveUntil = clock.now() + explicitLinkRetryWindow
         retry.prepareEndpoints = retry.prepareEndpoints || retry.publicKey !in activePreparationKeys
         retry.refreshReadiness = true
+        retry.isMissing = false
         unavailableLinkRetryAt.remove(retry.publicKey)
         retry.wake.trySend(Unit)
     }
@@ -1473,7 +1477,9 @@ class PrivatePaykitRepo @Inject constructor(
         awaitContactPreparationActive(priority)
         if (generation != preparationGeneration) return emptySet()
         if (state == null) return retryKeys
+        val missingKey = currentCoroutineContext()[PrivateMessageDrainRetry]?.takeIf { it.isMissing }?.publicKey
         return retryKeys.filterTo(mutableSetOf()) { retryKey ->
+            if (retryKey == missingKey && retryKey !in state.pendingOutbound) return@filterTo false
             when (state.linkedPeers[retryKey]) {
                 LinkedPeerState.LINKED -> receiveLinkedPeers || retryKey in state.pendingOutbound
                 null -> retryMissingPeers || retryKey in state.pendingOutbound
