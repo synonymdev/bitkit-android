@@ -332,8 +332,13 @@ class WalletViewModel @Inject constructor(
 
                 waitForRestoreIfNeeded()
 
-                val channelMigration = buildChannelMigrationIfAvailable()
-                startNode(walletIndex, channelMigration)
+                migrationService.lockChannelMigration()
+                try {
+                    val channelMigration = buildChannelMigrationIfAvailable()
+                    startNode(walletIndex, channelMigration)
+                } finally {
+                    migrationService.unlockChannelMigration()
+                }
             } finally {
                 isStarting = false
             }

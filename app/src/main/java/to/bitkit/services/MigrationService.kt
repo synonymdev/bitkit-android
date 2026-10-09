@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -111,6 +112,12 @@ class MigrationService @Inject constructor(
         /** Max Blocktank order IDs fetched per request. */
         internal const val BLOCKTANK_ORDER_IDS_CHUNK = 20
     }
+
+    private val channelMigrationMutex = Mutex()
+
+    suspend fun lockChannelMigration() = channelMigrationMutex.lock()
+
+    fun unlockChannelMigration() = channelMigrationMutex.unlock()
 
     private val rnMigrationStore = context.rnMigrationDataStore
 
@@ -316,6 +323,11 @@ class MigrationService @Inject constructor(
         pendingRemoteTransfers = null
         pendingRemoteBoosts = null
         Logger.debug("Cleared all persisted migration data", context = TAG)
+    }
+
+    suspend fun hasPendingMigrationRetries(): Boolean {
+        loadPersistedMigrationData()
+        return !canCleanupAfterMigration
     }
 
     val canCleanupAfterMigration: Boolean
@@ -1680,7 +1692,7 @@ class MigrationService @Inject constructor(
         loadPersistedMigrationData()
 
         // Handle MMKV (local) migration data - apply activities FIRST, then metadata
-        if (hasRNMmkvData()) {
+        if (needsPostMigrationSync() && hasRNMmkvData()) {
             loadRNMmkvData()?.let { mmkvData ->
                 extractRNActivities(mmkvData)?.let { activities ->
                     Logger.info("Applying ${activities.size} MMKV activities", context = TAG)
@@ -1696,12 +1708,6 @@ class MigrationService @Inject constructor(
                         Logger.info("Applying ${boosts.size} local boost markers", context = TAG)
                         applyBoostTransactions(boosts)
                     }
-                }
-
-                // Apply MMKV metadata (tags) AFTER activities are created
-                extractRNMetadata(mmkvData)?.let { metadata ->
-                    Logger.info("Applying MMKV metadata (tags: ${metadata.tags?.size})", context = TAG)
-                    applyRNMetadata(metadata)
                 }
             }
         }
