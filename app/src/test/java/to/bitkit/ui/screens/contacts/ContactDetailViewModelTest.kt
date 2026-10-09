@@ -26,6 +26,7 @@ import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitPaymentRequestTargetCheck
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -51,8 +52,9 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     private val clock = object : Clock {
         override fun now() = now
     }
+    private val signIn = PubkySignIn(publicKey = "pubkyowner", generation = 0)
     private val eligibleTargets = MutableStateFlow<List<PaykitPaymentRequestTarget>>(emptyList())
-    private val target = PaykitPaymentRequestTarget(TEST_PUBLIC_KEY, "bitkit/wallet")
+    private val target = PaykitPaymentRequestTarget(TEST_PUBLIC_KEY)
     private val openedPayment = PublicPaykitPaymentResult.Opened(
         paymentRequest = "bitcoin:bcrt1qtest",
         privatePaymentContext = null,
@@ -104,7 +106,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     fun `adding a tag persists the updated contact and closes the sheet`() = test {
         whenever(context.getString(any())).thenReturn("")
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact(tags = listOf("Friend")))))
-        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
@@ -116,6 +118,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         assertEquals(listOf("Friend", "Bitcoin"), sut.uiState.value.tags)
         assertFalse(sut.uiState.value.showAddTagSheet)
         verify(pubkyRepo).updateContact(
+            signIn = eq(signIn),
             publicKey = eq(TEST_PUBLIC_KEY),
             name = any(),
             bio = any(),
@@ -131,7 +134,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.contacts).thenReturn(
             MutableStateFlow(listOf(createContact(tags = listOf("Friend", "Bitcoin")))),
         )
-        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
@@ -141,6 +144,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
 
         assertEquals(listOf("Bitcoin"), sut.uiState.value.tags)
         verify(pubkyRepo).updateContact(
+            signIn = eq(signIn),
             publicKey = eq(TEST_PUBLIC_KEY),
             name = any(),
             bio = any(),
@@ -156,7 +160,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.contacts).thenReturn(
             MutableStateFlow(listOf(createContact(tags = listOf("Friend", "Bitcoin")))),
         )
-        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
@@ -166,8 +170,8 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         inOrder(pubkyRepo).apply {
-            verify(pubkyRepo).updateContact(any(), any(), any(), anyOrNull(), any(), eq(listOf("Bitcoin")))
-            verify(pubkyRepo).updateContact(any(), any(), any(), anyOrNull(), any(), eq(emptyList()))
+            verify(pubkyRepo).updateContact(any(), any(), any(), any(), anyOrNull(), any(), eq(listOf("Bitcoin")))
+            verify(pubkyRepo).updateContact(any(), any(), any(), any(), anyOrNull(), any(), eq(emptyList()))
         }
         assertEquals(emptyList(), sut.uiState.value.tags)
     }
@@ -178,7 +182,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.contacts).thenReturn(
             MutableStateFlow(listOf(createContact(tags = listOf("Friend", "Bitcoin")))),
         )
-        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
@@ -188,6 +192,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(pubkyRepo, times(1)).updateContact(
+            any(),
             any(),
             any(),
             any(),
@@ -209,18 +214,19 @@ class ContactDetailViewModelTest : BaseUnitTest() {
             lookup.await()
             contacts.value = listOf(resolved)
         }
-        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
 
         sut.addTag("Bitcoin")
         advanceUntilIdle()
-        verify(pubkyRepo, never()).updateContact(any(), any(), any(), anyOrNull(), any(), any())
+        verify(pubkyRepo, never()).updateContact(any(), any(), any(), any(), anyOrNull(), any(), any())
         lookup.complete(Unit)
         advanceUntilIdle()
 
         verify(pubkyRepo).updateContact(
+            signIn = signIn,
             publicKey = TEST_PUBLIC_KEY,
             name = "Alice",
             bio = "Hello",
@@ -235,7 +241,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         whenever(context.getString(any())).thenReturn("")
         val labelOnly = PubkyProfile.forDisplay(TEST_PUBLIC_KEY, "Alice", imageUrl = null)
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(labelOnly)))
-        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any()))
+        whenever(pubkyRepo.updateContact(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
@@ -244,7 +250,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.addTag("Bitcoin")
         advanceUntilIdle()
 
-        verify(pubkyRepo).updateContact(TEST_PUBLIC_KEY, "Alice", "", null, emptyList(), listOf("Bitcoin"))
+        verify(pubkyRepo).updateContact(signIn, TEST_PUBLIC_KEY, "Alice", "", null, emptyList(), listOf("Bitcoin"))
         assertFalse(sut.uiState.value.showAddTagSheet)
         assertEquals(listOf("Bitcoin"), sut.uiState.value.tags)
         verify(pubkyRepo, times(2)).resolvePendingContactProfile(TEST_PUBLIC_KEY)
@@ -254,7 +260,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     fun `failed tag addition stays open and can be retried`() = test {
         whenever(context.getString(any())).thenReturn("")
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact(tags = listOf("Friend")))))
-        whenever(pubkyRepo.updateContact(any(), any(), any(), anyOrNull(), any(), any())).thenReturn(
+        whenever(pubkyRepo.updateContact(any(), any(), any(), any(), anyOrNull(), any(), any())).thenReturn(
             Result.failure(ContactDetailTestError("save failed")),
             Result.success(Unit),
         )
@@ -273,7 +279,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
 
         assertFalse(sut.uiState.value.showAddTagSheet)
         assertEquals(listOf("Friend", "Bitcoin"), sut.uiState.value.tags)
-        verify(pubkyRepo, times(2)).updateContact(any(), any(), any(), anyOrNull(), any(), any())
+        verify(pubkyRepo, times(2)).updateContact(any(), any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -710,7 +716,10 @@ class ContactDetailViewModelTest : BaseUnitTest() {
 
     private fun createSut() = ContactDetailViewModel(
         context = context,
-        pubkyRepo = pubkyRepo,
+        pubkyRepo = pubkyRepo.also {
+            whenever(it.currentSignIn()).thenReturn(signIn)
+            whenever(it.isCurrent(signIn)).thenReturn(true)
+        },
         privatePaykitRepo = privatePaykitRepo,
         paykitPaymentRequestRepo = paykitPaymentRequestRepo.also {
             whenever(it.eligibleTargets).thenReturn(eligibleTargets)

@@ -17,6 +17,12 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
   Tags appear only with the loaded profile. A failed load still ends on the retry state
   (`ProfileRetry`). The avatar comes from the Pubky image disk cache, so it shows without the
   network.
+- **Public profile reads do not require private session restoration.** A saved local or Ring
+  credential identifies the public profile. Its name, bio, links, tags, QR code, Copy and Share
+  remain readable while Paykit restoration is deferred. Edit and tag changes stay disabled until
+  the authenticated profile is available. Retry and Disconnect remain available on the read-only
+  profile; these recovery controls disappear when editing becomes available. `profile-after-restart.xml` checks the saved profile
+  through a restart; injecting a held homeserver lock needs a separate fixture.
 - **Ring rows show at once.** The choice screen lists Ring's identities as soon as the shared pubky
   provider answers. Each row is captioned and titled with its truncated key, and a row's title
   becomes the profile name when that row's lookup finishes, rather than the screen waiting for all
@@ -36,13 +42,12 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
   Waiting behind other lookups does not count towards those ten seconds.
 - **Contacts lists saved contacts at once.** Contacts shows every saved contact as soon as the saved
   records are read, under its saved name or truncated key, and fills in a name and avatar when that
-  contact's profile lookup finishes; a lookup that fails leaves the row as it is. On Android the
-  rows fill in a few at a time, at most every 300 ms, rather than the list re-sorting once per
-  contact. The screen-wide spinner shows only until the saved records first load. Reopening
-  Contacts in the same session shows the profiles already found at once; on Android it also does
-  not look up again a profile found less than ten minutes ago, so only contacts still without a
-  profile get a new lookup. Opening a contact whose profile has not loaded yet looks it up at once,
-  and its edit form shows the published bio.
+  contact's profile lookup finishes; a lookup that fails leaves the row as it is. The rows fill in a
+  few at a time, at most every 300 ms, rather than the list re-sorting once per contact. The
+  screen-wide spinner shows only until the saved records first load. Reopening Contacts in the same
+  session shows the profiles already found at once, and does not look up again a profile found less
+  than ten minutes ago, so only contacts still without a profile get a new lookup. Opening a contact
+  whose profile has not loaded yet looks it up at once, and its edit form shows the published bio.
 
 ## Setup
 
@@ -74,25 +79,27 @@ only where the platform forces it; see [Android vs iOS](#android-vs-ios).
 
 ## Gotchas
 
-- **The session can restore after the profile button is tapped.** Profile then shows a spinner with
-  no name (`ProfileLoading`) until the session is back, and only then the cached header.
+- **Public display and private restoration can finish in either order.** Profile can show the
+  public data with Edit disabled while restoration continues. A spinner (`ProfileLoading`) means
+  neither the public read nor an authenticated cached header is available yet.
 - **Every choice row shares one test tag.** Tell the rows apart by their key caption. iOS gives each
   row its own identifier; see the identifier table in `journeys/README.md`.
 - **The avatar has no text.** Check it from a screenshot rather than `android layout`.
-- **Contacts can open the wrong screen right after a relaunch.** While the session is still
-  restoring, the menu's Contacts item opens the contacts intro or Profile instead. Return to the
-  home screen and open Contacts again.
+- **Contacts can show recovery right after a relaunch.** While the saved session is still
+  restoring, the menu's Contacts item opens Profile instead. Android can first show the contacts
+  intro if it has not been completed and no contacts are loaded. Return Home and open Contacts
+  again after restoration.
 - **The edit form calls the notes field "Bio".** `contacts-list-loading.xml` keeps the iOS wording;
   the field carries `ProfileEditBio`.
 
 ## Android vs iOS
 
-All four journeys share their file names and journey names with `bitkit-ios`. Every step names
+All five journeys share their file names and journey names with `bitkit-ios`. Every step names
 identifiers as testTags rather than iOS ids, drops the iOS `predicate exists` wait argument and runs
 `adb` instead of `xcrun simctl`; the differences below are the rest.
 
-- **Cached profile header while loading.** While the session is still restoring, Android shows a
-  bare spinner on Profile (`ProfileLoading`), as iOS does, so one step differs. Android adds a
+- **Cached profile header while loading.** The public profile can load before private restoration;
+  report that as already loaded rather than requiring a cached-header state. Android adds a
   screenshot check that the cached header shows the profile's avatar: the avatar comes from
   the Pubky image disk cache that synonymdev/bitkit-android#1399 adds, so the check is what shows
   it works without the network. iOS shows the cached avatar too but does not check it.
@@ -115,15 +122,17 @@ identifiers as testTags rather than iOS ids, drops the iOS `predicate exists` wa
   import testTag the journeys use; Back is the shared `NavigationBack`. See the Identifiers table
   in [`journeys/README.md`](../README.md#identifiers). Both platforms save the import only to the
   device.
-- **Contacts list loading.** `contacts-list-loading.xml` has the same file, journey name and steps
-  on both platforms; only the relaunch commands differ.
+- **Contacts list loading.** Both platforms route a saved identity through Profile recovery during
+  deferred restoration. Android can first show the contacts intro if it has not been completed and
+  no contacts are loaded. Return Home and reopen Contacts after restoration. The remaining steps
+  differ only in platform commands and identifiers.
 
 ## Test tags used
 
 - Home: `ProfileButton`.
 - Profile, cached: `ProfileCachedHeader`, `ProfileCachedName`.
 - Profile, loaded: `ProfileViewName`, `ProfileEdit`, `ProfileCopy`, `ProfileShare`, `ProfileQRCode`,
-  `ProfileAddTag`; failed load `ProfileRetry`.
+  `ProfileAddTag`; read-only recovery `ProfileRetry` and `ProfileSignOut`.
 - Profile intro: `ProfileIntro`, `ProfileIntro-button`.
 - Pubky choice: `PubkyChoiceIdentity` for each Ring row, `PubkyChoiceIdentityLookup` for a row's
   lookup spinner and `PubkyContactAvatar` for the avatar that replaces it, `PubkyChoiceCreate` when

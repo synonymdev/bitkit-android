@@ -1,6 +1,6 @@
 # Paykit issuer interoperability
 
-This is the Bitkit issuer contract for one-time Paykit Payment Requests. It describes the request and payment-endpoint shapes an issuer must provide for Bitkit to present and open a request. The canonical accepted and rejected examples are in
+This is the Bitkit issuer contract for one-time Paykit Payment Requests. It describes the request and payment-endpoint shapes an issuer must provide for Bitkit to present and open a request. Accepted and rejected unpriced request and endpoint-shape examples are in
 [`app/src/test/resources/paykit-issuer-interoperability.json`](../app/src/test/resources/paykit-issuer-interoperability.json).
 
 This contract records Bitkit behavior. Paykit protocol or SDK policy remains owned by Paykit.
@@ -9,16 +9,43 @@ This contract records Bitkit behavior. Paykit protocol or SDK policy remains own
 
 An actionable request must satisfy all of these requirements:
 
-- The amount asset is exactly lowercase `btc`.
-- The amount is a positive decimal Bitcoin value with at most eight significant fractional digits and no more than `18,446,744,073,709,551` satoshis.
-- The request is a one-time proposal: the local role is payer, lifecycle state is proposed, and recurrence is absent.
-- The proposal expiration is absent or is a valid future ISO 8601 timestamp.
-- `paymentDeadline` is absent. Bitkit does not yet enforce actual-payment deadlines.
+- Without conversion terms, the amount asset is exactly lowercase `btc`, with a positive decimal Bitcoin value and at most eight significant fractional digits.
+- With fixed conversion terms, the amount may use another denomination; Bitkit multiplies it by the issuer's BTC rate. The payable amount must not exceed `18,446,744,073,709,551` satoshis.
+- The request is one-time: the local role is payer, its actionable lifecycle state is proposed or accepted, and recurrence is absent.
+- The proposal expiration is absent or is a valid ISO 8601 timestamp. It must be in the future while the request is proposed; it does not prevent payment after acceptance.
+- `paymentDeadline` is absent or uses the absolute `At` form with a valid UTC ISO 8601 timestamp ending in `Z` that has not passed. The deadline is inclusive: payment is allowed at the exact deadline instant.
 - `acceptedPaymentEndpointIdentifiers` retains at least one identifier supported on the wallet's current network.
 
 Bitkit filters `acceptedPaymentEndpointIdentifiers` in issuer order, removes duplicates after their first occurrence, and drops unknown or wrong-network identifiers. The request remains actionable when at least one identifier survives.
 
-Requests with a payment deadline remain visible in history but are unavailable for payment. This restriction is separate from proposal expiration, which controls acceptance.
+Bitkit enforces absolute one-time payment deadlines during payment preparation and before submission, including retries. Requests whose valid absolute deadline has passed remain visible in history but are unavailable for payment. This is separate from proposal expiration, which controls acceptance.
+
+Malformed deadlines and relative deadline forms are not actionable. Recurring requests are outside this one-time contract.
+
+### Fixed pricing
+
+An exact asset-and-rail rate (such as `btc-bitcoin` or `btc-regtest`) takes precedence
+over a `btc` rate, including when the requested asset is already BTC. Only an unpriced
+same-asset endpoint defaults to parity. Cross-asset endpoints without a matching rate
+are excluded. Amounts and rates use positive decimal strings without signs or exponents;
+Bitkit accepts at most 80 characters and 38 significant digits per operand and rejects
+unrepresentable arithmetic instead of approximating it.
+
+Before multiplication, both platforms require the sum of the amount's and rate's
+normalized significant-digit counts to be at most 38. These counts exclude the decimal
+point and leading and trailing zeros. A parity rate of `1` counts as one digit.
+This conservative bound keeps the product exact before rounding to payment units;
+quotes outside the bound are rejected even when a particular product could fit.
+
+On-chain amounts round upward once to satoshis. Lightning amounts round upward once
+to millisatoshis and must then be exactly representable in whole satoshis. The existing
+send sheet uses one amount across its available rails: requests with differing BTC
+amounts across those rails, per-period quotes, and conversion-based subscriptions are
+unsupported. Normal unpriced BTC requests are unchanged.
+
+Bitkit displays the payable BTC amount and its own market-rate fiat estimate, not the
+original denomination as a fiat estimate. Original request terms remain unchanged in Paykit.
+The quoted amount is also used for invoice matching and payment validation.
 
 ### Endpoint identifiers
 
@@ -74,11 +101,11 @@ After this shape check, Bitkit validates that the value is usable: an on-chain a
 
 ## Delivery prerequisites
 
-The issuer and wallet must be linked Paykit peers on the same receiver path before Bitkit polls the request. The issuer must advertise a usable endpoint for at least one identifier retained from the request. A request that fails the request gate is not presented; a request whose endpoint cannot be resolved is deferred until usable payment details arrive.
+The issuer and wallet identities must be linked Paykit peers before Bitkit polls the request. Requests may require a specific payment App; Bitkit uses the SDK's request-specific resolver and preserves the selected App in its proof. The issuer can include exact `paymentEndpoints` in the Payment Request or supply current endpoints resolved for the requested App. At least one endpoint must be usable for an identifier retained from the request; embedded endpoints do not require separate advertisement. A request that fails the request gate is not presented. Missing payment details can be retried; a rejected endpoint ends preparation with unavailable-payment feedback and leaves the request pending for manual retry.
 
 ## Contract fixtures
 
-The fixture file is the cross-platform source of truth for Bitkit iOS and Android:
+The shared JSON fixture covers unpriced requests and endpoint shapes on both platforms:
 
 - Request fixtures cover every documented P2TR, P2WPKH, P2SH, and P2PKH identifier for Bitcoin, testnet, signet, and regtest.
 - Request fixtures cover both Lightning identifiers on every network.
@@ -86,4 +113,8 @@ The fixture file is the cross-platform source of truth for Bitkit iOS and Androi
 - Endpoint fixtures accept JSON object payloads with a non-empty string `value`, including optional string bounds and surrounding whitespace.
 - Rejected endpoint fixtures cover a raw string, empty payload, missing/empty/whitespace/numeric `value`, non-string bounds, a wrong-network on-chain identifier, top-level array, malformed JSON, and unsupported identifier.
 
-The iOS fixture suite in [PR #719](https://github.com/synonymdev/bitkit-ios/pull/719) consumes the same fixture names, inputs, and expected results. Any intentional platform difference requires changing this contract and both fixture suites together.
+Fixed pricing is covered by matching tables in `PaykitPaymentRequestServiceTests.swift`
+on iOS and `PaykitPaymentRequestRepoTest.kt` on Android, not by the JSON fixture.
+Those tables cover rate precedence, parity, unit rounding, unsupported quotes and the
+combined precision boundary. Changes to this contract must update the relevant tests
+on both platforms.

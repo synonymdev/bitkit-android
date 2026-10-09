@@ -168,13 +168,11 @@ enum class PaykitSubscriptionRole { Payer, Payee }
 data class PaykitSubscriptionId(
     val paymentRequestId: String,
     val counterparty: String,
-    val counterpartyReceiverPath: String,
 )
 
 data class PaykitSubscription(
     val paymentRequestId: String,
     val counterparty: String,
-    val counterpartyReceiverPath: String,
     val amountValue: String,
     val amountSats: ULong,
     val note: String?,
@@ -191,7 +189,7 @@ data class PaykitSubscription(
     val hasPaymentDeadline: Boolean = false,
 ) {
     val id: PaykitSubscriptionId
-        get() = PaykitSubscriptionId(paymentRequestId, counterparty, counterpartyReceiverPath)
+        get() = PaykitSubscriptionId(paymentRequestId, counterparty)
 
     val isPayer: Boolean
         get() = role == PaykitSubscriptionRole.Payer
@@ -244,7 +242,6 @@ data class PaykitSubscription(
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
                 counterparty = counterparty,
-                counterpartyReceiverPath = counterpartyReceiverPath,
                 amountValue = amountValue,
                 amountSats = amountSats,
                 note = note,
@@ -272,7 +269,6 @@ data class PaykitSubscription(
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
                 counterparty = counterparty,
-                counterpartyReceiverPath = counterpartyReceiverPath,
                 amountValue = amountValue,
                 amountSats = amountSats,
                 note = note,
@@ -288,12 +284,21 @@ data class PaykitSubscription(
     }
 }
 
+/** A canceled subscription is paid for up to its last paid period, whatever its fixed end date. */
+fun PaykitSubscription.canceledPaidThrough(): Instant? =
+    if (lifecycleState == PaymentRequestLifecycleState.CANCELED) paidPeriods.maxOfOrNull { it.endsAt } else null
+
+/** Active, or canceled with its last paid period still ahead: it keeps running until it is paid through. */
+fun PaykitSubscription.runsUntilPaidThrough(now: Instant): Boolean =
+    isActive(now) || canceledPaidThrough()?.let { it > now } == true
+
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
 internal fun PaymentRequestRecord.toPaykitSubscription(
     deliveryStatusOverride: PaykitPaymentRequestDeliveryStatus? = null,
 ): PaykitSubscription? {
     val role = localRole.toSubscriptionRole() ?: return null
     val requestTerms = terms ?: return null
+    if (requestTerms.conversion != null) return null
     val sdkRecurrence = requestTerms.recurrence ?: return null
     if (
         requestTerms.amount.asset != "btc" ||
@@ -328,7 +333,6 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
     return PaykitSubscription(
         paymentRequestId = paymentRequestId,
         counterparty = counterparty,
-        counterpartyReceiverPath = counterpartyReceiverPath,
         amountValue = requestTerms.amount.value,
         amountSats = amountSats,
         note = requestTerms.metadata.note()?.take(256),

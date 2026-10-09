@@ -36,6 +36,7 @@ import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
+import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestAmountScreen
@@ -110,8 +111,7 @@ fun ReceiveSheet(
         mutableStateOf(
             (startRoute as? ReceiveRoute.PaymentRequestAmount)?.let {
                 val publicKey = it.publicKey ?: return@let null
-                val receiverPath = it.receiverPath ?: return@let null
-                PaykitPaymentRequestTarget(publicKey, receiverPath)
+                PaykitPaymentRequestTarget(publicKey)
             }
         )
     }
@@ -167,13 +167,15 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
-                            editInvoiceSourceTab = ReceiveTab.TREZOR
+                            editInvoiceSourceTab = ReceiveTab.HARDWARE
                             invoiceEditState.beginHardwareEdit()
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         initialTab = invoiceEditState.initialTab(hardwareWalletId),
                         hardwareWalletId = selectedHardwareWalletId,
+                        hardwareTabLabel = hardwareWallets.firstOrNull { it.id == selectedHardwareWalletId }
+                            ?.let { stringResource(it.vendor.modelNameRes()) },
                         hardwareReceiveState = hwReceiveState,
                         onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
                         onRetryHardwareAddress = hwReceiveViewModel::retryAddress,
@@ -195,7 +197,7 @@ fun ReceiveSheet(
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestAmount> { backStackEntry ->
                     val route = backStackEntry.toRoute<ReceiveRoute.PaymentRequestAmount>()
                     val routeTarget = route.publicKey?.let { publicKey ->
-                        route.receiverPath?.let { receiverPath -> PaykitPaymentRequestTarget(publicKey, receiverPath) }
+                        PaykitPaymentRequestTarget(publicKey)
                     }
                     val contact = (routeTarget ?: selectedPaymentRequestTarget)?.let { target ->
                         paymentRequestContacts.firstOrNull {
@@ -483,11 +485,11 @@ internal class ReceiveInvoiceEditState {
 
     fun beginHardwareEdit() {
         isHardwareInvoice = true
-        returnTab = ReceiveTab.TREZOR
+        returnTab = ReceiveTab.HARDWARE
     }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
-        returnTab ?: ReceiveTab.TREZOR.takeIf { hardwareWalletId != null }
+        returnTab ?: ReceiveTab.HARDWARE.takeIf { hardwareWalletId != null || isHardwareInvoice }
 }
 
 @Composable
@@ -541,7 +543,6 @@ sealed interface ReceiveRoute {
     @Serializable
     data class PaymentRequestAmount(
         val publicKey: String? = null,
-        val receiverPath: String? = null,
     ) : InternalOnly
 
     @Serializable

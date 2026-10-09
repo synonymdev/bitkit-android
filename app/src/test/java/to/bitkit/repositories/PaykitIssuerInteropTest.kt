@@ -114,7 +114,6 @@ class PaykitIssuerInteropTest {
         endpointIdentifiers: List<String>,
     ) = PaymentRequestRecord(
         counterparty = "pubkyissuerfixture",
-        counterpartyReceiverPath = "bitkit/server",
         paymentRequestId = "71300000-0000-4000-8000-000000000001",
         localRole = PaymentRequestLocalRole.PAYER,
         state = PaymentRequestLifecycleState.PROPOSED,
@@ -131,6 +130,8 @@ class PaykitIssuerInteropTest {
             conversion = null,
             paymentDeadline = null,
             metadata = METADATA,
+            paymentEndpoints = null,
+            requiredAppId = "bitkit",
         ),
         acceptedEventId = null,
         acceptedOutboundStatus = null,
@@ -145,6 +146,9 @@ class PaykitIssuerInteropTest {
         lastOutboundStatus = null,
         lastEventAt = NOW.toString(),
         invalidReason = null,
+        proposalAppId = "bitkit",
+        payerAppId = null,
+        executionClaimAppId = null,
     )
 }
 

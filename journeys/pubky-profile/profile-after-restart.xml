@@ -1,0 +1,23 @@
+<journey name="public profile after restart">
+  <description>
+    Verifies that the same saved public profile can be read and copied after an app restart.
+    Precondition: an onboarded dev wallet with a published name, bio, link and tag, PIN off, and network access.
+    Viewing public data does not authorize profile edits or payments. If private session restoration
+    is still pending, edit and tag changes stay disabled until it succeeds. This journey does not
+    require a pending lock; controlled lock contention needs a separate fixture.
+  </description>
+  <actions>
+    <action>Open Profile from the header profile button (testTag "ProfileButton")</action>
+    <action>Wait for the profile name (testTag "ProfileViewName") and note its name, bio, links and tags</action>
+    <action>Tap Copy (testTag "ProfileCopy") and note the public key shown in the copied popup</action>
+    <action>Run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`</action>
+    <action>Open Profile from the header profile button (testTag "ProfileButton")</action>
+    <action>Wait for the profile name (testTag "ProfileViewName") and verify the saved name, bio, links and tags match</action>
+    <action>Verify the QR code (testTag "ProfileQRCode") and Copy (testTag "ProfileCopy") are available</action>
+    <action>Tap Copy and verify the copied popup shows the same public key</action>
+    <action>Dismiss the copied popup. While Edit (testTag "ProfileEdit") is disabled, verify Add Tag (testTag "ProfileAddTag") is disabled and existing tags have no remove action. Check Retry (testTag "ProfileRetry") and open then cancel Disconnect (testTag "ProfileSignOut") only if Edit is still disabled; if restoration finishes first, skip the read-only controls check</action>
+    <action>If Edit is still disabled after loading finishes, tap Retry (testTag "ProfileRetry"). Wait for restoration and profile loading to enable Edit. The read-only Retry and Disconnect footer then disappears</action>
+    <action>Tap Edit and verify the edit form opens with the saved profile values; cancel without changing them</action>
+  </actions>
+</journey>

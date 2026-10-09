@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -70,6 +71,7 @@ class DrawerMenuWidgetsTest {
                     hasSeenShopIntro = true,
                     onBeforeNavigate = {},
                     showWidgets = true,
+                    profileIdentityExists = flowOf(false),
                 )
             }
         }
@@ -102,6 +104,7 @@ class DrawerMenuWidgetsTest {
                     hasSeenShopIntro = true,
                     onBeforeNavigate = {},
                     showWidgets = true,
+                    profileIdentityExists = flowOf(false),
                     onOpenWidgetsHome = { openWidgetsHome.value = true },
                 )
                 if (openWidgetsHome.value) {
@@ -138,6 +141,7 @@ class DrawerMenuWidgetsTest {
                     hasSeenShopIntro = true,
                     onBeforeNavigate = {},
                     showWidgets = false,
+                    profileIdentityExists = flowOf(false),
                     onOpenWidgetsHome = { error("Should not request home widgets page") },
                     onOpenWidgetsSheet = { openWidgetsSheet.value = true },
                 )
@@ -177,6 +181,7 @@ class DrawerMenuWidgetsTest {
                     hasSeenShopIntro = true,
                     onBeforeNavigate = {},
                     showWidgets = true,
+                    profileIdentityExists = flowOf(true),
                     isPaykitEnabled = true,
                 )
             }
@@ -201,6 +206,7 @@ class DrawerMenuWidgetsTest {
                     hasSeenShopIntro = true,
                     onBeforeNavigate = {},
                     showWidgets = true,
+                    profileIdentityExists = flowOf(true),
                     isPaykitEnabled = false,
                 )
             }

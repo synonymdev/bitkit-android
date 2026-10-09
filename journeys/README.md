@@ -127,7 +127,7 @@ journey PR, which is what made this file conflict on every merge.
 | A hardware wallet to pair, watch and sign with | the deterministic Trezor emulator from `bitkit-docker` over the Bridge transport, with the USB attach intent injected by `adb`; USB enumeration, permission grants, the OS picker and BLE are not simulated — [hardware-wallet](hardware-wallet/README.md) |
 | Push notifications to a backgrounded or killed app | an FCM push from a CJIT order paid through `./lsp`, read back with `adb shell dumpsys notification` — [cjit-notifications](cjit-notifications/README.md) |
 | The OS notification-permission dialog | an API 33+ target, reset with `adb shell pm revoke to.bitkit.dev android.permission.POST_NOTIFICATIONS` — [notification-permission](notification-permission/README.md) |
-| An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked on receiver path `bitkit/server` — [payment-requests](payment-requests/README.md) |
+| An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked as identities — [payment-requests](payment-requests/README.md) |
 | Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
 | A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
 | LNURL pay, withdraw, channel and auth, and Lightning Addresses | the `bitkit-docker` `lnurl-server` on local regtest, with the app started by `just run docker`, which builds with `E2E=true` and forwards its ports over `adb reverse`; it issues memo invoices, so a check that needs a description-hash invoice needs another endpoint — [lnurl](lnurl) |
@@ -152,7 +152,11 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
-| `payment-requests/requested-resolution-failure.xml` | not ported |
+| `coin-selection/manual-wallet-switch.xml` | same file, journey name and actions; iOS can open the picker on the wallet switch, Android on the next swipe. The iOS picker has no accessibility identifiers, so assert its visible "Coin Selection" title. |
+| `payment-requests/requested-resolution-failure.xml` | same file and journey name; both platforms keep the preparing confirmation open across retries and stop automatic retries when it closes. Native progress and request-row identifiers differ. Android's subscription-reminder preparation has no intermediate Send sheet; see `paykit-clock-changes.md`. |
+| `payment-requests/request-summary.xml` | same file and journey name; Android additionally checks the open Sent receipt's live lifecycle subtitle after payment. iOS keeps a static note/date receipt without that subtitle, so those checks are not ported. |
+| `payment-requests/success-dismissal.xml` | same file, journey name and actions; both platforms dismiss successful and unpaid requests without a send error or duplicate payment. |
+| No matching intermediate return route | `amount-limits/custom-fee-wallet-switch.xml` is iOS-only: Custom returns through the fee picker before confirmation. Android's `setTransactionSpeed` returns directly to confirmation. |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
@@ -215,6 +219,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
 | Payment Request detail screen | `PaymentRequestDetailsScreen` | `PaymentRequestDetailScreen` |
+| Hardware wallet receive tab | `Tab-hardware` | `Tab-trezor` for a Trezor wallet, `Tab-jade` for a Jade |
 | Pubky Ring choice row | `PubkyChoiceIdentity` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRing_<pubky>` |
 | Pubky Ring choice row lookup spinner | `PubkyChoiceIdentityLookup` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRingLookup_<pubky>` |
 | Contact import overview profile and friend count | — *(no tag; the "Import" title and the "N friends" text)* | `ContactImportOverviewProfile`, `ContactImportOverviewSummary` |

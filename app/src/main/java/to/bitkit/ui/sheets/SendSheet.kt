@@ -24,10 +24,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
@@ -38,21 +44,25 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
-import to.bitkit.ui.screens.wallets.send.HARDWARE_SIGN_CANCELLED_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.HwSendSignScreen
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
+import to.bitkit.ui.screens.wallets.send.SEND_CONFIRM_RESET_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.SendAddressScreen
 import to.bitkit.ui.screens.wallets.send.SendAmountScreen
 import to.bitkit.ui.screens.wallets.send.SendCoinSelectionScreen
+import to.bitkit.ui.screens.wallets.send.SendConfirmContent
 import to.bitkit.ui.screens.wallets.send.SendConfirmScreen
 import to.bitkit.ui.screens.wallets.send.SendContactSelectScreen
 import to.bitkit.ui.screens.wallets.send.SendContactSelectViewModel
@@ -80,8 +90,17 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.time.Duration.Companion.seconds
 
 private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
+
+/** A peer reconnecting makes a channel usable again without any node event, so the overlay polls. */
+private val CHANNELS_REFRESH_INTERVAL = 1.seconds
+
+internal fun NavController.navigateToCoinSelection() {
+    currentBackStackEntry?.savedStateHandle?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
+    navigateTo(SendRoute.CoinSelection)
+}
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -91,19 +110,34 @@ fun SendSheet(
     hwSendViewModel: HwSendViewModel,
     startDestination: SendRoute = SendRoute.Recipient,
     hardwareWalletId: String? = null,
+    preparingRequest: PaykitPaymentRequest? = null,
 ) {
     val context = LocalContext.current
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
     val isOffline by remember { derivedStateOf { connectivityState != ConnectivityState.CONNECTED } }
     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+    val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     var routingCacheResetAttempted by rememberSaveable(startDestination) { mutableStateOf(false) }
 
     val shouldShowSyncOverlay = run {
+        if (preparingRequest != null) return@run false
         if (sendUiState.hardwareWalletId != null) return@run false
         if (!lightningState.nodeLifecycleState.isRunning()) return@run true
         val hasAnyChannels = lightningState.channels.isNotEmpty()
         hasAnyChannels && lightningState.channels.none { it.isUsable }
+    }
+
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val isWaitingForUsableChannel = shouldShowSyncOverlay && lightningState.nodeLifecycleState.isRunning()
+    LaunchedEffect(isWaitingForUsableChannel) {
+        if (!isWaitingForUsableChannel) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                walletViewModel.refreshChannelsAndPeers()
+                delay(CHANNELS_REFRESH_INTERVAL)
+            }
+        }
     }
 
     LaunchedEffect(startDestination) {
@@ -126,6 +160,14 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
+            LaunchedEffect(hwSendViewModel, sendUiState.resolvedHardwarePaymentTxId) {
+                val transactionId = sendUiState.resolvedHardwarePaymentTxId ?: return@LaunchedEffect
+                val walletId = sendUiState.hardwareWalletId ?: return@LaunchedEffect
+                val requestId = sendUiState.incomingPaymentRequestId ?: return@LaunchedEffect
+                if (!hwSendViewModel.resolveBroadcast(walletId, requestId, transactionId)) {
+                    appViewModel.acknowledgeHardwarePaymentResolution(transactionId)
+                }
+            }
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
                     appViewModel.completeHardwareContactPayment(result.txId)
@@ -153,7 +195,7 @@ fun SendSheet(
                         is SendEffect.NavigateToAmount -> navController.navigateTo(SendRoute.Amount)
                         is SendEffect.NavigateToAddress -> navController.navigateTo(SendRoute.Address)
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
-                        is SendEffect.NavigateToCoinSelection -> navController.navigateTo(SendRoute.CoinSelection)
+                        is SendEffect.NavigateToCoinSelection -> navController.navigateToCoinSelection()
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
                         is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
@@ -281,6 +323,20 @@ fun SendSheet(
                     }
                 }
                 composableWithDefaultTransitions<SendRoute.Confirm> {
+                    if (preparingRequest != null) {
+                        SendConfirmContent(
+                            uiState = SendUiState(),
+                            isNodeRunning = false,
+                            isLoading = false,
+                            showBiometrics = false,
+                            preparingRequest = preparingRequest,
+                            preparingContact = contacts.firstOrNull {
+                                PubkyPublicKeyFormat.matches(it.publicKey, preparingRequest.counterparty)
+                            } ?: PubkyProfile.placeholder(preparingRequest.counterparty),
+                            canGoBack = false,
+                        )
+                        return@composableWithDefaultTransitions
+                    }
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
 
@@ -321,10 +377,14 @@ fun SendSheet(
                         viewModel = hwSendViewModel,
                         prepareContactPayment = appViewModel::prepareHardwareContactPayment,
                         authorizeContactPayment = appViewModel::authorizeHardwareContactPayment,
+                        onPaymentDeadlineExpired = appViewModel::onHardwarePaymentDeadlineExpired,
+                        onPaymentSubmissionChange = appViewModel::onHardwarePaymentSubmissionChanged,
+                        onBroadcastAttemptChange = appViewModel::onHardwareBroadcastAttemptChanged,
+                        paymentDeadlineAt = appViewModel.hardwarePaymentDeadlineAt,
                         onBack = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle
-                                ?.set(HARDWARE_SIGN_CANCELLED_RESULT_KEY, true)
+                                ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
                             appViewModel.onHardwareSignCancelled()
                             if (!navController.popBackStack()) appViewModel.hideSheet()
                         },
@@ -572,7 +632,7 @@ fun SendSheet(
         }
 
         AnimatedVisibility(
-            visible = isOffline,
+            visible = isOffline && preparingRequest == null,
             enter = fadeIn(),
             exit = fadeOut(),
         ) {

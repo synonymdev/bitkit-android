@@ -7,7 +7,8 @@
     Deletion needs its own subscription rather than the one just cancelled: the creator's Delete button
     is gated on the subscription still being proposed or active, so a cancellation reaching the creator
     removes it. A proposal with no paid periods also leaves CREATED once deleted, whereas one that has
-    taken a payment stays there to retain its history.
+    taken a payment stays there to retain its history, and once canceled keeps its place until the paid
+    period ends, then moves to EXPIRED.
   </description>
   <actions>
     <action>Launch the E2E Bitkit app with an active subscription the payer accepted, per review-and-subscribe.xml</action>
@@ -17,9 +18,11 @@
     <action>Tap Cancel</action>
     <action>Verify the sheet title reads "Cancel Subscription", the cross illustration is shown, and the swipe control reads "Swipe To Cancel"</action>
     <action>Swipe the confirm control to the end</action>
-    <action>Verify the sheet dismisses and "Journey Sub" leaves the ACTIVE section</action>
+    <action>Verify the sheet dismisses and the "Journey Sub" detail shows STATUS "Active", the timing cell "EXPIRES" with the end date of the paid period, and the footer shows More Info without Cancel</action>
+    <action>Navigate back and verify the Subscriptions list shows "Journey Sub" in the ACTIVE section with "Expires" and the end date of the paid period as its subtitle</action>
+    <action>Tap the "Journey Sub" row and verify its detail opens again</action>
     <action>Switch to the creator instance and open Subscriptions</action>
-    <action>Verify "Journey Sub" is still listed under CREATED, because its paid periods are retained as history</action>
+    <action>Verify "Journey Sub" is still listed under CREATED with "Expires" and the end date of the paid period as its subtitle, because its paid periods are retained as history until that period ends, when it moves to EXPIRED</action>
     <action>Tap the pending "Journey Sub Two" row in the CREATED section</action>
     <action>Verify the detail shows SUBSCRIBERS and PAYMENTS cells, that PAYMENTS uses the coins icon, and that the footer Delete button carries the trash icon</action>
     <action>Tap Delete</action>

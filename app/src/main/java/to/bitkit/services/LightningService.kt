@@ -37,6 +37,7 @@ import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OnchainWalletAccount
 import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
@@ -81,8 +82,10 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
@@ -114,6 +117,13 @@ internal fun enabledOnchainWalletAccountConfigs(
         )
     }
 
+internal fun LdkAddressType.toBitkitAddressType(): AddressType = when (this) {
+    LdkAddressType.LEGACY -> AddressType.P2PKH
+    LdkAddressType.NESTED_SEGWIT -> AddressType.P2SH
+    LdkAddressType.NATIVE_SEGWIT -> AddressType.P2WPKH
+    LdkAddressType.TAPROOT -> AddressType.P2TR
+}
+
 private fun accountKey(addressType: LdkAddressType, accountIndex: UInt): String =
     "${addressType.name}:$accountIndex"
 
@@ -134,6 +144,7 @@ class LightningService internal constructor(
     private val loggerLdk: LoggerLdk,
     private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
     private val ldkQueue: CoroutineContext,
+    private val clock: Clock = Clock.System,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
@@ -179,6 +190,7 @@ class LightningService internal constructor(
         watchOnlyAccountStore: WatchOnlyAccountStore,
         loggerLdk: LoggerLdk,
         watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
+        clock: Clock = Clock.System,
     ) : this(
         bgDispatcher = bgDispatcher,
         ioDispatcher = ioDispatcher,
@@ -189,6 +201,7 @@ class LightningService internal constructor(
         loggerLdk = loggerLdk,
         watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
         ldkQueue = ServiceQueue.LDK.queueContext,
+        clock = clock,
     )
 
     @Volatile
@@ -679,20 +692,27 @@ class LightningService internal constructor(
         isChange: Boolean,
         startIndex: Int,
         count: Int,
+        accountIndex: UInt = 0u,
     ): List<AddressDerivationInfo> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         val keychain = if (isChange) KeychainKind.INTERNAL else KeychainKind.EXTERNAL
 
         return ServiceQueue.LDK.background(ldkQueue) {
             node.onchainPayment()
-                .addressInfosForType(
+                .addressInfosForAccount(
                     addressType.toLdkAddressType(),
+                    accountIndex,
                     keychain,
                     startIndex.toUInt(),
                     count.toUInt(),
                 )
                 .map { AddressDerivationInfo(address = it.address, index = it.index.toInt()) }
         }
+    }
+
+    suspend fun listOnchainWalletAccounts(): List<OnchainWalletAccount> = ServiceQueue.LDK.background(ldkQueue) {
+        val n = node ?: throw ServiceError.NodeNotSetup()
+        n.listOnchainWalletAccounts()
     }
 
     suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType) {
@@ -940,6 +960,7 @@ class LightningService internal constructor(
         satsPerVByte: ULong,
         utxosToSpend: List<SpendableUtxo>? = null,
         isMaxAmount: Boolean = false,
+        paymentDeadlineAt: Instant? = null,
     ): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -949,6 +970,7 @@ class LightningService internal constructor(
         )
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            ensurePaymentDeadline(paymentDeadlineAt)
             if (isMaxAmount) {
                 node.onchainPayment().sendAllToAddress(
                     address = address,
@@ -966,7 +988,7 @@ class LightningService internal constructor(
         }
     }
 
-    suspend fun send(bolt11: String, sats: ULong? = null): PaymentId {
+    suspend fun send(bolt11: String, sats: ULong? = null, paymentDeadlineAt: Instant? = null): PaymentId {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.debug("Paying bolt11: $bolt11", context = TAG)
@@ -975,6 +997,7 @@ class LightningService internal constructor(
             .getOrElse { throw LdkError(it as NodeException) }
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            ensurePaymentDeadline(paymentDeadlineAt)
             runCatching {
                 when (sats != null) {
                     true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, null)
@@ -984,6 +1007,12 @@ class LightningService internal constructor(
         }.onFailure {
             loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
         }.getOrThrow()
+    }
+
+    private fun ensurePaymentDeadline(paymentDeadlineAt: Instant?) {
+        if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+            throw ServiceError.PaymentDeadlineExpired()
+        }
     }
 
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
@@ -1328,13 +1357,6 @@ class LightningService internal constructor(
     suspend fun listMonitoredAddressTypes(): List<AddressType> = ServiceQueue.LDK.background(ldkQueue) {
         val n = node ?: throw ServiceError.NodeNotSetup()
         n.listMonitoredAddressTypes().map { it.toBitkitAddressType() }
-    }
-
-    private fun LdkAddressType.toBitkitAddressType(): AddressType = when (this) {
-        LdkAddressType.LEGACY -> AddressType.P2PKH
-        LdkAddressType.NESTED_SEGWIT -> AddressType.P2SH
-        LdkAddressType.NATIVE_SEGWIT -> AddressType.P2WPKH
-        LdkAddressType.TAPROOT -> AddressType.P2TR
     }
 
     private fun AddressType.toLdkAddressType(): LdkAddressType = when (this) {

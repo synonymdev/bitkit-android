@@ -1,10 +1,11 @@
 package to.bitkit.services
 
 import com.synonym.bitkitcore.approvePubkyAuth
-import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitPublicKeys
+import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkySessionBootstrapResult
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +32,10 @@ class PubkyService @Inject constructor(
 
     suspend fun initialize() = ServiceQueue.CORE.background {
         paykitSdkService.initialize()
+    }
+
+    suspend fun initializeAndImportSession(secret: String): Result<String> = ServiceQueue.CORE.background {
+        paykitSdkService.initializeAndImportSession(secret).map { it.publicKey }
     }
 
     suspend fun republishIdentityIfNeeded(publicKey: String? = null) =
@@ -63,11 +68,11 @@ class PubkyService @Inject constructor(
             val report = paykitSdkService.syncPublicEndpoints(emptyList())
             if (report.failed.isNotEmpty()) throw AppError("Failed to remove Paykit payment endpoints")
         }.exceptionOrNull()
-        val markerError = runSuspendCatching {
-            paykitSdkService.syncLocalReceiverMarker(isDiscoverable = false)
+        val appError = runSuspendCatching {
+            paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false)
         }.exceptionOrNull()
-        val cleanupError = endpointError ?: markerError
-        if (endpointError != null && markerError != null) endpointError.addSuppressed(markerError)
+        val cleanupError = endpointError ?: appError
+        if (endpointError != null && appError != null) endpointError.addSuppressed(appError)
         cleanupError?.let { throw it }
     }
 
@@ -200,18 +205,37 @@ class PubkyService @Inject constructor(
         paykitSdkService.contactRecords()
     }
 
+    @Suppress("LongParameterList")
     suspend fun saveContact(
         publicKey: String,
         label: String?,
-        receiverPaths: List<String>? = null,
         restorePrivateConnection: Boolean = false,
         expectedIdentity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
     ): ContactRecord = ServiceQueue.CORE.background {
-        paykitSdkService.saveContact(publicKey, label, receiverPaths, restorePrivateConnection, expectedIdentity)
+        paykitSdkService.saveContact(
+            publicKey,
+            label,
+            restorePrivateConnection,
+            expectedIdentity,
+            isStillCurrent,
+        )
+    }
+
+    suspend fun saveContacts(
+        updates: List<ContactUpdate>,
+        expectedIdentity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
+    ): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.saveContacts(updates, expectedIdentity, isStillCurrent)
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.CORE.background {
         paykitSdkService.removeContact(publicKey)
+    }
+
+    suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.removeContacts(publicKeys)
     }
 
     suspend fun resolveContactProfile(
@@ -219,17 +243,9 @@ class PubkyService @Inject constructor(
         allowPubkyProfileFallback: Boolean,
         lane: PaykitReadLane = PaykitReadLane.Interactive,
         timeout: Duration? = null,
-    ): ContactProfileResolution? = cancellablePublicRead {
+    ): ProfileResolution? = cancellablePublicRead {
         paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback, lane, timeout)
     }
-
-    suspend fun discoverRelevantReceiverPaths(
-        publicKey: String,
-        lane: PaykitReadLane = PaykitReadLane.Interactive,
-    ): List<String> = cancellablePublicRead {
-        paykitSdkService.discoverRelevantReceiverPaths(publicKey, lane)
-    }
-
     // endregion
 
     private suspend fun <T> cancellablePublicRead(block: suspend CoroutineScope.() -> T): T =

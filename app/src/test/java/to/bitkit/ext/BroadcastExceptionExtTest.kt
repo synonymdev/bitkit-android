@@ -30,4 +30,20 @@ class BroadcastExceptionExtTest {
 
         assertFalse(error.isBroadcastConnectivityFailure())
     }
+
+    @Test
+    fun `only invalid raw transactions are definite broadcast failures`() {
+        val invalidTransactions = listOf(
+            BroadcastException.InvalidHex("bad hex"),
+            BroadcastException.InvalidTransaction("bad tx"),
+        )
+        for (error in invalidTransactions) {
+            assertTrue(AppError(error).isDefiniteHardwarePreBroadcastFailure())
+        }
+        assertFalse(
+            BroadcastException.ElectrumException("Broadcast failed: disconnected")
+                .isDefiniteHardwarePreBroadcastFailure()
+        )
+        assertFalse(AppError("unknown result").isDefiniteHardwarePreBroadcastFailure())
+    }
 }
