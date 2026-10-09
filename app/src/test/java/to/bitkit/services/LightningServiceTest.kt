@@ -190,6 +190,30 @@ class LightningServiceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initial fixed send accepts confirmed preset above recovery fee ceiling`() = test {
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1_000uL)
+        assertEquals(OnchainSendOutcome.Accepted(txid), prepared.broadcast())
+        verify(native).broadcast()
+    }
+
+    @Test
+    fun `initial Max send accepts confirmed preset above recovery fee ceiling`() = test {
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendAllToAddress("address", true, sendFeeRate)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1_000uL, isMaxAmount = true)
+        assertEquals(OnchainSendOutcome.Accepted(txid), prepared.broadcast())
+        verify(native).broadcast()
+    }
+
+    @Test
     fun `onchain send refuses a different wallet before invoking native payment`() = test {
         assertFailsWith<ServiceError.NodeNotSetup> {
             sut.prepareOnchainSend("bcrt1qrecipient", 1_000uL, 1uL, walletIndex = 9)

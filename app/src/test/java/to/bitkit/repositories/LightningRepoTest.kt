@@ -1712,6 +1712,69 @@ class LightningRepoTest : BaseUnitTest() {
         }
     }
 
+    @Test
+    fun `pre-marker failure is not dispatched after exact unsent guard cleanup`() = test {
+        val txid = "ab".repeat(32)
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer {
+            saved = null
+            Unit
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher,
+            lightningService = lightningService,
+            settingsStore = settingsStore,
+            coreService = coreService,
+            lspNotificationsService = lspNotificationsService,
+            firebaseMessaging = firebaseMessaging,
+            keychain = keychain,
+            lnurlService = lnurlService,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store,
+            connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        whenever(coreService.activity).thenReturn(mock())
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        val prepared = PreparedOnchainSend(
+            OnchainPreparedReceipt(txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
+        ) { throw to.bitkit.utils.ServiceError.NodeNotSetup() }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+        startNodeForTesting()
+        val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+        val error = repo.sendOnChain("address", 1_000uL).exceptionOrNull()
+        assertNull(store.current())
+        assertIs<OnchainSendNotDispatchedError>(error)
+    }
+
+    @Test
+    fun `accepted Max result carries recorded prepared recipient amount`() = test {
+        val original = pendingSendAttempt().copy(isMaxAmount = true)
+        val repo = prepareGuardedSend(original)
+        val txid = "ab".repeat(32)
+        val prepared = PreparedOnchainSend(
+            OnchainPreparedReceipt(txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 900uL),
+        ) { beforeDispatch ->
+            beforeDispatch()
+            OnchainSendOutcome.Accepted(txid)
+        }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(original.copy(amountSats = 900uL, evidence = OnchainSendEvidence.Accepted, txid = txid))
+        val result = repo.sendOnChain("address", 1_000uL, isMaxAmount = true).getOrThrow()
+        assertEquals(OnchainSendOutcome.Accepted(txid, 900uL), result)
+    }
+
     private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
         OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
     ) { it(); outcome }

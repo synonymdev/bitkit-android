@@ -9846,6 +9846,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `send-all Success uses accepted prepared recipient amount`() = test {
+        val address = "bcrt1qmaxrecipient"
+        val txid = "ab".repeat(32)
+        balanceState.value = BalanceState(maxSendOnchainSats = 1_000uL)
+        stubOnchainSend(address, 1_000uL, Result.success(OnchainSendOutcome.Accepted(txid, 900uL)))
+        setSendState(SendUiState(address = address, amount = 1_000uL, payMethod = SendMethod.ONCHAIN))
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            awaitItem()
+        }
+        assertEquals(txid, sut.successSendUiState.value.paymentHashOrTxId)
+        assertEquals(900L, sut.successSendUiState.value.sats)
+    }
+
+    @Test
     fun `generic outer error after ordinary send remains unresolved`() = test {
         val address = "bcrt1qoutererror"
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)

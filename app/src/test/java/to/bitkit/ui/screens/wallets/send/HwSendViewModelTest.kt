@@ -43,6 +43,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.RetainedHardwareOnchainPayment
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
@@ -1157,6 +1158,110 @@ class HwSendViewModelTest : BaseUnitTest() {
             fixture.broadcast.txId, ADDRESS, AMOUNT_SATS, fixture.broadcast.miningFeeSats,
             fixture.broadcast.feeRate, false, null, WALLET_ID,
         )
+    }
+
+    @Test
+    fun `refused Shop payment stays dismissable after its deadline`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+            paymentDeadlineAt = deadline,
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
+            .thenReturn(Result.failure(BroadcastException.InvalidTransaction("bad-txns-inputs-missingorspent")))
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        now = deadline + 1.seconds
+        var expiredAttempted: Boolean? = null
+        sut.signAndBroadcast(original, onPaymentDeadlineExpired = { expiredAttempted = it })
+        advanceUntilIdle()
+        assertEquals(true, expiredAttempted)
+        assertTrue(sut.uiState.value.canLeave)
+        sut.cancel()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx, deadline)
+    }
+
+    @Test
+    fun `retained Shop payment retries original bytes after display fee changes`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.InvalidTransaction("bad-txns-inputs-missingorspent")))
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        sut.cancel()
+        advanceUntilIdle()
+        sut.signAndBroadcast(original.copy(satsPerVByte = SATS_PER_VBYTE + 1uL))
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `restored refused Shop receipt remains dismissable after expiry without sending`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+            paymentDeadlineAt = now - 1.seconds,
+        )
+        whenever(
+            proofRepo.retainedHardwareOnchainPayment(
+                requireNotNull(original.paymentRequestId),
+                WALLET_ID,
+                original.paymentIdentity,
+                original.address,
+                original.amountSats,
+            )
+        ).thenReturn(RetainedHardwareOnchainPayment(fixture.signedTx, true, true))
+        var attempted: Boolean? = null
+        sut.signAndBroadcast(original, onPaymentDeadlineExpired = { attempted = it })
+        advanceUntilIdle()
+        assertEquals(true, attempted)
+        assertTrue(sut.uiState.value.canLeave)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+    }
+
+    @Test
+    fun `fresh unknown retry after refusal re-arms navigation protection`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+            paymentDeadlineAt = now + 1.seconds,
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, original.paymentDeadlineAt)).thenReturn(
+            Result.failure(BroadcastException.InvalidTransaction("invalid transaction")),
+            Result.failure(BroadcastException.ElectrumException("response lost after dispatch")),
+        )
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.canLeave)
+        now += 2.seconds
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.canLeave)
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx, original.paymentDeadlineAt)
     }
 
     private fun signedFixtureHex() = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))

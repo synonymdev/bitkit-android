@@ -1714,6 +1714,73 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    @Suppress("LongMethod") // One lifecycle proves persisted refusal, reopen, guard retention and redispatch.
+    fun `hardware refusal navigation hint survives reopen and clears on dispatch`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val walletId = "original-hardware-wallet"
+        val raw = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
+            .bufferedReader().readText().trim()
+        val signed = HwFundingSignedTx(raw, 141uL, 2uL, request.amountSats + 141uL)
+        val txid = SignedTransactionId.fromHex(raw)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId, signedTx = signed).getOrThrow()
+        assertTrue(
+            repo.markHardwareOnchainDispatch(
+                request.id,
+                walletId,
+                txid,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+            )
+        )
+        assertFalse(
+            repo.markHardwareRefusedForNavigation(
+                request.id,
+                walletId,
+                txid,
+                COUNTERPARTY,
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+            )
+        )
+        assertTrue(
+            repo.markHardwareRefusedForNavigation(
+                request.id,
+                walletId,
+                txid,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+            )
+        )
+        val reopened = paymentProofRepo()
+        val restored = reopened.retainedHardwareOnchainPayment(
+            request.id,
+            walletId,
+            LOCAL_IDENTITY,
+            ONCHAIN_ADDRESS,
+            request.amountSats,
+        )
+        assertEquals(RetainedHardwareOnchainPayment(signed, true, true), restored)
+        assertFalse(reopened.failHardwareOnchainPaymentBeforeDispatch(request, walletId, LOCAL_IDENTITY, true))
+        assertTrue(
+            reopened.markHardwareOnchainDispatch(
+                request.id,
+                walletId,
+                txid,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+            )
+        )
+        assertFalse(storedProofs.single().hardwareRefusedForNavigation)
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        assertFalse(storedProofs.single().onchainAcceptanceVerified)
+    }
+
+    @Test
     fun `prebroadcast hardware candidate survives repository reopen without claiming acceptance`() = test {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val walletId = "original-hardware-wallet"

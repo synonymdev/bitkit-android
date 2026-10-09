@@ -77,4 +77,36 @@ class BroadcastExceptionExtTest {
         }
         assertFalse(AppError("unknown result").isHardwareBroadcastRefusalForNavigation())
     }
+
+    @Test
+    fun `wrapped Electrum server refusals allow navigation`() {
+        val messages = listOf(
+            "the transaction was rejected by network rules.\n\nmin relay fee not met, 100 < 110",
+            "sendrawtransaction RPC error: {\"code\":-26,\"message\":\"bad-txns-inputs-missingorspent\"}",
+            "mempool min fee not met, 110 < 300",
+        )
+        for (message in messages) {
+            val payload = kotlinx.serialization.json.buildJsonObject {
+                put("code", kotlinx.serialization.json.JsonPrimitive(1))
+                put("message", kotlinx.serialization.json.JsonPrimitive(message))
+            }
+            val error = BroadcastException.ElectrumException("Broadcast failed: Electrum server error: $payload")
+            assertTrue(error.isHardwareBroadcastRefusalForNavigation())
+            assertFalse(error.isDefiniteHardwarePreBroadcastFailure())
+        }
+    }
+
+    @Test
+    fun `malformed unknown and incidental Electrum messages stay guarded`() {
+        val payloads = listOf(
+            "Broadcast failed: Electrum server error: {invalid JSON min relay fee not met}",
+            "Broadcast failed: Electrum server error: {\"message\":\"disconnected\"}",
+            "Broadcast failed: Electrum server error: {\"message\":\"unknown refusal\"}",
+            "Broadcast failed: Electrum server error: {\"message\":{},\"reason\":\"min relay fee not met\"}",
+            "Broadcast failed: Electrum server error: {\"message\":\"non-finalized response lost\"}",
+        )
+        for (payload in payloads) {
+            assertFalse(BroadcastException.ElectrumException(payload).isHardwareBroadcastRefusalForNavigation())
+        }
+    }
 }

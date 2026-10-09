@@ -4585,7 +4585,7 @@ class AppViewModel @Inject constructor(
                             type = NewTransactionSheetType.ONCHAIN,
                             direction = NewTransactionSheetDirection.SENT,
                             paymentHashOrTxId = outcome.txid,
-                            sats = amount.toLong(),
+                            sats = (outcome.amountSats ?: amount).toLong(),
                             isLoadingDetails = true,
                         )
                     )

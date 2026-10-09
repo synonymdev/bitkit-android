@@ -1613,12 +1613,18 @@ class LightningRepo @Inject constructor(
             return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(it))
         }
         var outcomePersisted = true
+        var dispatchStarted = false
         val outcome = runSuspendCatching {
             onchainSendAttemptStore.broadcastPreparedCandidate(
                 attempt.attemptId,
                 attempt.walletIndex,
                 prepared.receipt.txid,
-                prepared::broadcast,
+                broadcast = { beforeDispatch ->
+                    prepared.broadcast {
+                        beforeDispatch()
+                        dispatchStarted = true
+                    }
+                },
             )
         }.getOrElse { error ->
             if (error is OnchainSendNotDispatchedError) {
@@ -1627,12 +1633,19 @@ class LightningRepo @Inject constructor(
                 }.onFailure { Logger.warn("Failed to clear expired preparation", it, context = TAG) }
                 return@executeWhenNodeRunning Result.failure(error)
             }
-            val winner = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull()
+            val winnerResult = runSuspendCatching { onchainSendAttemptStore.current() }
+            val winner = winnerResult.getOrNull()
+            val releasedWithoutDispatch = !dispatchStarted && winnerResult.isSuccess && winner == null
             if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
                 winner.hasPositiveEvidence
             ) {
                 outcomePersisted = false
                 OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
+            } else if (releasedWithoutDispatch &&
+                lightningService.currentWalletIndex == attempt.walletIndex
+            ) {
+                // current() released the exact local preparation whose dispatch marker was never written.
+                return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(error))
             } else {
                 return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
             }
@@ -1677,7 +1690,7 @@ class LightningRepo @Inject constructor(
         }
         runSuspendCatching { syncState() }
             .onFailure { Logger.warn("Failed to sync after accepted on-chain send", it, context = TAG) }
-        Result.success(winningOutcome)
+        Result.success(winningOutcome.copy(amountSats = recorded.amountSats.takeIf { recorded.isMaxAmount }))
     }
 
     private val recoveryCoordinator by lazy {

@@ -31,7 +31,7 @@ import kotlin.time.ExperimentalTime
 sealed interface OnchainSendOutcome {
     val txid: String
 
-    data class Accepted(override val txid: String) : OnchainSendOutcome
+    data class Accepted(override val txid: String, val amountSats: ULong? = null) : OnchainSendOutcome
     data class Rejected(override val txid: String, val reason: String) : OnchainSendOutcome
     data class Unknown(override val txid: String) : OnchainSendOutcome
 }

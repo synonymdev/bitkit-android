@@ -66,6 +66,7 @@ enum class PaykitPaymentProofKind(val type: String) {
 data class RetainedHardwareOnchainPayment(
     val signedTx: HwFundingSignedTx,
     val hasAttemptedBroadcast: Boolean,
+    val isRefusedForNavigation: Boolean = false,
 )
 
 @Serializable
@@ -86,6 +87,8 @@ data class PendingPaykitPaymentProof(
     val onchainAcceptanceVerified: Boolean = false,
     val hardwareDispatchDenied: Boolean = false,
     val hardwareDispatchAttempted: Boolean? = null,
+    // Local navigation hint only; wallet backup restore deliberately defaults to conservative navigation.
+    val hardwareRefusedForNavigation: Boolean = false,
     val hardwareSignedTransaction: String? = null,
     val hardwareMiningFeeSats: ULong? = null,
     val hardwareFeeRate: ULong? = null,
@@ -602,7 +605,41 @@ class PaykitPaymentProofRepo @Inject constructor(
                     it.onchainAddress == address && it.onchainAmountSats == amountSats &&
                     it.retainedSignedHardwareReceipt() != null
             } ?: return@withLock false
-            persist(proofs.map { if (it == original) it.copy(hardwareDispatchAttempted = true) else it })
+            persist(
+                proofs.map {
+                    if (it == original) {
+                        it.copy(hardwareDispatchAttempted = true, hardwareRefusedForNavigation = false)
+                    } else {
+                        it
+                    }
+                }
+            )
+            true
+        }
+    }
+
+    // All captured payment fields are required to keep this hint bound to the original signed receipt.
+    @Suppress("LongParameterList", "CyclomaticComplexMethod")
+    suspend fun markHardwareRefusedForNavigation(
+        requestId: PaykitPaymentRequestId,
+        walletId: String,
+        txid: String,
+        identity: String?,
+        address: String,
+        amountSats: ULong,
+    ): Boolean = withContext(ioDispatcher) {
+        operationMutex.withLock {
+            if (!PubkyPublicKeyFormat.matches(currentIdentity(), identity)) return@withLock false
+            val proofs = loadProofs()
+            val original = proofs.singleOrNull {
+                PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == requestId &&
+                    it.onchainWalletId == walletId && it.kind == PaykitPaymentProofKind.Onchain &&
+                    it.paymentStarted && it.hardwareDispatchAttempted == true &&
+                    !it.hardwareDispatchDenied && !it.onchainAcceptanceVerified && it.proofData == null &&
+                    it.paymentIdentifier.equals(txid, true) && it.onchainAddress == address &&
+                    it.onchainAmountSats == amountSats && it.retainedSignedHardwareReceipt() != null
+            } ?: return@withLock false
+            persist(proofs.map { if (it == original) it.copy(hardwareRefusedForNavigation = true) else it })
             true
         }
     }
@@ -652,7 +689,11 @@ class PaykitPaymentProofRepo @Inject constructor(
                     val error = consumption.exceptionOrNull()
                     if (error != null && error !is PrivatePaykitError.PaymentListAlreadyConsumed) throw error
                 }
-                RetainedHardwareOnchainPayment(it, proof.hardwareDispatchAttempted != false)
+                RetainedHardwareOnchainPayment(
+                    it,
+                    proof.hardwareDispatchAttempted != false,
+                    proof.hardwareRefusedForNavigation,
+                )
             }
         }
     }

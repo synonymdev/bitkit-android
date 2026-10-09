@@ -93,13 +93,23 @@ class HwSendViewModel @Inject constructor(
         onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
     ) {
         if (pendingResult.value != null || _uiState.value.isSigning || signingJob?.isActive == true) return
-        if (pendingBroadcast?.matches(request) == false) return
         signingWalletId = request.walletId
         _uiState.update { it.copy(isSigning = true) }
         val attempt = ++signingAttempt
         signingJob = viewModelScope.launch {
             try {
                 runCatching {
+                    if (pendingBroadcast?.matches(request) == false) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = HwErrorPresenter.userMessage(
+                                context,
+                                PaykitPaymentRequestError.OperationInProgress,
+                            ),
+                        )
+                        return@runCatching
+                    }
                     var pending = pendingBroadcast?.takeIf { it.matches(request) }
                     if (pending == null && request.paymentRequestId != null) {
                         val restored = paykitPaymentProofRepo.retainedHardwareOnchainPayment(
@@ -115,13 +125,15 @@ class HwSendViewModel @Inject constructor(
                                     request,
                                     restored.signedTx,
                                     isPreparedForBroadcast = true,
-                                    hasAttemptedBroadcast = restored.hasAttemptedBroadcast
+                                    hasAttemptedBroadcast = restored.hasAttemptedBroadcast,
+                                    isRefusedForNavigation = restored.isRefusedForNavigation,
                                 )
                             pendingBroadcast = pending
                             _uiState.update {
                                 it.copy(
                                     hasPendingBroadcast = true,
-                                    isBroadcastUnresolved = restored.hasAttemptedBroadcast
+                                    isBroadcastUnresolved =
+                                    restored.hasAttemptedBroadcast && !restored.isRefusedForNavigation,
                                 )
                             }
                         }
@@ -183,12 +195,12 @@ class HwSendViewModel @Inject constructor(
         onPaymentDeadlineExpired: suspend (Boolean) -> Unit,
     ): Boolean {
         if (payment.request.paymentDeadlineAt?.let { clock.now() > it } == true) {
-            _uiState.update { it.copy(isBroadcastUnresolved = payment.hasAttemptedBroadcast) }
+            _uiState.update { it.copy(isBroadcastUnresolved = payment.blocksNavigation) }
             onPaymentDeadlineExpired(payment.hasAttemptedBroadcast)
             return false
         }
         val authorized = authorizeContactPayment(payment.hasAttemptedBroadcast)
-        if (!authorized && payment.hasAttemptedBroadcast &&
+        if (!authorized && payment.blocksNavigation &&
             payment.request.paymentDeadlineAt?.let { clock.now() > it } == true
         ) {
             _uiState.update { it.copy(isBroadcastUnresolved = true) }
@@ -228,7 +240,7 @@ class HwSendViewModel @Inject constructor(
             val request = payment.request
             val requestId = request.paymentRequestId
             if (requestId == null) {
-                pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)
+                pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
                 hwWalletRepo.broadcastFunding(payment.signedTx, request.paymentDeadlineAt)
             } else {
                 hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
@@ -242,7 +254,7 @@ class HwSendViewModel @Inject constructor(
                             request.amountSats,
                         )
                     ) { "Original hardware payment is no longer eligible for dispatch" }
-                    pendingBroadcast = payment.copy(hasAttemptedBroadcast = true)
+                    pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
                 }
             }
         }.getOrElse { error ->
@@ -256,7 +268,7 @@ class HwSendViewModel @Inject constructor(
                 } ?: !payment.hasAttemptedBroadcast
                 val unresolved = payment.hasAttemptedBroadcast || !cleared
                 pendingBroadcast = payment.copy(hasAttemptedBroadcast = unresolved)
-                _uiState.update { it.copy(isBroadcastUnresolved = unresolved) }
+                _uiState.update { it.copy(isBroadcastUnresolved = unresolved && !payment.isRefusedForNavigation) }
                 onPaymentDeadlineExpired(unresolved)
                 return null
             }
@@ -466,9 +478,23 @@ class HwSendViewModel @Inject constructor(
             it.request.paymentRequestId != null && it.hasAttemptedBroadcast
         } == true
         // This changes navigation only: a protocol refusal never releases the durable wallet guard.
-        _uiState.update {
-            it.copy(isBroadcastUnresolved = retainedShopPayment && !error.isHardwareBroadcastRefusalForNavigation())
+        val refused = retainedShopPayment && error.isHardwareBroadcastRefusalForNavigation()
+        pendingBroadcast = pendingBroadcast?.copy(isRefusedForNavigation = refused)
+        if (refused) {
+            val payment = requireNotNull(pendingBroadcast)
+            val request = payment.request
+            runSuspendCatching {
+                paykitPaymentProofRepo.markHardwareRefusedForNavigation(
+                    requireNotNull(request.paymentRequestId),
+                    request.walletId,
+                    SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                    request.paymentIdentity,
+                    request.address,
+                    request.amountSats,
+                )
+            }.onFailure { Logger.warn("Failed to save hardware refusal navigation state", it, context = TAG) }
         }
+        _uiState.update { it.copy(isBroadcastUnresolved = retainedShopPayment && !refused) }
         when {
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
@@ -562,6 +588,11 @@ private data class PendingHwSendBroadcast(
     val signedTx: HwFundingSignedTx,
     val isPreparedForBroadcast: Boolean = false,
     val hasAttemptedBroadcast: Boolean = false,
+    val isRefusedForNavigation: Boolean = false,
 ) {
-    fun matches(request: HwSendRequest): Boolean = this.request == request
+    val blocksNavigation: Boolean get() = hasAttemptedBroadcast && !isRefusedForNavigation
+
+    fun matches(request: HwSendRequest): Boolean = this.request == request ||
+        hasAttemptedBroadcast && this.request.paymentRequestId != null &&
+        this.request.copy(satsPerVByte = request.satsPerVByte) == request
 }

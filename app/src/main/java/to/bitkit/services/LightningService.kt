@@ -71,7 +71,6 @@ import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.repositories.OnchainPreparedReceipt
-import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
@@ -974,7 +973,7 @@ class LightningService internal constructor(
         paymentDeadlineAt: Instant? = null,
     ): PreparedOnchainSend = callOnchainSend {
         ensurePaymentDeadline(paymentDeadlineAt)
-        require(OnchainRecoveryFeeRate.isValid(satsPerVByte))
+        require(satsPerVByte > 0uL && satsPerVByte <= UInt.MAX_VALUE.toULong())
         if (currentWalletIndex != walletIndex) throw ServiceError.NodeNotSetup()
         val originalNode = node ?: throw ServiceError.NodeNotSetup()
         val prepared = if (isMaxAmount) {
