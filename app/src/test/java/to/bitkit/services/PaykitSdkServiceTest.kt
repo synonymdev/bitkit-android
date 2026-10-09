@@ -58,6 +58,7 @@ import org.mockito.kotlin.description
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -206,6 +207,27 @@ class PaykitSdkServiceTest {
         verify(sdk, times(2)).ensureLinkWithPeer(RING_PUBKY, 1u)
         verify(sdk).prepareAndResolvePrivateContactPayment(RING_PUBKY, null, null, 1u)
         verify(sdk).prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null, 1u)
+    }
+
+    @Test
+    fun `private link retries preserve observation and transport failures`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.backupStateRevision()).thenReturn("backup")
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val failures = listOf(
+            PaykitException.Protocol("link_observation_failed", "Invalid link metadata"),
+            PaykitException.Transport("transport_error", "Unavailable homeserver"),
+        )
+
+        for (failure in failures) {
+            doThrow(failure).whenever(sdk).ensureLinkWithPeer(RING_PUBKY, 1u)
+            assertSame(failure, assertFailsWith<PaykitException> { service.ensureLinkWithPeer(RING_PUBKY) })
+        }
+
+        doReturn(LinkedPeerHandshakeReport(RING_PUBKY, LinkedPeerState.LINKED, 1uL, null))
+            .whenever(sdk).ensureLinkWithPeer(RING_PUBKY, 1u)
+        assertEquals(LinkedPeerState.LINKED, service.ensureLinkWithPeer(RING_PUBKY).state)
     }
 
     @Test
@@ -2113,6 +2135,71 @@ class PaykitSdkServiceTest {
         verify(newSdk, never()).saveContactsAndUnblockPeers(any())
         save { true }
         verify(newSdk).saveContactsAndUnblockPeers(any())
+    }
+
+    @Test
+    fun `obsolete contact withdrawal is rejected after queue and preflight waits`() = runTest {
+        for (holdQueue in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val started = CompletableDeferred<Unit>()
+            val resume = CompletableDeferred<Unit>()
+            whenever(sdk.contactRecords()).doSuspendableAnswer {
+                started.complete(Unit)
+                resume.await()
+                emptyList()
+            }
+            whenever(sdk.linkedPeers()).doSuspendableAnswer {
+                if (!holdQueue) {
+                    started.complete(Unit)
+                    resume.await()
+                }
+                listOf(contactPeer(LinkedPeerState.LINKED))
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            var isCurrent = true
+            val read = if (holdQueue) async { service.contactRecords() } else null
+            if (holdQueue) started.await()
+            val cleanup = async {
+                assertFailsWith<ObsoletePaykitContactSync> {
+                    service.clearPrivatePaymentLists(listOf(RING_PUBKY)) { isCurrent }
+                }
+            }
+            runCurrent()
+            started.await()
+            assertFalse(cleanup.isCompleted)
+            isCurrent = false
+            resume.complete(Unit)
+            read?.await()
+            cleanup.await()
+
+            verify(sdk, never()).syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())
+            verify(sdk, never()).ensureLinkWithPeer(any(), any())
+            service.clearPrivatePaymentLists(listOf(RING_PUBKY)) { true }
+            verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())
+        }
+    }
+
+    @Test
+    fun `admitted withdrawal finishes after contact snapshot changes`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val started = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+        whenever(sdk.linkedPeers()).thenReturn(listOf(contactPeer(LinkedPeerState.LINKED)))
+        whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).doSuspendableAnswer {
+            started.complete(Unit)
+            resume.await()
+            report
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        var isCurrent = true
+        val cleanup = async { service.clearPrivatePaymentLists(listOf(RING_PUBKY)) { isCurrent } }
+        started.await()
+        isCurrent = false
+        resume.complete(Unit)
+
+        assertSame(report, cleanup.await())
+        verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())
     }
 
     @Test

@@ -1,5 +1,11 @@
 # Contacts
 
+`link-contact-after-resume.xml` checks saving a new contact, leaving and reopening Bitkit, and
+reaching Request or Pay without re-adding the contact. It is mirrored on iOS and requires two
+disposable, request-capable identities. Record readiness timing separately from a pass/fail result.
+A natural run may finish linking before backgrounding; the controlled pending-operation checks
+below are still needed to verify that pending work resumes.
+
 `delete-newly-saved-contact.xml` checks deletion directly from Contact Saved and adding that
 contact again. It is mirrored on iOS. Deleted contact screens must not remain in Back history.
 
@@ -36,6 +42,18 @@ guidance and leave saved contacts intact.
 
 ## Foreground wait isolation
 
+Hold an unrelated SDK operation after saving the contact itself. Contact Saved must appear without
+waiting for the queued identity lookup; leaving Add Contact must not discard its link retry.
+Switch identity while scheduling is held and verify that no linking starts for the previous sign-in.
+These checks require controlled operation blocking, which the journey runner does not provide.
+
+Save a contact with no Paykit records. After its missing-peer result, the explicit retry must retire
+without recurring SDK reads. A later explicit refresh can try again; pending outbound delivery for
+other peers must continue. Repeat with an existing unlinked peer record whose remote Paykit
+authorization is absent. That stored row alone must not keep the retry running. If the same peer
+has queued outbound work, preserve delivery retries until it drains. Inspecting retry retirement
+requires an instrumented fixture.
+
 Hold an unrelated contact's background preparation in progress, then open a saved, linked contact
 and request or pay it. The selected contact must be eligible for its own lookup before the full
 contact scan finishes. Hold its public capability lookup separately: this public read must not
@@ -47,6 +65,26 @@ selected retry contacts should be sent to or read from in that drain. Repeat dur
 with one withdrawal failing: OFF remains immediate, cleanup remains pending on failure, and no new
 publication starts. Record action-to-result time separately from SDK lock and network waits; these
 fault-injection checks do not establish staging latency or a guaranteed completion deadline.
+
+## Contact synchronization overlap
+
+Hold contact synchronization before private preparation or cleanup, then save a new contact and
+start its explicit link retry. Release synchronization and verify that the contact stays saved,
+its retry retains the original priority deadline, and the older contact list does not withdraw
+its payment endpoints. On Android, hold the startup app-registry refresh; on iOS, hold public
+publication while enabling contact payments and leave Settings to save the contact.
+
+Repeat by removing and re-adding a contact while synchronization's cleanup is queued, then by changing identity.
+Obsolete cleanup must not cancel the new retry or remove its assignments. A deletion that stays
+current must still remove the contact. These checks require controlled operation blocking and
+retry-state inspection, which the standard journey runner does not provide; record timing
+separately from the correctness result.
+
+Repeat enabling contact payments with a pending private withdrawal. Change saved contacts while
+the cleanup flag update is held, release it, and run the removal retry. Sharing must stay enabled,
+the old withdrawal must not run, and current contacts must be prepared without resetting an
+existing explicit retry deadline. On iOS the cleanup flag is updated synchronously; hold the
+following private-preparation call instead.
 
 ## Background preparation
 

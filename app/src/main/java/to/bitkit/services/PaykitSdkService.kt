@@ -835,10 +835,12 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun clearPrivatePaymentLists(
         counterparties: List<String>,
+        isStillCurrent: (() -> Boolean)? = null,
     ): PrivatePaymentListDeliveryReport? {
         if (counterparties.isEmpty()) return null
         isSetup.await()
         return operationLock.withLock {
+            checkPaykitContactSync(isStillCurrent)
             withStateRevisionTracking { handle ->
                 val peers = completeSdkCall { handle.linkedPeers() }
                 val blockedPeers = peers.filter { it.state == LinkedPeerState.BLOCKED }
@@ -854,6 +856,7 @@ class PaykitSdkService @Inject constructor(
                     if (app?.capabilities?.privatePayments == false) return@withStateRevisionTracking null
                 }
                 for (update in updates) {
+                    checkPaykitContactSync(isStillCurrent)
                     if (peers.any {
                             it.state == LinkedPeerState.RECOVERY_REQUIRED &&
                                 PubkyPublicKeyFormat.matches(it.counterparty, update.counterparty)
@@ -866,6 +869,7 @@ class PaykitSdkService @Inject constructor(
                         }
                     }
                 }
+                checkPaykitContactSync(isStillCurrent)
                 completeSdkCall {
                     handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                         updates = updates,
@@ -1714,6 +1718,12 @@ internal class PaykitSdkSessionProvider(
         }
         paykitIdentitySecretKey = key
     }
+}
+
+internal class ObsoletePaykitContactSync : CancellationException("Paykit contact sync is obsolete")
+
+internal fun checkPaykitContactSync(isStillCurrent: (() -> Boolean)?) {
+    if (isStillCurrent?.invoke() == false) throw ObsoletePaykitContactSync()
 }
 
 internal fun clearPubkySessionCredentials(deleteKeychainValue: (String) -> Unit) {
