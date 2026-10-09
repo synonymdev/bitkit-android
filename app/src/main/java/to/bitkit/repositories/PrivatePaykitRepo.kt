@@ -229,20 +229,15 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     suspend fun enableSharingAndPrepareSavedContacts(
-        publicKeys: Collection<String>,
+        savedPublicKeys: () -> Collection<String>,
         isStillCurrent: (() -> Boolean)? = null,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runContactSync {
             checkPaykitContactSync(isStillCurrent)
-            val wasCleanupPending = isContactSharingCleanupPending()
-            checkPaykitContactSync(isStillCurrent)
             updateContactSharingCleanupPending(false, isStillCurrent)
             checkPaykitContactSync(isStillCurrent)
-            scheduleSavedContactPreparation(publicKeys, isStillCurrent).onFailure {
-                if (wasCleanupPending) {
-                    runSuspendCatching { updateContactSharingCleanupPending(true) }.onFailure(it::addSuppressed)
-                }
-            }.getOrThrow()
+            val keys = rememberSavedContacts(savedPublicKeys(), replacing = true)
+            scheduleContactPreparation(keys)
         }
     }
 

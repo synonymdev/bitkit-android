@@ -68,6 +68,12 @@ current must still remove the contact. These checks require controlled operation
 retry-state inspection, which the standard journey runner does not provide; record timing
 separately from the correctness result.
 
+Repeat enabling contact payments with a pending private withdrawal. Change saved contacts while
+the cleanup flag update is held, release it, and run the removal retry. Sharing must stay enabled,
+the old withdrawal must not run, and current contacts must be prepared without resetting an
+existing explicit retry deadline. On iOS the cleanup flag is updated synchronously; hold the
+following private-preparation call instead.
+
 ## Background preparation
 
 Sign in from Pubky Ring with a saved, request-capable contact while holding the selected

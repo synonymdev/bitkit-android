@@ -200,10 +200,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         runCurrent()
         advanceTimeBy(12_000)
 
+        sut.enableSharingAndPrepareSavedContacts({ listOf(CONTACT_KEY) }).getOrThrow()
         sut.scheduleSavedContactPreparation(emptyList()) { false }.getOrThrow()
         sut.pruneUnsavedContactState(emptyList()) { false }.getOrThrow()
         sut.removeSavedContacts(listOf(CONTACT_KEY)) { false }.getOrThrow()
-        sut.enableSharingAndPrepareSavedContacts(emptyList()) { false }.getOrThrow()
+        sut.enableSharingAndPrepareSavedContacts({ emptyList() }) { false }.getOrThrow()
 
         verifyNoInteractions(addressReservationRepo)
         verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY, 1u, Priority.Interactive)
@@ -284,7 +285,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `enabling sharing rechecks snapshot inside cleanup flag update`() = test {
+    fun `enabling sharing rechecks sign in inside cleanup flag update`() = test {
         cacheData.update { it.copy(cleanupPending = true) }
         val updateStarted = CompletableDeferred<Unit>()
         val resumeUpdate = CompletableDeferred<Unit>()
@@ -295,7 +296,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             resumeUpdate.await()
             cacheData.update(transform)
         }
-        val enabling = async { sut.enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY)) { isCurrent } }
+        val enabling = async { sut.enableSharingAndPrepareSavedContacts({ listOf(CONTACT_KEY) }) { isCurrent } }
         updateStarted.await()
         isCurrent = false
         resumeUpdate.complete(Unit)
@@ -304,6 +305,45 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(cacheData.value.cleanupPending)
         verifyNoInteractions(paykitSdkService, addressReservationRepo)
+    }
+
+    @Test
+    fun `enabling sharing reschedules current contacts after pending cleanup skipped preparation`() = test {
+        settingsData.update { SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false) }
+        cacheData.update {
+            it.copy(cleanupPending = true, contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
+        }
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verifyNoInteractions(paykitSdkService, addressReservationRepo)
+
+        val updateStarted = CompletableDeferred<Unit>()
+        val resumeUpdate = CompletableDeferred<Unit>()
+        var holdUpdate = true
+        var contacts = listOf(CONTACT_KEY)
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
+            val transform = it.getArgument<(PrivatePaykitCacheData) -> PrivatePaykitCacheData>(0)
+            cacheData.update(transform)
+            if (holdUpdate) {
+                holdUpdate = false
+                updateStarted.complete(Unit)
+                resumeUpdate.await()
+            }
+        }
+        val enabling = async { sut.enableSharingAndPrepareSavedContacts({ contacts }) { true } }
+        updateStarted.await()
+        contacts = listOf(CONTACT_KEY, OTHER_CONTACT_KEY)
+        resumeUpdate.complete(Unit)
+        enabling.await().getOrThrow()
+        sut.retryPendingEndpointRemoval(contacts).getOrThrow()
+        runCurrent()
+        sut.awaitContactPreparation()
+
+        assertFalse(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
+        verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
+        verify(paykitSdkService).ensureLinkWithPeer(OTHER_CONTACT_KEY)
+        sut.closeAndClear()
     }
 
     @Test
@@ -1876,7 +1916,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitOnchainEnabled = true,
         )
 
-        val result = sut.enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY))
+        val result = sut.enableSharingAndPrepareSavedContacts({ listOf(CONTACT_KEY) })
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         assertFalse(cacheData.value.cleanupPending)
@@ -2234,7 +2274,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             LinkedPeerHandshakeReport(CONTACT_KEY, LinkedPeerState.LINKED, 1uL, null)
         }
 
-        assertTrue(sut.enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY)).isSuccess)
+        assertTrue(sut.enableSharingAndPrepareSavedContacts({ listOf(CONTACT_KEY) }).isSuccess)
         runCurrent()
         assertTrue(linkStarted.isCompleted)
         repeat(3) { sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow() }

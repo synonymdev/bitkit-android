@@ -100,10 +100,10 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
     private suspend fun prepareCurrentSavedContacts(signIn: PubkySignIn?): Result<Unit> {
         if (signIn == null || !pubkyRepo.isCurrent(signIn)) return Result.success(Unit)
-        val contacts = pubkyRepo.contacts.value.map { it.publicKey }.toSet()
-        return privatePaykitRepo.enableSharingAndPrepareSavedContacts(contacts) {
-            pubkyRepo.isCurrent(signIn) && pubkyRepo.contacts.value.map { it.publicKey }.toSet() == contacts
-        }
+        return privatePaykitRepo.enableSharingAndPrepareSavedContacts(
+            savedPublicKeys = { pubkyRepo.contacts.value.map { it.publicKey }.toSet() },
+            isStillCurrent = { pubkyRepo.isCurrent(signIn) },
+        )
     }
 
     private suspend fun rollbackEnabled(
