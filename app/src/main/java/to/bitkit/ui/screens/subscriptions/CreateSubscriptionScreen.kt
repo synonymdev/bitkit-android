@@ -49,6 +49,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,9 +57,13 @@ import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
@@ -66,11 +71,12 @@ import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionDraft
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.MoneyDisplay
+import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactRow
 import to.bitkit.ui.components.TextInput
@@ -104,8 +110,9 @@ fun CreateSubscriptionSheet(
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val isCreating by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
+    val receivingMethods by appViewModel.paykitReceivingMethods.collectAsStateWithLifecycle()
     var step by remember { mutableStateOf(SubscriptionCreationStep.Details) }
-    var amountSats by remember { mutableStateOf(0uL) }
+    var amount by remember { mutableStateOf(PaykitAmount(PaykitAsset.BTC, 0uL)) }
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var frequency by remember { mutableStateOf(PaykitRecurrenceUnit.Month) }
@@ -118,7 +125,11 @@ fun CreateSubscriptionSheet(
 
     when (step) {
         SubscriptionCreationStep.Details -> CreateSubscriptionDetails(
-            amountSats = amountSats,
+            amount = amount,
+            acceptedMethods = PaykitRequestPricing.subscriptionEndpoints(
+                amount.asset,
+                receivingMethods,
+            ).toImmutableList(),
             name = name,
             description = description,
             frequency = frequency,
@@ -153,14 +164,14 @@ fun CreateSubscriptionSheet(
         SubscriptionCreationStep.Amount -> PaymentRequestAmountContent(
             amountInputViewModel = amountInputViewModel,
             initialDraft = PaykitPaymentRequestDraft(
-                amountSats = amountSats,
+                amount = amount,
                 note = name,
                 expiresAt = SubscriptionClockOffset.subscriptionNow() + expiration.duration,
             ),
             contact = null,
             onBack = { step = SubscriptionCreationStep.Details },
             onContinue = {
-                amountSats = it.amountSats
+                amount = it.amount
                 step = SubscriptionCreationStep.Details
             },
             modifier = Modifier.sheetHeight()
@@ -180,7 +191,7 @@ fun CreateSubscriptionSheet(
                 selectedTarget?.let { target ->
                     appViewModel.createSubscription(
                         draft = PaykitSubscriptionDraft(
-                            amountSats = amountSats,
+                            amount = amount,
                             name = name,
                             description = description,
                             frequency = frequency,
@@ -210,7 +221,8 @@ fun CreateSubscriptionSheet(
 
 @Composable
 internal fun CreateSubscriptionDetails(
-    amountSats: ULong,
+    amount: PaykitAmount,
+    acceptedMethods: ImmutableList<String>,
     name: String,
     description: String,
     frequency: PaykitRecurrenceUnit,
@@ -257,17 +269,38 @@ internal fun CreateSubscriptionDetails(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth().clickableAlpha(onClick = onAmountClick)
                 ) {
-                    MoneyDisplay(
-                        sats = amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-                        showSymbol = true,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
+                    PaykitAmountDisplay(amount, modifier = Modifier.weight(1f))
                     Icon(
                         painter = painterResource(R.drawable.ic_pencil_simple),
                         contentDescription = stringResource(R.string.common__edit),
                         tint = Colors.White,
                         modifier = Modifier.size(24.dp)
                     )
+                }
+                VerticalSpacer(24.dp)
+                Column(modifier = Modifier.testTag("SubscriptionAcceptedMethods")) {
+                    Caption13Up(
+                        text = stringResource(R.string.wallet__payment_request_accepted_methods),
+                        color = Colors.White64,
+                    )
+                    VerticalSpacer(8.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (MethodId.UsdtArbitrum.rawValue in acceptedMethods) {
+                            BodyMSB(text = "USDT", color = Colors.Usdt)
+                        }
+                        if (acceptedMethods.any { MethodId.fromRawValue(it)?.isOnchain == true }) {
+                            BodyMSB(text = stringResource(R.string.lightning__savings), color = Colors.Brand)
+                        }
+                        if (MethodId.Bolt11.rawValue in acceptedMethods) {
+                            BodyMSB(text = stringResource(R.string.lightning__spending), color = Colors.Purple)
+                        }
+                        if (acceptedMethods.isEmpty()) {
+                            BodyM(
+                                text = stringResource(R.string.wallet__payment_request_status_unavailable),
+                                color = Colors.White64,
+                            )
+                        }
+                    }
                 }
                 VerticalSpacer(24.dp)
                 Caption13Up(text = stringResource(R.string.subscriptions__frequency), color = Colors.White64)
@@ -329,7 +362,7 @@ internal fun CreateSubscriptionDetails(
         PrimaryButton(
             text = stringResource(R.string.subscriptions__choose_recipient),
             onClick = onChooseRecipient,
-            enabled = amountSats > 0uL && name.isNotBlank() && !isLoadingIcon,
+            enabled = amount.atomic > 0uL && name.isNotBlank() && !isLoadingIcon && acceptedMethods.isNotEmpty(),
             modifier = Modifier.testTag("SubscriptionChooseRecipient")
         )
         VerticalSpacer(16.dp)
@@ -541,7 +574,8 @@ private fun CreateSubscriptionDetailsPreview() {
     AppThemeSurface {
         BottomSheetPreview {
             CreateSubscriptionDetails(
-                amountSats = 100_000uL,
+                amount = PaykitAmount(PaykitAsset.BTC, 100_000uL),
+                acceptedMethods = persistentListOf(MethodId.P2wpkh.rawValue, MethodId.Bolt11.rawValue),
                 name = "Rent Support",
                 description = "Monthly support",
                 frequency = PaykitRecurrenceUnit.Month,

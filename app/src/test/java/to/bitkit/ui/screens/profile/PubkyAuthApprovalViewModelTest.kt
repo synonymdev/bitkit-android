@@ -3,12 +3,17 @@ package to.bitkit.ui.screens.profile
 import android.content.Context
 import android.util.Log
 import app.cash.turbine.test
+import com.synonym.bitkitcore.UsdtPaymentRequest
+import com.synonym.bitkitcore.usdtParsePaymentRequest
 import com.synonym.paykit.PubkyAuthCompanionClaimApprovalException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.mockStatic
@@ -26,6 +31,7 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.models.PaykitUsdt
 import to.bitkit.models.PreparedWatchOnlyAccountClaim
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
@@ -36,11 +42,14 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountAuthorizationStartError
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("LargeClass")
@@ -57,11 +66,13 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         on { displayName } doReturn displayNameFlow
         on { displayImageUri } doReturn displayImageUriFlow
     }
+    private val usdtRepo: UsdtRepo = mock()
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo = mock()
 
     @Before
     fun setUp() {
         whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
+        whenever(context.getString(R.string.profile__auth_approval_services_separator)).thenReturn(" and ")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
         whenever(
             context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
@@ -525,7 +536,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         assertEquals(ApprovalState.Success, sut.uiState.value.state)
         verifyBlocking(watchOnlyAccountRepo) { prepareUnsignedClaim(authUrl, "paykit server") }
-        verifyBlocking(pubkyRepo) { approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        verifyBlocking(pubkyRepo) {
+            approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
         verifyBlocking(pubkyRepo, times(2)) { parseAuthUrl(authUrl) }
         verifyBlocking(pubkyRepo, never()) { approveAuth(authUrl, capabilities, clientId) }
         verifyBlocking(watchOnlyAccountRepo) { beginAuthorization(prepared.account.id) }
@@ -561,7 +574,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         assertEquals(ApprovalState.Success, sut.uiState.value.state)
         verifyBlocking(watchOnlyAccountRepo, times(1)) { prepareUnsignedClaim(authUrl, "paykit server") }
         verifyBlocking(watchOnlyAccountRepo, times(1)) { beginAuthorization(prepared.account.id) }
-        verifyBlocking(pubkyRepo, times(1)) { approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        verifyBlocking(pubkyRepo, times(1)) {
+            approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
         verifyBlocking(watchOnlyAccountRepo, times(1)) { markActive(prepared.account.id) }
     }
 
@@ -584,7 +599,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false)
-        whenever { pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        whenever {
+            pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
             .doSuspendableAnswer { approvalResult.await() }
         whenever { watchOnlyAccountRepo.markActive(prepared.account.id) }.thenReturn(Unit)
         val sut = createSut()
@@ -617,7 +634,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         verifyBlocking(pubkyRepo, times(1)) { parseAuthUrl(secondAuthUrl) }
         verifyBlocking(watchOnlyAccountRepo, times(1)) { prepareUnsignedClaim(authUrl, "paykit server") }
         verifyBlocking(watchOnlyAccountRepo, times(1)) { beginAuthorization(prepared.account.id) }
-        verifyBlocking(pubkyRepo, times(1)) { approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        verifyBlocking(pubkyRepo, times(1)) {
+            approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
         verifyBlocking(pubkyRepo, never()) { approveAuth(secondAuthUrl, secondCapabilities, clientId) }
         verifyBlocking(watchOnlyAccountRepo, times(1)) { markActive(prepared.account.id) }
     }
@@ -638,7 +657,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false)
-        whenever { pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        whenever {
+            pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
             .thenReturn(Result.failure(AppError(authorizationError)))
         val sut = createSut()
 
@@ -667,7 +688,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false)
-        whenever { pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        whenever {
+            pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
             .thenReturn(Result.failure(IllegalStateException("Relay delivery failed")))
         val sut = createSut()
 
@@ -700,7 +723,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         )
         whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
         whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(true)
-        whenever { pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        whenever {
+            pubkyRepo.approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
             .thenReturn(Result.failure(IllegalStateException("Relay delivery failed")))
         val sut = createSut()
 
@@ -747,7 +772,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
         verifyBlocking(watchOnlyAccountRepo) { cancelAuthorization(prepared.account.id) }
-        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        verifyBlocking(pubkyRepo, never()) {
+            approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
         verifyBlocking(watchOnlyAccountRepo, never()) { markActive(prepared.account.id) }
     }
 
@@ -786,7 +813,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         verifyBlocking(watchOnlyAccountRepo) {
             cancelAuthorization(prepared.account.id, preserveAuthorizingState = true)
         }
-        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        verifyBlocking(pubkyRepo, never()) {
+            approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
     }
 
     @Test
@@ -842,14 +871,110 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         assertEquals(ApprovalState.Success, restartedSut.uiState.value.state)
         verifyBlocking(watchOnlyAccountRepo, times(2)) { prepareUnsignedClaim(authUrl, "paykit server") }
         verifyBlocking(watchOnlyAccountRepo, times(2)) { beginAuthorization(prepared.account.id) }
-        verifyBlocking(pubkyRepo, times(2)) { approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload) }
+        verifyBlocking(pubkyRepo, times(2)) {
+            approveAuthWithCompanionClaim(authUrl, clientId, prepared.payload)
+        }
         verifyBlocking(watchOnlyAccountRepo, times(2)) { markActive(prepared.account.id) }
+    }
+
+    @Test
+    fun `receiving details share exactly the requested assets`() = test {
+        val address = "0x1111111111111111111111111111111111111111"
+        mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")).use { core ->
+            core.`when`<UsdtPaymentRequest> { usdtParsePaymentRequest(address) }
+                .thenReturn(UsdtPaymentRequest(address, null, null))
+            val endpoint = PaykitUsdt.endpoint(address)
+            whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(endpoint))
+            for (claim in listOf(PubkyAuthClaim.USDT_ADDRESS_V1, PubkyAuthClaim.BITCOIN_AND_USDT)) {
+                clearInvocations(watchOnlyAccountRepo)
+                val url = "pubkyauth://signin_grant?x-bitkit-claim=${claim.wireValue}"
+                whenever(
+                    pubkyRepo.parseAuthUrl(url)
+                ).thenReturn(Result.success(authRequest(url, PubkyAuthClaim.REQUIRED_CAPABILITIES, claim)))
+                val prepared = PreparedWatchOnlyAccountClaim(watchOnlyAccount(), byteArrayOf(1))
+                whenever(watchOnlyAccountRepo.prepareUnsignedClaim(url, "paykit server")).thenReturn(prepared)
+                whenever(watchOnlyAccountRepo.beginAuthorization(prepared.account.id)).thenReturn(false)
+                var shared: ByteArray? = null
+                whenever(pubkyRepo.approveAuthWithCompanionClaim(eq(url), eq(clientId), any()))
+                    .thenAnswer {
+                        shared = it.getArgument(2)
+                        Result.success(Unit)
+                    }
+                val sut = createSut()
+                sut.load(url)
+                advanceUntilIdle()
+                assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
+                sut.approveWatchOnlyConsent(url)
+                assertTrue(sut.uiState.value.canAuthorize)
+                sut.confirmAuthorize(url)
+                advanceUntilIdle()
+                assertEquals(ApprovalState.Success, sut.uiState.value.state)
+                val details = Json.parseToJsonElement(checkNotNull(shared).decodeToString()).jsonObject
+                val usdt = details.getValue("usdt-arbitrum-address").jsonObject
+                assertEquals(address, usdt.getValue("value").jsonPrimitive.content)
+                assertEquals(PaykitUsdt.CHAIN_ID, usdt.getValue("chain_id").jsonPrimitive.content)
+                assertEquals(PaykitUsdt.TOKEN, usdt.getValue("token").jsonPrimitive.content)
+                assertEquals(
+                    if (claim.sharesBitcoin) {
+                        setOf(
+                            "bitcoin_account",
+                            "usdt-arbitrum-address"
+                        )
+                    } else {
+                        setOf("usdt-arbitrum-address")
+                    },
+                    details.keys
+                )
+                if (claim.sharesBitcoin) {
+                    assertEquals(
+                        prepared.account.xpub,
+                        details.getValue("bitcoin_account").jsonObject.getValue("xpub").jsonPrimitive.content
+                    )
+                    verifyBlocking(watchOnlyAccountRepo) { markActive(prepared.account.id) }
+                } else {
+                    verifyBlocking(watchOnlyAccountRepo, never()) { prepareUnsignedClaim(any(), any()) }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `unavailable optional address can be skipped or retried`() = test {
+        val url = "pubkyauth://signin_grant?x-bitkit-claim=usdt-address-v1"
+        whenever(
+            pubkyRepo.parseAuthUrl(url)
+        ).thenReturn(
+            Result.success(
+                authRequest(url, PubkyAuthClaim.REQUIRED_CAPABILITIES, PubkyAuthClaim.USDT_ADDRESS_V1)
+            )
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("Unavailable")))
+        val sut = createSut()
+        sut.load(url)
+        advanceUntilIdle()
+        sut.approveWatchOnlyConsent(url)
+        assertTrue(sut.uiState.value.canAuthorize)
+        assertFalse(sut.uiState.value.shareUsdt)
+        assertTrue(sut.uiState.value.usdtUnavailable)
+        sut.setShareUsdt(true)
+        assertFalse(sut.uiState.value.canAuthorize)
+        val endpoint = to.bitkit.repositories.Endpoint(
+            methodId = to.bitkit.repositories.MethodId.UsdtArbitrum,
+            value = "reviewed-address",
+            rawPayload = "{}"
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(endpoint))
+        sut.loadUsdtAddress(url)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canAuthorize)
+        assertFalse(sut.uiState.value.usdtUnavailable)
     }
 
     private fun createSut() = PubkyAuthApprovalViewModel(
         context = context,
         pubkyRepo = pubkyRepo,
         watchOnlyAccountRepo = watchOnlyAccountRepo,
+        usdtRepo = usdtRepo,
     )
 
     private fun authRequest(

@@ -56,7 +56,7 @@ fun CameraPermissionView(
 @Composable
 fun DeniedContent(
     onClickRetry: () -> Unit = {},
-    onClickPaste: () -> Unit = {},
+    onClickPaste: (() -> Unit)? = {},
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -103,16 +103,18 @@ fun DeniedContent(
 
         FillHeight()
 
-        PrimaryButton(
-            text = stringResource(R.string.other__qr_paste),
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_clipboard_text_simple),
-                    contentDescription = null,
-                )
-            },
-            onClick = onClickPaste,
-        )
+        if (onClickPaste != null) {
+            PrimaryButton(
+                text = stringResource(R.string.other__qr_paste),
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_clipboard_text_simple),
+                        contentDescription = null,
+                    )
+                },
+                onClick = onClickPaste,
+            )
+        }
     }
 }
 

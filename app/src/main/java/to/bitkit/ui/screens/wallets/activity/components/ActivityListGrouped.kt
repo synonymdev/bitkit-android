@@ -23,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.UsdtTransfer
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -30,11 +31,14 @@ import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
 import to.bitkit.ext.scopedId
 import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.screens.wallets.usdt.UsdtActivityRow
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import java.time.Instant
@@ -58,17 +62,18 @@ fun ActivityListGrouped(
     showContactAvatar: Boolean = true,
     hardwareIds: ImmutableSet<String> = persistentSetOf(),
     titleProvider: @Composable (Activity) -> String? = { null },
+    usdtItems: ImmutableList<UsdtTransfer> = persistentListOf(),
 ) {
-    val contacts by activityListViewModel?.contacts?.collectAsStateWithLifecycle() ?: remember {
-        mutableStateOf(persistentListOf())
-    }
+    val app = appViewModel
+    val settings = settingsViewModel
+    val hideBalance by settings?.hideBalance?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(false) }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxSize()
     ) {
-        if (!items.isNullOrEmpty()) {
-            val groupedItems = groupActivityItems(items)
+        if (!items.isNullOrEmpty() || usdtItems.isNotEmpty()) {
+            val groupedItems = remember(items, usdtItems) { groupActivityItems(items.orEmpty(), usdtItems) }
 
             LazyColumn(
                 state = listState,
@@ -79,18 +84,15 @@ fun ActivityListGrouped(
                 itemsIndexed(
                     items = groupedItems,
                     key = { index, item ->
-                        when (item) {
-                            is String -> "header_$item"
-                            is Activity -> when (item) {
-                                is Activity.Lightning -> "lightning_${item.scopedId()}"
-                                is Activity.Onchain -> "onchain_${item.scopedId()}"
-                            }
-
-                            else -> "item_$index"
-                        }
+                        groupedActivityKey(index, item)
                     }
                 ) { index, item ->
                     when (item) {
+                        is UsdtTransfer -> {
+                            UsdtActivityRow(item, hideBalance, onClick = { app?.navigateToUsdtActivity(item.id) })
+                            if (index < groupedItems.lastIndex) VerticalSpacer(16.dp)
+                        }
+
                         is String -> {
                             Caption13Up(
                                 text = item,
@@ -115,13 +117,13 @@ fun ActivityListGrouped(
                                         placementSpec = tween(durationMillis = 300)
                                     )
                             ) {
-                                ActivityRow(
-                                    item = item,
-                                    onClick = onActivityItemClick,
-                                    testTag = "$activityTestTagPrefix-$index",
-                                    title = titleProvider(item) ?: contactActivityTitle(item, contacts),
-                                    isHardware = item.scopedId() in hardwareIds,
-                                    contact = if (showContactAvatar) contactForActivity(item, contacts) else null,
+                                ActivityContactRow(
+                                    item,
+                                    onActivityItemClick,
+                                    "$activityTestTagPrefix-$index",
+                                    titleProvider(item),
+                                    hardwareIds,
+                                    showContactAvatar
                                 )
                                 if (index < groupedItems.lastIndex) {
                                     VerticalSpacer(16.dp)
@@ -162,6 +164,36 @@ fun ActivityListGrouped(
     }
 }
 
+@Composable
+private fun ActivityContactRow(
+    item: Activity,
+    onClick: (Activity) -> Unit,
+    testTag: String,
+    title: String?,
+    hardwareIds: ImmutableSet<String>,
+    showContactAvatar: Boolean,
+) {
+    val contacts by activityListViewModel?.contacts?.collectAsStateWithLifecycle() ?: remember {
+        mutableStateOf(persistentListOf())
+    }
+    ActivityRow(
+        item = item,
+        onClick = onClick,
+        testTag = testTag,
+        title = title ?: contactActivityTitle(item, contacts),
+        isHardware = item.scopedId() in hardwareIds,
+        contact = if (showContactAvatar) contactForActivity(item, contacts) else null
+    )
+}
+
+private fun groupedActivityKey(index: Int, item: Any): String = when (item) {
+    is UsdtTransfer -> "usdt_${item.id}"
+    is String -> "header_$item"
+    is Activity.Lightning -> "lightning_${item.scopedId()}"
+    is Activity.Onchain -> "onchain_${item.scopedId()}"
+    else -> "item_$index"
+}
+
 @Suppress("LongMethod", "LongParameterList")
 fun LazyListScope.activityListGroupedItems(
     items: ImmutableList<Activity>?,
@@ -177,15 +209,7 @@ fun LazyListScope.activityListGroupedItems(
         itemsIndexed(
             items = groupedItems,
             key = { index, item ->
-                when (item) {
-                    is String -> "header_$item"
-                    is Activity -> when (item) {
-                        is Activity.Lightning -> "lightning_${item.scopedId()}"
-                        is Activity.Onchain -> "onchain_${item.scopedId()}"
-                    }
-
-                    else -> "item_$index"
-                }
+                groupedActivityKey(index, item)
             },
         ) { index, item ->
             when (item) {
@@ -264,7 +288,7 @@ fun LazyListScope.activityListGroupedItems(
 
 // region utils
 @Suppress("CyclomaticComplexMethod")
-private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
+private fun groupActivityItems(activityItems: List<Activity>, usdtItems: List<UsdtTransfer> = emptyList()): List<Any> {
     val now = Instant.now()
     val zoneId = ZoneId.systemDefault()
     val today = now.atZone(zoneId).truncatedTo(ChronoUnit.DAYS)
@@ -276,18 +300,24 @@ private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
     val startOfMonth = today.withDayOfMonth(1).toInstant().epochSecond
     val startOfYear = today.withDayOfYear(1).toInstant().epochSecond
 
-    val todayItems = mutableListOf<Activity>()
-    val yesterdayItems = mutableListOf<Activity>()
-    val weekItems = mutableListOf<Activity>()
-    val monthItems = mutableListOf<Activity>()
-    val yearItems = mutableListOf<Activity>()
-    val earlierItems = mutableListOf<Activity>()
+    val todayItems = mutableListOf<Any>()
+    val yesterdayItems = mutableListOf<Any>()
+    val weekItems = mutableListOf<Any>()
+    val monthItems = mutableListOf<Any>()
+    val yearItems = mutableListOf<Any>()
+    val earlierItems = mutableListOf<Any>()
 
-    for (item in activityItems) {
-        val timestamp = when (item) {
-            is Activity.Lightning -> item.v1.timestamp.toLong()
-            is Activity.Onchain -> item.v1.timestamp.toLong()
+    val entries = (
+        activityItems.map {
+            WalletActivity.Bitcoin(it)
+        } + usdtItems.map { WalletActivity.Usdt(it) }
+        ).sortedByDescending { it.timestamp }
+    for (entry in entries) {
+        val item: Any = when (entry) {
+            is WalletActivity.Bitcoin -> entry.item
+            is WalletActivity.Usdt -> entry.item
         }
+        val timestamp = entry.timestamp.toLong()
         when {
             timestamp >= startOfDay -> todayItems.add(item)
             timestamp >= startOfYesterday -> yesterdayItems.add(item)
@@ -299,29 +329,18 @@ private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
     }
 
     return buildList {
-        if (todayItems.isNotEmpty()) {
-            add("TODAY")
-            addAll(todayItems)
-        }
-        if (yesterdayItems.isNotEmpty()) {
-            add("YESTERDAY")
-            addAll(yesterdayItems)
-        }
-        if (weekItems.isNotEmpty()) {
-            add("THIS WEEK")
-            addAll(weekItems)
-        }
-        if (monthItems.isNotEmpty()) {
-            add("THIS MONTH")
-            addAll(monthItems)
-        }
-        if (yearItems.isNotEmpty()) {
-            add("THIS YEAR")
-            addAll(yearItems)
-        }
-        if (earlierItems.isNotEmpty()) {
-            add("EARLIER")
-            addAll(earlierItems)
+        listOf(
+            "TODAY" to todayItems,
+            "YESTERDAY" to yesterdayItems,
+            "THIS WEEK" to weekItems,
+            "THIS MONTH" to monthItems,
+            "THIS YEAR" to yearItems,
+            "EARLIER" to earlierItems,
+        ).forEach { (title, items) ->
+            if (items.isNotEmpty()) {
+                add(title)
+                addAll(items)
+            }
         }
     }
 }
@@ -363,5 +382,19 @@ private fun PreviewEmptyWithFooter() {
             onEmptyActivityRowClick = {},
             showFooter = true,
         )
+    }
+}
+
+fun activityGroupTitleResource(timestamp: ULong): Int {
+    val today = Instant.now().atZone(ZoneId.systemDefault()).truncatedTo(ChronoUnit.DAYS)
+    val week = today.with(TemporalAdjusters.previousOrSame(WeekFields.of(Locale.getDefault()).firstDayOfWeek))
+    val date = Instant.ofEpochSecond(timestamp.toLong())
+    return when {
+        date >= today.toInstant() -> R.string.wallet__activity_group_today
+        date >= today.minusDays(1).toInstant() -> R.string.wallet__activity_group_yesterday
+        date >= week.toInstant() -> R.string.wallet__activity_group_week
+        date >= today.withDayOfMonth(1).toInstant() -> R.string.wallet__activity_group_month
+        date >= today.withDayOfYear(1).toInstant() -> R.string.wallet__activity_group_year
+        else -> R.string.wallet__activity_group_earlier
     }
 }

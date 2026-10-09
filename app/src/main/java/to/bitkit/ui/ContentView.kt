@@ -165,6 +165,7 @@ import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
+import to.bitkit.ui.screens.wallets.usdt.UsdtWalletScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
@@ -486,7 +487,11 @@ fun ContentView(
         val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
         val hwSendViewModel = hiltViewModel<HwSendViewModel>()
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
-        val canDismissSheet = currentSheet !is Sheet.Send || hwSendUiState.canLeave
+        var receiveBlocking by remember(currentSheet) { mutableStateOf(false) }
+        val canDismissSheet = !receiveBlocking && (
+            currentSheet !is Sheet.Send ||
+                (hwSendUiState.canLeave && !appViewModel.isPaykitUsdtBusy)
+            )
         val isAcceptingSubscription by appViewModel.isAcceptingSubscription.collectAsStateWithLifecycle()
         val isRetryingInitialSubscriptionPayment by
             appViewModel.isRetryingInitialSubscriptionPayment.collectAsStateWithLifecycle()
@@ -552,6 +557,8 @@ fun ContentView(
                                 ReceiveSheet(
                                     appViewModel = appViewModel,
                                     startRoute = sheet.route,
+                                    initialTab = sheet.initialTab,
+                                    onBlockingChange = { receiveBlocking = it },
                                     hardwareWalletId = sheet.hardwareWalletId,
                                     walletState = walletState,
                                     isOffline = connectivityState != ConnectivityState.CONNECTED,
@@ -1209,6 +1216,14 @@ private fun NavGraphBuilder.home(
             )
         }
     }
+    composableWithDefaultTransitions<Routes.UsdtActivity> { entry ->
+        UsdtWalletScreen(onBack = {
+            navController.popBackStack()
+        }, initialTransferId = entry.toRoute<Routes.UsdtActivity>().transferId)
+    }
+    deepLinkableComposable<Routes.UsdtWallet> {
+        UsdtWalletScreen(onBack = { navController.popBackStack() })
+    }
     deepLinkableComposable<Routes.Savings> {
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
@@ -1425,8 +1440,13 @@ private fun NavGraphBuilder.contacts(
             ContactDetailScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
-                onPayContact = { paymentRequest, publicKey, privatePaymentContext ->
-                    appViewModel.openContactPayment(paymentRequest, publicKey, privatePaymentContext)
+                onPayContact = { paymentRequest, publicKey, privatePaymentContext, endpoints ->
+                    appViewModel.openContactPayment(
+                        paymentRequest,
+                        publicKey,
+                        privatePaymentContext,
+                        endpoints = endpoints
+                    )
                 },
                 onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
                 onRequestPayment = {
@@ -1469,9 +1489,9 @@ private fun NavGraphBuilder.contacts(
                         popUpTo(Routes.AddContact(publicKey)) { inclusive = true }
                     }
                 },
-                onPayContact = { paymentRequest, publicKey ->
+                onPayContact = { paymentRequest, publicKey, endpoints ->
                     navController.popBackStack()
-                    appViewModel.openContactPayment(paymentRequest, publicKey)
+                    appViewModel.openContactPayment(paymentRequest, publicKey, endpoints = endpoints)
                 },
             )
         }
@@ -2218,6 +2238,12 @@ sealed interface Routes {
 
     @Serializable
     data class HardwareWallet(val walletId: String) : Routes.DeepLinkable
+
+    @Serializable
+    data object UsdtWallet : Routes.DeepLinkable
+
+    @Serializable
+    data class UsdtActivity(val transferId: String) : Routes.InternalOnly
 
     @Serializable
     data object Settings : Routes.DeepLinkable

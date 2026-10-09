@@ -33,11 +33,12 @@ fun MoneyDisplay(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     showSymbol: Boolean = true,
+    prefix: String = "",
 ) {
     val text = rememberMoneyText(sats, showSymbol = showSymbol)
     text?.let {
         Display(
-            text = it.withAccent(
+            text = "$prefix$it".withAccent(
                 accentStyle = SpanStyle(
                     color = Colors.White64,
                     fontWeight = FontWeight.ExtraBold,

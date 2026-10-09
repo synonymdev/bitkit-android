@@ -105,7 +105,6 @@ import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PaykitBillingPeriod
-import to.bitkit.repositories.PaykitIssuerInterop
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.services.PaykitSdkOperationLock.Priority
@@ -143,11 +142,14 @@ data class PaykitResolvedPaymentEndpoint(
 
 data class PaykitPaymentRequestProposalTerms(
     val amountValue: String,
+    val amountAsset: String,
     val paymentReference: String,
     val proposalExpiresAt: String,
     val acceptedPaymentEndpointIdentifiers: List<String>,
     val metadataJson: String,
     val recurrence: PaykitPaymentRequestRecurrenceTerms? = null,
+    val conversion: com.synonym.paykit.PaymentConversion? = null,
+    val paymentDeadline: com.synonym.paykit.PaymentDeadline? = null,
 )
 
 data class PaykitPaymentRequestRecurrenceTerms(
@@ -1021,7 +1023,7 @@ class PaykitSdkService @Inject constructor(
                         PubkyPublicKeyFormat.matches(identityStatus.publicKey, expectedIdentity)
                 ) { "Paykit identity changed before proposing the payment request" }
                 val terms = PaymentRequestTerms(
-                    amount = PaymentRequestAmount(proposal.amountValue, PaykitIssuerInterop.BITCOIN_ASSET),
+                    amount = PaymentRequestAmount(proposal.amountValue, proposal.amountAsset),
                     paymentReference = PaymentReference(proposal.paymentReference),
                     proposalExpiresAt = proposal.proposalExpiresAt,
                     recurrence = proposal.recurrence?.let {
@@ -1036,8 +1038,8 @@ class PaykitSdkService @Inject constructor(
                     acceptedPaymentEndpointIdentifiers = proposal.acceptedPaymentEndpointIdentifiers,
                     paymentEndpoints = null,
                     requiredAppId = "bitkit",
-                    conversion = null,
-                    paymentDeadline = null,
+                    conversion = proposal.conversion,
+                    paymentDeadline = proposal.paymentDeadline,
                     metadata = PrivateJsonObject(proposal.metadataJson),
                 )
                 completeSdkCall { handle.proposePaymentRequest(counterparty, terms) }
@@ -1074,6 +1076,7 @@ class PaykitSdkService @Inject constructor(
         paymentEndpointIdentifier: String,
         proofJson: String,
         billingPeriod: PaykitBillingPeriod? = null,
+        conversionQuoteId: String? = null,
     ): PaymentRequestRecord {
         isSetup.await()
         return operationLock.withLock {
@@ -1087,7 +1090,7 @@ class PaykitSdkService @Inject constructor(
                             paymentAppId = paymentAppId,
                             paymentEndpointIdentifier = paymentEndpointIdentifier,
                             allowanceId = null,
-                            conversionQuoteId = null,
+                            conversionQuoteId = conversionQuoteId,
                             proof = PrivateJsonObject(proofJson),
                         ),
                     )
@@ -1225,16 +1228,16 @@ class PaykitSdkService @Inject constructor(
             },
         )
 
-    suspend fun exportBackupState(): String {
+    internal suspend fun exportBackupState(priority: Priority = Priority.Background): String {
         isSetup.await()
         val generation = runtimeGeneration
         return operationLock.withoutLock {
             var backup: String?
             do {
-                isPaymentSubmissionActive.first { !it }
-                backup = operationLock.withLock(Priority.Background) {
+                if (priority == Priority.Background) isPaymentSubmissionActive.first { !it }
+                backup = operationLock.withLock(priority) {
                     check(runtimeGeneration == generation) { "Paykit runtime changed before backup export" }
-                    if (isPaymentSubmissionActive.value) return@withLock null
+                    if (priority == Priority.Background && isPaymentSubmissionActive.value) return@withLock null
                     withPaykitKey { completeSdkCall { it.exportBackupString() } }
                 }
             } while (backup == null)
@@ -1502,6 +1505,9 @@ class PaykitSdkService @Inject constructor(
 
     companion object {
         private const val TAG = "PaykitSdkService"
+
+        /** Maximum plaintext size accepted by Paykit's pubky-noise transport. */
+        const val MAX_MESSAGE_BYTES = 1000
 
         /** Minimum delay between successful identity republications. */
         private val IDENTITY_REPUBLISH_INTERVAL = 30.minutes

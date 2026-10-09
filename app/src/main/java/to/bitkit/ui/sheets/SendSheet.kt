@@ -75,6 +75,7 @@ import to.bitkit.ui.screens.wallets.send.SendPendingViewModel
 import to.bitkit.ui.screens.wallets.send.SendPinCheckScreen
 import to.bitkit.ui.screens.wallets.send.SendQuickPayScreen
 import to.bitkit.ui.screens.wallets.send.SendRecipientScreen
+import to.bitkit.ui.screens.wallets.usdt.PaykitUsdtReview
 import to.bitkit.ui.screens.wallets.withdraw.WithdrawConfirmScreen
 import to.bitkit.ui.screens.wallets.withdraw.WithdrawErrorScreen
 import to.bitkit.ui.settings.support.SupportScreen
@@ -121,7 +122,7 @@ fun SendSheet(
     var routingCacheResetAttempted by rememberSaveable(startDestination) { mutableStateOf(false) }
 
     val shouldShowSyncOverlay = run {
-        if (preparingRequest != null) return@run false
+        if (preparingRequest != null || sendUiState.paykitUsesUsdt) return@run false
         if (sendUiState.hardwareWalletId != null) return@run false
         if (!lightningState.nodeLifecycleState.isRunning()) return@run true
         val hasAnyChannels = lightningState.channels.isNotEmpty()
@@ -197,6 +198,7 @@ fun SendSheet(
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
                         is SendEffect.NavigateToCoinSelection -> navController.navigateToCoinSelection()
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
+                        is SendEffect.NavigateToUsdtReview -> navController.navigateTo(SendRoute.UsdtReview)
                         is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
@@ -251,9 +253,23 @@ fun SendSheet(
                             appViewModel.clearActiveContactPaymentContext()
                             navController.popBackStack()
                         },
-                        onOpenPayment = { paymentRequest, publicKey, privatePaymentContext ->
-                            appViewModel.openContactPayment(paymentRequest, publicKey, privatePaymentContext)
+                        onOpenPayment = { paymentRequest, publicKey, privatePaymentContext, endpoints ->
+                            appViewModel.openContactPayment(
+                                paymentRequest,
+                                publicKey,
+                                privatePaymentContext,
+                                endpoints = endpoints
+                            )
                         },
+                    )
+                }
+                composableWithDefaultTransitions<SendRoute.UsdtReview> {
+                    val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                    PaykitUsdtReview(
+                        uiState = uiState,
+                        app = appViewModel,
+                        onBack = { navController.popBackStack() },
+                        onDone = { appViewModel.hideSheet() }
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.Amount> {
@@ -670,6 +686,9 @@ sealed interface SendRoute {
 
     @Serializable
     data object Amount : DeepLinkStart
+
+    @Serializable
+    data object UsdtReview : InternalOnly
 
     @Serializable
     data object QrScanner : DeepLinkStart

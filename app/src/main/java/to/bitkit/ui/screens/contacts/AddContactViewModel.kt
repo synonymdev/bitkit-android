@@ -18,6 +18,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
@@ -121,7 +122,9 @@ class AddContactViewModel @Inject constructor(
                 .onSuccess { result ->
                     when (result) {
                         is PublicPaykitPaymentResult.Opened ->
-                            _effects.emit(AddContactEffect.OpenPayment(result.paymentRequest, profile.publicKey))
+                            _effects.emit(
+                                AddContactEffect.OpenPayment(result.paymentRequest, profile.publicKey, result.endpoints)
+                            )
                         PublicPaykitPaymentResult.NoEndpoint ->
                             showPayError(R.string.slashtags__error_pay_empty_msg)
                         PublicPaykitPaymentResult.NotOpened ->
@@ -184,5 +187,9 @@ data class AddContactUiState(
 
 sealed interface AddContactEffect {
     data class ContactSaved(val publicKey: String) : AddContactEffect
-    data class OpenPayment(val paymentRequest: String, val publicKey: String) : AddContactEffect
+    data class OpenPayment(
+        val paymentRequest: String,
+        val publicKey: String,
+        val endpoints: List<Endpoint> = emptyList()
+    ) : AddContactEffect
 }

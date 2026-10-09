@@ -24,6 +24,7 @@ data class WalletBackupV1(
     val paykitSdkBackupState: String? = null,
     val watchOnlyAccounts: List<WatchOnlyAccountRecord>? = null,
     val watchOnlyAccountAllocationState: WatchOnlyAccountAllocationState? = null,
+    val usdtWallet: String? = null,
     val paykitPaymentState: PaykitPaymentStateBackup? = null,
 )
 

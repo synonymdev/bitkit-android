@@ -221,6 +221,13 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | BuyIntroScreen.kt | Buy Bitcoin › Buy Bitcoin |
 
+## ui/screens/wallets/usdt
+
+| Android | Figma |
+| - | - |
+| UsdtDepositReceiveScreen.kt | `todo` |
+| UsdtWalletScreen.kt | `todo` |
+
 ## ui/screens/wallets/withdraw
 
 | Android | Figma |
@@ -346,3 +353,9 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | CustomFeeSettingsScreen.kt | Send (Paste) (On-chain) › Set custom fee |
 | TransactionSpeedSettingsScreen.kt | Settings > General › Speed |
+
+### USDT receive
+
+[Figma](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49861-374947):
+Receive Dollars, network selection, amount entry, estimated fees, QR and address details share the existing Receive sheet.
+The BTC/USD input toggle preserves the USDT request amount. See `journeys/usdt-receive-amount-and-units.xml`.

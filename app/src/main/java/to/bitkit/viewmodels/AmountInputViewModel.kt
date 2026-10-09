@@ -25,9 +25,9 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.AmountInputHandler
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.components.KEY_DECIMAL
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPadType
+import to.bitkit.ui.utils.NumberPadInputHandler
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Locale
@@ -74,7 +74,7 @@ class AmountInputViewModel @Inject constructor(
         val maxLength = getMaxLength(currencyState)
         val maxDecimals = getMaxDecimals(currencyState)
 
-        val newText = handleInput(key = key, current = rawInputText, maxLength, maxDecimals)
+        val newText = NumberPadInputHandler.handleInput(key = key, current = rawInputText, maxLength, maxDecimals)
 
         if (newText == rawInputText && key != KEY_DELETE) {
             triggerErrorState(key)
@@ -368,62 +368,6 @@ class AmountInputViewModel @Inject constructor(
         return text.replace(",", "")
             .toDoubleOrNull()
             ?.let { fiat -> amountInputHandler.convertFiatToSats(fiat) }
-    }
-
-    private fun handleInput(
-        key: String,
-        current: String,
-        maxLength: Int,
-        maxDecimals: Int,
-    ): String {
-        return if (maxDecimals == 0) {
-            handleIntegerInput(key, current, maxLength)
-        } else {
-            handleDecimalInput(key, current, maxLength, maxDecimals)
-        }
-    }
-
-    private fun handleIntegerInput(key: String, current: String, maxLength: Int): String {
-        if (key == KEY_DELETE) return current.dropLast(1)
-
-        if (current == "0") return key
-        if (current.length >= maxLength) return current
-
-        return current + key
-    }
-
-    @Suppress("ReturnCount")
-    private fun handleDecimalInput(
-        key: String,
-        current: String,
-        maxLength: Int,
-        maxDecimals: Int,
-    ): String {
-        val parts = current.split(".", limit = 2)
-        val decimalPart = if (parts.size > 1) parts[1] else ""
-
-        if (key == KEY_DELETE) {
-            if (current == "0.") return ""
-            return current.dropLast(1)
-        }
-
-        // Handle leading zeros - replace "0" with new digit but allow "0."
-        if (current == "0" && key != ".") return key
-
-        // Limit to maxLength
-        if (current.length >= maxLength) return current
-
-        // Limit decimal places
-        if (decimalPart.length >= maxDecimals) return current
-
-        if (key == KEY_DECIMAL) {
-            // No multiple decimal symbols
-            if (current.contains(".")) return current
-            // Add leading zero
-            if (current.isEmpty()) return "0."
-        }
-
-        return current + key
     }
 }
 

@@ -65,6 +65,8 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.dateTimeFormatterOf
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
@@ -82,8 +84,8 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
-import to.bitkit.ui.components.MoneyDisplay
-import to.bitkit.ui.components.MoneyMSB
+import to.bitkit.ui.components.PaykitAmountCell
+import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Sheet
@@ -215,7 +217,7 @@ internal fun SubscriptionsContent(
                 ) {
                     item {
                         SubscriptionMetrics(
-                            monthlyCostSats = subscriptionMonthlyCostSats(subscriptions, now),
+                            monthlyCosts = subscriptionMonthlyCosts(subscriptions, now),
                             activeCount = sections.active.size,
                             createdCount = sections.created.size,
                         )
@@ -390,7 +392,7 @@ private fun SubscriptionEmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int, createdCount: Int) {
+private fun SubscriptionMetrics(monthlyCosts: List<PaykitAmount>, activeCount: Int, createdCount: Int) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -406,7 +408,7 @@ private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int, created
                     tint = Colors.Purple,
                     modifier = Modifier.size(24.dp)
                 )
-                MoneyMSB(sats = monthlyCostSats, showSymbol = true)
+                Column { monthlyCosts.forEach { PaykitAmountCell(it) } }
             }
         }
         VerticalDivider(color = Colors.White16, modifier = Modifier.height(50.dp))
@@ -438,6 +440,7 @@ fun SubscriptionDetailScreen(
 ) {
     val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
+    val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
     val paymentHistory by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val subscription = subscriptions.firstOrNull { it.id == id }
     val now = rememberSubscriptionNow(listOfNotNull(subscription).toImmutableList())
@@ -475,8 +478,7 @@ fun SubscriptionDetailScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Caption13Up(text = subscription.cadenceText(), color = Colors.White64)
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        MoneyDisplay(sats = subscription.displaySats, showSymbol = true)
-                        FillWidth()
+                        PaykitAmountDisplay(subscription.amount, modifier = Modifier.weight(1f))
                         SubscriptionAvatar(
                             subscription = subscription,
                             contact = contacts.contactFor(subscription),
@@ -498,6 +500,7 @@ fun SubscriptionDetailScreen(
                         payments.forEach { payment ->
                             PaymentRequestCard(
                                 request = payment,
+                                receipt = receipts.lastOrNull { it.requestId == payment.id },
                                 contact = contacts.contactFor(subscription),
                                 title = subscription.note?.takeIf(String::isNotBlank)
                                     ?: stringResource(R.string.subscriptions__subscription),
@@ -764,10 +767,12 @@ private fun SubscriptionReview(
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(titleText = stringResource(R.string.subscriptions__review_and_subscribe))
-        rememberMoneyText(sats = subscription.displaySats, reversed = true, showSymbol = true)?.let {
-            Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
+        if (subscription.amount.asset == PaykitAsset.BTC) {
+            rememberMoneyText(sats = subscription.displaySats, reversed = true, showSymbol = true)?.let {
+                Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
+            }
         }
-        MoneyDisplay(sats = subscription.displaySats, showSymbol = true)
+        PaykitAmountDisplay(subscription.amount)
         VerticalSpacer(24.dp)
         SubscriptionProviderCard(subscription, contact, onClick = onDetails)
         subscription.paymentDueOnAcceptance(now, Clock.System.now())?.billingPeriod?.let { period ->
@@ -784,7 +789,7 @@ private fun SubscriptionReview(
         if (!subscription.recurrence.unit.isSupported) {
             VerticalSpacer(16.dp)
             BodyM(text = stringResource(R.string.subscriptions__unsupported_description), color = Colors.White64)
-        } else if (subscription.hasPaymentDeadline || subscription.acceptedPaymentEndpointIdentifiers.isEmpty()) {
+        } else if (subscription.acceptedPaymentEndpointIdentifiers.isEmpty()) {
             VerticalSpacer(16.dp)
             BodyM(
                 text = stringResource(R.string.subscriptions__unsupported_payment_description),
@@ -959,10 +964,12 @@ private fun SubscriptionCancel(
                 }
             )
         )
-        rememberMoneyText(sats = subscription.displaySats, reversed = true, showSymbol = true)?.let {
-            Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
+        if (subscription.amount.asset == PaykitAsset.BTC) {
+            rememberMoneyText(sats = subscription.displaySats, reversed = true, showSymbol = true)?.let {
+                Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
+            }
         }
-        MoneyDisplay(sats = subscription.displaySats, showSymbol = true)
+        PaykitAmountDisplay(subscription.amount)
         VerticalSpacer(24.dp)
         SubscriptionProviderCard(
             subscription = subscription,
@@ -1167,29 +1174,31 @@ private fun Instant.formatShortDate(): String = dateTimeFormatterOf("MMMM d")
     .format(java.time.Instant.ofEpochMilli(toEpochMilliseconds()))
 
 internal val PaykitSubscription.displaySats: Long
-    get() = amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
+    get() = amount.atomic.coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
-internal fun subscriptionMonthlyCostSats(
+internal fun subscriptionMonthlyCosts(
     subscriptions: List<PaykitSubscription>,
     now: Instant,
-): Long {
-    val running = subscriptions.filter { it.isPayer && it.runsUntilPaidThrough(now) }
-    val total = running.fold(BigDecimal.ZERO) { total, subscription ->
-        val annualPeriods = when (subscription.recurrence.unit) {
-            PaykitRecurrenceUnit.Minute -> 525_600L
-            PaykitRecurrenceUnit.Hour -> 8_760L
-            PaykitRecurrenceUnit.Day -> 365L
-            PaykitRecurrenceUnit.Week -> 52L
-            PaykitRecurrenceUnit.Month -> 12L
-            PaykitRecurrenceUnit.Year -> 1L
+): List<PaykitAmount> {
+    val active = subscriptions.filter { it.isPayer && it.runsUntilPaidThrough(now) }
+    val assets = active.map { it.amount.asset }.distinct().ifEmpty { listOf(PaykitAsset.BTC) }
+    return assets.sortedBy { it.code }.map { asset ->
+        val total = active.filter { it.amount.asset == asset }.fold(BigDecimal.ZERO) { total, subscription ->
+            val annualPeriods = when (subscription.recurrence.unit) {
+                PaykitRecurrenceUnit.Minute -> 525_600L
+                PaykitRecurrenceUnit.Hour -> 8_760L
+                PaykitRecurrenceUnit.Day -> 365L
+                PaykitRecurrenceUnit.Week -> 52L
+                PaykitRecurrenceUnit.Month -> 12L
+                PaykitRecurrenceUnit.Year -> 1L
+            }
+            val denominator = subscription.recurrence.every.toLong() * 12
+            val monthlyCost = BigDecimal(subscription.amount.atomic.toString())
+                .multiply(BigDecimal.valueOf(annualPeriods))
+                .divide(BigDecimal.valueOf(denominator), MathContext.DECIMAL128)
+                .setScale(0, RoundingMode.HALF_UP)
+            total.add(monthlyCost)
         }
-        val denominator = subscription.recurrence.every.toLong() * 12
-        val monthlyCost = BigDecimal(subscription.amountSats.toString())
-            .multiply(BigDecimal.valueOf(annualPeriods))
-            .divide(BigDecimal.valueOf(denominator), MathContext.DECIMAL128)
-            .setScale(0, RoundingMode.HALF_UP)
-        total.add(monthlyCost)
+        PaykitAmount(asset, total.coerceAtMost(BigDecimal(ULong.MAX_VALUE.toString())).toPlainString().toULong())
     }
-    return total.coerceAtMost(BigDecimal.valueOf(Long.MAX_VALUE))
-        .toLong()
 }

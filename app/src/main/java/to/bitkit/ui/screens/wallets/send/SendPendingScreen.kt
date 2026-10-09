@@ -129,7 +129,7 @@ private fun Content(
 }
 
 @Composable
-private fun HourglassAnimation(modifier: Modifier = Modifier) {
+fun HourglassAnimation(modifier: Modifier = Modifier) {
     val infiniteTransition = rememberInfiniteTransition(label = "hourglass")
     val rotation by infiniteTransition.animateFloat(
         initialValue = -16f,

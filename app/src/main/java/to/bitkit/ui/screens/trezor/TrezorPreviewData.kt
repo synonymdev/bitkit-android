@@ -109,6 +109,9 @@ internal object TrezorPreviewData {
     private const val SAMPLE_XPUB =
         "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqY" +
             "h2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"
+    private const val SAMPLE_ZPUB =
+        "zpub6r8o2p9croV2A7Gh2VZn42iEEv7QCxJrXyqWDUcV7aMapn2nY464gJKzfFT" +
+            "s2Ry4UnCFT1pmvSru6u1KX4GyRs2ti4SYydbtH17Tg8wL57f"
     private const val SAMPLE_PUBKEY =
         "02a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
     private const val SAMPLE_CHAIN_CODE =
@@ -121,6 +124,9 @@ internal object TrezorPreviewData {
 
     val samplePublicKeyResponse = TrezorPublicKeyResponse(
         xpub = SAMPLE_XPUB,
+        xpubSegwit = SAMPLE_ZPUB,
+        descriptor = null,
+        displayablePublicKey = SAMPLE_ZPUB,
         path = "m/84'/0'/0'",
         publicKey = SAMPLE_PUBKEY,
         chainCode = SAMPLE_CHAIN_CODE,

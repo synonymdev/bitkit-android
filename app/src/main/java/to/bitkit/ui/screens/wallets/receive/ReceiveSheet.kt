@@ -28,6 +28,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PaykitPaymentRequest
@@ -66,6 +68,8 @@ fun ReceiveSheet(
     walletState: WalletState,
     isOffline: Boolean,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
+    initialTab: ReceiveTab? = null,
+    onBlockingChange: (Boolean) -> Unit = {},
     hardwareWalletId: String? = null,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     paymentRequestAmountViewModel: AmountInputViewModel = hiltViewModel(key = "PaymentRequestAmount"),
@@ -93,7 +97,7 @@ fun ReceiveSheet(
     var paymentRequestDraft by remember {
         mutableStateOf(
             PaykitPaymentRequestDraft(
-                amountSats = 0uL,
+                amount = PaykitAmount(PaykitAsset.BTC, 0uL),
                 note = "",
                 expiresAt = Clock.System.now() + 7.days,
             )
@@ -172,7 +176,8 @@ fun ReceiveSheet(
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
-                        initialTab = invoiceEditState.initialTab(hardwareWalletId),
+                        initialTab = invoiceEditState.initialTab(hardwareWalletId) ?: initialTab,
+                        onBlockingChange = onBlockingChange,
                         hardwareWalletId = selectedHardwareWalletId,
                         hardwareTabLabel = hardwareWallets.firstOrNull { it.id == selectedHardwareWalletId }
                             ?.let { stringResource(it.vendor.modelNameRes()) },
@@ -183,7 +188,7 @@ fun ReceiveSheet(
                         showPaymentRequestContacts = paymentRequestTargets.isNotEmpty(),
                         onClickPaymentRequestContacts = {
                             paymentRequestDraft = paymentRequestDraft.copy(
-                                amountSats = 0uL,
+                                amount = PaykitAmount(PaykitAsset.BTC, 0uL),
                                 note = "",
                                 expiresAt = Clock.System.now() + 7.days,
                             )
@@ -390,7 +395,7 @@ fun ReceiveSheet(
                         showPaymentRequestButton = paymentRequestTargets.isNotEmpty(),
                         onClickPaymentRequest = { amountSats, note ->
                             paymentRequestDraft = PaykitPaymentRequestDraft(
-                                amountSats = amountSats,
+                                amount = PaykitAmount(PaykitAsset.BTC, amountSats),
                                 note = note,
                                 expiresAt = Clock.System.now() + 7.days,
                             )

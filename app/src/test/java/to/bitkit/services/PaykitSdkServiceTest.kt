@@ -560,6 +560,8 @@ class PaykitSdkServiceTest {
             assertFalse(backup.isCompleted)
             verify(sdk, never()).exportBackupString()
             service.linkedPeers(Priority.Interactive)
+            assertEquals("pending-write-backup", service.exportBackupState(Priority.Interactive))
+            assertFalse(backup.isCompleted)
             if (cancelBackup) {
                 backup.cancel()
                 assertFailsWith<CancellationException> { backup.await() }
@@ -567,7 +569,7 @@ class PaykitSdkServiceTest {
             service.setPaymentSubmissionActive(false)
             runCurrent()
             if (!cancelBackup) assertEquals("pending-write-backup", backup.await())
-            verify(sdk, times(if (cancelBackup) 0 else 1)).exportBackupString()
+            verify(sdk, times(if (cancelBackup) 1 else 2)).exportBackupString()
         }
     }
 

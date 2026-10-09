@@ -275,6 +275,11 @@ data class CurrencyState(
     val lastSuccessfulRefresh: Long? = null,
 )
 
+val CurrencyState.paykitRate: to.bitkit.models.PaykitExchangeRate?
+    get() = rates.firstOrNull {
+        it.quote == "USD"
+    }?.let { to.bitkit.models.PaykitExchangeRate(it.lastPrice, it.lastUpdatedAt) }
+
 interface AmountInputHandler {
     fun convertSatsToFiatString(sats: Long): String
     fun convertFiatToSats(fiat: Double): Long

@@ -28,6 +28,7 @@ import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PrivateOperationError
 import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyIdentityCapability
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,6 +61,9 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.models.FxRate
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.safe
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
@@ -68,8 +72,10 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -104,7 +110,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             val endpoints: List<String>,
             val expected: ULong,
         )
-        val cases = listOf(
+        listOf(
             Case("usd", "1000", listOf(ConversionRate("btc", "0.001")), listOf("btc-lightning-bolt11"), 100_000_000uL),
             Case("usdt", "12.34", listOf(ConversionRate("btc", "0.00002")), listOf("btc-lightning-lnurl"), 24_680uL),
             Case("btc", "0.001", listOf(ConversionRate("btc", "0.5")), listOf("btc-lightning-bolt11"), 50_000uL),
@@ -132,8 +138,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 listOf("btc-regtest-p2wpkh", "btc-lightning-bolt11", "btc-lightning-lnurl"),
                 21_000uL,
             ),
-        )
-        cases.forEach {
+        ).forEach {
             val record = paymentRequestRecord(
                 amount = it.amount,
                 asset = it.asset,
@@ -142,48 +147,40 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             )
             val result = record.parseIncomingPaykitPaymentRequest(clock.now()) as PaykitPaymentRequestParseResult.Parsed
             val request = result.request
-            assertEquals(it.expected, request.amountSats)
             assertEquals(it.amount, request.amountValue)
-            assertEquals(it.asset, record.terms?.amount?.asset)
-            assertEquals(PaymentConversion.Fixed(it.rates), record.terms?.conversion)
-            assertTrue(request.acceptsPaymentAmount(it.expected))
-            assertFalse(request.acceptsPaymentAmount(it.expected.safe() + 1uL.safe()))
-            val expectedMsats = it.expected.safe() * 1000uL.safe()
-            assertTrue(request.acceptsLightningInvoiceAmountMsats(expectedMsats))
-            assertFalse(request.acceptsLightningInvoiceAmountMsats(expectedMsats.safe() + 1uL.safe()))
-        }
-    }
-
-    @Test
-    fun `fixed pricing rejects products beyond exact decimal precision`() {
-        val cases = listOf(
-            Triple("9." + "0".repeat(35) + "1", "0.00004", 36_001uL),
-            Triple("9." + "0".repeat(36) + "1", "0.00004", null),
-            Triple("9." + "0".repeat(36) + "1", "1", null),
-            Triple("0009." + "0".repeat(35) + "10", "0.0000400", 36_001uL),
-        )
-        cases.forEach { (amount, rate, expected) ->
-            val record = paymentRequestRecord(
-                amount = amount,
-                asset = "usd",
-                conversion = PaymentConversion.Fixed(listOf(ConversionRate("btc", rate))),
-                endpoints = listOf("btc-regtest-p2wpkh"),
-            )
-            val result = record.parseIncomingPaykitPaymentRequest(clock.now())
-            if (expected != null) {
-                assertEquals(expected, (result as PaykitPaymentRequestParseResult.Parsed).request.amountSats)
-            } else {
-                assertEquals(
-                    PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPricing),
-                    result,
-                    "$amount * $rate",
-                )
+            for (endpoint in request.acceptedPaymentEndpointIdentifiers) {
+                val method = checkNotNull(MethodId.fromRawValue(endpoint))
+                assertEquals(it.expected, request.payment(method, clock.now()).amount.atomic)
+                assertTrue(request.acceptsPaymentAmount(it.expected, method, at = clock.now()))
+                assertFalse(request.acceptsPaymentAmount(it.expected.safe() + 1uL.safe(), method, at = clock.now()))
+                if (method == MethodId.Bolt11 || method == MethodId.Lnurl) {
+                    val msats = it.expected.safe() * 1000uL.safe()
+                    assertTrue(request.acceptsLightningInvoiceAmountMsats(msats, at = clock.now()))
+                    assertFalse(request.acceptsLightningInvoiceAmountMsats(msats.safe() + 1uL.safe(), at = clock.now()))
+                }
             }
         }
     }
 
     @Test
-    fun `fixed pricing omits unquoted cross asset rails`() {
+    fun `fixed pricing rejects requested amounts beyond currency precision`() {
+        for (amount in listOf("9.001", "9." + "0".repeat(35) + "1")) {
+            val record = paymentRequestRecord(
+                amount = amount,
+                asset = "usd",
+                conversion = PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00004"))),
+                endpoints = listOf("btc-regtest-p2wpkh"),
+            )
+            assertEquals(
+                PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount),
+                record.parseIncomingPaykitPaymentRequest(clock.now()),
+                amount,
+            )
+        }
+    }
+
+    @Test
+    fun `fixed pricing only permits quoted cross asset rails`() {
         val record = paymentRequestRecord(
             amount = "1",
             asset = "usd",
@@ -191,11 +188,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             endpoints = listOf("btc-lightning-bolt11", "btc-regtest-p2wpkh", "btc-regtest-p2tr"),
         )
         val result = record.parseIncomingPaykitPaymentRequest(clock.now()) as PaykitPaymentRequestParseResult.Parsed
-        assertEquals(21_000uL, result.request.amountSats)
-        assertEquals(
-            listOf("btc-regtest-p2wpkh", "btc-regtest-p2tr"),
-            result.request.acceptedPaymentEndpointIdentifiers,
-        )
+        assertEquals(21_000uL, result.request.payment(MethodId.P2wpkh, clock.now()).amount.atomic)
+        assertEquals(21_000uL, result.request.payment(MethodId.P2tr, clock.now()).amount.atomic)
+        assertFails { result.request.payment(MethodId.Bolt11, clock.now()) }
     }
 
     @Test
@@ -205,10 +200,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(ConversionRate("btc", "0")), listOf(ConversionRate("btc", "-1")),
             listOf(ConversionRate("btc", "1e-3")), listOf(ConversionRate("btc", " 1")),
             listOf(ConversionRate("btc", "1\n")), listOf(ConversionRate("btc", "184467440738")),
-            listOf(ConversionRate("btc", "0.000000011")),
             listOf(ConversionRate("btc", "0.123456789012345678901234567890123456789")),
             listOf(ConversionRate("btc", "1"), ConversionRate("btc", "2")),
-            listOf(ConversionRate("btc", "1"), ConversionRate("btc-lightning", "2")),
         )
         (rates.map { PaymentConversion.Fixed(it) } + PaymentConversion.PerPeriod).forEach {
             val record = paymentRequestRecord(
@@ -217,30 +210,32 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 conversion = it,
                 endpoints = listOf("btc-regtest-p2wpkh", "btc-lightning-bolt11"),
             )
-            assertEquals(
-                PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPricing),
-                record.parseIncomingPaykitPaymentRequest(clock.now()),
-            )
+            val result = record.parseIncomingPaykitPaymentRequest(clock.now()) as PaykitPaymentRequestParseResult.Parsed
+            assertFails { result.request.payment(MethodId.P2wpkh, clock.now()) }
+            assertFails { result.request.payment(MethodId.Bolt11, clock.now()) }
         }
     }
 
     @Test
-    fun `conversion subscriptions remain unsupported`() {
+    fun `conversion subscriptions preserve their pricing terms`() {
         val record = paymentRequestRecord(
             conversion = PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.5"))),
             recurrence = PaymentRequestRecurrence(1u, "month", "2027-01-01T00:00:00Z", "2027-01-01T00:00:00Z", null),
         )
-        assertNull(record.toPaykitSubscription())
+        val subscription = assertNotNull(record.toPaykitSubscription())
+        assertEquals(record.terms?.conversion, subscription.pricing.conversion)
     }
 
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
+    private val lightningRepo = mock<LightningRepo>()
     private val presentationStore = mock<PaykitPaymentRequestPresentationStore>()
     private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val paymentProofStore = mock<PaykitPaymentProofStore>()
     private val proofStateVersion = MutableStateFlow(0L)
     private val paymentSubmissionActive = MutableStateFlow(false)
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
+    private val usdtPayments = mock<PaykitUsdtPaymentRepo>()
     private val subscriptionNotificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
     private var schedulerOriginMillis = 0L
     private val clock = object : Clock {
@@ -258,6 +253,46 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paymentSubmissionActive.value = it.getArgument(0)
             Unit
         }
+        stubMessageProcessing()
+        whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
+        whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(presentationStore.loadAcceptedOneTimeIds(any())).thenReturn(emptySet())
+        whenever(presentationStore.addAcceptedOneTimeId(any(), any())).thenAnswer {
+            setOf(it.getArgument<PaykitPaymentRequestId>(1))
+        }
+        whenever(presentationStore.removeAcceptedOneTimeIds(any(), any())).thenReturn(emptySet())
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(
+            presentationStore.loadSubscriptionState(any())
+        ).thenReturn(PaykitSubscriptionPresentationState())
+        whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptyMap())
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(paymentProofStore.backupStateVersion).thenReturn(proofStateVersion)
+        whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
+            .thenReturn(Result.success(emptySet()))
+        whenever(usdtPayments.verifiedReceipts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.protectedRequestIdsForSubscriptionCancellation(any(), any()))
+            .thenReturn(Result.success(emptySet()))
+        sut = PaykitPaymentRequestRepo(
+            testDispatcher,
+            paykitSdkService,
+            settingsStore,
+            presentationStore,
+            diagnostics,
+            paymentProofStore,
+            paymentProofRepo,
+            usdtPayments,
+            subscriptionNotificationScheduler,
+            clock,
+            clock,
+            lightningRepo,
+            currencyRepoWithRate(),
+        )
+        sut.activate(LOCAL_IDENTITY)
+    }
+
+    private suspend fun stubMessageProcessing() {
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(paykitSdkService.processOutboundPrivateMessages(any())).thenReturn(
             OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
@@ -279,36 +314,30 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {
             paykitSdkService.processOutboundPrivateMessages(it.getArgument(0))
         }
-        whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
-        whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
-        whenever(presentationStore.loadAcceptedOneTimeIds(any())).thenReturn(emptySet())
-        whenever(presentationStore.addAcceptedOneTimeId(any(), any())).thenAnswer {
-            setOf(it.getArgument<PaykitPaymentRequestId>(1))
-        }
-        whenever(presentationStore.removeAcceptedOneTimeIds(any(), any())).thenReturn(emptySet())
-        whenever(
-            presentationStore.loadSubscriptionState(any())
-        ).thenReturn(PaykitSubscriptionPresentationState())
-        whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptyMap())
-        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
-        whenever(paymentProofStore.backupStateVersion).thenReturn(proofStateVersion)
-        whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
-            .thenReturn(Result.success(emptySet()))
-        sut = PaykitPaymentRequestRepo(
-            testDispatcher,
-            paykitSdkService,
-            settingsStore,
-            presentationStore,
-            diagnostics,
-            paymentProofStore,
-            paymentProofRepo,
-            subscriptionNotificationScheduler,
-            clock,
-            clock,
-        )
-        sut.activate(LOCAL_IDENTITY)
     }
+
+    private fun currencyRepoWithRate(): CurrencyRepo =
+        mock {
+            on { currencyState }.thenReturn(
+                MutableStateFlow(
+                    CurrencyState(
+                        rates = persistentListOf(
+                            FxRate(
+                                symbol = "BTCUSD",
+                                lastPrice = "100000",
+                                base = "BTC",
+                                baseName = "Bitcoin",
+                                quote = "USD",
+                                quoteName = "US Dollar",
+                                currencySymbol = "$",
+                                currencyFlag = "",
+                                lastUpdatedAt = clock.now().toEpochMilliseconds(),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
 
     @After
     fun tearDown() = test {
@@ -776,7 +805,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh().getOrThrow()
 
         val request = sut.pendingRequests.value.single()
-        assertEquals(100_000uL, request.amountSats)
+        assertEquals(100_000uL, request.amount.atomic)
         assertEquals(listOf(MethodId.Bolt11.rawValue), request.acceptedPaymentEndpointIdentifiers)
     }
 
@@ -927,7 +956,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh().getOrThrow()
 
         assertEquals(listOf("millisatoshi-safe-max"), sut.pendingRequests.value.map { it.paymentRequestId })
-        assertEquals(listOf(ULong.MAX_VALUE / 1000uL), sut.pendingRequests.value.map { it.amountSats })
+        assertEquals(listOf(ULong.MAX_VALUE / 1000uL), sut.pendingRequests.value.map { it.amount.atomic })
     }
 
     @Test
@@ -935,8 +964,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = PaykitPaymentRequest(
             paymentRequestId = PAYMENT_REQUEST_ID,
             counterparty = COUNTERPARTY,
-            amountValue = "0.000025",
-            amountSats = 2_500uL,
+            paymentReference = "test-reference",
+            amount = PaykitAmount(PaykitAsset.BTC, 2_500uL),
             expiresAt = null,
             acceptedPaymentEndpointIdentifiers = listOf(MethodId.Bolt11.rawValue),
         )
@@ -1497,9 +1526,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             diagnostics,
             paymentProofStore,
             paymentProofRepo,
+            usdtPayments,
             subscriptionNotificationScheduler,
             clock,
             clock,
+            lightningRepo,
+            mock(),
         )
         other.activate(LOCAL_IDENTITY)
         var record = paymentRequestRecord()
@@ -1675,55 +1707,51 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `proposal uses exact linked capable path and canonical bitcoin terms`() = test {
-        val target = PaykitPaymentRequestTarget(COUNTERPARTY)
-        whenever(
-            paykitSdkService.identityStatus()
-        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
-        whenever(paykitSdkService.linkedPeers()).thenReturn(
-            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
-        )
-        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(
-            true,
-        )
-        whenever(
-            paykitSdkService.proposePaymentRequest(
-                eq(COUNTERPARTY),
-                any(),
-                eq(LOCAL_IDENTITY),
-            ),
-        ).thenReturn(
-            paymentRequestRecord(
-                role = PaymentRequestLocalRole.PAYEE,
-                counterparty = COUNTERPARTY,
-            ),
-        )
+    fun `proposal uses canonical terms and accepts available selected methods`() = test {
+        val target =
+            stubProposal(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE, counterparty = COUNTERPARTY))
         val expiry = clock.now().plus(60.seconds)
 
-        val creation = sut.propose(
-            draft = PaykitPaymentRequestDraft(amountSats = 1uL, note = " Lunch ", expiresAt = expiry),
-            target = target,
-            savedPublicKeys = listOf(COUNTERPARTY),
-        ).getOrThrow()
-        val request = creation.request
+        val onchain = MethodId.entries.first { it.isOnchain }.rawValue
+        for ((canReceiveLightning, restriction) in listOf(false to null, true to null, true to listOf(onchain))) {
+            whenever(lightningRepo.canReceive()).thenReturn(canReceiveLightning)
+            clearInvocations(paykitSdkService)
+            val creation = sut.propose(
+                draft = PaykitPaymentRequestDraft(
+                    amount = PaykitAmount(PaykitAsset.BTC, 1uL),
+                    note = " Lunch ",
+                    expiresAt = expiry,
+                    acceptedPaymentEndpointIdentifiers = restriction,
+                ),
+                target = target,
+                savedPublicKeys = listOf(COUNTERPARTY),
+            ).getOrThrow()
+            val request = creation.request
 
-        val proposal = argumentCaptor<PaykitPaymentRequestProposalTerms>()
-        verifyBlocking(paykitSdkService) {
-            proposePaymentRequest(
-                eq(COUNTERPARTY),
-                proposal.capture(),
-                eq(LOCAL_IDENTITY),
-            )
+            val proposal = argumentCaptor<PaykitPaymentRequestProposalTerms>()
+            verifyBlocking(paykitSdkService) {
+                proposePaymentRequest(eq(COUNTERPARTY), proposal.capture(), eq(LOCAL_IDENTITY))
+            }
+            assertEquals("0.00000001", proposal.firstValue.amountValue)
+            assertTrue(proposal.firstValue.paymentReference.startsWith("bitkit-"))
+            assertEquals(expiry.toString(), proposal.firstValue.proposalExpiresAt)
+            val accepted = proposal.firstValue.acceptedPaymentEndpointIdentifiers
+            if (restriction != null) {
+                assertEquals(restriction, accepted)
+            } else {
+                assertTrue(accepted.contains(onchain))
+                assertEquals(canReceiveLightning, accepted.contains(MethodId.Bolt11.rawValue))
+                assertEquals(
+                    PublicPaykitRepo.isUsdtPaymentOptionEnabled(SettingsData()),
+                    accepted.contains(MethodId.UsdtArbitrum.rawValue),
+                )
+            }
+            assertEquals("{\"note\":\"Lunch\"}", proposal.firstValue.metadataJson)
+            assertEquals("Lunch", request.note)
+            assertEquals(PaykitPaymentRequestDeliveryStatus.Queued, request.deliveryStatus)
+            assertEquals(LOCAL_IDENTITY, creation.creatorIdentity)
+            assertTrue(creation.wasPublishedToActiveState)
         }
-        assertEquals("0.00000001", proposal.firstValue.amountValue)
-        assertTrue(proposal.firstValue.paymentReference.startsWith("bitkit-"))
-        assertEquals(expiry.toString(), proposal.firstValue.proposalExpiresAt)
-        assertTrue(proposal.firstValue.acceptedPaymentEndpointIdentifiers.isNotEmpty())
-        assertEquals("{\"note\":\"Lunch\"}", proposal.firstValue.metadataJson)
-        assertEquals("Lunch", request.note)
-        assertEquals(PaykitPaymentRequestDeliveryStatus.Queued, request.deliveryStatus)
-        assertEquals(LOCAL_IDENTITY, creation.creatorIdentity)
-        assertTrue(creation.wasPublishedToActiveState)
         verify(paykitSdkService).identityStatus(Priority.Interactive)
         verify(paykitSdkService).linkedPeers(Priority.Interactive)
         verify(paykitSdkService).processOutboundPrivateMessages(COUNTERPARTY, Priority.Interactive)
@@ -1747,7 +1775,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             whenever(paykitSdkService.allPaymentRequests(LOCAL_IDENTITY)).thenReturn(listOfNotNull(freshRecord))
 
             val creation = sut.propose(
-                PaykitPaymentRequestDraft(1uL, "Lunch", clock.now().plus(60.seconds)),
+                PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds)),
                 target,
                 listOf(COUNTERPARTY),
             ).getOrThrow()
@@ -1784,7 +1812,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             clearInvocations(paykitSdkService)
 
             val creation = sut.propose(
-                PaykitPaymentRequestDraft(1uL, "Lunch", clock.now().plus(60.seconds)),
+                PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds)),
                 target,
                 listOf(COUNTERPARTY),
             ).getOrThrow()
@@ -1803,7 +1831,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun `proposal remains created after status read failure and propagates status read cancellation`() = test {
         val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalOutboundMessageId = 7uL)
         val target = stubProposal(record)
-        val draft = PaykitPaymentRequestDraft(1uL, "Lunch", clock.now().plus(60.seconds))
+        val draft = PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds))
         var cancelled = false
         whenever(paykitSdkService.allPaymentRequests(LOCAL_IDENTITY)).doSuspendableAnswer {
             if (cancelled) throw CancellationException()
@@ -1830,7 +1858,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
 
         val creation = sut.propose(
-            PaykitPaymentRequestDraft(1uL, "Lunch", clock.now().plus(60.seconds)),
+            PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds)),
             target,
             listOf(COUNTERPARTY),
         ).getOrThrow()
@@ -1841,7 +1869,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `proposal revalidates and drains only the selected saved contact`() = test {
-        val target = PaykitPaymentRequestTarget(COUNTERPARTY)
+        val target =
+            stubProposal(
+                paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalOutboundMessageId = 7uL)
+            )
         val stalledDiscovery = CompletableDeferred<Unit>()
         val unrelatedDelivery = CompletableDeferred<Unit>()
         whenever(paykitSdkService.processPendingPrivateMessages()).doSuspendableAnswer {
@@ -1855,32 +1886,23 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.processOutboundPrivateMessages(COUNTERPARTY)).thenReturn(
             OutboundPrivateSendReport(listOf(7uL), listOf(7uL), emptyList(), emptyList(), emptyList()),
         )
-        whenever(
-            paykitSdkService.identityStatus()
-        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(
                 linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED),
                 linkedPeer(SECOND_IDENTITY, LinkedPeerState.LINKED),
             ),
         )
-        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(
-            true,
-        )
         whenever(paykitSdkService.canReceivePaymentRequests(eq(SECOND_IDENTITY), any())).doSuspendableAnswer {
             stalledDiscovery.await()
             true
         }
-        whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))).thenReturn(
-            paymentRequestRecord(
-                role = PaymentRequestLocalRole.PAYEE,
-                counterparty = COUNTERPARTY,
-            ).copy(proposalOutboundMessageId = 7uL),
-        )
-
         val proposal = async {
             sut.propose(
-                draft = PaykitPaymentRequestDraft(1uL, "Lunch", clock.now().plus(60.seconds)),
+                draft = PaykitPaymentRequestDraft(
+                    PaykitAmount(PaykitAsset.BTC, 1uL),
+                    "Lunch",
+                    clock.now().plus(60.seconds)
+                ),
                 target = target,
                 savedPublicKeys = listOf(SECOND_IDENTITY, COUNTERPARTY),
             )
@@ -1923,7 +1945,11 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val proposal = async {
             sut.propose(
-                draft = PaykitPaymentRequestDraft(1uL, "Lunch", clock.now().plus(60.seconds)),
+                draft = PaykitPaymentRequestDraft(
+                    PaykitAmount(PaykitAsset.BTC, 1uL),
+                    "Lunch",
+                    clock.now().plus(60.seconds)
+                ),
                 target = target,
                 savedPublicKeys = listOf(COUNTERPARTY),
             ).getOrThrow()
@@ -2452,7 +2478,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertFailsWith<PaykitPaymentRequestError.RequestExpired> {
             sut.propose(
-                draft = PaykitPaymentRequestDraft(1uL, "", clock.now()),
+                draft = PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "", clock.now()),
                 target = target,
                 savedPublicKeys = listOf(COUNTERPARTY),
             ).getOrThrow()

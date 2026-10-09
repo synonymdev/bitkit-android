@@ -1,10 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
-import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +23,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,9 +36,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -66,6 +59,7 @@ import to.bitkit.R
 import to.bitkit.ext.commentAllowed
 import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.PaykitPaymentRequest
@@ -79,6 +73,10 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.NumberPadActionButton
+import to.bitkit.ui.components.PaykitAmountDisplay
+import to.bitkit.ui.components.PaymentRequestInvoiceNote
+import to.bitkit.ui.components.PaymentRequestSummary
+import to.bitkit.ui.components.PaymentReviewIllustration
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SendCell
@@ -86,9 +84,7 @@ import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.TextInput
-import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.components.ZigzagDivider
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.settingsViewModel
@@ -109,8 +105,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
-private const val SWIPE_ROTATION_DEGREES = 14f
-private const val IMAGE_FILL_PERCENTAGE = 0.8f
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
 
 @Suppress("MagicNumber")
@@ -350,15 +344,26 @@ private fun ContentRunning(
             .padding(horizontal = 16.dp)
             .fillMaxSize()
     ) {
-        BalanceHeaderView(
-            sats = (preparingRequest?.amountSats ?: uiState.amount).toLong(),
-            useSwipeToHide = false,
-            onClick = { onEvent(SendEvent.BackToAmount) }.takeUnless { isPreparing },
-            testTag = "ReviewAmount",
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("ReviewAmount")
-        )
+        if (preparingRequest != null) {
+            Caption13Up(
+                text = stringResource(R.string.wallet__payment_request_requested_amount),
+                color = Colors.White64
+            )
+            VerticalSpacer(8.dp)
+        }
+        if (preparingRequest != null && preparingRequest.amount.asset != PaykitAsset.BTC) {
+            PaykitAmountDisplay(preparingRequest.amount)
+        } else {
+            BalanceHeaderView(
+                sats = (preparingRequest?.amount?.atomic ?: uiState.amount).toLong(),
+                useSwipeToHide = false,
+                onClick = { onEvent(SendEvent.BackToAmount) }.takeUnless { isPreparing },
+                testTag = "ReviewAmount",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("ReviewAmount")
+            )
+        }
 
         BoxWithConstraints(
             modifier = Modifier
@@ -407,20 +412,12 @@ private fun ContentRunning(
                         PaymentRequestSummary(
                             profile = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
                             note = if (isPreparing) preparingRequest.note else uiState.oneOffPaymentRequestNote,
-                            iconColor = accentColor,
                         )
                         VerticalSpacer(16.dp)
                     }
-                    Image(
-                        painter = painterResource(R.drawable.coin_stack_4),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth(IMAGE_FILL_PERCENTAGE)
-                            .weight(1f)
-                            .align(Alignment.CenterHorizontally)
-                            .padding(bottom = 16.dp)
-                            .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
+                    PaymentReviewIllustration(
+                        swipeProgress = { swipeProgress.floatValue },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -860,97 +857,6 @@ private fun ContactRecipient(
             text = profile.name,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun PaymentRequestSummary(
-    profile: PubkyProfile?,
-    note: String?,
-    iconColor: Color,
-    modifier: Modifier = Modifier,
-) {
-    if (profile == null) return
-    val noteColor = if (note != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = modifier.height(IntrinsicSize.Min)
-    ) {
-        SendCell(
-            caption = stringResource(R.string.wallet__send_from),
-            modifier = Modifier.weight(1f)
-        ) {
-            PaymentRequestSummaryValue(
-                text = profile.name,
-                icon = R.drawable.ic_user,
-                iconColor = iconColor,
-                testTag = "PaymentRequestFrom",
-            )
-        }
-        SendCell(
-            caption = stringResource(R.string.wallet__payment_request_for),
-            modifier = Modifier.weight(1f)
-        ) {
-            PaymentRequestSummaryValue(
-                text = note ?: stringResource(R.string.wallet__payment_request_not_specified),
-                textColor = noteColor,
-                icon = R.drawable.ic_note,
-                iconColor = iconColor,
-                testTag = "PaymentRequestFor",
-            )
-        }
-    }
-}
-
-@Composable
-private fun PaymentRequestSummaryValue(
-    text: String,
-    @DrawableRes icon: Int,
-    iconColor: Color,
-    testTag: String,
-    modifier: Modifier = Modifier,
-    textColor: Color = MaterialTheme.colorScheme.primary,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = modifier
-    ) {
-        Icon(
-            painter = painterResource(icon),
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(16.dp)
-        )
-        BodySSB(
-            text = text,
-            color = textColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag(testTag)
-        )
-    }
-}
-
-@Composable
-private fun PaymentRequestInvoiceNote(
-    note: String,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Caption13Up(text = stringResource(R.string.wallet__activity_invoice_note), color = Colors.White64)
-        VerticalSpacer(8.dp)
-        ZigzagDivider()
-        Title(
-            text = note,
-            color = Colors.White,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Colors.White10)
-                .padding(24.dp)
-                .testTag("PaymentRequestInvoiceNote")
         )
     }
 }
