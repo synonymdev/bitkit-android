@@ -79,7 +79,7 @@ Reference: [USDT designs](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bi
 
 - [ ] Check funded and empty Home and USDT wallet layouts; the USDT accent is #009393 throughout receive, send, Paykit, sharing and celebrations.
 - [ ] In Receive, open Network and select an enabled source. Verify the minimum-amount error is compact and clears on editing.
-- [ ] Enter an accepted amount, switch BTC/USD twice and verify the amount is preserved. Continue and verify Estimated Fees shows the expected deduction and received amount, then continues to the QR for that network.
+- [ ] Enter an accepted dollar amount and verify its BTC equivalent. Continue and verify Estimated Fees shows the expected deduction and received amount, then continues to the QR for that network.
 - [ ] Open address details, verify Copy and QR target the same address, and return to the QR.
 - [ ] Back out of an unprepared network and verify the displayed network always matches the QR. Return to Arbitrum and verify its original wallet address.
 - [ ] With an authorized incoming transfer or an explicitly identified fixture, verify teal receive confetti, Details and OK; Details opens that transfer.

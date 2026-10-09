@@ -832,6 +832,7 @@ fun CopyAddressCard(
     body: String? = null,
     testTag: String? = null,
     accentColor: Color? = null,
+    shareContent: String = address,
 ) {
     val context = LocalContext.current
 
@@ -906,7 +907,7 @@ fun CopyAddressCard(
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,
-                onClick = { shareText(context, address) },
+                onClick = { shareText(context, shareContent) },
                 fullWidth = false,
                 icon = {
                     Icon(

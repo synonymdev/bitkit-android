@@ -13,11 +13,14 @@ import to.bitkit.repositories.paykitRate
 import to.bitkit.ui.LocalCurrencies
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.text.NumberFormat
+import java.util.Locale
 
 @Composable
 internal fun UsdtAmountHeader(
     amount: String,
     modifier: Modifier = Modifier,
+    displayAmount: String? = null,
     hideBalance: Boolean = false,
     prefix: String? = null,
     onToggleHide: (() -> Unit)? = null,
@@ -30,7 +33,7 @@ internal fun UsdtAmountHeader(
         isBitcoinPrimary = false,
         smallRowText = btc ?: "USDT",
         smallRowSymbol = if (btc != null) BITCOIN_SYMBOL else null,
-        largeRowText = amount,
+        largeRowText = displayAmount ?: amount,
         largeRowSymbol = "$",
         largeRowPrefix = prefix,
         showSymbol = true,
@@ -44,10 +47,13 @@ internal fun UsdtAmountHeader(
 
 private const val USDT_CENT = 10_000uL
 
-internal fun usdtOverviewAmount(amount: ULong): String {
-    if (amount > 0uL && amount < USDT_CENT) return "<0.01"
-    return BigDecimal(amount.toString()).movePointLeft(PaykitAsset.USDT.decimals).setScale(2, RoundingMode.HALF_UP)
-        .stripTrailingZeros().toPlainString()
+internal fun usdtOverviewAmount(amount: ULong, locale: Locale = Locale.getDefault()): String {
+    val format = NumberFormat.getNumberInstance(locale).apply {
+        maximumFractionDigits = 2
+        roundingMode = RoundingMode.HALF_UP
+    }
+    if (amount > 0uL && amount < USDT_CENT) return "<" + format.format(BigDecimal("0.01"))
+    return format.format(BigDecimal(amount.toString()).movePointLeft(PaykitAsset.USDT.decimals))
 }
 
 internal fun usdtDisplaySats(amount: String, rate: PaykitExchangeRate?, now: Long = nowMillis()): Long? {

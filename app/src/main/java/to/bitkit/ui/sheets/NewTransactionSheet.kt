@@ -46,6 +46,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SHEET_INTRO_IMAGE_WIDTH_FRACTION
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.UsdtAmountHeader
+import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -173,6 +174,7 @@ fun NewTransactionSheetView(
             if (details.usdtAmount != null) {
                 UsdtAmountHeader(
                     amount = usdtFormatAmount(details.usdtAmount),
+                    displayAmount = usdtOverviewAmount(details.usdtAmount),
                     hideBalance = hideBalance,
                     modifier = Modifier.testTag("ReceivedTransaction")
                 )
