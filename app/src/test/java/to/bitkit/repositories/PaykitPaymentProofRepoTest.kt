@@ -2041,6 +2041,66 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         runCurrent()
     }
 
+    @Test
+    fun `retained refused hardware reopen preserves exact receipt and blocks new preparation`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val raw = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
+            .bufferedReader().use { it.readText().trim() }
+        val proof = PendingPaykitPaymentProof(
+            identity = LOCAL_IDENTITY,
+            requestId = request.id,
+            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+            paymentAppId = "bitkit",
+            kind = PaykitPaymentProofKind.Onchain,
+            paymentStarted = true,
+            paymentIdentifier = SignedTransactionId.fromHex(raw),
+            onchainAddress = ONCHAIN_ADDRESS,
+            onchainAmountSats = request.amountSats,
+            onchainWalletId = "trezor:original",
+            hardwareDispatchAttempted = true,
+            hardwareRefusedForNavigation = true,
+            hardwareSignedTransaction = raw,
+            hardwareMiningFeeSats = 1_000uL,
+            hardwareFeeRate = 2uL,
+            hardwareTotalSpent = 2_000uL,
+        )
+        storedProofs = listOf(proof)
+        val reopened = paymentProofRepo()
+        assertEquals(proof, reopened.retainedHardwareOnchainRequest(request))
+        assertEquals(
+            raw,
+            reopened.retainedHardwareOnchainPayment(
+                request.id,
+                proof.onchainWalletId,
+                LOCAL_IDENTITY,
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+            )?.signedTx?.serializedTx,
+        )
+        assertNull(reopened.retainedHardwareOnchainRequest(request.copy(amountSats = request.amountSats + 1uL)))
+        assertNull(reopened.retainedHardwareOnchainRequest(request.copy(paymentRequestId = "foreign-request")))
+        assertTrue(reopened.hasRetainedHardwareOnchainPayment(proof.onchainWalletId))
+        assertEquals(
+            PaykitPaymentRequestError.OperationInProgress,
+            reopened.prepare(
+                request,
+                MethodId.P2wpkh.rawValue,
+                "bitkit",
+                PaykitPaymentProofKind.Onchain,
+            ).exceptionOrNull(),
+        )
+        storedProofs = listOf(proof.copy(hardwareRefusedForNavigation = false))
+        assertNull(reopened.retainedHardwareOnchainRequest(request))
+        assertTrue(reopened.hasRetainedHardwareOnchainPayment(proof.onchainWalletId))
+        storedProofs = listOf(proof)
+        whenever(paykitSdkService.identityStatus())
+            .thenReturn(IdentityStatus(COUNTERPARTY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        assertNull(reopened.retainedHardwareOnchainRequest(request))
+        assertEquals(listOf(proof), storedProofs)
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+    }
+
     private fun paymentProofRepo(store: PaykitPaymentProofStore = this.store) = PaykitPaymentProofRepo(
         ioDispatcher = testDispatcher,
         paykitSdkService = paykitSdkService,

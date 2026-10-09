@@ -1315,6 +1315,7 @@ class AppViewModel @Inject constructor(
                 }
                 if (!ownsPaymentRequestPreparation(preparation)) return true
             }
+            if (reopenRetainedHardwarePayment(request, generation, preparation)) return true
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
             return finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
         } finally {
@@ -1324,6 +1325,64 @@ class AppViewModel @Inject constructor(
                 finishPaymentRequestPreparation(preparation)
             }
         }
+    }
+
+    @Suppress("ReturnCount") // Keep presentation and identity guards as early exits.
+    private suspend fun reopenRetainedHardwarePayment(
+        request: PaykitPaymentRequest,
+        generation: Long,
+        preparation: PaymentRequestPreparation?,
+    ): Boolean {
+        val retained = runSuspendCatching { paykitPaymentProofRepo.retainedHardwareOnchainRequest(request) }
+        retained.exceptionOrNull()?.let {
+            toast(it)
+            return true
+        }
+        val proof = retained.getOrNull() ?: return false
+        val identity = proof.identity
+        if (!isCurrentPaymentRequestPresentation(request, generation, preparation) ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        ) {
+            return true
+        }
+        paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull()?.let {
+            toast(it)
+            return true
+        }
+        resetSendState(
+            isPaymentRequest = true,
+            paymentRequestNote = request.note,
+            hardwareWalletId = proof.onchainWalletId,
+            incomingPaymentRequestId = request.id,
+            selectedTags = requestedPaymentRequestTags,
+        )
+        if (!isCurrentPaymentRequestPresentation(request, generation, preparation) ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        ) {
+            return true
+        }
+        // The retained receipt authorizes only reopening the same signed payment, not preparing another spend.
+        setActiveContactPaymentContext(
+            ContactPaymentContext(publicKey = request.counterparty, incomingPaymentRequest = request),
+        )
+        _sendUiState.update {
+            it.copy(
+                contactPaymentProfile = activeContactPaymentProfile(),
+                address = requireNotNull(proof.onchainAddress),
+                addressInput = requireNotNull(proof.onchainAddress),
+                isAddressInputValid = true,
+                amount = requireNotNull(proof.onchainAmountSats),
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Custom(requireNotNull(proof.hardwareFeeRate).toUInt()),
+                onchainFeeUi = OnchainFeeUi(
+                    rate = FeeRate.CUSTOM,
+                    sats = requireNotNull(proof.hardwareMiningFeeSats).toLong(),
+                ),
+            )
+        }
+        showSheet(Sheet.Send(SendRoute.Confirm, hardwareWalletId = proof.onchainWalletId))
+        return true
     }
 
     private fun finishIncomingPaymentRequestPreparation(

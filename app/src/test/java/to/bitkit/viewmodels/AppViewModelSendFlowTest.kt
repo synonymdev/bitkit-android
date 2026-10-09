@@ -1469,6 +1469,60 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `reopened refused hardware request uses original receipt without new payment preparation`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest().copy(
+            lifecycleState = PaymentRequestLifecycleState.ACCEPTED,
+            amountSats = 1_000uL,
+            amountValue = "0.00001000",
+        )
+        val signed = hardwareSignedReceipt()
+        val proof = to.bitkit.repositories.PendingPaykitPaymentProof(
+            identity = testPublicKey,
+            requestId = request.id,
+            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+            paymentAppId = "bitkit",
+            kind = PaykitPaymentProofKind.Onchain,
+            paymentStarted = true,
+            paymentIdentifier = to.bitkit.utils.SignedTransactionId.fromHex(signed.serializedTx),
+            onchainAddress = REGTEST_ADDRESS,
+            onchainAmountSats = request.amountSats,
+            onchainWalletId = HARDWARE_WALLET_ID,
+            hardwareDispatchAttempted = true,
+            hardwareRefusedForNavigation = true,
+            hardwareSignedTransaction = signed.serializedTx,
+            hardwareMiningFeeSats = signed.miningFeeSats,
+            hardwareFeeRate = signed.feeRate,
+            hardwareTotalSpent = signed.totalSpent,
+        )
+        whenever(paykitPaymentProofRepo.retainedHardwareOnchainRequest(request)).thenReturn(proof)
+        whenever(privatePaykitRepo.beginPaymentRequest(request))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.OperationInProgress))
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 0uL))
+        pendingPaykitPaymentRequests.value = listOf(request)
+        surfacedPaykitPaymentRequestIds += request.id
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+        assertEquals(REGTEST_ADDRESS, sut.sendUiState.value.address)
+        assertEquals(request.amountSats, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+        assertFalse(sut.sendUiState.value.canSwitchFundingSource)
+        assertEquals(request.id, sut.sendUiState.value.incomingPaymentRequestId)
+        assertEquals(signed.miningFeeSats.toLong(), sut.sendUiState.value.onchainFeeUi.sats)
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+        verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+    }
+
+    @Test
     fun `opened request passes its note to the confirm sheet`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest().copy(note = "Lunch last week")

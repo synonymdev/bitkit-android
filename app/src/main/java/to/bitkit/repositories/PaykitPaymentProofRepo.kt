@@ -132,6 +132,8 @@ class PaykitPaymentProofRepo @Inject constructor(
                     identity = publicKey,
                     completedProofKinds = proofs.filter { it.proofData != null }.associate { it.requestId to it.kind },
                     inFlightRequestIds = proofs.filter { it.paymentStarted }.mapTo(mutableSetOf()) { it.requestId },
+                    reopenableHardwareRequestIds = proofs.filter { it.isReopenableHardwareReceipt(publicKey) }
+                        .mapTo(mutableSetOf()) { it.requestId },
                 )
             }
         }
@@ -144,6 +146,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         val identity: String,
         val completedProofKinds: Map<PaykitPaymentRequestId, PaykitPaymentProofKind>,
         val inFlightRequestIds: Set<PaykitPaymentRequestId>,
+        val reopenableHardwareRequestIds: Set<PaykitPaymentRequestId>,
     )
 
     suspend fun backupSnapshot(): List<PaykitPaymentStateBackup.Proof> = withContext(ioDispatcher) {
@@ -655,6 +658,16 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
     }
 
+    suspend fun retainedHardwareOnchainRequest(request: PaykitPaymentRequest): PendingPaykitPaymentProof? =
+        withContext(ioDispatcher) {
+            operationMutex.withLock {
+                val identity = currentIdentity() ?: return@withLock null
+                loadProofs().singleOrNull {
+                    it.isReopenableHardwareReceipt(identity) && it.matchesHardwareRetryRequest(request)
+                }
+            }
+        }
+
     suspend fun retainedHardwareOnchainPayment(
         requestId: PaykitPaymentRequestId,
         walletId: String,
@@ -696,14 +709,6 @@ class PaykitPaymentProofRepo @Inject constructor(
                 )
             }
         }
-    }
-
-    private fun PendingPaykitPaymentProof.retainedSignedHardwareReceipt(): HwFundingSignedTx? {
-        val raw = hardwareSignedTransaction ?: return null
-        val txid = runCatching { SignedTransactionId.fromHex(raw) }.getOrNull() ?: return null
-        if (!txid.equals(paymentIdentifier, true)) return null
-        if (hardwareMiningFeeSats == null || hardwareFeeRate == null || hardwareTotalSpent == null) return null
-        return HwFundingSignedTx(raw, hardwareMiningFeeSats, hardwareFeeRate, hardwareTotalSpent)
     }
 
     suspend fun clearHardwareOnchainCandidateBeforeDispatch(
@@ -1372,3 +1377,25 @@ private fun String.matchesPaymentHash(paymentHash: String): Boolean {
 private fun String.isHex(byteCount: Int): Boolean = hexBytes()?.size == byteCount
 
 private fun String.hexBytes(): ByteArray? = runCatching { fromHex() }.getOrNull()
+
+internal fun PendingPaykitPaymentProof.retainedSignedHardwareReceipt(): HwFundingSignedTx? {
+    val raw = hardwareSignedTransaction ?: return null
+    val txid = runCatching { SignedTransactionId.fromHex(raw) }.getOrNull() ?: return null
+    if (!txid.equals(paymentIdentifier, true)) return null
+    if (hardwareMiningFeeSats == null || hardwareFeeRate == null || hardwareTotalSpent == null) return null
+    return HwFundingSignedTx(raw, hardwareMiningFeeSats, hardwareFeeRate, hardwareTotalSpent)
+}
+
+@Suppress("CyclomaticComplexMethod")
+internal fun PendingPaykitPaymentProof.isReopenableHardwareReceipt(identity: String): Boolean =
+    PubkyPublicKeyFormat.matches(this.identity, identity) && kind == PaykitPaymentProofKind.Onchain &&
+        paymentStarted && onchainWalletId != WalletScope.default && hardwareDispatchAttempted == true &&
+        hardwareRefusedForNavigation && !hardwareDispatchDenied && !onchainAcceptanceVerified && proofData == null &&
+        billingPeriod == null && !onchainAddress.isNullOrBlank() && onchainAmountSats != null &&
+        hardwareFeeRate != null && hardwareFeeRate in 1uL..UInt.MAX_VALUE.toULong() &&
+        hardwareMiningFeeSats != null && hardwareMiningFeeSats <= Long.MAX_VALUE.toULong() &&
+        retainedSignedHardwareReceipt() != null
+
+internal fun PendingPaykitPaymentProof.matchesHardwareRetryRequest(request: PaykitPaymentRequest): Boolean =
+    requestId == request.id && billingPeriod == request.billingPeriod && onchainAmountSats == request.amountSats &&
+        paymentEndpointIdentifier in request.acceptedPaymentEndpointIdentifiers
