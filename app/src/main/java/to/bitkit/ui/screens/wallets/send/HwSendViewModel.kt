@@ -479,7 +479,7 @@ class HwSendViewModel @Inject constructor(
         } == true
         // This changes navigation only: a protocol refusal never releases the durable wallet guard.
         val refused = retainedShopPayment && error.isHardwareBroadcastRefusalForNavigation()
-        pendingBroadcast = pendingBroadcast?.copy(isRefusedForNavigation = refused)
+        if (refused) pendingBroadcast = pendingBroadcast?.copy(isRefusedForNavigation = true)
         if (refused) {
             val payment = requireNotNull(pendingBroadcast)
             val request = payment.request
@@ -494,7 +494,9 @@ class HwSendViewModel @Inject constructor(
                 )
             }.onFailure { Logger.warn("Failed to save hardware refusal navigation state", it, context = TAG) }
         }
-        _uiState.update { it.copy(isBroadcastUnresolved = retainedShopPayment && !refused) }
+        _uiState.update {
+            it.copy(isBroadcastUnresolved = retainedShopPayment && pendingBroadcast?.blocksNavigation == true)
+        }
         when {
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
@@ -594,5 +596,5 @@ private data class PendingHwSendBroadcast(
 
     fun matches(request: HwSendRequest): Boolean = this.request == request ||
         hasAttemptedBroadcast && this.request.paymentRequestId != null &&
-        this.request.copy(satsPerVByte = request.satsPerVByte) == request
+        this.request.copy(satsPerVByte = request.satsPerVByte, tags = request.tags) == request
 }

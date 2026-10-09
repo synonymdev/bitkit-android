@@ -1210,6 +1210,139 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `retained Shop payment retries original bytes after tags change`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+            tags = listOf("original-tag"),
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.InvalidTransaction("bad-txns-inputs-missingorspent")),
+            Result.failure(BroadcastException.ElectrumException("response lost after dispatch")),
+        )
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        sut.cancel()
+        advanceUntilIdle()
+        sut.signAndBroadcast(original.copy(tags = listOf("new-display-tag")))
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+        verify(proofRepo, times(2)).retainHardwareOnchainCandidate(
+            requireNotNull(original.paymentRequestId),
+            original.walletId,
+            SignedTransactionId.fromHex(fixture.signedTx.serializedTx),
+            original.paymentIdentity,
+            original.address,
+            original.amountSats,
+            fixture.signedTx,
+        )
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.canLeave)
+    }
+
+    @Test
+    fun `pre-dispatch retry marker denial after refusal keeps the sheet dismissable`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.InvalidTransaction("bad-txns-inputs-missingorspent")))
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        whenever(
+            proofRepo.markHardwareOnchainDispatch(
+                any(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull(),
+                any(),
+                any(),
+            )
+        ).thenReturn(false)
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        assertTrue(sut.uiState.value.canLeave)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        verify(proofRepo, never()).clearHardwareOnchainCandidateBeforeDispatch(
+            any(),
+            any(),
+            any(),
+            org.mockito.kotlin.anyOrNull(),
+            any(),
+            any(),
+            any(),
+        )
+    }
+
+    @Test
+    fun `retry setup failure before boundary after refusal keeps the sheet dismissable`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.InvalidTransaction("bad-txns-inputs-missingorspent")))
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+        whenever(hwWalletRepo.broadcastFundingAtBoundary(any(), org.mockito.kotlin.anyOrNull(), any()))
+            .thenReturn(Result.failure(IllegalStateException("device setup failed before callback")))
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(proofRepo, times(1)).markHardwareOnchainDispatch(
+            any(),
+            any(),
+            any(),
+            org.mockito.kotlin.anyOrNull(),
+            any(),
+            any(),
+        )
+        assertTrue(sut.uiState.value.canLeave)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+    }
+
+    @Test
+    fun `retained Shop retry still rejects changed payment identity or recipient`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(
+            paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            paymentIdentity = "original-identity",
+        )
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.InvalidTransaction("bad-txns-inputs-missingorspent")))
+        sut.signAndBroadcast(original)
+        advanceUntilIdle()
+        for (changed in listOf(
+            original.copy(paymentIdentity = "different-payer"),
+            original.copy(paymentRequestId = PaykitPaymentRequestId("different-request", "counterparty")),
+            original.copy(address = "different-recipient"),
+            original.copy(amountSats = original.amountSats + 1uL),
+        )) {
+            sut.signAndBroadcast(changed)
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.canLeave)
+            assertTrue(sut.uiState.value.hasPendingBroadcast)
+        }
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
     fun `restored refused Shop receipt remains dismissable after expiry without sending`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
