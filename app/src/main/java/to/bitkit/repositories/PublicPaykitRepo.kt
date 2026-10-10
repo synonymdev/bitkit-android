@@ -87,6 +87,7 @@ internal val PublicPaykitPaymentResult.incomingPaymentRequestFailureReason:
 data class PrivatePaykitPaymentContext(
     val paymentAppsByEndpoint: Map<String, String>,
     val paymentListVersion: ULong?,
+    val previousPaymentListVersion: ULong? = null,
 )
 
 @OptIn(ExperimentalTime::class)

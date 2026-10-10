@@ -15,6 +15,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAuthData
@@ -39,6 +40,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -73,7 +75,6 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -143,6 +144,7 @@ import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -157,6 +159,13 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendAttemptUnreadableError
+import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendNotDispatchedError
+import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendPendingError
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
 import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentProofRepo
@@ -212,7 +221,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
-import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -406,7 +414,6 @@ class AppViewModel @Inject constructor(
     private var requestedPaymentRequest: PaykitPaymentRequest? = null
     private var shouldRestorePaymentRequestSheet = false
     private var preparedContactPaymentContext: ContactPaymentContext? = null
-    private var attemptedHardwarePaymentContext: ContactPaymentContext? = null
     private var privatePaykitAppRegistrationIdentity: String? = null
     private var requestedPaymentRequestIdentity: String? = null
     private var deferredSubscriptionNotification: SubscriptionNotificationTarget? = null
@@ -784,7 +791,6 @@ class AppViewModel @Inject constructor(
         val isStillCurrent = { isCurrentPaykitContactSync(state, signIn) }
         val identityChanged = !PubkyPublicKeyFormat.matches(paymentRequestIdentity, state.publicKey)
         if (identityChanged) {
-            paykitPaymentProofRepo.clearOnchainPaymentResolutions()
             resetPaykitPresentationState(
                 dismissActiveRequest = paymentRequestIdentity != null,
                 preserveRequestedPaymentRequest = paymentRequestIdentity == null,
@@ -873,9 +879,28 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private val _resolvedHardwarePayments = MutableStateFlow<
+        ImmutableMap<Pair<String, String>, PaykitOnchainPaymentProofResolution>
+    >(persistentMapOf())
+    val resolvedHardwarePayments = _resolvedHardwarePayments.asStateFlow()
+
+    fun resolvedHardwarePaymentFor(walletId: String, transactionId: String): PaykitOnchainPaymentProofResolution? =
+        _resolvedHardwarePayments.value[walletId to transactionId.lowercase()]?.takeIf {
+            PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, it.identity)
+        }
+
+    fun consumeResolvedHardwarePayment(resolution: PaykitOnchainPaymentProofResolution) {
+        val key = resolution.walletId to resolution.transactionId.lowercase()
+        _resolvedHardwarePayments.update { current ->
+            if (current[key] == resolution) (current - key).toImmutableMap() else current
+        }
+    }
+
     private fun observePaykitOnchainPaymentResolution() {
         viewModelScope.launch {
-            paykitPaymentProofRepo.onchainPaymentResolutions.collect { resolutions ->
+            combine(paykitPaymentProofRepo.onchainPaymentResolutions, pubkyRepo.publicKey) { resolutions, _ ->
+                resolutions
+            }.collect { resolutions ->
                 resolutions.forEach(::handlePaykitOnchainPaymentResolution)
             }
         }
@@ -883,17 +908,12 @@ class AppViewModel @Inject constructor(
 
     private fun handlePaykitOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
         if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, resolution.identity)) return
-        paykitPaymentProofRepo.consumeOnchainPaymentResolution(resolution)
-        val sendState = _sendUiState.value
-        val matchesHardwareWallet = sendState.hardwareWalletId != null &&
-            sendState.hardwareWalletId == resolution.walletId
-        if (_currentSheet.value is Sheet.Send && matchesHardwareWallet &&
-            sendState.incomingPaymentRequestId == resolution.requestId
-        ) {
-            synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
-            _sendUiState.update { it.copy(resolvedHardwarePaymentTxId = resolution.transactionId) }
-            return
+        if (resolution.walletId != WalletScope.default) {
+            _resolvedHardwarePayments.update {
+                (it + ((resolution.walletId to resolution.transactionId.lowercase()) to resolution)).toImmutableMap()
+            }
         }
+        paykitPaymentProofRepo.consumeOnchainPaymentResolution(resolution)
         val resolvesCurrentPayment = uncertainOnchainPaymentRequestId == resolution.requestId
         if (!resolvesCurrentPayment) {
             synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
@@ -912,7 +932,8 @@ class AppViewModel @Inject constructor(
                 type = NewTransactionSheetType.ONCHAIN,
                 direction = NewTransactionSheetDirection.SENT,
                 paymentHashOrTxId = resolution.transactionId,
-                sats = _sendUiState.value.amount.toLong(),
+                sats = resolution.amountSats?.toLong() ?: _sendUiState.value.amount.toLong(),
+                activityWalletId = resolution.walletId,
                 isLoadingDetails = true,
             )
         )
@@ -1311,6 +1332,7 @@ class AppViewModel @Inject constructor(
                 }
                 if (!ownsPaymentRequestPreparation(preparation)) return true
             }
+            if (reopenRetainedHardwarePayment(request, generation, preparation)) return true
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
             return finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
         } finally {
@@ -1320,6 +1342,66 @@ class AppViewModel @Inject constructor(
                 finishPaymentRequestPreparation(preparation)
             }
         }
+    }
+
+    @Suppress("ReturnCount") // Keep presentation and identity guards as early exits.
+    private suspend fun reopenRetainedHardwarePayment(
+        request: PaykitPaymentRequest,
+        generation: Long,
+        preparation: PaymentRequestPreparation?,
+    ): Boolean {
+        val retained = runSuspendCatching { paykitPaymentProofRepo.retainedHardwareOnchainRequest(request) }
+        retained.exceptionOrNull()?.let {
+            toast(it)
+            return true
+        }
+        val proof = retained.getOrNull() ?: return false
+        val identity = proof.identity
+        if (!isCurrentPaymentRequestPresentation(request, generation, preparation) ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        ) {
+            return true
+        }
+        paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull()?.let {
+            toast(it)
+            return true
+        }
+        resetSendState(
+            isPaymentRequest = true,
+            paymentRequestNote = request.note,
+            hardwareWalletId = proof.onchainWalletId,
+            incomingPaymentRequestId = request.id,
+            selectedTags = requestedPaymentRequestTags,
+        )
+        if (!isCurrentPaymentRequestPresentation(request, generation, preparation) ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        ) {
+            return true
+        }
+        // The retained receipt authorizes only reopening the same signed payment, not preparing another spend.
+        setActiveContactPaymentContext(
+            ContactPaymentContext(publicKey = request.counterparty, incomingPaymentRequest = request),
+        )
+        _sendUiState.update {
+            it.copy(
+                contactPaymentProfile = activeContactPaymentProfile(),
+                isRetainedHardwarePayment = true,
+                address = requireNotNull(proof.onchainAddress),
+                addressInput = requireNotNull(proof.onchainAddress),
+                isAddressInputValid = true,
+                amount = requireNotNull(proof.onchainAmountSats),
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Custom(requireNotNull(proof.hardwareFeeRate).toUInt()),
+                onchainFeeUi = OnchainFeeUi(
+                    rate = FeeRate.CUSTOM,
+                    sats = requireNotNull(proof.hardwareMiningFeeSats).toLong(),
+                ),
+            )
+        }
+        preparation?.let { paymentRequestPreparation.compareAndSet(it, null) }
+        showSheet(Sheet.Send(SendRoute.Confirm, hardwareWalletId = proof.onchainWalletId))
+        return true
     }
 
     private fun finishIncomingPaymentRequestPreparation(
@@ -2416,6 +2498,7 @@ class AppViewModel @Inject constructor(
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
                     SendEvent.SpeedAndFee -> {
+                        if (_sendUiState.value.isRetainedHardwarePayment) return@collect
                         if (_sendUiState.value.onchainFeeUi.estimates.isEmpty()) {
                             viewModelScope.launch {
                                 refreshOnchainFeeUi()
@@ -2990,6 +3073,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun onSelectSpeed(speed: TransactionSpeed) {
+        if (_sendUiState.value.isRetainedHardwarePayment) return
         if (speed is TransactionSpeed.Custom && speed.satsPerVByte == 0u) {
             setSendEffect(SendEffect.NavigateToFeeCustom)
         } else {
@@ -2998,6 +3082,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun setTransactionSpeed(speed: TransactionSpeed) {
+        if (_sendUiState.value.isRetainedHardwarePayment) return
         onchainSendRefreshJob?.cancel()
         val previous = _sendUiState.value
         _sendUiState.update {
@@ -3057,6 +3142,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun onPaymentMethodSwitch() {
         val current = _sendUiState.value
+        if (current.isRetainedHardwarePayment) return
         val sources = availableFundingSources(current)
         if (sources.size < 2) return
         sendStateGeneration++
@@ -3634,7 +3720,6 @@ class AppViewModel @Inject constructor(
             if (request != null && !retryIncomingRequest) completePaymentRequestPresentation(request)
             activeContactPaymentContext = null
             preparedContactPaymentContext = null
-            attemptedHardwarePaymentContext = null
             request
         }
         if (interruptedRequest == null) return
@@ -3978,6 +4063,10 @@ class AppViewModel @Inject constructor(
         if (hardwareWalletId == null) maxOf(selectedMax, maximumHardwareFundingBalanceSats()) else selectedMax
 
     private fun availableFundingSources(state: SendUiState): List<SendFundingSource> = buildList {
+        if (state.isRetainedHardwarePayment) {
+            state.hardwareWalletId?.let { add(SendFundingSource.Hardware(it)) }
+            return@buildList
+        }
         if (state.isUnified || state.decodedInvoice != null) add(SendFundingSource.Spending)
         if (state.address.isNotEmpty()) {
             add(SendFundingSource.Savings)
@@ -4470,8 +4559,29 @@ class AppViewModel @Inject constructor(
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
         val proofPreparation = preparePaymentProof(incomingPaymentRequest)
-        proofPreparation.exceptionOrNull()?.let {
-            handlePaymentPreparationFailure(it, contactPaymentContext)
+        if (proofPreparation.isFailure) {
+            if (incomingPaymentRequest != null && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
+                val previous = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+                    ?.takeIf { it.requestId == incomingPaymentRequest.id }
+                if (previous != null) {
+                    val txid = previous.txid
+                    if (previous.hasPositiveEvidence && txid != null) {
+                        onSendSuccess(
+                            NewTransactionSheetDetails(
+                                type = NewTransactionSheetType.ONCHAIN,
+                                direction = NewTransactionSheetDirection.SENT,
+                                paymentHashOrTxId = txid,
+                                sats = previous.amountSats.toLong(),
+                                isLoadingDetails = false,
+                            )
+                        )
+                    } else {
+                        showUnresolvedOnchainSend(txid, previous.amountSats, requestId = previous.requestId)
+                    }
+                    return
+                }
+            }
+            handlePaymentPreparationFailure(requireNotNull(proofPreparation.exceptionOrNull()), contactPaymentContext)
             return
         }
         val preparedPaymentProofRequest = proofPreparation.getOrNull()
@@ -4555,6 +4665,14 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         amount: ULong,
     ) {
+        val originalPayer = preparedPaymentProofRequest?.let {
+            paykitPaymentProofRepo.captureOriginalOnchainPayer(it).getOrElse { error ->
+                releasePrivatePaymentListIfNeeded(contactPaymentContext)
+                cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                handlePaymentPreparationFailure(error, contactPaymentContext)
+                return
+            }
+        }
         val address = _sendUiState.value.address
         val tags = _sendUiState.value.selectedTags
         val proofPreparation = incomingPaymentRequest?.let { paymentProofPreparation(contactPaymentContext) }
@@ -4565,33 +4683,67 @@ class AppViewModel @Inject constructor(
             address = address,
             amount = amount,
             tags = tags,
+            requestId = incomingPaymentRequest?.id,
+            payerIdentity = originalPayer,
+            contactPublicKey = contactPaymentContext?.publicKey,
             paymentDeadlineAt = incomingPaymentRequest?.paymentDeadlineAt,
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
-                    markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
+                    markOnchainPaymentStarted(
+                        incomingPaymentRequest,
+                        address,
+                        contactPaymentContext = contactPaymentContext,
+                    ).getOrThrow()
                     paymentProofStarted = true
+                    paykitPaymentProofRepo.verifyOriginalOnchainPayer(
+                        preparedPaymentProofRequest,
+                        requireNotNull(originalPayer),
+                    ).getOrThrow()
                 }
                 incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
                 sendAttempted = true
             },
-            onBroadcast = { txId ->
-                proofRequest = null
-                completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId, proofPreparation)
-            },
-        ).onSuccess { txId ->
-            Logger.info("Onchain send result txid: $txId", context = TAG)
-            onSendSuccess(
-                NewTransactionSheetDetails(
-                    type = NewTransactionSheetType.ONCHAIN,
-                    direction = NewTransactionSheetDirection.SENT,
-                    paymentHashOrTxId = txId,
-                    sats = amount.toLong(),
-                    isLoadingDetails = true,
-                )
-            )
-            lightningRepo.sync()
-            activityRepo.syncActivities()
-            _successSendUiState.update { it.copy(isLoadingDetails = false) }
+        ).onSuccess { outcome ->
+            proofRequest = null
+            when (outcome) {
+                is OnchainSendOutcome.Accepted -> {
+                    Logger.info("Accepted on-chain send '${outcome.txid}'", context = TAG)
+                    completeOnchainPaymentProofInBackground(incomingPaymentRequest, outcome.txid, proofPreparation, outcome)
+                    onSendSuccess(
+                        NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.ONCHAIN,
+                            direction = NewTransactionSheetDirection.SENT,
+                            paymentHashOrTxId = outcome.txid,
+                            sats = (outcome.amountSats ?: amount).toLong(),
+                            isLoadingDetails = true,
+                        )
+                    )
+                    if (incomingPaymentRequest == null) {
+                        withContext(NonCancellable) {
+                            lightningRepo.completeAcceptedOrdinaryFollowup(outcome.txid)
+                        }
+                    }
+                    lightningRepo.sync()
+                    activityRepo.syncActivities()
+                    _successSendUiState.update { it.copy(isLoadingDetails = false) }
+                }
+
+                is OnchainSendOutcome.Rejected -> {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.wallet__error_sending_title),
+                        description = outcome.reason,
+                    )
+                    showUnresolvedOnchainSend(
+                        outcome.txid,
+                        amount,
+                        incomingPaymentRequest,
+                        refusalReason = outcome.reason
+                    )
+                }
+
+                is OnchainSendOutcome.Unknown -> showUnresolvedOnchainSend(outcome.txid, amount, incomingPaymentRequest)
+            }
         }.onFailure { error ->
             handleOnchainPaymentFailure(
                 error = error,
@@ -4613,23 +4765,81 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
     ) {
         val amount = _sendUiState.value.amount
-        if (
-            incomingPaymentRequest != null &&
-            sendAttempted &&
-            !error.isDefiniteOnchainPreBroadcastFailure()
-        ) {
+        val unresolved = error is OnchainSendPendingError || error is OnchainSendBlockedError ||
+            error is OnchainSendAttemptUnreadableError ||
+            (sendAttempted && error !is OnchainSendNotDispatchedError)
+        if (unresolved) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
-            uncertainOnchainPaymentRequestId = incomingPaymentRequest.id
-            paykitPaymentProofRepo.onchainPaymentResolutions.value
-                .firstOrNull { it.requestId == incomingPaymentRequest.id }
-                ?.let(::handlePaykitOnchainPaymentResolution)
-            if (uncertainOnchainPaymentRequestId == null) return
-            setSendEffect(
-                SendEffect.NavigateToPending(
-                    paymentHash = incomingPaymentRequest.paymentRequestId,
-                    amount = amount.toLong(),
-                    observeResolution = false,
+            if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            if (!paymentProofStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            val previous = (error as? OnchainSendBlockedError)?.attempt
+            if (previous != null && (incomingPaymentRequest == null || previous.requestId != incomingPaymentRequest.id)) {
+                clearCancelledContactContext(contactPaymentContext)
+            }
+            val priorAccepted = previous?.takeIf {
+                it.hasPositiveEvidence && it.txid != null && !it.isTransfer &&
+                    incomingPaymentRequest != null && it.requestId == incomingPaymentRequest.id
+            }
+            if (priorAccepted != null) {
+                val txid = requireNotNull(priorAccepted.txid)
+                onSendSuccess(
+                    NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.ONCHAIN,
+                        direction = NewTransactionSheetDirection.SENT,
+                        paymentHashOrTxId = txid,
+                        sats = priorAccepted.amountSats.toLong(),
+                        isLoadingDetails = false,
+                    )
                 )
+                return
+            }
+            if (previous != null && previous.hasPositiveEvidence && previous.txid != null &&
+                !previous.isTransfer && previous.requestId == null
+            ) {
+                // Finish the earlier payment, but this blocked confirmation did not send the new payment.
+                runSuspendCatching { lightningRepo.completeAcceptedOrdinaryFollowup(previous.txid) }
+                    .onFailure { Logger.warn("Failed to finish earlier ordinary send locally", it, context = TAG) }
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__error_sending_title),
+                    description = context.getString(R.string.wallet__send_pending__blocked_new_send),
+                )
+                hideSheet()
+                return
+            }
+            previous?.refusalReason?.let {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__error_sending_title),
+                    description = it,
+                )
+            }
+            val unresolvedRequestId = if (previous != null) previous.requestId else incomingPaymentRequest?.id
+            if (previous != null) {
+                _sendUiState.update {
+                    it.copy(
+                        incomingPaymentRequestId = unresolvedRequestId,
+                        isPaymentRequest = unresolvedRequestId != null,
+                        address = previous.address,
+                        amount = previous.amountSats,
+                    )
+                }
+            }
+            uncertainOnchainPaymentRequestId = unresolvedRequestId
+            paykitPaymentProofRepo.onchainPaymentResolutions.value
+                .firstOrNull {
+                    it.requestId == unresolvedRequestId &&
+                        PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, it.identity)
+                }
+                ?.let {
+                    handlePaykitOnchainPaymentResolution(it)
+                    return
+                }
+            showUnresolvedOnchainSend(
+                txid = (error as? OnchainSendPendingError)?.txid ?: previous?.txid,
+                amount = previous?.amountSats ?: amount,
+                requestId = unresolvedRequestId,
+                refusalReason = previous?.refusalReason,
             )
             return
         }
@@ -4638,6 +4848,7 @@ class AppViewModel @Inject constructor(
         }
         releasePrivatePaymentListIfNeeded(contactPaymentContext)
         cancelPaymentProofPreparation(preparedPaymentProofRequest)
+        if (error is OnchainSendNotDispatchedError) paykitPaymentProofRepo.reconcile()
         Logger.error("Error sending onchain payment", error, context = TAG)
         if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
             setSendEffect(SendEffect.NavigateToError(error.toSendFailureDetails(context, _sendUiState.value.address)))
@@ -4649,6 +4860,124 @@ class AppViewModel @Inject constructor(
             )
             hideSheet()
         }
+    }
+
+    suspend fun retryOriginalOnchainSend(
+        original: OnchainSendAttempt,
+        feeRateSatsPerVByte: ULong,
+        approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit = { _, _ -> },
+    ): Result<OnchainSendOutcome> {
+        val request = original.requestId?.let { id ->
+            (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
+                .firstOrNull { it.id == id }
+        }
+        if (original.requestId != null && request == null) {
+            return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+        }
+        val result = lightningRepo.retryOriginalOnchainSend(
+            original.attemptId,
+            original.walletId,
+            feeRateSatsPerVByte,
+            paymentDeadlineAt = request?.paymentDeadlineAt,
+            approvePrepared = { receipt ->
+                val fee = requireNotNull(receipt.miningFeeSats)
+                check(fee <= Long.MAX_VALUE.toULong())
+                val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrNull()
+                val warnings = buildList {
+                    if (fee > original.amountSats / 2uL) add(SanityWarning.FEE_OVER_HALF_VALUE)
+                    if (feeInUsd != null && feeInUsd.value > BigDecimal(TEN_USD)) add(SanityWarning.FEE_OVER_10_USD)
+                }
+                approvePrepared(receipt, warnings)
+            },
+        ) { attempt ->
+            check(
+                attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
+                    attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
+            )
+            attempt.orderId?.let { orderId ->
+                val order = blocktankRepo.fetchOrders(listOf(orderId)).getOrThrow().singleOrNull { it.id == orderId }
+                check(order != null && order.payment?.onchain?.address == attempt.address)
+                val originalContext = requireNotNull(attempt.transferContext)
+                check(order.state2 == BtOrderState2.CREATED)
+                check(order.clientBalanceSat == originalContext.originalOrderClientBalanceSats)
+                check(order.feeSat == originalContext.originalOrderFeeSats)
+                check(kotlin.time.Instant.parse(order.orderExpiresAt) > kotlin.time.Clock.System.now())
+            }
+            if (request != null) {
+                val currentRequest =
+                    (
+                        paykitPaymentRequestRepo.pendingRequests.value +
+                            paykitPaymentRequestRepo.paymentRequestHistory.value
+                        )
+                        .firstOrNull { it.id == attempt.requestId }
+                        ?: throw PaykitPaymentRequestError.RequestUnavailable
+                check(currentRequest.paymentDeadlineAt == request.paymentDeadlineAt)
+                paykitPaymentRequestRepo.ensurePaymentAllowed(currentRequest).getOrThrow()
+                paykitPaymentProofRepo.authorizeOnchainRecovery(attempt).getOrThrow()
+            }
+        }
+        if (result.getOrNull() is OnchainSendOutcome.Accepted) {
+            runSuspendCatching {
+                val winner = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
+                if (request != null) {
+                    paykitPaymentProofRepo.completeRecoveredOnchainPayment(request, winner)
+                } else if (winner.isTransfer) {
+                    transferRepo.resumeAcceptedFunding().getOrThrow()
+                } else {
+                    lightningRepo.completeAcceptedOrdinaryFollowup(requireNotNull(winner.txid))
+                }
+            }.onFailure { Logger.warn("Failed to finish original recovered send locally", it, context = TAG) }
+        }
+        return result
+    }
+
+    fun onRecoveredTransfer(original: OnchainSendAttempt) {
+        viewModelScope.launch {
+            runSuspendCatching {
+                val current = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
+                if (current != original || !current.isTransfer || current.requestId != null) return@runSuspendCatching
+                if (!current.hasPositiveEvidence || !current.localFollowupComplete) return@runSuspendCatching
+                if (current.txid == null || current.transferContext == null) return@runSuspendCatching
+                val orderId = current.orderId ?: return@runSuspendCatching
+                hideSheet()
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))
+            }.onFailure { Logger.warn("Failed to open recovered transfer", it, context = TAG) }
+        }
+    }
+
+    fun showPendingTransfer(attempt: OnchainSendAttempt) {
+        if (!attempt.isTransfer || attempt.orderId == null || !attempt.blocksNextSend) return
+        showSheet(
+            Sheet.Send(
+                SendRoute.Pending(
+                    paymentHash = attempt.txid.orEmpty(),
+                    amount = attempt.amountSats.toLong(),
+                    observeResolution = false,
+                    isOnchain = true,
+                    walletId = attempt.walletId,
+                    refusalReason = attempt.refusalReason,
+                )
+            )
+        )
+    }
+
+    private fun showUnresolvedOnchainSend(
+        txid: String?,
+        amount: ULong,
+        request: PaykitPaymentRequest? = null,
+        requestId: PaykitPaymentRequestId? = request?.id,
+        refusalReason: String? = null,
+    ) {
+        uncertainOnchainPaymentRequestId = requestId
+        setSendEffect(
+            SendEffect.NavigateToPending(
+                paymentHash = txid ?: requestId?.paymentRequestId.orEmpty(),
+                amount = amount.toLong(),
+                observeResolution = false,
+                isOnchain = true,
+                refusalReason = refusalReason,
+            )
+        )
     }
 
     @Suppress("LongMethod", "CyclomaticComplexMethod")
@@ -4665,8 +4994,8 @@ class AppViewModel @Inject constructor(
         var createdMetadataPaymentId: String? = null
         val paymentHash = decodedInvoice.paymentHash.toHex()
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
-            cancelPaymentProofPreparation(proofRequest)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            cancelPaymentProofPreparation(proofRequest)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return
         }
@@ -4765,7 +5094,10 @@ class AppViewModel @Inject constructor(
     }
 
     @Suppress("ReturnCount")
-    private suspend fun prepareContactPayment(contactPaymentContext: ContactPaymentContext?): Boolean {
+    private suspend fun prepareContactPayment(
+        contactPaymentContext: ContactPaymentContext?,
+        beforePrivateConsumption: suspend () -> Result<Unit> = { Result.success(Unit) },
+    ): Boolean {
         if (isPreparedContactPayment(contactPaymentContext)) return true
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return false
 
@@ -4774,6 +5106,11 @@ class AppViewModel @Inject constructor(
                 handlePaymentPreparationFailure(it, contactPaymentContext)
                 return false
             }
+        }
+        beforePrivateConsumption().onFailure {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return false
         }
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
             handlePaymentPreparationFailure(it, contactPaymentContext)
@@ -4825,6 +5162,7 @@ class AppViewModel @Inject constructor(
         request: PaykitPaymentRequest?,
         txId: String,
         preparation: PaymentProofPreparation?,
+        acceptedOutcome: OnchainSendOutcome.Accepted? = null,
     ) {
         val paymentRequest = request ?: return
         if (preparation == null) return
@@ -4834,6 +5172,7 @@ class AppViewModel @Inject constructor(
                 txid = txId,
                 paymentEndpointIdentifier = preparation.endpointIdentifier,
                 paymentAppId = preparation.appId,
+                acceptedOutcome = acceptedOutcome,
             )
             if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
         }
@@ -4843,8 +5182,15 @@ class AppViewModel @Inject constructor(
         request: PaykitPaymentRequest?,
         address: String,
         walletId: String = WalletScope.default,
-    ): Result<Unit> = request?.let { paykitPaymentProofRepo.markOnchainPaymentStarted(it, address, walletId) }
-        ?: Result.success(Unit)
+        contactPaymentContext: ContactPaymentContext? = null,
+    ): Result<Unit> = request?.let {
+        val privateContext = contactPaymentContext?.privatePaymentContext
+        paykitPaymentProofRepo.markOnchainPaymentStarted(
+            it, address, walletId,
+            privatePaymentListVersion = privateContext?.paymentListVersion,
+            previousPrivatePaymentListVersion = privateContext?.previousPaymentListVersion,
+        )
+    } ?: Result.success(Unit)
 
     private suspend fun cancelPaymentProofPreparation(request: PaykitPaymentRequest?) {
         request?.let { paykitPaymentProofRepo.cancelPreparation(it) }
@@ -5042,27 +5388,27 @@ class AppViewModel @Inject constructor(
         address: String,
         amount: ULong,
         tags: List<String> = emptyList(),
+        requestId: PaykitPaymentRequestId? = null,
+        payerIdentity: String? = null,
+        contactPublicKey: String? = null,
         paymentDeadlineAt: Instant? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
-    ): Result<Txid> {
-        var broadcastTxId: Txid? = null
-        return lightningRepo.sendOnChain(
-            address = address,
-            sats = amount,
-            speed = _sendUiState.value.speed,
-            utxosToSpend = _sendUiState.value.selectedUtxos,
-            isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
-                amount == walletRepo.balanceState.value.maxSendOnchainSats,
-            tags = tags,
-            beforeSendAttempt = beforeSendAttempt,
-            paymentDeadlineAt = paymentDeadlineAt,
-            onBroadcast = {
-                broadcastTxId = it
-                onBroadcast(it)
-            },
-        ).recoverCatching { broadcastTxId ?: throw it }
-    }
+    ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
+        address = address,
+        sats = amount,
+        speed = _sendUiState.value.speed,
+        utxosToSpend = _sendUiState.value.selectedUtxos,
+        isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
+            amount == walletRepo.balanceState.value.maxSendOnchainSats,
+        tags = tags,
+        requestId = requestId,
+        payerIdentity = payerIdentity,
+        contactPublicKey = contactPublicKey,
+        paymentDeadlineAt = paymentDeadlineAt,
+        beforeSendAttempt = beforeSendAttempt,
+        onBroadcast = onBroadcast,
+    )
 
     private suspend fun sendLightning(
         bolt11: String,
@@ -5104,10 +5450,10 @@ class AppViewModel @Inject constructor(
 
     fun resetQuickPay() = _quickPayData.update { null }
 
-    fun navigateToActivity(activityRawId: String) {
+    fun navigateToActivity(activityRawId: String, walletId: String? = null) {
         viewModelScope.launch {
             hideSheet()
-            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activityRawId)))
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activityRawId, walletId)))
         }
     }
 
@@ -5121,6 +5467,7 @@ class AppViewModel @Inject constructor(
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(): Job? {
         val currentState = _sendUiState.value
+        if (currentState.isRetainedHardwarePayment) return null
         if (currentState.payMethod != SendMethod.ONCHAIN ||
             currentState.amount == 0uL ||
             currentState.address.isEmpty()
@@ -5160,6 +5507,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshOnchainFeeUi() = withContext(bgDispatcher) {
         val currentState = _sendUiState.value
+        if (currentState.isRetainedHardwarePayment) return@withContext
         updateOnchainFeeUi { it.copy(isLoading = true) }
 
         val speeds = listOf(
@@ -5195,7 +5543,7 @@ class AppViewModel @Inject constructor(
 
     private fun updateOnchainFeeUi(transform: (OnchainFeeUi) -> OnchainFeeUi) {
         _sendUiState.update {
-            it.copy(onchainFeeUi = transform(it.onchainFeeUi))
+            if (it.isRetainedHardwarePayment) it else it.copy(onchainFeeUi = transform(it.onchainFeeUi))
         }
     }
 
@@ -5729,34 +6077,63 @@ class AppViewModel @Inject constructor(
         super.onCleared()
     }
 
-    suspend fun prepareHardwareContactPayment(): Boolean {
-        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-        if (isPreparedContactPayment(contactPaymentContext)) return true
+    fun onHardwarePaymentSubmissionChanged(active: Boolean) {
+        paykitPaymentRequestRepo.setPaymentSubmissionActive(active && activeIncomingPaymentRequest() != null)
+    }
 
+    fun hardwarePaymentIdentity(): String? = pubkyRepo.publicKey.value?.let(PubkyPublicKeyFormat::normalized)
+
+    suspend fun prepareHardwareContactPayment(
+        walletId: String? = _sendUiState.value.hardwareWalletId,
+        address: String = _sendUiState.value.address,
+        requestId: PaykitPaymentRequestId? = activeIncomingPaymentRequest()?.id,
+        identity: String? = hardwarePaymentIdentity(),
+        signedTx: HwFundingSignedTx? = null,
+    ): Boolean {
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        if (contactPaymentContext?.incomingPaymentRequest?.id != requestId) return false
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
+        if (incomingPaymentRequest != null &&
+            (identity == null || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value))
+        ) return false
+        if (incomingPaymentRequest != null && signedTx == null) return false
+        // A retry of the original signed transaction skips this hook in HwSendViewModel.
+        // A new Shop payment must consult the durable paymentStarted guard again.
+        if (incomingPaymentRequest == null && isPreparedContactPayment(contactPaymentContext)) return true
         val proofPreparation = preparePaymentProof(incomingPaymentRequest)
-        proofPreparation.exceptionOrNull()?.let {
+        val preparedPaymentProofRequest = proofPreparation.getOrElse {
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return false
         }
-        val preparedPaymentProofRequest = proofPreparation.getOrNull()
-        if (!prepareContactPayment(contactPaymentContext)) {
+        var proofStarted = false
+        if (!prepareContactPayment(contactPaymentContext) {
+                if (preparedPaymentProofRequest == null) {
+                    Result.success(Unit)
+                } else {
+                    // Persist the signed original receipt and cleanup boundary before consuming its endpoint.
+                    paykitPaymentProofRepo.markOnchainPaymentStarted(
+                        requireNotNull(incomingPaymentRequest),
+                        address,
+                        walletId ?: WalletScope.default,
+                        contactPaymentContext.privatePaymentContext?.paymentListVersion,
+                        signedTx,
+                        contactPaymentContext.privatePaymentContext?.previousPaymentListVersion,
+                    ).onSuccess { proofStarted = true }
+                }
+            }
+        ) {
+            if (proofStarted && incomingPaymentRequest != null && identity != null) {
+                paykitPaymentProofRepo.failHardwareOnchainPaymentBeforeDispatch(
+                    incomingPaymentRequest,
+                    walletId ?: WalletScope.default,
+                    identity,
+                    hasAttemptedBroadcast = false,
+                )
+            }
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false
         }
-        if (preparedPaymentProofRequest != null) {
-            val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
-            markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
-                synchronized(contactPaymentContextLock) {
-                    if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
-                }
-                releasePrivatePaymentListIfNeeded(contactPaymentContext)
-                cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                handlePaymentPreparationFailure(it, contactPaymentContext)
-                return false
-            }
-        }
-        return true
+        return incomingPaymentRequest == null || PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
     }
 
     val hardwarePaymentDeadlineAt: Instant?
@@ -5764,63 +6141,86 @@ class AppViewModel @Inject constructor(
             activeContactPaymentContext?.incomingPaymentRequest?.paymentDeadlineAt
         }
 
-    fun onHardwarePaymentSubmissionChanged(active: Boolean) {
-        paykitPaymentRequestRepo.setPaymentSubmissionActive(active && activeIncomingPaymentRequest() != null)
+    suspend fun onHardwarePaymentDeadlineExpired(
+        hasAttemptedBroadcast: Boolean,
+        requestId: PaykitPaymentRequestId? = activeIncomingPaymentRequest()?.id,
+        identity: String? = hardwarePaymentIdentity(),
+        walletId: String? = _sendUiState.value.hardwareWalletId,
+    ) {
+        val context = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        val request = context?.incomingPaymentRequest ?: return
+        if (request.id != requestId || identity == null || walletId == null ||
+            walletId != _sendUiState.value.hardwareWalletId || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)) return
+        handleHardwarePaymentFailure(PaykitPaymentRequestError.RequestExpired, context, request, walletId, identity, hasAttemptedBroadcast)
     }
 
-    fun onHardwareBroadcastAttemptChanged(attempted: Boolean) {
-        synchronized(contactPaymentContextLock) {
-            attemptedHardwarePaymentContext = if (attempted) preparedContactPaymentContext else null
-        }
-    }
-
-    suspend fun authorizeHardwareContactPayment(hasAttemptedBroadcast: Boolean): Boolean {
+    suspend fun authorizeHardwareContactPayment(
+        hasAttemptedBroadcast: Boolean,
+        requestId: PaykitPaymentRequestId? = activeIncomingPaymentRequest()?.id,
+        identity: String? = hardwarePaymentIdentity(),
+        walletId: String? = _sendUiState.value.hardwareWalletId,
+    ): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        if (contactPaymentContext?.incomingPaymentRequest?.id != requestId) return false
         val request = contactPaymentContext?.incomingPaymentRequest ?: return true
-        val error = paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull() ?: return true
-        handleHardwarePaymentFailure(error, contactPaymentContext, hasAttemptedBroadcast)
-        return false
-    }
-
-    suspend fun onHardwarePaymentDeadlineExpired(hasAttemptedBroadcast: Boolean) {
-        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-        handleHardwarePaymentFailure(
-            PaykitPaymentRequestError.RequestExpired,
-            contactPaymentContext,
-            hasAttemptedBroadcast,
-        )
+        if (identity == null || walletId == null) return false
+        if (walletId != _sendUiState.value.hardwareWalletId ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        ) {
+            return false
+        }
+        val error = paykitPaymentRequestRepo.ensurePaymentAllowed(request).exceptionOrNull()
+        if (walletId != _sendUiState.value.hardwareWalletId ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value) ||
+            synchronized(contactPaymentContextLock) { activeContactPaymentContext } != contactPaymentContext
+        ) return false
+        if (error == null) return true
+        return handleHardwarePaymentFailure(error, contactPaymentContext, request, walletId, identity, hasAttemptedBroadcast)
     }
 
     private suspend fun handleHardwarePaymentFailure(
         error: Throwable,
         contactPaymentContext: ContactPaymentContext?,
+        request: PaykitPaymentRequest,
+        walletId: String,
+        identity: String,
         hasAttemptedBroadcast: Boolean,
-    ) {
-        val preservesUncertainPayment = synchronized(contactPaymentContextLock) {
-            contactPaymentContext != null && contactPaymentContext == attemptedHardwarePaymentContext
-        }
-        if (hasAttemptedBroadcast || preservesUncertainPayment) {
+    ): Boolean {
+        if (hasAttemptedBroadcast) {
             toast(error)
-            return
+            return false
         }
 
-        contactPaymentContext?.incomingPaymentRequest?.let { paykitPaymentProofRepo.failOnchainPayment(it) }
-        isSubmittingPaymentRequest = false
+        if (!paykitPaymentProofRepo.failHardwareOnchainPaymentBeforeDispatch(
+                request,
+                walletId,
+                identity,
+                hasAttemptedBroadcast,
+            )
+        ) {
+            toast(error)
+            return false
+        }
         releasePrivatePaymentListIfNeeded(contactPaymentContext)
         synchronized(contactPaymentContextLock) {
             if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
         }
+        isSubmittingPaymentRequest = false
         handlePaymentPreparationFailure(error, contactPaymentContext)
+        return false
     }
 
-    fun completeHardwareContactPayment(txId: String) {
-        acknowledgeHardwarePaymentResolution(txId)
-        val context = synchronized(contactPaymentContextLock) {
-            preparedContactPaymentContext
-        }
-        val request = context?.incomingPaymentRequest
-        val preparation = request?.let { paymentProofPreparation(context) }
-        completeOnchainPaymentProofInBackground(request, txId, preparation)
+    suspend fun completeHardwareContactPayment(
+        txId: String,
+        walletId: String,
+        requestId: PaykitPaymentRequestId?,
+        identity: String?,
+    ): Boolean {
+        if (requestId == null) return true
+        val completed = paykitPaymentProofRepo.completeHardwareOnchainPayment(requestId, walletId, txId, identity) &&
+            PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        if (!completed) uncertainOnchainPaymentRequestId = requestId
+        return completed
     }
 
     fun acknowledgeHardwarePaymentResolution(txId: String) {
@@ -5835,21 +6235,20 @@ class AppViewModel @Inject constructor(
 
     private fun cancelHardwarePaymentRequestIfNeeded() {
         val request = synchronized(contactPaymentContextLock) {
-            if (preparedContactPaymentContext == attemptedHardwarePaymentContext) {
-                preparedContactPaymentContext = null
-            }
             activeContactPaymentContext
                 ?.takeIf { it == preparedContactPaymentContext && _sendUiState.value.hardwareWalletId != null }
                 ?.incomingPaymentRequest
         }
-        if (request == null) {
+        // A returned Core result may still lack a durable txid when its candidate save failed.
+        // Dismissing that uncertain original payment must not reopen its started proof for a new send.
+        if (request == null || uncertainOnchainPaymentRequestId == request.id) {
             isSubmittingPaymentRequest = false
             return
         }
 
         viewModelScope.launch {
             try {
-                paykitPaymentProofRepo.failOnchainPayment(request)
+                paykitPaymentProofRepo.cancelPreparation(request)
             } finally {
                 isSubmittingPaymentRequest = false
             }
@@ -5861,13 +6260,14 @@ class AppViewModel @Inject constructor(
         allowDuplicateHash: Boolean = false,
         walletId: String = WalletScope.default,
         navigate: Boolean = true,
+        syncContact: Boolean = true,
     ) {
         details.paymentHashOrTxId?.let {
             val isNewPayment = synchronized(processedPaymentsLock) {
                 processedPayments.add(it)
             }
             when {
-                isNewPayment -> syncContactForActivity(it, walletId)
+                isNewPayment -> if (syncContact) syncContactForActivity(it, walletId)
                 !allowDuplicateHash -> {
                     Logger.debug("Skipped duplicate processed payment '$it'", context = TAG)
                     return
@@ -6586,6 +6986,7 @@ data class SendUiState(
     val paymentRequestNote: String? = null,
     val hardwareWalletId: String? = null,
     val resolvedHardwarePaymentTxId: String? = null,
+    val isRetainedHardwarePayment: Boolean = false,
     val hardwareWalletName: String? = null,
     val hardwareAvailableSats: ULong = 0uL,
     val isSubscriptionPayment: Boolean = false,
@@ -6671,6 +7072,8 @@ sealed class SendEffect {
         val paymentHash: String,
         val amount: Long,
         val observeResolution: Boolean = true,
+        val isOnchain: Boolean = false,
+        val refusalReason: String? = null,
     ) : SendEffect()
 }
 
@@ -6721,29 +7124,6 @@ private class LightningPaymentFailedError(
     val reason: PaymentFailureReason?,
     val paymentRequest: String?,
 ) : AppError(reason?.name)
-
-private fun Throwable.isDefiniteOnchainPreBroadcastFailure(): Boolean =
-    generateSequence(this as Throwable?) { it.cause }
-        .any {
-            when (it) {
-                is ServiceError.NodeNotSetup,
-                is ServiceError.NodeNotStarted,
-                is ServiceError.PaymentDeadlineExpired,
-                is NodeException.NotRunning,
-                is NodeException.OnchainTxCreationFailed,
-                is NodeException.OnchainTxSigningFailed,
-                is NodeException.WalletOperationFailed,
-                is NodeException.PersistenceFailed,
-                is NodeException.InvalidAddress,
-                is NodeException.InvalidAmount,
-                is NodeException.InvalidNetwork,
-                is NodeException.InvalidFeeRate,
-                is NodeException.InsufficientFunds,
-                is NodeException.CoinSelectionFailed,
-                is NodeException.NoSpendableOutputs -> true
-                else -> false
-            }
-        }
 
 sealed interface LnurlParams {
     data class LnurlPay(val data: LnurlPayData) : LnurlParams

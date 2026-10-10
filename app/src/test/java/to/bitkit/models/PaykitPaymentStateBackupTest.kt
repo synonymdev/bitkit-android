@@ -10,11 +10,47 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 class PaykitPaymentStateBackupTest {
+    @Test
+    fun `proofs without an app id remain readable without inventing provenance`() {
+        WalletScope.pushTestOverride("wallet0").use {
+            val local = Json.decodeFromString<to.bitkit.repositories.PendingPaykitPaymentProof>(
+                """{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},"paymentEndpointIdentifier":"bitcoin-onchain","kind":"Onchain","paymentStarted":true}""",
+            )
+            assertEquals("", local.paymentAppId)
+            assertTrue(local.paymentStarted)
+            assertFalse(local.onchainAcceptanceVerified)
+            val backup = Json.decodeFromString<PaykitPaymentStateBackup.Proof>(
+                """{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},"paymentEndpointIdentifier":"bitcoin-onchain","kind":"bitcoin-onchain-txid","paymentStarted":true,"onchainMatchingTransactionIdsBeforeAttempt":[]}""",
+            )
+            assertEquals("", backup.restored().paymentAppId)
+            assertEquals(local.requestId, backup.restored().requestId)
+            assertFalse(backup.restored().onchainAcceptanceVerified)
+        }
+    }
+    @Test
+    fun `shared active operation survives payment backup reader writer roundtrip`() {
+        val wire = """
+            {"subscriptions":{},"pendingProofs":[],"activeOnchainAttempt":{"version":1,"wallet":{"kind":"software","network":"regtest","binding":"${"ab".repeat(
+            32
+        )}","sourceIndex":"0"},"attemptId":"00000000-0000-4000-8000-000000000001","requestId":null,"orderId":null,"payerIdentity":null,"address":"bcrt1qrecipient","amountSats":"20000","isMaxAmount":false,"status":"unknown","txid":"${"cd".repeat(
+            32
+        )}","rejectionReason":null,"originalInputs":[{"txid":"${"ef".repeat(
+            32
+        )}","vout":"0"}],"candidateTxids":["${"cd".repeat(
+            32
+        )}"],"feeRateSatsPerVByte":"1","followup":null,"transfer":null}}
+        """.trimIndent()
+        val codec = Json { ignoreUnknownKeys = true }
+        val decoded = codec.decodeFromString<PaykitPaymentStateBackup>(wire)
+        assertContains(codec.encodeToString(decoded), "\"activeOnchainAttempt\"")
+    }
+
     @Test
     fun `payment backup accepts shared wire format and retains pending payment`() {
         WalletScope.pushTestOverride("wallet0").use {
@@ -24,6 +60,7 @@ class PaykitPaymentStateBackupTest {
             val backup = Json.decodeFromString<PaykitPaymentStateBackup>(fixture)
             val restored = backup.pendingProofs.single().restored()
             assertTrue(restored.paymentStarted)
+            assertFalse(restored.onchainAcceptanceVerified)
             assertEquals(PaykitPaymentProofKind.Onchain, restored.kind)
             assertEquals(
                 Instant.parse(requireNotNull(restored.requestId.billingPeriodStartsAt)),
@@ -43,6 +80,12 @@ class PaykitPaymentStateBackupTest {
             assertEquals(restored, decoded.pendingProofs.single().restored())
             assertEquals(backup.subscriptions, decoded.subscriptions)
             assertEquals(rebuilt.acceptedOneTimeRequests, decoded.acceptedOneTimeRequests)
+
+            val verifiedProof = restored.copy(onchainAcceptanceVerified = true)
+            val verifiedBackup = PaykitPaymentStateBackup.Proof(verifiedProof)
+            val verifiedJson = Json.encodeToString(verifiedBackup)
+            assertContains(verifiedJson, "\"onchainAcceptanceVerified\":true")
+            assertTrue(Json.decodeFromString<PaykitPaymentStateBackup.Proof>(verifiedJson).restored().onchainAcceptanceVerified)
 
             val hardwareProof = restored.copy(onchainWalletId = "hardware-wallet")
             val hardwareBackup = PaykitPaymentStateBackup.Proof(hardwareProof)

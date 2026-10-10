@@ -20,6 +20,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
@@ -46,13 +47,13 @@ private const val SEND_SIGN_VISUAL_TOP_RATIO = 0.54f
 fun HwSendSignScreen(
     walletId: String,
     sendUiState: SendUiState,
+    paymentIdentity: String?,
     satsPerVByte: ULong,
     viewModel: HwSendViewModel,
-    prepareContactPayment: suspend () -> Boolean,
+    prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean,
     authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
     onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit,
     onPaymentSubmissionChange: (Boolean) -> Unit,
-    onBroadcastAttemptChange: (Boolean) -> Unit,
     paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
 ) {
@@ -67,20 +68,12 @@ fun HwSendSignScreen(
         amountSats = sendUiState.amount,
         satsPerVByte = satsPerVByte,
         tags = sendUiState.selectedTags,
-        paymentDeadlineAt = paymentDeadlineAt,
         paymentRequestId = sendUiState.incomingPaymentRequestId,
+        paymentIdentity = paymentIdentity,
+        paymentDeadlineAt = paymentDeadlineAt,
     )
 
     val onBackRequest: () -> Unit = { if (uiState.canLeave) onBack() }
-    val signAndBroadcast: () -> Unit = {
-        viewModel.signAndBroadcast(
-            request,
-            prepareContactPayment,
-            authorizeContactPayment,
-            onPaymentDeadlineExpired,
-            onBroadcastAttemptChange,
-        )
-    }
 
     LaunchedEffect(walletId) {
         viewModel.warmUp(walletId)
@@ -104,14 +97,27 @@ fun HwSendSignScreen(
         hasPendingBroadcast = uiState.hasPendingBroadcast,
         vendor = vendor,
         onBack = onBackRequest,
-        onOpenConnect = signAndBroadcast,
+        onOpenConnect = {
+            viewModel.signAndBroadcast(
+                request,
+                prepareContactPayment,
+                authorizeContactPayment,
+                onPaymentDeadlineExpired
+            )
+        },
     )
 
     if (uiState.isPassphraseRequired) {
         HwPassphrasePromptSheet(
             isVerifying = uiState.isVerifyingPassphrase,
             onSubmit = { passphrase ->
-                viewModel.submitPassphrase(walletId, passphrase, signAndBroadcast)
+                viewModel.submitPassphrase(
+                    request,
+                    passphrase,
+                    prepareContactPayment,
+                    authorizeContactPayment,
+                    onPaymentDeadlineExpired,
+                )
             },
             onDismiss = viewModel::dismissPassphrase,
         )

@@ -17,6 +17,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -39,6 +40,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonPrimitive
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
@@ -51,6 +53,7 @@ import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
@@ -68,7 +71,6 @@ import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
-import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -128,6 +130,7 @@ class LightningRepo @Inject constructor(
     private val lnurlService: LnurlService,
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
+    private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val connectivityRepo: ConnectivityRepo,
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
@@ -159,6 +162,7 @@ class LightningRepo @Inject constructor(
     private val syncMutex = Mutex()
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
+    private val ordinaryFollowupRetryJob = AtomicReference<Job?>(null)
     private val pendingStopJob = AtomicReference<Job?>(null)
     private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
@@ -192,6 +196,7 @@ class LightningRepo @Inject constructor(
 
                     if (_lightningState.value.nodeLifecycleState.isRunning()) {
                         connectToTrustedPeers()
+                        scheduleOrdinaryFollowupRetry()
                     }
 
                     // Start retry loop if sync is failing
@@ -512,6 +517,7 @@ class LightningRepo @Inject constructor(
 
     private suspend fun adoptRunningNode(): Result<Unit> {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+        scheduleOrdinaryFollowupRetry()
         return lightningService.startEventListener(::onEvent).onFailure {
             Logger.warn("Failed to start event listener", it, context = TAG)
         }
@@ -555,6 +561,30 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun onEvent(event: Event) {
+        val observedTxid = when (event) {
+            is Event.OnchainTransactionReceived -> event.txid
+            is Event.OnchainTransactionConfirmed -> event.txid
+            else -> null
+        }
+        if (observedTxid != null) {
+            runSuspendCatching {
+                val observed = onchainSendAttemptStore.observeExactTransaction(
+                    observedTxid, isConfirmed = event is Event.OnchainTransactionConfirmed,
+                )
+                val attempt = observed ?: onchainSendAttemptStore.current()
+                if (attempt != null && attempt.txid.equals(observedTxid, ignoreCase = true) &&
+                    attempt.hasPositiveEvidence && !attempt.localFollowupComplete &&
+                    !attempt.isTransfer && attempt.requestId == null
+                ) {
+                    finishOnchainSendLocally(attempt)
+                    onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+                }
+            }
+                .onFailure {
+                    Logger.warn("Failed to record exact on-chain transaction observation", it, context = TAG)
+                    scheduleOrdinaryFollowupRetry()
+                }
+        }
         handleLdkEvent(event)
         recordProbeOutcome(event)
         val settledReceiveInvoice: SettledReceiveInvoice?
@@ -1478,9 +1508,22 @@ class LightningRepo @Inject constructor(
         tags: List<String> = emptyList(),
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
+        requestId: PaykitPaymentRequestId? = null,
+        orderId: String? = null,
+        transferContext: OnchainTransferContext? = null,
+        payerIdentity: String? = null,
         paymentDeadlineAt: Instant? = null,
-    ): Result<Txid> = executeWhenNodeRunning("sendOnChain") {
+        contactPublicKey: String? = null,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
+
+        // Recovery must remain reachable when observing the original transaction makes sync fail.
+        val retainedAttempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrElse {
+            return@executeWhenNodeRunning Result.failure(it)
+        }
+        if (retainedAttempt?.blocksNextSend == true) {
+            return@executeWhenNodeRunning Result.failure(OnchainSendBlockedError(retainedAttempt))
+        }
 
         // Ensure wallet is synced before sending to have up-to-date state
         ensureSyncedBeforeSend().onFailure {
@@ -1503,37 +1546,338 @@ class LightningRepo @Inject constructor(
 
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
-        beforeSendAttempt()
-        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount, paymentDeadlineAt)
-        onBroadcast(txId)
+        val attempt = runSuspendCatching {
+            onchainSendAttemptStore.admit(
+                walletId = WalletScope.default,
+                requestId = requestId,
+                orderId = orderId,
+                address = address,
+                amountSats = sats,
+                isMaxAmount = isMaxAmount,
+                feeRateSatsPerVByte = satsPerVByte,
+                isTransfer = isTransfer,
+                channelId = channelId,
+                tags = tags,
+                transferContext = transferContext,
+                beforeSendAttempt = beforeSendAttempt,
+                payerIdentity = payerIdentity,
+                contactPublicKey = contactPublicKey,
+            )
+        }.getOrElse {
+            val error = if (it is OnchainSendBlockedError || it is OnchainSendAttemptUnreadableError) {
+                it
+            } else {
+                OnchainSendNotDispatchedError(it)
+            }
+            return@executeWhenNodeRunning Result.failure(error)
+        }
+        val preparedResult = try {
+            runSuspendCatching {
+                lightningService.prepareOnchainSend(
+                    address,
+                    sats,
+                    satsPerVByte,
+                    utxosForSend,
+                    isMaxAmount,
+                    attempt.walletIndex,
+                    paymentDeadlineAt,
+                )
+                    .also { prepared ->
+                        if (!isMaxAmount && utxosForSend != null) {
+                            check(
+                                prepared.receipt.inputs.toSet() == utxosForSend.map {
+                                    OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
+                                }.toSet()
+                            )
+                        }
+                        onchainSendAttemptStore.retainPreparedReceipt(
+                            attempt.attemptId,
+                            attempt.walletIndex,
+                            prepared.receipt.copy(feeRateSatsPerVByte = satsPerVByte),
+                            isRecovery = false,
+                        )
+                    }
+            }
+        } catch (cancelled: CancellationException) {
+            // Release only the exact empty pre-dispatch guard. A retained receipt remains protected.
+            withContext(NonCancellable) {
+                runSuspendCatching {
+                    onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+                }.onFailure { Logger.warn("Failed to release cancelled preparation", it, context = TAG) }
+            }
+            throw cancelled
+        }
+        val prepared = preparedResult.getOrElse {
+            // Preparation and receipt persistence never dispatch. A failed save leaves the preguard if cleanup fails.
+            runSuspendCatching { onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex) }
+            return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(it))
+        }
+        var outcomePersisted = true
+        var dispatchStarted = false
+        val outcome = runSuspendCatching {
+            onchainSendAttemptStore.broadcastPreparedCandidate(
+                attempt.attemptId,
+                attempt.walletIndex,
+                prepared.receipt.txid,
+                broadcast = { beforeDispatch ->
+                    prepared.broadcast {
+                        beforeDispatch()
+                        dispatchStarted = true
+                    }
+                },
+            )
+        }.getOrElse { error ->
+            if (error is OnchainSendNotDispatchedError) {
+                runSuspendCatching {
+                    onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+                }.onFailure { Logger.warn("Failed to clear expired preparation", it, context = TAG) }
+                return@executeWhenNodeRunning Result.failure(error)
+            }
+            val winnerResult = runSuspendCatching { onchainSendAttemptStore.current() }
+            val winner = winnerResult.getOrNull()
+            val releasedWithoutDispatch = !dispatchStarted && winnerResult.isSuccess && winner == null
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
+                winner.hasPositiveEvidence
+            ) {
+                outcomePersisted = false
+                OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
+            } else if (releasedWithoutDispatch &&
+                lightningService.currentWalletIndex == attempt.walletIndex
+            ) {
+                // current() released the exact local preparation whose dispatch marker was never written.
+                return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(error))
+            } else {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
+            }
+        }
+        val recorded = runSuspendCatching {
+            onchainSendAttemptStore.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex)
+        }.getOrElse { error ->
+            outcomePersisted = false
+            val winner = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull()
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
+                winner.hasPositiveEvidence
+            ) {
+                winner
+            } else {
+                // Native acceptance is not durable local completion. Preserve the signed receipt
+                // and Pending until the exact winner can be persisted or independently observed.
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
+            }
+        }
+        val winningOutcome = if (recorded.hasPositiveEvidence) {
+            OnchainSendOutcome.Accepted(requireNotNull(recorded.txid))
+        } else {
+            outcome
+        }
+        if (winningOutcome !is OnchainSendOutcome.Accepted) return@executeWhenNodeRunning Result.success(winningOutcome)
+        val txId = winningOutcome.txid
+        runSuspendCatching { onBroadcast(txId) }
+            .onFailure { Logger.warn("Failed to continue accepted on-chain send", it, context = TAG) }
 
+        runSuspendCatching { finishOnchainSendLocally(recorded) }
+            .onFailure { Logger.warn("Failed to finish accepted on-chain send locally", it, context = TAG) }
+        if (!outcomePersisted) {
+            runSuspendCatching {
+                val durable = requireNotNull(onchainSendAttemptStore.currentDurable())
+                check(durable.attemptId == recorded.attemptId && durable.walletId == recorded.walletId &&
+                    durable.hasPositiveEvidence && durable.txid.equals(txId, true)) {
+                    "Accepted on-chain outcome repair is not durable"
+                }
+            }.getOrElse {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(it, txId))
+            }
+        }
+        runSuspendCatching { syncState() }
+            .onFailure { Logger.warn("Failed to sync after accepted on-chain send", it, context = TAG) }
+        Result.success(winningOutcome.copy(amountSats = recorded.amountSats.takeIf { recorded.isMaxAmount }))
+    }
+
+    private val recoveryCoordinator by lazy {
+        OnchainSendCoordinator(
+            onchainSendAttemptStore,
+            object : OnchainPreparedSender {
+                override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend =
+                    error("Initial sends use sendOnChain admission")
+
+                override suspend fun prepareRecovery(
+                    attempt: OnchainSendAttempt,
+                    feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?,
+                ): PreparedOnchainSend {
+                    val inputs = requireNotNull(attempt.originalInputs)
+                    // The saved signed receipt is the input identity. Native preparation resolves
+                    // the actual values and spendability; never replace missing inputs from a fresh list.
+                    val selected = inputs.map { input ->
+                        SpendableUtxo(OutPoint(input.txid, input.vout), 0uL)
+                    }
+                    return lightningService.prepareOnchainSend(
+                        attempt.address,
+                        attempt.amountSats,
+                        feeRateSatsPerVByte,
+                        selected,
+                        false,
+                        attempt.walletIndex,
+                        paymentDeadlineAt,
+                    )
+                }
+            },
+            bgDispatcher
+        )
+    }
+
+    suspend fun retryOriginalOnchainSend(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        paymentDeadlineAt: Instant? = null,
+        approvePrepared: suspend (OnchainPreparedReceipt) -> Unit = {},
+        authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("retryOriginalOnchainSend") {
+        val result = recoveryCoordinator.retryOriginal(
+            attemptId, walletId, feeRateSatsPerVByte, paymentDeadlineAt, approvePrepared, authorizeOriginal,
+        )
+        val accepted = result.getOrNull() as? OnchainSendOutcome.Accepted
+        if (accepted != null) {
+            runSuspendCatching {
+                onchainSendAttemptStore.current()?.takeIf { it.hasPositiveEvidence }?.let {
+                    finishOnchainSendLocally(
+                        it
+                    )
+                }
+            }.onFailure { Logger.warn("Failed to finish recovered on-chain send locally", it, context = TAG) }
+            runSuspendCatching {
+                val durable = requireNotNull(onchainSendAttemptStore.currentDurable())
+                check(durable.attemptId == attemptId && durable.walletId == walletId &&
+                    durable.hasPositiveEvidence && durable.txid.equals(accepted.txid, true)) {
+                    "Recovered on-chain outcome is not durable"
+                }
+            }.getOrElse {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(it, accepted.txid))
+            }
+        }
+        result
+    }
+
+    private suspend fun finishOnchainSendLocally(attempt: OnchainSendAttempt) {
+        val originalFollowup = attempt.backupFollowup
+        check(
+            !attempt.restoredFromBackup || originalFollowup != null
+        ) { "Original local follow-up context is unavailable" }
+        val originalContact = originalFollowup?.contact?.let {
+            require(it is JsonPrimitive && it.isString && it.content.isNotBlank()) { "Invalid original contact" }
+            it.content
+        }
+        val txId = requireNotNull(attempt.txid) { "On-chain send has no transaction id" }
+        val isSuccessor = attempt.candidateTxids.isNotEmpty() && !txId.equals(attempt.candidateTxids.first(), true)
+        val needsExactFee = attempt.verifiedWinningFeeSats == null && (isSuccessor ||
+            (attempt.candidateTxids.isNotEmpty() && originalFollowup?.feeSats?.toULongOrNull() == 0uL))
+        val fee = attempt.verifiedWinningFeeSats ?: if (needsExactFee) {
+            requireNotNull(lightningService.observedOriginalSendFee(attempt)) {
+                "Winning transaction fee is unavailable"
+            }.also { onchainSendAttemptStore.retainWinningFee(attempt.attemptId, attempt.walletIndex, txId, it) }
+        } else {
+            originalFollowup?.feeSats?.toULong() ?: 0uL
+        }
         val preActivityMetadata = PreActivityMetadata(
-            walletId = WalletScope.default,
+            walletId = attempt.walletId,
             paymentId = txId,
-            createdAt = nowTimestamp().toEpochMilli().toULong(),
-            tags = tags,
+            createdAt = originalFollowup?.createdAtMillis?.toULong() ?: nowMillis().toULong(),
+            tags = attempt.tags,
             paymentHash = null,
             txId = txId,
-            address = address,
+            address = attempt.address,
             isReceive = false,
-            feeRate = satsPerVByte,
-            isTransfer = isTransfer,
-            channelId = channelId ?: "",
+            feeRate = attempt.winningFeeRateSatsPerVByte,
+            isTransfer = attempt.isTransfer,
+            channelId = attempt.channelId ?: "",
         )
-        preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata)
-
+        preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata).getOrThrow()
         coreService.activity.createSentOnchainActivityFromSendResult(
             txid = txId,
-            address = address,
-            amount = sats,
-            fee = 0u,
-            feeRate = satsPerVByte,
-            isTransfer = isTransfer,
-            channelId = channelId,
+            address = attempt.address,
+            amount = attempt.amountSats,
+            fee = fee,
+            feeRate = attempt.winningFeeRateSatsPerVByte,
+            isTransfer = attempt.isTransfer,
+            channelId = attempt.channelId,
+            walletId = attempt.walletId,
         )
+        if (originalContact != null) {
+            coreService.activity.restoreSentOnchainContact(txId, attempt.walletId, originalContact)
+        }
+        if (needsExactFee || attempt.verifiedWinningFeeSats != null) {
+            coreService.activity.repairVerifiedSentOnchainFee(txId, attempt.walletId, fee, attempt.winningFeeRateSatsPerVByte)
+        }
+        check(coreService.activity.getOnchainActivityByTxId(txId, attempt.walletId) != null) {
+            "Accepted on-chain transaction has no durable local activity"
+        }
+    }
 
-        syncState()
-        Result.success(txId)
+    private fun scheduleOrdinaryFollowupRetry() {
+        val previous = ordinaryFollowupRetryJob.get()
+        if (previous?.isActive == true) return
+        val retry = scope.launch(start = CoroutineStart.LAZY) {
+            repeat(3) {
+                delay(1.seconds)
+                if (!_lightningState.value.nodeLifecycleState.isRunning()) return@launch
+                val attempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull() ?: return@launch
+                if (!attempt.hasPositiveEvidence || attempt.localFollowupComplete ||
+                    attempt.isTransfer || attempt.requestId != null
+                ) return@launch
+                completeAcceptedOrdinaryFollowup(requireNotNull(attempt.txid))
+            }
+        }
+        if (ordinaryFollowupRetryJob.compareAndSet(previous, retry)) retry.start() else retry.cancel()
+    }
+
+    suspend fun completeAcceptedOrdinaryFollowup(txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt != null && !attempt.isTransfer && attempt.requestId == null &&
+            attempt.txid.equals(txid, ignoreCase = true) && attempt.hasPositiveEvidence
+        ) {
+            runSuspendCatching {
+                finishOnchainSendLocally(attempt)
+                onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+            }.onFailure { Logger.warn("Failed to finish accepted ordinary send locally", it, context = TAG) }
+        }
+    }
+
+    suspend fun completeAcceptedTransferFollowup(orderId: String, txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt?.orderId == orderId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            finishOnchainSendLocally(attempt)
+            onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        }
+    }
+
+    // A change signal only: consumers must reread and validate the original attempt.
+    val onchainSendAttemptUpdates get() = onchainSendAttemptStore.backupStateVersion
+
+    suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
+
+    suspend fun releaseInterruptedShopPreparation(
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = onchainSendAttemptStore.releaseInterruptedShopPreparation(removeOriginalProof)
+
+    suspend fun finishAcceptedShopActivity(requestId: PaykitPaymentRequestId, txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt?.requestId == requestId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            finishOnchainSendLocally(attempt)
+        }
+    }
+
+    suspend fun completeAcceptedShopFollowup(requestId: PaykitPaymentRequestId, txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt?.requestId == requestId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            finishOnchainSendLocally(attempt)
+            onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        }
     }
 
     suspend fun determineUtxosToSpend(
@@ -1722,6 +2066,7 @@ class LightningRepo @Inject constructor(
                 balances = getBalances(),
             )
         }
+        if (_lightningState.value.nodeLifecycleState.isRunning()) scheduleOrdinaryFollowupRetry()
     }
 
     private fun logNodeSupportSummary(reason: String) {

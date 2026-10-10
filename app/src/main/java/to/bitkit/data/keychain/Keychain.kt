@@ -52,10 +52,15 @@ class Keychain @Inject constructor(
 
     fun loadString(key: String): String? = load(key)?.decodeToString()
 
+    fun loadString(key: String, walletIndex: Int): String? =
+        loadIndexed(key, stringPreferencesKey("${key}_$walletIndex"))?.decodeToString()
+
+    fun load(key: String): ByteArray? = loadIndexed(key, key.indexed)
+
     @Suppress("TooGenericExceptionCaught")
-    fun load(key: String): ByteArray? {
+    private fun loadIndexed(key: String, indexedKey: Preferences.Key<String>): ByteArray? {
         try {
-            return snapshot[key.indexed]?.fromBase64()?.let {
+            return snapshot[indexedKey]?.fromBase64()?.let {
                 keyStore.decrypt(it)
             }
         } catch (c: CancellationException) {
@@ -131,11 +136,16 @@ class Keychain @Inject constructor(
         Logger.info("Saved value for key '$key'", context = TAG)
     }
 
+    suspend fun upsertString(key: String, value: String) = upsertIndexed(key, value, key.indexed)
+
+    suspend fun upsertString(key: String, value: String, walletIndex: Int) =
+        upsertIndexed(key, value, stringPreferencesKey("${key}_$walletIndex"))
+
     @Suppress("TooGenericExceptionCaught")
-    suspend fun upsertString(key: String, value: String) {
+    private suspend fun upsertIndexed(key: String, value: String, indexedKey: Preferences.Key<String>) {
         try {
             val encryptedValue = keyStore.encrypt(value.toByteArray())
-            keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
+            keychain.edit { it[indexedKey] = encryptedValue.toBase64() }
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
@@ -144,10 +154,14 @@ class Keychain @Inject constructor(
         Logger.info("Upserted value for key '$key'", context = TAG)
     }
 
+    suspend fun delete(key: String) = deleteIndexed(key, key.indexed)
+
+    suspend fun delete(key: String, walletIndex: Int) = deleteIndexed(key, stringPreferencesKey("${key}_$walletIndex"))
+
     @Suppress("TooGenericExceptionCaught")
-    suspend fun delete(key: String) {
+    private suspend fun deleteIndexed(key: String, indexedKey: Preferences.Key<String>) {
         try {
-            keychain.edit { it.remove(key.indexed) }
+            keychain.edit { it.remove(indexedKey) }
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
@@ -236,6 +250,7 @@ class Keychain @Inject constructor(
         PAYKIT_RECOVERY_BACKUP,
         PAYKIT_PENDING_BACKUP_RESTORE,
         PAYKIT_PENDING_PAYMENT_PROOFS,
+        ONCHAIN_SEND_ATTEMPT,
         PAYKIT_ACCEPTED_PAYMENT_REQUESTS,
         PAYKIT_PRESENTED_PAYMENT_REQUESTS,
         PUBKY_SECRET_KEY,

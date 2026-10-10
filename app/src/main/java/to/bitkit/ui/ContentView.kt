@@ -822,7 +822,11 @@ private fun RootNavHost(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         transferViewModel.transferEffects.collect { effect ->
-            navController.navigateForTransferEffect(effect)
+            if (effect is TransferEffect.OnFundingPending) {
+                appViewModel.showPendingTransfer(effect.attempt)
+            } else {
+                navController.navigateForTransferEffect(effect)
+            }
         }
     }
 

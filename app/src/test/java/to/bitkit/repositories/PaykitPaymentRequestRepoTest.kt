@@ -292,6 +292,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).thenReturn(PaykitSubscriptionPresentationState())
         whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptyMap())
         whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(paymentProofStore.load()).thenReturn(emptyList())
         whenever(paymentProofStore.backupStateVersion).thenReturn(proofStateVersion)
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
@@ -2495,6 +2496,84 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(true)
         whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))).thenReturn(record)
         return PaykitPaymentRequestTarget(COUNTERPARTY)
+    }
+
+    @Test
+    @Suppress("LongMethod") // Keep the reload, original receipt and guarded variants in one regression.
+    fun `refused retained hardware request remains reopenable after proof store reload`() = test {
+        restoreAcceptedRequest()
+        val record = paymentRequestRecord(
+            state = PaymentRequestLifecycleState.ACCEPTED,
+            amount = "0.00001000",
+            endpoints = listOf(MethodId.P2wpkh.rawValue),
+        )
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        val raw = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
+            .bufferedReader().use { it.readText().trim() }
+        val proof = PendingPaykitPaymentProof(
+            identity = LOCAL_IDENTITY,
+            requestId = requestId,
+            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+            paymentAppId = "bitkit",
+            kind = PaykitPaymentProofKind.Onchain,
+            paymentStarted = true,
+            paymentIdentifier = to.bitkit.utils.SignedTransactionId.fromHex(raw),
+            onchainAddress = "original-address",
+            onchainAmountSats = 1_000uL,
+            onchainWalletId = "trezor:original",
+            hardwareDispatchAttempted = true,
+            hardwareRefusedForNavigation = true,
+            hardwareSignedTransaction = raw,
+            hardwareMiningFeeSats = 1_000uL,
+            hardwareFeeRate = 2uL,
+            hardwareTotalSpent = 2_000uL,
+        )
+        var saved: String? = null
+        val keychain = mock<to.bitkit.data.keychain.Keychain>()
+        whenever(keychain.loadString(any())).thenAnswer { saved }
+        whenever(keychain.upsertString(any(), any())).doSuspendableAnswer { saved = it.getArgument(1) }
+        PaykitPaymentProofStore(keychain).save(listOf(proof))
+        val reopened = PaykitPaymentProofStore(keychain)
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY))
+            .thenAnswer { reopened.inFlightRequestIds(LOCAL_IDENTITY) }
+        whenever(paymentProofStore.load()).thenAnswer { reopened.load() }
+
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
+        assertTrue(sut.pendingRequests.value.single().isPaymentInFlight)
+        assertFalse(sut.pendingRequests.value.single().canDismiss)
+        assertFalse(sut.paymentRequestHistory.value.single { it.id == requestId }.canDismiss)
+        assertTrue(sut.pendingRequests.value.single().copy(isPaymentInFlight = false).canDismiss)
+        sut.ensurePaymentAllowed(sut.pendingRequests.value.single()).getOrThrow()
+        assertEquals(listOf(proof), reopened.load())
+        assertEquals(setOf(requestId), reopened.inFlightRequestIds(LOCAL_IDENTITY))
+        assertTrue(reopened.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY).isEmpty())
+        assertEquals(
+            PaykitPaymentRequestError.OperationInProgress,
+            sut.dismiss(sut.pendingRequests.value.single()).exceptionOrNull(),
+        )
+        verify(paykitSdkService, never()).cancelPaymentRequest(any(), any(), anyOrNull())
+        verify(paykitSdkService, never()).rejectPaymentRequest(any(), any(), anyOrNull())
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any())
+        val guarded = listOf(
+            proof.copy(hardwareRefusedForNavigation = false),
+            proof.copy(hardwareDispatchDenied = true),
+            proof.copy(onchainAcceptanceVerified = true),
+            proof.copy(hardwareSignedTransaction = null),
+            proof.copy(paymentIdentifier = "00".repeat(32)),
+            proof.copy(onchainAmountSats = 1_001uL),
+            proof.copy(onchainWalletId = to.bitkit.models.WalletScope.default),
+        )
+        for (candidate in guarded) {
+            reopened.save(listOf(candidate))
+            proofStateVersion.value += 1
+            sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+            assertTrue(sut.pendingRequests.value.isEmpty())
+            assertEquals(listOf(candidate), reopened.load())
+            assertEquals(setOf(requestId), reopened.inFlightRequestIds(LOCAL_IDENTITY))
+        }
     }
 
     private suspend fun restoreAcceptedRequest() {

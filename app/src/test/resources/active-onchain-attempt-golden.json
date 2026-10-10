@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "createdAt": 1791234000000,
+  "transfers": [],
+  "paykitPaymentState": {
+    "subscriptions": {},
+    "pendingProofs": [
+      {
+        "identity": "pubkyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        "requestId": {
+          "paymentRequestId": "550e8400-e29b-41d4-a716-446655440000",
+          "counterparty": "pubkyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "billingPeriodStartsAt": null
+        },
+        "paymentEndpointIdentifier": "btc-regtest-p2wpkh",
+        "paymentAppId": "bitkit",
+        "kind": "bitcoin-onchain-txid",
+        "paymentStarted": true,
+        "paymentIdentifier": "abababababababababababababababababababababababababababababababab",
+        "proofData": null,
+        "billingPeriod": null,
+        "onchainAddress": "bcrt1qoriginal",
+        "onchainAmountSats": 1234,
+        "onchainWalletId": null,
+        "onchainMatchingTransactionIdsBeforeAttempt": [],
+        "onchainAcceptanceVerified": false
+      }
+    ],
+    "activeOnchainAttempt": {
+      "version": 1,
+      "wallet": {
+        "kind": "software",
+        "network": "regtest",
+        "binding": "fe843546f607f38ba7b1e8fe479c3103139ebea5b83628cbaa465e41cf6cb6c0",
+        "sourceIndex": "0"
+      },
+      "attemptId": "550e8400-e29b-41d4-a716-446655440001",
+      "requestId": {
+        "paymentRequestId": "550e8400-e29b-41d4-a716-446655440000",
+        "counterparty": "pubkyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+        "billingPeriodStartsAt": null
+      },
+      "orderId": null,
+      "payerIdentity": "pubkyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "address": "bcrt1qoriginal",
+      "amountSats": "1234",
+      "isMaxAmount": false,
+      "status": "unknown",
+      "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "rejectionReason": null,
+      "originalInputs": [
+        {
+          "txid": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+          "vout": "4294967295"
+        }
+      ],
+      "candidateTxids": [
+        "abababababababababababababababababababababababababababababababab",
+        "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ],
+      "feeRateSatsPerVByte": "2",
+      "followup": {
+        "feeSats": "123",
+        "tags": [
+          "original tag"
+        ],
+        "contact": "pubkyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+        "createdAtMillis": "1791234000000",
+        "channelId": null
+      },
+      "transfer": null
+    }
+  }
+}

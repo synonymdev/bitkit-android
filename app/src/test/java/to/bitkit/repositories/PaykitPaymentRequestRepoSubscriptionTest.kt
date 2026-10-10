@@ -847,6 +847,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
             .thenReturn(mapOf(requestId to PaykitPaymentProofKind.Onchain))
 
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(setOf(requestId))
         sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
@@ -854,6 +855,8 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         verify(paykitSdkService, never()).processPendingPrivateMessages()
         verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
         assertEquals(requestId, sut.paymentRequestHistory.value.single().id)
+        assertTrue(sut.paymentRequestHistory.value.single().isPaymentInFlight)
+        assertFalse(sut.paymentRequestHistory.value.single().canDismiss)
         assertEquals(
             PaymentRequestLifecycleState.PROOF_SUBMITTED,
             sut.paymentRequestHistory.value.single().lifecycleState,

@@ -5,6 +5,13 @@ Paykit access and a watch-only account, a linked buyer receives the Payment Requ
 the request on regtest through confirmation. It does not cover marketplace browsing, Locks content
 delivery, fiat payment, or Hypercolor.
 
+## Local-only fallback
+
+Remote Shop staging remains the default. After an actual staging Paykit pairing failure, see
+[`local-paykit-fallback.md`](local-paykit-fallback.md) and `local-paykit-fallback.xml` for the
+conditional standalone fixture. It is unrun and does not establish Shop order-paid acceptance.
+The companion journey is shared with iOS; only platform build instructions differ.
+
 ## Companion consent and reconnect
 
 - `paykit-only-approval.xml` checks Paykit-only consent and cancellation without account creation.

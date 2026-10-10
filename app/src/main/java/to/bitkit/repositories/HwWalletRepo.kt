@@ -884,6 +884,57 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    suspend fun broadcastFundingAtBoundary(
+        signedTx: HwFundingSignedTx,
+        paymentDeadlineAt: Instant?,
+        beforeNativeBroadcast: suspend () -> Unit,
+    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val txId = trezorRepo.broadcastRawTxAtBoundary(
+                signedTx.serializedTx, paymentDeadlineAt, beforeNativeBroadcast
+            ).getOrThrow()
+            HwFundingBroadcastResult(txId, signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent)
+        }
+    }
+
+    /** Fresh backend observation of this exact transaction in the original hardware wallet. */
+    suspend fun observeExactTransaction(
+        walletId: String,
+        txid: String,
+        originalAddress: String? = null,
+        originalAmountSats: ULong? = null,
+    ): Result<Boolean> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            require(walletId != WalletScope.default && txid.matches(Regex("[0-9a-fA-F]{64}")))
+            val account = getFundingAccount(walletId).getOrThrow()
+            val detail = trezorRepo.getTransactionDetail(
+                extendedKey = account.xpub,
+                txid = txid,
+                network = Env.network.toCoreNetwork(),
+                scriptType = account.accountType,
+            ).getOrThrow()
+            if (!detail.txid.equals(txid, ignoreCase = true) || detail.sent == 0uL) {
+                return@runSuspendCatching false
+            }
+            if (originalAddress != null || originalAmountSats != null) {
+                val address = requireNotNull(originalAddress).also { require(it.isNotBlank()) }
+                val amount = requireNotNull(originalAmountSats).also { require(it > 0uL) }
+                val recipientOutputs = detail.outputs.filter { it.address == address }
+                if (recipientOutputs.isEmpty()) return@runSuspendCatching false
+                val recipientAmount = recipientOutputs.fold(0uL) { total, output ->
+                    require(output.value <= ULong.MAX_VALUE - total) { "Observed recipient amount overflow" }
+                    total + output.value
+                }
+                if (recipientAmount != amount) return@runSuspendCatching false
+                val fee = requireNotNull(detail.fee)
+                val rate = requireNotNull(detail.feeRate).also { require(it.isFinite() && it >= 0.0) }
+                activityRepo.completeObservedHardwarePayment(walletId, txid, address, amount, fee, ceil(rate).toULong())
+                    .getOrThrow()
+            }
+            true
+        }
+    }
+
     suspend fun disconnectStaleSession(walletId: String): Result<Unit> = withContext(NonCancellable) {
         withContext(ioDispatcher) {
             runSuspendCatching {

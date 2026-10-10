@@ -599,7 +599,7 @@ internal fun PaymentRequestCard(
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_dismiss),
                     onClick = {
-                        if (isBusy || onDismiss == null) return@SecondaryButton
+                        if (isBusy || onDismiss == null || !request.canDismiss) return@SecondaryButton
                         isDismissingLocally = true
                         scope.launch {
                             try {
@@ -610,7 +610,7 @@ internal fun PaymentRequestCard(
                         }
                     },
                     isLoading = isBusy,
-                    enabled = !isBusy,
+                    enabled = !isBusy && request.canDismiss && onDismiss != null,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_x),

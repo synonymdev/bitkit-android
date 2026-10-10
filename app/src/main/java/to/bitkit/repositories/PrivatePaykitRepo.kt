@@ -531,6 +531,7 @@ class PrivatePaykitRepo @Inject constructor(
         result
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun consumePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,
@@ -544,9 +545,16 @@ class PrivatePaykitRepo @Inject constructor(
                 throw PrivatePaykitError.PaymentListAlreadyConsumed
             }
 
+            val previousEndpoints = contactState.remoteEndpoints
             contactState.consumedPrivatePaymentListVersion = paymentListVersion
             contactState.remoteEndpoints = emptyList()
-            persistState(markWalletBackup = true)
+            try {
+                persistState(markWalletBackup = true)
+            } catch (error: Throwable) {
+                contactState.consumedPrivatePaymentListVersion = consumedVersion
+                contactState.remoteEndpoints = previousEndpoints
+                throw error
+            }
             Logger.info(
                 "Consumed private Paykit payment list version $paymentListVersion " +
                     "for '${redacted(normalizedKey)}'",
@@ -560,16 +568,34 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun releasePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,
+    ): Result<Unit> = releasePrivatePaymentListVersion(
+        publicKey,
+        context.paymentListVersion,
+        context.previousPaymentListVersion,
+    )
+
+    suspend fun releasePrivatePaymentListVersion(
+        publicKey: String,
+        paymentListVersion: ULong?,
+        previousPaymentListVersion: ULong? = null,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             val normalizedKey = normalizedPublicKey(publicKey) ?: throw PrivatePaykitError.InvalidPublicKey
-            val paymentListVersion = context.paymentListVersion ?: return@runSuspendCatching
+            if (paymentListVersion == null) return@runSuspendCatching
             val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
             val consumedVersion = contactState.consumedPrivatePaymentListVersion
             if (consumedVersion != paymentListVersion) return@runSuspendCatching
 
-            contactState.consumedPrivatePaymentListVersion = null
-            persistState(markWalletBackup = true)
+            if (previousPaymentListVersion != null && previousPaymentListVersion >= paymentListVersion) {
+                throw PaykitPaymentRequestError.RequestUnavailable
+            }
+            contactState.consumedPrivatePaymentListVersion = previousPaymentListVersion
+            try {
+                persistState(markWalletBackup = true)
+            } catch (error: Throwable) {
+                contactState.consumedPrivatePaymentListVersion = consumedVersion
+                throw error
+            }
             Logger.info(
                 "Released private Paykit payment list version '$paymentListVersion' " +
                     "for '${redacted(normalizedKey)}'",
@@ -842,6 +868,7 @@ class PrivatePaykitRepo @Inject constructor(
                     paymentAppsByEndpoint = privatePayable.distinctBy { it.methodId }
                         .associate { it.methodId.rawValue to requireNotNull(it.appId) },
                     paymentListVersion = paymentListVersion,
+                    previousPaymentListVersion = consumedVersion.takeIf { paymentListVersion != null },
                 ),
             )
         }
