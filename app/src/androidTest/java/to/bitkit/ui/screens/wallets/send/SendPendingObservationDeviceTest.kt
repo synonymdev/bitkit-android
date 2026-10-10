@@ -24,6 +24,7 @@ import org.junit.runner.RunWith
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssStoreIdProvider
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.repositories.ActivityRepo
@@ -56,6 +57,8 @@ class SendPendingObservationDeviceTest {
     val composeTestRule = createComposeRule()
 
     @Inject lateinit var store: OnchainSendAttemptStore
+
+    @Inject lateinit var keychain: Keychain
 
     @Inject lateinit var lightningRepo: LightningRepo
 
@@ -96,8 +99,19 @@ class SendPendingObservationDeviceTest {
                 wire.restored(Env.network.name.lowercase(), "22".repeat(32), original.walletId, original.walletIndex)
             }.isFailure,
         )
+        val attemptKey = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        val savedAttempt = requireNotNull(keychain.loadString(attemptKey, original.walletIndex))
         try {
-            store.restoreActive(restored.copy(evidence = OnchainSendEvidence.Unknown))
+            // Test-only storage seam: production restore deliberately cannot downgrade positive evidence.
+            keychain.upsertString(
+                attemptKey,
+                Json.encodeToString(restored.copy(evidence = OnchainSendEvidence.Unknown)),
+                original.walletIndex,
+            )
+            val pending = requireNotNull(store.current())
+            assertTrue(pending.isUnresolved && !pending.hasPositiveEvidence && !pending.localFollowupComplete)
+            assertTrue(pending.restoredFromBackup)
+            assertEquals(original.attemptId, pending.attemptId)
             assertEquals(original.originalInputs, store.current()?.originalInputs)
             assertEquals(original.candidateTxids, store.current()?.candidateTxids)
             val vm = SendPendingViewModel(PendingPaymentRepo(), activityRepo, lightningRepo)
@@ -124,7 +138,7 @@ class SendPendingObservationDeviceTest {
                                 onClose = {},
                                 onViewDetails = {},
                                 viewModel = vm,
-                                retryOriginal = { _, _ -> error("Observation must not invoke retry") },
+                                retryOriginal = { _, _, _ -> error("Observation must not invoke retry") },
                                 onRecovered = { txid, amount -> recovered = txid to amount },
                                 savedStateHandle = SavedStateHandle(),
                                 onNavigateToPin = { error("Observation must not request spend authentication") },
@@ -149,11 +163,8 @@ class SendPendingObservationDeviceTest {
             File(context.getExternalFilesDir(null), "current-observation-integration.json")
                 .writeText(Json.encodeToString(requireNotNull(store.current())))
         } finally {
-            // Preserve the owned fixture's original known-positive operation and completion flag.
-            store.observeExactTransaction(expected)
-            store.markLocalFollowupComplete(original.attemptId, original.walletIndex)
-            store.restoreActive(original)
-            store.markLocalFollowupComplete(original.attemptId, original.walletIndex)
+            keychain.upsertString(attemptKey, savedAttempt, original.walletIndex)
+            assertEquals(savedAttempt, keychain.loadString(attemptKey, original.walletIndex))
         }
         assertEquals(original, store.current())
     }

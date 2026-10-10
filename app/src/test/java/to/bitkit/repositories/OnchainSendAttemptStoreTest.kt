@@ -409,6 +409,9 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val completed = store.current()
         store.restoreActive(accepted)
         assertEquals(completed, store.current())
+        store.restoreActive(accepted.copy(evidence = OnchainSendEvidence.Unknown))
+        assertEquals(completed, store.current())
+        assertFalse(requireNotNull(store.current()).isUnresolved)
     }
 
     @Test
