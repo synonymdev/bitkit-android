@@ -188,6 +188,11 @@ When the user provides custom instructions after `--`:
 
 **QA Notes / Validation:**
 - QA Notes separate actionable human QA instructions from automated verification coverage.
+- Follow `AGENTS.md` under Stable QA case IDs: label manual cases `1.`, `2.` (sub-cases
+  `2a`, `2b`) and journeys `J1`, `J2`. Keep existing IDs on description updates, assign
+  new IDs after the highest previously assigned ID, and never reuse retired IDs.
+  Note removed IDs and reasons outside runnable checkboxes; reference IDs in Evidence,
+  Gaps and review/test reports, preserving the revision each result actually tested.
 - Always use this structure:
   ```md
   ### QA Notes
@@ -214,7 +219,7 @@ When the user provides custom instructions after `--`:
   to commits. Do not assume staging includes new Shop/Marketplace, Pubky Ring, homeserver or library
   versions; explain compatible setup or missing prerequisites. Keep details proportional; use a
   justified `N/A` when no device tests apply (for example, documentation-only changes).
-- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line as an unchecked checkbox (`- [ ] `), then `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
+- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line as an unchecked checkbox (`- [ ] `), then its stable journey ID (`J1: `), then `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
 - List a journey as `temporary` only when the user asks for one in custom instructions or a `.ai/pr/` file: a reproduction that needs a code change or data that will not exist on master. Put its XML, and any code change as a `.diff`, in a collapsed `<details>` block under its line, and do not commit it. Never add one unasked; at most, suggest it to the author and ask whether they agree.
 - Reference journeys by bare file name only, never the full path. Only when two listed journeys share the same name, prefix the shortest leading path segment(s) that disambiguate them, the same rule as test files.
 - A PR with a user-visible change adds or updates the journey that proves it, and any journey whose route the diff changes; list them all. Reviewers drive the listed journeys on a device.
@@ -233,7 +238,7 @@ When the user provides custom instructions after `--`:
 - If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
 - Write manual tests using this template:
   ```md
-  - [ ] {optional_condition + →} {action} → {expectation} — {missing capability} not in Capabilities
+  - [ ] {manual_case_id}. {optional_condition + →} {action} → {expectation} — {missing capability} not in Capabilities
   ```
 - Use `regression:` for regression checks, positioned at the start of the action.
 - Always use `→` to denote navigation, for example `Send → Amount`; the last `→` introduces the expectation.
@@ -256,8 +261,8 @@ Example:
 ```
 ### QA Notes
 #### Manual Tests
-- [ ] Consumer app → exercise the updated binding flow → behavior matches the previous release
-- [ ] `regression:` Android integration screen → trigger the changed API path → no crash or stale data
+- [ ] 1. Consumer app → exercise the updated binding flow → behavior matches the previous release
+- [ ] 2. `regression:` Android integration screen → trigger the changed API path → no crash or stale data
 #### Automated Checks
 - added `FooBindingTest.kt` — covers the updated Android API path
 - ran `cargo test --all-features` — binding round-trip CI does not build
@@ -267,10 +272,10 @@ Concrete style target:
 ```md
 ### QA Notes
 #### Journeys
-- [ ] new `send-amount-over-balance.xml` — error shows before the 15 s timeout
-- [ ] updated `lightning-transfer-detail.xml` — Connection opens Channel Detail
+- [ ] J1: new `send-amount-over-balance.xml` — error shows before the 15 s timeout
+- [ ] J2: updated `lightning-transfer-detail.xml` — Connection opens Channel Detail
 #### Manual Tests
-- [ ] Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities
+- [ ] 1. Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities
 #### Automated Checks
 - added `TransferViewModelTest.kt` — rejects amounts over the spending balance
 - updated `SendFlowTest.kt` — fixed-amount invoice skips the Amount screen
@@ -385,7 +390,7 @@ When the user explicitly requests a model-section, relationship, or full-descrip
   PRs above. Preserve all other PR content, including authored QA notes and known model metadata.
 - For a requested full-description update, gather current branch/issue context using Steps 3–6,
   comparing against the PR's actual base. Reconcile with the existing description; retain still-valid
-  authored QA instructions and known model/effort pairs rather than replacing them with defaults.
+  authored QA instructions, stable case IDs and known model/effort pairs rather than replacing them with defaults.
 - Save the complete updated body to `.ai/pr_NN.md` using the actual PR number. With `--dry`, stop
   after saving and report the path; otherwise apply it with `gh pr edit NN --body-file .ai/pr_NN.md`.
 - Description-only updates do not require application checks or an additional code review. When

@@ -37,6 +37,26 @@ compatible version, or identify the missing prerequisite. Keep setup proportiona
 cases; documentation-only/no-runtime changes can use `N/A — no device testing required.` with the
 reason. Preserve existing authored QA notes when updating a description.
 
+### Stable QA case IDs
+
+Assign explicit IDs to PR QA cases: manual tests `1.`, `2.`, etc., sub-cases `2a`,
+`2b`, and journeys `J1`, `J2`, etc. IDs are scoped to the PR and remain fixed once
+it is open, including while in draft. Use literal labels inside task-list items
+(for example `- [ ] 1. ...` and `- [ ] J1: new ...`), not automatically renumbered
+ordered lists.
+
+When updating the description, preserve IDs for the same cases even if their order
+changes. Append new IDs after the highest previously assigned ID in that category;
+do not fill gaps or reuse removed IDs. Record retired IDs and why the cases were
+removed, without leaving them as runnable unchecked tasks. A replacement testing a
+different behavior gets a new ID; clarify edits to an existing case so earlier
+results are not treated as evidence for changed expectations. Adding or renaming
+an ID is not execution evidence. `N/A` sections do not need IDs.
+
+Reviews, author Evidence/Gaps notes and test reports should refer to these IDs,
+together with the tested revision and relevant environment. Preserve historical
+results at their original revisions; an unchanged ID does not make a result fresh.
+
 ### Author verification
 
 Authors are strongly encouraged to run the tests they ask reviewers to perform before requesting

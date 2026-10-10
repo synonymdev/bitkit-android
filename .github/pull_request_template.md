@@ -27,17 +27,19 @@ Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e
 
 ### QA Notes
 
+<!-- Stable case IDs (AGENTS.md): manual 1., 2., sub-cases 2a/2b; journeys J1/J2. Keep IDs once the PR is open, including drafts. New cases take IDs after the highest previously assigned ID; never renumber or reuse retired IDs. Record removed IDs and reasons outside runnable tasks. Refer to IDs plus tested revisions in Evidence, Gaps and review/test reports. N/A needs no IDs. -->
+
 #### Setup
 
 <!-- Enough setup for the requested device journeys/manual tests: executable steps or a reproducible shared recipe (resolved commit) plus PR-specific deviations. Include only relevant service/library versions or pins, staging vs local backend/network, configuration/flags, prerequisites, fixture accounts/identities and preparation/reset steps. Do not assume required Shop/Marketplace, Pubky Ring, homeserver or library versions exist on staging; explain compatible setup or missing prerequisites. Justified N/A for documentation-only/no-device-testing changes. Preserve authored QA notes on updates. -->
 
 #### Journeys
 
-<!-- One line per journey this PR adds or updates: `new` or `updated`, the bare journey file name in backticks, then what it proves — `- [ ] new `send-amount-over-balance.xml` — error shows before the 15 s timeout`; prefix the shortest disambiguating folder only when two journeys share a name. `temporary` only when the author asks for a reproduction that cannot be committed; its XML and any `.diff` go in a collapsed `<details>` block under the line. Two empty values: `N/A — no user-visible behaviour change.`, or `N/A — not drivable; see Manual Tests.` when every flow touched needs a capability the Capabilities table in `journeys/README.md` does not list. Leave the boxes unchecked; the reviewer ticks a line after driving it. -->
+<!-- One line per journey this PR adds or updates: stable ID (`J1:`), `new` or `updated`, the bare journey file name in backticks, then what it proves — `- [ ] J1: new `send-amount-over-balance.xml` — error shows before the 15 s timeout`; prefix the shortest disambiguating folder only when two journeys share a name. `temporary` only when the author asks for a reproduction that cannot be committed; its XML and any `.diff` go in a collapsed `<details>` block under the line. Two empty values: `N/A — no user-visible behaviour change.`, or `N/A — not drivable; see Manual Tests.` when every flow touched needs a capability the Capabilities table in `journeys/README.md` does not list. Leave the boxes unchecked; the reviewer ticks a line after driving it. -->
 
 #### Manual Tests
 
-<!-- Only for a step needing a capability the Capabilities table in `journeys/README.md` does not list: action → expectation — the missing capability, as in `- [ ] Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities`. `N/A` when there is none. -->
+<!-- Only for a step needing a capability the Capabilities table in `journeys/README.md` does not list: action → expectation — the missing capability, as in `- [ ] 1. Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities`. `N/A` when there is none. -->
 
 #### Automated Checks
 

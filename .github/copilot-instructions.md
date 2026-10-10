@@ -8,6 +8,12 @@ Check the PR's current draft status before starting and before publishing a revi
 and wait until they are ready for review, following `AGENTS.md` under Draft status and review
 readiness. This guidance does not itself configure or disable external review automation.
 
+## QA case references
+
+Follow `AGENTS.md` under Stable QA case IDs. Reference the PR’s existing manual/journey
+IDs in review and test reports, with the assessed revision; do not renumber the cases
+or present an old result as validation of changed expectations.
+
 ## Review summary metadata
 
 Follow `AGENTS.md` under "Review summary metadata": end the review summary with
