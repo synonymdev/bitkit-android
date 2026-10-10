@@ -73,6 +73,8 @@ import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainTransferContext
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -379,6 +381,40 @@ class TransferViewModel @Inject constructor(
         walletRepo.getAddresses(count = 1).onFailure { ToastEventBus.send(it) }.getOrNull()?.firstOrNull()?.address
 
     private suspend fun paySpendingConfirmOrder(order: IBtOrder, shown: TransferToSpendingUiState): Boolean {
+        val previous = lightningRepo.currentOnchainSendAttempt()
+        if (previous?.orderId == order.id) {
+            val txid = previous.txid
+            if (previous.hasPositiveEvidence && txid != null) {
+                if (!previous.localFollowupComplete) {
+                    val original = requireNotNull(previous.transferContext) {
+                        "Original funding context is unavailable"
+                    }
+                    check(order.payment?.onchain?.address == previous.address) {
+                        "Original funding order address changed"
+                    }
+                    check(
+                        order.clientBalanceSat == original.originalOrderClientBalanceSats &&
+                            order.feeSat == original.originalOrderFeeSats
+                    ) { "Original funding order terms changed or are unavailable" }
+                    withContext(NonCancellable) {
+                        fundPaidOrder(
+                            order = order,
+                            txId = txid,
+                            txTotalSats = original.txTotalSats,
+                            preTransferOnchainSats = original.preTransferOnchainSats,
+                            originalContext = original,
+                            requireTransferPersisted = true,
+                        )
+                        runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(order.id, txid) }
+                            .onFailure { Logger.warn("Failed to finish accepted transfer locally", it, context = TAG) }
+                    }
+                }
+                return true
+            }
+            transferEffects.emit(TransferEffect.OnFundingPending(previous))
+            return false
+        }
+        if (cacheStore.data.first().paidOrders.containsKey(order.id)) return true
         val plan = resolveSpendingConfirmPlan(order, shown) ?: return false
 
         Logger.debug(
@@ -391,6 +427,16 @@ class TransferViewModel @Inject constructor(
         if (holdForFeesChange(order, shown, plan) || isSendAllBelowOrderFee(order, shown, plan)) return false
 
         val address = order.payment?.onchain?.address.orEmpty()
+        val transferContext = OnchainTransferContext(
+            txTotalSats = if (plan.shouldUseSendAll) {
+                plan.spendableBalance
+            } else {
+                order.feeSat.safe() + plan.miningFeeSats.safe()
+            },
+            preTransferOnchainSats = plan.totalOnchainBalance,
+            originalOrderClientBalanceSats = order.clientBalanceSat,
+            originalOrderFeeSats = order.feeSat,
+        )
         return lightningRepo
             .sendOnChain(
                 address = address,
@@ -401,24 +447,42 @@ class TransferViewModel @Inject constructor(
                 isTransfer = true,
                 channelId = order.channel?.shortChannelId,
                 isMaxAmount = plan.shouldUseSendAll,
+                orderId = order.id,
+                transferContext = transferContext,
             )
-            .onSuccess { txId ->
-                // Survive ViewModel clearance between broadcast and paid-order cache write.
-                withContext(NonCancellable) {
-                    fundPaidOrder(
-                        order = order,
-                        txId = txId,
-                        txTotalSats = if (plan.shouldUseSendAll) {
-                            plan.spendableBalance
-                        } else {
-                            order.feeSat.safe() + plan.miningFeeSats.safe()
-                        },
-                        preTransferOnchainSats = plan.totalOnchainBalance,
-                    )
+            .fold(
+                onSuccess = { outcome ->
+                    if (outcome !is OnchainSendOutcome.Accepted) {
+                        showRetainedFundingPending()
+                        return@fold false
+                    }
+                    // Survive ViewModel clearance between accepted broadcast and paid-order cache write.
+                    withContext(NonCancellable) {
+                        fundPaidOrder(
+                            order = order,
+                            txId = outcome.txid,
+                            txTotalSats = transferContext.txTotalSats,
+                            preTransferOnchainSats = transferContext.preTransferOnchainSats,
+                            originalContext = transferContext,
+                            requireTransferPersisted = true,
+                        )
+                        runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(order.id, outcome.txid) }
+                            .onFailure { Logger.warn("Failed to finish accepted transfer locally", it, context = TAG) }
+                    }
+                    true
+                },
+                onFailure = {
+                    if (!showRetainedFundingPending()) ToastEventBus.send(it)
+                    false
                 }
-            }
-            .onFailure { ToastEventBus.send(it) }
-            .isSuccess
+            )
+    }
+
+    private suspend fun showRetainedFundingPending(): Boolean {
+        val attempt = lightningRepo.currentOnchainSendAttempt() ?: return false
+        if (!attempt.isTransfer || !attempt.blocksNextSend) return false
+        transferEffects.emit(TransferEffect.OnFundingPending(attempt))
+        return true
     }
 
     private suspend fun resolveSpendingConfirmPlan(
@@ -640,16 +704,22 @@ class TransferViewModel @Inject constructor(
         txTotalSats: ULong? = null,
         preTransferOnchainSats: ULong? = null,
         activityWalletId: String = WalletScope.default,
+        originalContext: OnchainTransferContext? = null,
+        requireTransferPersisted: Boolean = false,
     ) {
-        cacheStore.addPaidOrder(orderId = order.id, txId = txId)
-        transferRepo.createTransfer(
-            type = TransferType.TO_SPENDING,
-            amountSats = order.clientBalanceSat.toLong(),
-            fundingTxId = txId,
-            lspOrderId = order.id,
-            txTotalSats = txTotalSats?.toLong(),
-            preTransferOnchainSats = preTransferOnchainSats?.toLong(),
-        )
+        if (requireTransferPersisted) {
+            transferRepo.persistAcceptedFunding(order, txId, requireNotNull(originalContext)).getOrThrow()
+        } else {
+            cacheStore.addPaidOrder(orderId = order.id, txId = txId)
+            transferRepo.createTransfer(
+                type = TransferType.TO_SPENDING,
+                amountSats = order.clientBalanceSat.toLong(),
+                fundingTxId = txId,
+                lspOrderId = order.id,
+                txTotalSats = txTotalSats?.toLong(),
+                preTransferOnchainSats = preTransferOnchainSats?.toLong(),
+            )
+        }
         if (createTransferActivity) {
             transferRepo.createPendingToSpendingActivity(
                 order = order,
@@ -2101,6 +2171,7 @@ data class TransferValues(
 sealed interface TransferEffect {
     data object OnQuoteReady : TransferEffect
     data object OnSpendingFundingPaid : TransferEffect
+    data class OnFundingPending(val attempt: to.bitkit.repositories.OnchainSendAttempt) : TransferEffect
     data object OnHwTxSigned : TransferEffect
     data class ToastException(val e: Throwable) : TransferEffect
     data class ToastError(val title: String, val description: String) : TransferEffect

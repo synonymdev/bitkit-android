@@ -10,6 +10,8 @@ import kotlinx.coroutines.withContext
 import org.junit.Test
 import org.lightningdevkit.ldknode.Node
 import org.mockito.Mockito.mockStatic
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -44,12 +46,12 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
         for (isMax in listOf(false, true)) {
             now = deadline - 1.nanoseconds
             val result = async {
-                runCatching { service.send("address", 1uL, 1uL, isMaxAmount = isMax, paymentDeadlineAt = deadline) }
+                runCatching { service.prepareOnchainSend("address", 1uL, 1uL, isMaxAmount = isMax, paymentDeadlineAt = deadline) }
             }
             now = deadline + 1.nanoseconds
             runCurrent()
 
-            assertIs<ServiceError.PaymentDeadlineExpired>(result.await().exceptionOrNull()?.cause)
+            assertIs<ServiceError.PaymentDeadlineExpired>(result.await().exceptionOrNull())
         }
         verifyNoInteractions(node)
     }
@@ -68,10 +70,33 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
         )
 
         val error = runCatching {
-            service.send("address", 1uL, 1uL, paymentDeadlineAt = deadline)
+            service.prepareOnchainSend("address", 1uL, 1uL, paymentDeadlineAt = deadline)
         }.exceptionOrNull()
 
-        assertSame(submitted, assertIs<AppError>(error).cause)
+        assertSame(submitted, error)
+    }
+
+    @Test
+    fun `expiry after preparation prevents native dispatch of the retained candidate`() = test {
+        var now = deadline
+        val node = mock<Node>()
+        val payment = mock<org.lightningdevkit.ldknode.OnchainPayment>()
+        val native = mock<org.lightningdevkit.ldknode.PreparedOnchainSend>()
+        whenever(node.onchainPayment()).thenReturn(payment)
+        whenever(payment.prepareSendToAddress(org.mockito.kotlin.eq("address"), org.mockito.kotlin.eq(1uL),
+            org.mockito.kotlin.any(), org.mockito.kotlin.isNull())).thenReturn(native)
+        whenever(native.txid()).thenReturn("ab".repeat(32))
+        whenever(native.inputs()).thenReturn(listOf(org.lightningdevkit.ldknode.OutPoint("11".repeat(32), 0u)))
+        whenever(native.recipientAmountSats()).thenReturn(1uL)
+        val service = lightningService(node, object : Clock { override fun now() = now }, testDispatcher)
+        val prepared = service.prepareOnchainSend("address", 1uL, 1uL, paymentDeadlineAt = deadline)
+        now = deadline + 1.nanoseconds
+
+        val error = runCatching { prepared.broadcast() }.exceptionOrNull()
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(error)
+        assertEquals("ab".repeat(32), prepared.receipt.txid)
+        verify(native, never()).broadcast()
     }
 
     @Test
@@ -116,5 +141,6 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
         watchOnlyAccountLifecycleCoordinator = WatchOnlyAccountLifecycleCoordinator(),
         ldkQueue = queue,
         clock = clock,
+        onchainFeeRateFactory = { mock() },
     ).also { it.node = node }
 }

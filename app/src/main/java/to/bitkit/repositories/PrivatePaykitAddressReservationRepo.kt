@@ -214,7 +214,8 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
                     it in savedKeys
                 },
             )
-            if (next == current) return@locked
+            // Keep failed deletion hidden immediately, but retry the durable write even when
+            // the filtered in-memory ledger already matches the requested cleanup.
             ledger = next
             persist(next)
             notifyBackupStateChanged()
@@ -232,7 +233,8 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
                 contactAssignments = current.contactAssignments.filterKeys { it !in removedKeys },
                 contactAssignmentHistory = current.contactAssignmentHistory.filterKeys { it !in removedKeys },
             )
-            if (next == current) return@locked
+            // Keep failed deletion hidden immediately, but retry the durable write even when
+            // the filtered in-memory ledger already matches the requested cleanup.
             ledger = next
             persist(next)
             notifyBackupStateChanged()

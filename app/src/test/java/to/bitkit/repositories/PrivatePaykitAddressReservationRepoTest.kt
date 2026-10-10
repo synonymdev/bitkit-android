@@ -333,6 +333,14 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
         assertNull(sut.currentContactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
         assertNull(sut.contactPublicKeyForReservedAddress(historicalAddress))
         assertEquals(persisted, reservationData.value)
+
+        org.mockito.kotlin.doAnswer {
+            val transform = it.getArgument<(PrivatePaykitReservationData) -> PrivatePaykitReservationData>(0)
+            reservationData.value = transform(reservationData.value)
+        }.whenever(reservationStore).update(any())
+        sut.removeContactAssignments(listOf(CONTACT_KEY, historyOnlyKey))
+        assertTrue(reservationData.value.contactAssignments.isEmpty())
+        assertTrue(reservationData.value.contactAssignmentHistory.isEmpty())
     }
 
     @Test

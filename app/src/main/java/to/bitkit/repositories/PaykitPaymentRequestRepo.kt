@@ -94,6 +94,7 @@ data class PaykitPaymentRequest(
     val billingPeriod: PaykitBillingPeriod? = null,
     val paymentProofKind: PaykitPaymentProofKind? = null,
     val paymentDeadlineAt: Instant? = null,
+    val isPaymentInFlight: Boolean = false,
 ) {
     enum class ParseFailure(
         val logValue: String,
@@ -122,6 +123,9 @@ data class PaykitPaymentRequest(
             counterparty,
             billingPeriod?.startsAt?.toString(),
         )
+
+    val canDismiss: Boolean
+        get() = !isPaymentInFlight
 
     val requiresAcceptance: Boolean
         get() = billingPeriod == null && lifecycleState == PaymentRequestLifecycleState.PROPOSED
@@ -1168,6 +1172,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val locallyInFlightRequestIds = expectedIdentity
             ?.let(paymentProofStore::inFlightRequestIds)
             .orEmpty()
+        val reopenableHardwareProofs = expectedIdentity?.let { identity ->
+            paymentProofStore.load().filter { it.isReopenableHardwareReceipt(identity) }
+        }.orEmpty()
         val allSubscriptions = records.mapNotNull(PaymentRequestRecord::toPaykitSubscription)
             .map { it.withExpiredLifecycle(subscriptionNow) }
         val blockedSubscriptionIds = allSubscriptions.mapNotNull { subscription ->
@@ -1245,9 +1252,16 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 }
             }
         }.filter {
-            isLocallyPayable(it) && it.id !in locallyCompletedRequestIds && it.id !in locallyInFlightRequestIds
+            isLocallyPayable(it) && it.id !in locallyCompletedRequestIds &&
+                (
+                    it.id !in locallyInFlightRequestIds || reopenableHardwareProofs.any { proof ->
+                        proof.matchesHardwareRetryRequest(it)
+                    }
+                    )
         }
-        val incoming = (dueRequests + oneTimeIncoming).sortedBy { it.createdAt }
+        val incoming = (dueRequests + oneTimeIncoming)
+            .map { it.copy(isPaymentInFlight = it.id in locallyInFlightRequestIds) }
+            .sortedBy { it.createdAt }
         val oneTimeHistory = records.mapNotNull { it.toPaykitPaymentRequestHistory(now) }.map { request ->
             val proofKind = locallyCompletedProofKinds[request.id] ?: return@map request
             request.copy(
@@ -1256,6 +1270,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
             )
         }
         val history = (recurringHistory + oneTimeHistory)
+            .map {
+                it.copy(
+                    isPaymentInFlight = it.direction == PaykitPaymentRequestDirection.Incoming &&
+                        it.id in locallyInFlightRequestIds,
+                )
+            }
             .sortedByDescending { it.createdAt }
         if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return
         pruneAcceptedOneTimeRequestIds(records, expectedIdentity, generation)
@@ -1423,6 +1443,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     val current = _pendingRequests.value.firstOrNull { it.id == request.id }
                         ?: throw PaykitPaymentRequestError.RequestUnavailable
 
+                    if (resultingState in listOf(
+                            PaymentRequestLifecycleState.CANCELED,
+                            PaymentRequestLifecycleState.REJECTED,
+                        ) && activeIdentity?.let { current.id in paymentProofStore.inFlightRequestIds(it) } == true
+                    ) {
+                        throw PaykitPaymentRequestError.OperationInProgress
+                    }
                     actionVersion++
                     operation(current)
                     if (resultingState != PaymentRequestLifecycleState.ACCEPTED) processPendingMessages()

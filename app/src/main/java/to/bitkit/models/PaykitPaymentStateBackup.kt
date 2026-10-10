@@ -16,6 +16,7 @@ import kotlin.time.Instant
 data class PaykitPaymentStateBackup(
     val subscriptions: Map<String, Subscription>,
     val pendingProofs: List<Proof>,
+    val activeOnchainAttempt: ActiveOnchainAttemptBackup? = null,
     val acceptedOneTimeRequests: Map<String, Set<PaykitPaymentRequestId>>? = null,
 ) {
     @Serializable
@@ -42,7 +43,7 @@ data class PaykitPaymentStateBackup(
         val identity: String,
         val requestId: PaykitPaymentRequestId,
         val paymentEndpointIdentifier: String,
-        val paymentAppId: String,
+        val paymentAppId: String = "",
         val kind: String,
         val paymentStarted: Boolean,
         val paymentIdentifier: String? = null,
@@ -52,7 +53,22 @@ data class PaykitPaymentStateBackup(
         val onchainAmountSats: ULong? = null,
         val onchainWalletId: String? = null,
         val onchainMatchingTransactionIdsBeforeAttempt: Set<String>,
+        val onchainAcceptanceVerified: Boolean = false,
+        val hardwareSignedTransaction: String? = null,
+        val hardwareMiningFeeSats: ULong? = null,
+        val hardwareFeeRate: ULong? = null,
+        val hardwareTotalSpent: ULong? = null,
+        val hardwareDispatchAttempted: Boolean? = null,
+        val privatePaymentListVersion: ULong? = null,
+        val previousPrivatePaymentListVersion: ULong? = null,
     ) {
+        init {
+            require(
+                previousPrivatePaymentListVersion == null ||
+                    (privatePaymentListVersion != null && previousPrivatePaymentListVersion < privatePaymentListVersion)
+            ) { "Invalid private payment-list boundary" }
+        }
+
         constructor(proof: PendingPaykitPaymentProof) : this(
             identity = proof.identity,
             requestId = proof.requestId,
@@ -67,6 +83,14 @@ data class PaykitPaymentStateBackup(
             onchainAmountSats = proof.onchainAmountSats,
             onchainWalletId = proof.onchainWalletId,
             onchainMatchingTransactionIdsBeforeAttempt = proof.onchainMatchingTransactionIdsBeforeAttempt,
+            onchainAcceptanceVerified = proof.onchainAcceptanceVerified,
+            hardwareSignedTransaction = proof.hardwareSignedTransaction,
+            hardwareMiningFeeSats = proof.hardwareMiningFeeSats,
+            hardwareFeeRate = proof.hardwareFeeRate,
+            hardwareTotalSpent = proof.hardwareTotalSpent,
+            hardwareDispatchAttempted = proof.hardwareDispatchAttempted,
+            privatePaymentListVersion = proof.privatePaymentListVersion,
+            previousPrivatePaymentListVersion = proof.previousPrivatePaymentListVersion
         )
 
         fun restored() = PendingPaykitPaymentProof(
@@ -83,6 +107,14 @@ data class PaykitPaymentStateBackup(
             onchainAmountSats = onchainAmountSats,
             onchainWalletId = onchainWalletId ?: WalletScope.default,
             onchainMatchingTransactionIdsBeforeAttempt = onchainMatchingTransactionIdsBeforeAttempt,
+            onchainAcceptanceVerified = onchainAcceptanceVerified,
+            hardwareSignedTransaction = hardwareSignedTransaction,
+            hardwareMiningFeeSats = hardwareMiningFeeSats,
+            hardwareFeeRate = hardwareFeeRate,
+            hardwareTotalSpent = hardwareTotalSpent,
+            hardwareDispatchAttempted = hardwareDispatchAttempted,
+            privatePaymentListVersion = privatePaymentListVersion,
+            previousPrivatePaymentListVersion = previousPrivatePaymentListVersion
         )
     }
 }

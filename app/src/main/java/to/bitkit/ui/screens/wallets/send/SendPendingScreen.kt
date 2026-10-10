@@ -15,47 +15,84 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
+import to.bitkit.models.WalletScope
+import to.bitkit.repositories.OnchainRecoveryFeeRate
+import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PendingPaymentResolution
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.rememberBiometricAuthSupported
+import to.bitkit.viewmodels.SanityWarning
+
+const val RECOVERY_PIN_CHECK_RESULT_KEY = "RECOVERY_PIN_CHECK_RESULT_KEY"
 
 @Composable
 fun SendPendingScreen(
     paymentHash: String,
     amount: Long,
     observeResolution: Boolean = true,
+    isOnchain: Boolean = false,
     onPaymentSuccess: (String, Long) -> Unit,
     onPaymentError: (PendingPaymentResolution.Failure) -> Unit,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
     viewModel: SendPendingViewModel,
+    walletId: String = WalletScope.default,
+    refusalReason: String? = null,
+    retryOriginal: suspend (OnchainSendAttempt, ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Result<OnchainSendOutcome>,
+    onRecovered: (String, Long) -> Unit,
+    savedStateHandle: SavedStateHandle,
+    onNavigateToPin: () -> Unit,
+    onRecoveredTransfer: (OnchainSendAttempt) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    if (observeResolution) {
-        LaunchedEffect(Unit) { viewModel.init(paymentHash, amount) }
+    val txid = paymentHash.takeIf { isOnchain && it.matches(Regex("[0-9a-fA-F]{64}")) }
+    LaunchedEffect(Unit) {
+        if (isOnchain) {
+            viewModel.initOnchain(txid, amount, walletId)
+        } else if (observeResolution) {
+            viewModel.init(paymentHash, amount)
+        }
     }
 
     uiState.resolution?.takeIf { observeResolution }?.let { resolution ->
@@ -71,21 +108,193 @@ fun SendPendingScreen(
         }
     }
 
-    Content(
-        amount = if (observeResolution) uiState.amount else amount,
-        activityId = uiState.activityId,
-        onClose = onClose,
-        onViewDetails = onViewDetails,
+    uiState.recoveredTxid?.let { winner ->
+        LaunchedEffect(winner) { onRecovered(winner, uiState.amount) }
+    }
+    uiState.recoveredTransfer?.let { winner ->
+        LaunchedEffect(winner.attemptId, winner.txid) { onRecoveredTransfer(winner) }
+    }
+    RecoveryAuthorization(
+        uiState,
+        savedStateHandle,
+        onNavigateToPin,
+        viewModel,
+        { rate, approve -> viewModel.retryOriginal(rate) { attempt, fee -> retryOriginal(attempt, fee, approve) } },
+    ) { onRetry ->
+        SendPendingContent(
+            amount = if (observeResolution || isOnchain) uiState.amount else amount,
+            isOnchain = isOnchain,
+            activityId = uiState.activityId,
+            txid = uiState.currentTxid ?: txid,
+            refusalReason = refusalReason,
+            onClose = onClose,
+            onViewDetails = onViewDetails,
+            canRetry = uiState.recoveryAttempt != null,
+            isRecovering = uiState.isRecovering,
+            recoveryError = uiState.recoveryErrorMessage(),
+            onRetry = onRetry,
+        )
+    }
+}
+
+@Composable
+private fun SendPendingUiState.recoveryErrorMessage(): String? = recoveryError?.let {
+    stringResource(
+        if (invalidFeeRate) {
+            R.string.wallet__send_pending__retry_invalid_fee
+        } else {
+            R.string.wallet__send_pending__retry_error
+        }
     )
 }
 
 @Composable
-private fun Content(
+private fun RecoveryAuthorization(
+    uiState: SendPendingUiState,
+    savedStateHandle: SavedStateHandle,
+    onNavigateToPin: () -> Unit,
+    viewModel: SendPendingViewModel,
+    retryOriginal: (ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Unit,
+    content: @Composable (() -> Unit) -> Unit,
+) {
+    var showFeeApproval by remember { mutableStateOf(false) }
+    var feeInput by rememberSaveable { mutableStateOf("") }
+    val settings = settingsViewModel ?: return
+    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
+    val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isBiometrySupported = rememberBiometricAuthSupported()
+    LaunchedEffect(savedStateHandle) {
+        savedStateHandle.getStateFlow<Boolean?>(RECOVERY_PIN_CHECK_RESULT_KEY, null)
+            .filterNotNull().collect { successful ->
+                savedStateHandle.remove<Boolean>(RECOVERY_PIN_CHECK_RESULT_KEY)
+                viewModel.answerRecoveryPin(successful)
+            }
+    }
+    LaunchedEffect(uiState.recoveryApproval) {
+        if (viewModel.openRecoveryPin()) onNavigateToPin()
+    }
+    when (val approval = uiState.recoveryApproval) {
+        is RecoveryApproval.Fee -> AlertDialog(
+            onDismissRequest = { viewModel.answerRecoveryApproval(false) },
+            title = { BodyM(stringResource(R.string.wallet__send_pending__retry_title)) },
+            text = {
+                Column {
+                    SelectionContainer { BodyM(approval.receipt.address, color = Colors.White64) }
+                    BalanceHeaderView(sats = approval.receipt.amountSats.toLong())
+                    VerticalSpacer(16.dp)
+                    BodyM(stringResource(R.string.wallet__send_fee_total)
+                        .replace("{feeSats}", requireNotNull(approval.receipt.miningFeeSats).toString()))
+                    BodyM("${approval.receipt.feeRateSatsPerVByte} " + stringResource(R.string.common__sat_vbyte))
+                }
+            },
+            confirmButton = {
+                PrimaryButton(text = stringResource(R.string.wallet__send_pending__retry_authorize),
+                    onClick = { viewModel.answerRecoveryApproval(true) })
+            },
+            dismissButton = {
+                SecondaryButton(text = stringResource(R.string.common__cancel),
+                    onClick = { viewModel.answerRecoveryApproval(false) })
+            },
+        )
+        is RecoveryApproval.Warning -> AppAlertDialog(
+            title = stringResource(R.string.common__are_you_sure),
+            text = stringResource(approval.warning.message),
+            confirmText = stringResource(R.string.wallet__send_yes),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = { viewModel.answerRecoveryApproval(true) },
+            onDismiss = { viewModel.answerRecoveryApproval(false) },
+        )
+        RecoveryApproval.Biometrics -> BiometricsView(
+            onSuccess = { viewModel.answerRecoveryApproval(true) },
+            onFailure = { viewModel.useRecoveryPin() },
+        )
+        else -> Unit
+    }
+    if (showFeeApproval) {
+        uiState.recoveryAttempt?.let { original ->
+            RecoveryFeeDialog(original, feeInput, { feeInput = it }, { showFeeApproval = false }) { rate ->
+                showFeeApproval = false
+                retryOriginal(rate) { receipt, warnings ->
+                    viewModel.approveRecoveryFee(receipt, warnings, isPinEnabled && pinForPayments,
+                        isBiometricEnabled && isBiometrySupported)
+                }
+            }
+        }
+    }
+    content {
+        feeInput = uiState.recoveryAttempt?.feeRateSatsPerVByte?.toString().orEmpty()
+        showFeeApproval = true
+    }
+}
+
+@Composable
+private fun RecoveryFeeDialog(
+    original: OnchainSendAttempt,
+    feeInput: String,
+    onFeeChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onAuthorize: (ULong) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { BodyM(stringResource(R.string.wallet__send_pending__retry_title)) },
+        text = {
+            Column {
+                BodyM(stringResource(R.string.wallet__send_pending__retry_description))
+                original.let { original ->
+                    VerticalSpacer(16.dp)
+                    SelectionContainer { BodyM(original.address, color = Colors.White64) }
+                    BalanceHeaderView(sats = original.amountSats.toLong())
+                }
+                VerticalSpacer(16.dp)
+                TextInput(
+                    value = feeInput,
+                    onValueChange = onFeeChange,
+                    placeholder = stringResource(R.string.common__sat_vbyte),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = feeInput.isNotBlank() && OnchainRecoveryFeeRate.parse(feeInput) == null,
+                    supportingText = {
+                        if (feeInput.isNotBlank() && OnchainRecoveryFeeRate.parse(feeInput) == null) {
+                            BodyM(stringResource(R.string.wallet__send_pending__retry_invalid_fee))
+                        }
+                    },
+                )
+            }
+        },
+        confirmButton = {
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                enabled = OnchainRecoveryFeeRate.parse(feeInput) != null,
+                onClick = {
+                    val rate = OnchainRecoveryFeeRate.parse(feeInput) ?: return@PrimaryButton
+                    onAuthorize(rate)
+                },
+            )
+        },
+        dismissButton = {
+            SecondaryButton(
+                text = stringResource(R.string.common__cancel),
+                onClick = onClose,
+            )
+        },
+    )
+}
+
+@Composable
+internal fun SendPendingContent(
     amount: Long,
+    isOnchain: Boolean,
     activityId: String?,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
     modifier: Modifier = Modifier,
+    txid: String? = null,
+    refusalReason: String? = null,
+    canRetry: Boolean = false,
+    isRecovering: Boolean = false,
+    recoveryError: String? = null,
+    onRetry: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -100,16 +309,58 @@ private fun Content(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                VerticalSpacer(16.dp)
+                BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
+                recoveryError?.let {
+                    VerticalSpacer(16.dp)
+                    BodyM(it, color = Colors.White64)
+                }
+
+                VerticalSpacer(32.dp)
+                BodyM(
+                    stringResource(
+                        if (isOnchain) {
+                            R.string.wallet__send_pending__onchain_description
+                        } else {
+                            R.string.wallet__send_pending__description
+                        },
+                    ),
+                    color = Colors.White64,
+                )
+
+                if (isOnchain) {
+                    refusalReason?.let {
+                        VerticalSpacer(16.dp)
+                        BodyM(stringResource(R.string.wallet__send_pending__refusal, it), color = Colors.White64)
+                    }
+                    txid?.let {
+                        VerticalSpacer(16.dp)
+                        SelectionContainer {
+                            BodyM(stringResource(R.string.wallet__send_pending__txid, it), color = Colors.White64)
+                        }
+                    }
+                }
+
+                VerticalSpacer(32.dp)
+                HourglassAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
+                VerticalSpacer(16.dp)
+            }
             VerticalSpacer(16.dp)
-            BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
-
-            VerticalSpacer(32.dp)
-            BodyM(stringResource(R.string.wallet__send_pending__description), color = Colors.White64)
-
-            FillHeight()
-            HourglassAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
-            FillHeight()
-
+            if (canRetry) {
+                SecondaryButton(
+                    text = stringResource(R.string.wallet__send_pending__retry_title),
+                    enabled = !isRecovering,
+                    onClick = onRetry,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                VerticalSpacer(16.dp)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__send_details),
@@ -154,8 +405,9 @@ private fun HourglassAnimation(modifier: Modifier = Modifier) {
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendPendingContent(
                 amount = 50_000L,
+                isOnchain = false,
                 activityId = null,
                 onClose = {},
                 onViewDetails = {},

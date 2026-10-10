@@ -231,9 +231,10 @@ internal fun IncomingPaymentRequestDetailsContent(
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_dismiss),
-                    enabled = !isDismissing,
+                    enabled = !isDismissing && request.canDismiss,
                     isLoading = isDismissing,
                     onClick = {
+                        if (!request.canDismiss) return@SecondaryButton
                         val dismiss = onDismiss ?: return@SecondaryButton
                         isDismissing = true
                         scope.launch {

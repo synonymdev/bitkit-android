@@ -1544,6 +1544,48 @@ class ActivityService(
         }
     }
 
+    /** Apply saved original hardware tags once after exact outgoing activity verification. */
+    suspend fun restoreSentOnchainTags(txid: String, walletId: String): Boolean =
+        ServiceQueue.CORE.background {
+            val activity = requireNotNull(getActivityByTxId(walletId = walletId, txId = txid))
+            check(activity.walletId == walletId && activity.txId.equals(txid, true) &&
+                activity.txType == PaymentType.SENT)
+            val metadata = com.synonym.bitkitcore.getAllPreActivityMetadata().filter {
+                it.walletId == walletId && !it.isReceive && it.paymentId.equals(txid, true) &&
+                    it.txId?.equals(txid, true) == true && it.tags.isNotEmpty()
+            }
+            if (metadata.isEmpty()) return@background false
+            val existingTags = getTags(walletId = walletId, activityId = activity.id)
+            val newTags = metadata.flatMap { it.tags }.distinct().filter { it.isNotBlank() && it !in existingTags }
+            if (newTags.isNotEmpty()) addTags(walletId = walletId, activityId = activity.id, tags = newTags)
+            com.synonym.bitkitcore.upsertPreActivityMetadata(metadata.map { it.copy(tags = emptyList()) })
+            newTags.isNotEmpty()
+        }
+
+    /** Restore original attribution only when no contact has been saved for the accepted transaction. */
+    suspend fun restoreSentOnchainContact(txid: String, walletId: String, contact: String) =
+        ServiceQueue.CORE.background {
+            val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            if (cacheStore.data.first().isContactDetached(existing.id, walletId)) return@background
+            if (existing.contact == null) {
+                upsertActivity(Activity.Onchain(existing.copy(contact = contact)))
+            }
+            check(cacheStore.data.first().isContactDetached(existing.id, walletId) ||
+                requireNotNull(getOnchainActivityByTxId(txid, walletId)).contact != null)
+        }
+
+    /** Called only after exact original-node transaction/prevout verification, to repair an existing placeholder. */
+    suspend fun repairVerifiedSentOnchainFee(txid: String, walletId: String, fee: ULong, feeRate: ULong) =
+        ServiceQueue.CORE.background {
+            val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            val updated = existing.copy(fee = fee, feeRate = feeRate)
+            if (updated != existing) upsertActivity(Activity.Onchain(updated))
+            val restored = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(restored.fee == fee && restored.feeRate == feeRate)
+        }
+
     suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) {
         ServiceQueue.CORE.background {
             runCatching {

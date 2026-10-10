@@ -4,6 +4,7 @@ import kotlinx.serialization.SerializationException
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -13,6 +14,8 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertContains
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class PaykitPaymentProofStoreTest : BaseUnitTest() {
     companion object {
@@ -30,6 +33,29 @@ class PaykitPaymentProofStoreTest : BaseUnitTest() {
         assertContains(error.message.orEmpty(), KEY)
         assertIs<SerializationException>(error.cause)
         verify(keychain, never()).delete(KEY)
+    }
+
+    @Test
+    fun `unverified txid proof stays in flight without claiming local completion`() = test {
+        val identity = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val requestId = PaykitPaymentRequestId("request", "counterparty")
+        val proof = PendingPaykitPaymentProof(
+            identity = identity, requestId = requestId, paymentEndpointIdentifier = MethodId.P2wpkh.rawValue, paymentAppId = "bitkit",
+            kind = PaykitPaymentProofKind.Onchain, paymentStarted = true,
+            paymentIdentifier = "ab".repeat(32), proofData = "ab".repeat(32),
+        )
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(KEY)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(KEY), any())).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = PaykitPaymentProofStore(keychain)
+        store.save(listOf(proof))
+        assertTrue(store.completedRequestProofKindsAwaitingSubmission(identity).isEmpty())
+        assertEquals(setOf(requestId), store.inFlightRequestIds(identity))
+
+        store.save(listOf(proof.copy(onchainAcceptanceVerified = true)))
+        assertContains(requireNotNull(saved), "\"onchainAcceptanceVerified\":true")
+        assertEquals(mapOf(requestId to PaykitPaymentProofKind.Onchain), store.completedRequestProofKindsAwaitingSubmission(identity))
     }
 
     @Test

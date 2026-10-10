@@ -12,6 +12,7 @@ import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
+import com.synonym.bitkitcore.TransactionDetail
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -449,6 +450,18 @@ class TrezorRepo @Inject constructor(
         }
     }
 
+    suspend fun getTransactionDetail(
+        extendedKey: String,
+        txid: String,
+        network: BitkitCoreNetwork,
+        scriptType: AccountType,
+    ): Result<TransactionDetail> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            awaitSetup()
+            trezorService.getTransactionDetail(extendedKey, currentElectrumUrl(), txid, network, scriptType)
+        }
+    }
+
     suspend fun getTransactionHistory(
         extendedKey: String,
         network: BitkitCoreNetwork = Env.network.toCoreNetwork(),
@@ -608,6 +621,22 @@ class TrezorRepo @Inject constructor(
                 serializedTx = serializedTx,
                 electrumUrl = currentElectrumUrl(),
                 paymentDeadlineAt = paymentDeadlineAt,
+            )
+        }.onFailure {
+            Logger.error("Trezor broadcastRawTx failed", it, context = TAG)
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
+        }
+    }
+
+    suspend fun broadcastRawTxAtBoundary(
+        serializedTx: String,
+        paymentDeadlineAt: Instant?,
+        beforeNativeBroadcast: suspend () -> Unit,
+    ): Result<String> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            awaitSetup()
+            trezorService.broadcastRawTxAtBoundary(
+                serializedTx, currentElectrumUrl(), paymentDeadlineAt, beforeNativeBroadcast
             )
         }.onFailure {
             Logger.error("Trezor broadcastRawTx failed", it, context = TAG)

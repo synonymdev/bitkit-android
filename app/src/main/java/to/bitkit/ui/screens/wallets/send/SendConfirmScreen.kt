@@ -567,7 +567,7 @@ private fun OnChainDetails(
                     color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
                     enabled = uiState.canSwitchFundingSource && interactionsEnabled,
                     isLoading = uiState.isFundingSourceLoading,
-                    clickable = interactionsEnabled,
+                    clickable = interactionsEnabled && !uiState.isRetainedHardwarePayment,
                     icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
@@ -608,7 +608,9 @@ private fun OnChainDetails(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickableAlpha(enabled = interactionsEnabled) { onEvent(SendEvent.SpeedAndFee) }
+                    .clickableAlpha(enabled = interactionsEnabled && !uiState.isRetainedHardwarePayment) {
+                        onEvent(SendEvent.SpeedAndFee)
+                    }
             ) {
                 SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
                     Row(

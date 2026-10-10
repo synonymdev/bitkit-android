@@ -18,14 +18,19 @@ import org.junit.rules.TemporaryFolder
 import org.lightningdevkit.ldknode.AddressInfo
 import org.lightningdevkit.ldknode.AddressType
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OnchainPayment
+import org.lightningdevkit.ldknode.OnchainSendResult
 import org.lightningdevkit.ldknode.OnchainWalletAccount
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.timeout
@@ -43,12 +48,24 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendAttemptStore
+import to.bitkit.repositories.OnchainSendCoordinator
+import to.bitkit.repositories.OnchainPreparedSender
+import to.bitkit.repositories.PreparedOnchainSend
+import to.bitkit.repositories.OnchainTransferContext
+import to.bitkit.models.ActiveOnchainAttemptBackup
+import to.bitkit.models.WalletScope
+import kotlinx.serialization.json.Json
+import kotlin.time.Instant
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -67,6 +84,8 @@ class LightningServiceTest : BaseUnitTest() {
     private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
     private val loggerLdk = mock<LoggerLdk>()
     private val node = mock<Node>()
+    private val onchainPayment = mock<OnchainPayment>()
+    private val sendFeeRate = mock<FeeRate>()
     private val watchOnlyAccountLifecycleCoordinator = WatchOnlyAccountLifecycleCoordinator()
 
     @get:Rule
@@ -86,6 +105,7 @@ class LightningServiceTest : BaseUnitTest() {
             loggerLdk = loggerLdk,
             watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
             ldkQueue = testDispatcher,
+            onchainFeeRateFactory = { sendFeeRate },
         )
         sut.node = node
     }
@@ -137,6 +157,134 @@ class LightningServiceTest : BaseUnitTest() {
         whenever(node.listChannels()).thenReturn(listOf(usableChannel))
 
         assertTrue(sut.canReceive())
+    }
+
+    private fun preparedNative(txid: String) = mock<org.lightningdevkit.ldknode.PreparedOnchainSend>().also {
+        whenever(it.txid()).thenReturn(txid)
+        whenever(it.inputs()).thenReturn(listOf(org.lightningdevkit.ldknode.OutPoint("11".repeat(32), 0u)))
+        whenever(it.recipientAmountSats()).thenReturn(1_000uL)
+    }
+
+    @Test
+    fun `fixed preparation captures actual receipt without dispatch and caches broadcast`() = test {
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
+
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1uL)
+        assertEquals(txid, prepared.receipt.txid)
+        assertEquals(1_000uL, prepared.receipt.amountSats)
+        assertEquals(1, prepared.receipt.inputs.size)
+        verify(native, never()).broadcast()
+        repeat(2) { assertEquals(OnchainSendOutcome.Accepted(txid), prepared.broadcast()) }
+        verify(native).broadcast()
+        verify(onchainPayment, never()).sendToAddressWithBroadcastResult(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `initial Max uses native automatic reserve semantics then captures actual amount`() = test {
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        whenever(native.recipientAmountSats()).thenReturn(900uL)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendAllToAddress("address", true, sendFeeRate)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Unknown(txid))
+
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1uL, isMaxAmount = true)
+        assertEquals(900uL, prepared.receipt.amountSats)
+        verify(native, never()).broadcast()
+        assertEquals(OnchainSendOutcome.Unknown(txid), prepared.broadcast())
+        verify(onchainPayment).prepareSendAllToAddress("address", true, sendFeeRate)
+        verify(onchainPayment, never()).sendAllToAddressWithBroadcastResult(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `initial fixed preset above 999 dispatches through durable receipt retention`() = test {
+        initialPresetThroughRetention(isMax = false, isTransfer = false)
+        initialPresetThroughRetention(isMax = false, isTransfer = false, feeRate = UInt.MAX_VALUE.toULong())
+    }
+
+    @Test
+    fun `initial send-all preset above 999 dispatches through durable receipt retention`() = test {
+        initialPresetThroughRetention(isMax = true, isTransfer = false)
+    }
+
+    @Test
+    fun `initial Fast transfer preset above 999 dispatches through durable receipt retention`() = test {
+        initialPresetThroughRetention(isMax = true, isTransfer = true)
+    }
+
+    private suspend fun initialPresetThroughRetention(isMax: Boolean, isTransfer: Boolean, feeRate: ULong = 1_000uL) {
+        var saved: String? = null
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, sut, kotlin.time.Clock.System)
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        val amount = if (isMax) 900uL else 1_000uL
+        whenever(native.recipientAmountSats()).thenReturn(amount)
+        whenever(native.miningFeeSats()).thenReturn(50uL)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
+        whenever(onchainPayment.prepareSendAllToAddress("address", true, sendFeeRate)).thenReturn(native)
+        whenever(native.broadcast()).thenAnswer {
+            val retained = Json.decodeFromString<OnchainSendAttempt>(requireNotNull(saved))
+            assertTrue(retained.initialDispatchAttempted)
+            assertEquals(feeRate, retained.candidateFeeRates[txid])
+            assertEquals(amount, retained.amountSats)
+            OnchainSendResult.Accepted(txid)
+        }
+        val attempt = store.admit(
+            walletId = WalletScope.default, requestId = null, orderId = if (isTransfer) "order-1" else null,
+            address = "address", amountSats = 1_000uL, isMaxAmount = isMax, feeRateSatsPerVByte = feeRate,
+            isTransfer = isTransfer, channelId = null, tags = listOf("original-tag"),
+            transferContext = if (isTransfer) OnchainTransferContext(2_000uL, 2_000uL, 900uL, 900uL) else null,
+            beforeSendAttempt = {},
+        )
+        val sender = object : OnchainPreparedSender {
+            override suspend fun prepareInitial(attempt: OnchainSendAttempt) = sut.prepareOnchainSend(
+                attempt.address,
+                attempt.amountSats,
+                attempt.feeRateSatsPerVByte,
+                isMaxAmount = attempt.isMaxAmount,
+            )
+            override suspend fun prepareRecovery(
+                attempt: OnchainSendAttempt,
+                feeRateSatsPerVByte: ULong,
+                paymentDeadlineAt: Instant?,
+            ): PreparedOnchainSend = error("unused")
+        }
+        val coordinator = OnchainSendCoordinator(store, sender, testDispatcher)
+        assertEquals(OnchainSendOutcome.Accepted(txid), coordinator.sendInitial(attempt).getOrThrow())
+        verify(native).broadcast()
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, sut, kotlin.time.Clock.System)
+        val recorded = requireNotNull(reopened.current())
+        val wire = ActiveOnchainAttemptBackup.from(recorded, "regtest", "12".repeat(32))
+        val restoredWire = Json.decodeFromString<ActiveOnchainAttemptBackup>(Json.encodeToString(wire))
+        val restored = restoredWire.restored("regtest", wire.wallet.binding, WalletScope.default, 0)
+        assertEquals(feeRate, restored.feeRateSatsPerVByte)
+        assertEquals(mapOf(txid to feeRate), restored.candidateFeeRates)
+        assertEquals(recorded.originalInputs, restored.originalInputs)
+        assertEquals(amount, restored.amountSats)
+        assertEquals(recorded.transferContext, restored.transferContext)
+    }
+
+    @Test
+    fun `onchain send refuses a different wallet before invoking native payment`() = test {
+        assertFailsWith<ServiceError.NodeNotSetup> {
+            sut.prepareOnchainSend("bcrt1qrecipient", 1_000uL, 1uL, walletIndex = 9)
+        }
+        verify(node, never()).onchainPayment()
+    }
+
+    @Test
+    fun `generated node error stays direct across the service queue`() = test {
+        assertFailsWith<NodeException.InvalidAddress> {
+            sut.callOnchainSend { throw NodeException.InvalidAddress("invalid address") }
+        }
     }
 
     @Test

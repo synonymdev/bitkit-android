@@ -47,6 +47,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.ui.components.ConnectionIssuesView
@@ -58,6 +59,7 @@ import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.screens.wallets.send.HwSendSignScreen
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
+import to.bitkit.ui.screens.wallets.send.RECOVERY_PIN_CHECK_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.SEND_CONFIRM_RESET_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.SendAddressScreen
 import to.bitkit.ui.screens.wallets.send.SendAmountScreen
@@ -160,32 +162,66 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
-            LaunchedEffect(hwSendViewModel, sendUiState.resolvedHardwarePaymentTxId) {
-                val transactionId = sendUiState.resolvedHardwarePaymentTxId ?: return@LaunchedEffect
-                val walletId = sendUiState.hardwareWalletId ?: return@LaunchedEffect
-                val requestId = sendUiState.incomingPaymentRequestId ?: return@LaunchedEffect
-                if (!hwSendViewModel.resolveBroadcast(walletId, requestId, transactionId)) {
-                    appViewModel.acknowledgeHardwarePaymentResolution(transactionId)
+            fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
+                appViewModel.onSendSuccess(
+                    details = NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.ONCHAIN,
+                        direction = NewTransactionSheetDirection.SENT,
+                        paymentHashOrTxId = txId,
+                        activityWalletId = walletId,
+                        sats = amountSats.toLong(),
+                    ),
+                    walletId = walletId,
+                    navigate = false,
+                    syncContact = !isShopPayment,
+                )
+                appViewModel.clearClipboardForAutoRead()
+                navController.navigateTo(SendRoute.Success) {
+                    popUpTo(navController.graph.id) { inclusive = true }
+                }
+            }
+            LaunchedEffect(appViewModel, hwSendViewModel) {
+                appViewModel.resolvedHardwarePayments.collect { resolutions ->
+                    resolutions.values.forEach { resolution ->
+                        if (appViewModel.resolvedHardwarePaymentFor(resolution.walletId, resolution.transactionId) == resolution &&
+                            hwSendViewModel.completeReconciledBroadcast(resolution.walletId, resolution.transactionId) {
+                                showHardwareSuccess(it.txId, it.amountSats, it.walletId, it.paymentRequestId != null)
+                            }
+                        ) {
+                            appViewModel.consumeResolvedHardwarePayment(resolution)
+                        }
+                    }
                 }
             }
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
-                    appViewModel.completeHardwareContactPayment(result.txId)
-                    appViewModel.onSendSuccess(
-                        details = NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.ONCHAIN,
-                            direction = NewTransactionSheetDirection.SENT,
-                            paymentHashOrTxId = result.txId,
-                            activityWalletId = result.walletId,
-                            sats = result.amountSats.toLong(),
-                        ),
-                        walletId = result.walletId,
-                        navigate = false,
-                    )
-                    appViewModel.clearClipboardForAutoRead()
-                    navController.navigateTo(SendRoute.Success) {
-                        popUpTo(navController.graph.id) { inclusive = true }
+                    val resolved = appViewModel.resolvedHardwarePaymentFor(result.walletId, result.txId)
+                    if (resolved != null && hwSendViewModel.completeReconciledBroadcast(
+                            resolved.walletId, resolved.transactionId
+                        )
+                    ) {
+                        appViewModel.consumeResolvedHardwarePayment(resolved)
+                        showHardwareSuccess(result.txId, result.amountSats, result.walletId, result.paymentRequestId != null)
+                        return@collect
                     }
+                    val proofComplete = appViewModel.completeHardwareContactPayment(
+                        result.txId, result.walletId, result.paymentRequestId, result.paymentIdentity,
+                    )
+                    if (!proofComplete) {
+                        navController.navigateTo(
+                            SendRoute.Pending(
+                                paymentHash = result.txId,
+                                amount = result.amountSats.toLong(),
+                                walletId = result.walletId,
+                                observeResolution = false,
+                                isOnchain = true,
+                            )
+                        ) { popUpTo(navController.graph.id) { inclusive = true } }
+                        // Proof persistence may have failed. Keep the exact result replayable on reopening
+                        // and retain the signed operation so another request cannot sign or broadcast.
+                        return@collect
+                    }
+                    showHardwareSuccess(result.txId, result.amountSats, result.walletId, result.paymentRequestId != null)
                     hwSendViewModel.completeBroadcast()
                 }
             }
@@ -200,6 +236,8 @@ fun SendSheet(
                         is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
+                            val details = appViewModel.successSendUiState.value
+                            hwSendViewModel.completeReconciledBroadcast(details.activityWalletId, details.paymentHashOrTxId)
                             appViewModel.clearClipboardForAutoRead()
                             navController.navigateTo(SendRoute.Success) {
                                 popUpTo(navController.graph.id) { inclusive = true }
@@ -216,7 +254,13 @@ fun SendSheet(
                         is SendEffect.NavigateToComingSoon -> navController.navigateTo(SendRoute.ComingSoon)
                         is SendEffect.NavigateToContacts -> navController.navigateTo(SendRoute.ContactSelect)
                         is SendEffect.NavigateToPending -> navController.navigateTo(
-                            SendRoute.Pending(it.paymentHash, it.amount, observeResolution = it.observeResolution)
+                            SendRoute.Pending(
+                                it.paymentHash,
+                                it.amount,
+                                observeResolution = it.observeResolution,
+                                isOnchain = it.isOnchain,
+                                refusalReason = it.refusalReason,
+                            )
                         ) { popUpTo(startDestination) { inclusive = true } }
                         is SendEffect.NavigateToError -> navController.navigateTo(
                             SendRoute.errorFromFailure(
@@ -370,16 +414,34 @@ fun SendSheet(
                         ?.toULong()
                         ?.takeIf { rate -> rate > 0uL }
                         ?: HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE
+                    val paymentIdentity = appViewModel.hardwarePaymentIdentity()
                     HwSendSignScreen(
                         walletId = walletId,
                         sendUiState = uiState,
+                        paymentIdentity = paymentIdentity,
                         satsPerVByte = satsPerVByte,
                         viewModel = hwSendViewModel,
-                        prepareContactPayment = appViewModel::prepareHardwareContactPayment,
-                        authorizeContactPayment = appViewModel::authorizeHardwareContactPayment,
-                        onPaymentDeadlineExpired = appViewModel::onHardwarePaymentDeadlineExpired,
+                        prepareContactPayment = { signedTx ->
+                            appViewModel.prepareHardwareContactPayment(
+                                walletId,
+                                uiState.address,
+                                uiState.incomingPaymentRequestId,
+                                paymentIdentity,
+                                signedTx,
+                            )
+                        },
+                        authorizeContactPayment = { hasAttemptedBroadcast ->
+                            appViewModel.authorizeHardwareContactPayment(
+                                hasAttemptedBroadcast,
+                                uiState.incomingPaymentRequestId,
+                                paymentIdentity,
+                                walletId,
+                            )
+                        },
                         onPaymentSubmissionChange = appViewModel::onHardwarePaymentSubmissionChanged,
-                        onBroadcastAttemptChange = appViewModel::onHardwareBroadcastAttemptChanged,
+                        onPaymentDeadlineExpired = { attempted ->
+                            appViewModel.onHardwarePaymentDeadlineExpired(attempted, uiState.incomingPaymentRequestId, paymentIdentity, walletId)
+                        },
                         paymentDeadlineAt = appViewModel.hardwarePaymentDeadlineAt,
                         onBack = {
                             navController.previousBackStackEntry
@@ -442,6 +504,20 @@ fun SendSheet(
                         },
                         tqgInputTestTag = "TagInputSend",
                         addButtonTestTag = "SendTagsSubmit",
+                    )
+                }
+                composableWithDefaultTransitions<SendRoute.RecoveryPinCheck> {
+                    SendPinCheckScreen(
+                        onBack = {
+                            navController.previousBackStackEntry?.savedStateHandle
+                                ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, false)
+                            navController.popBackStack()
+                        },
+                        onSuccess = {
+                            navController.previousBackStackEntry?.savedStateHandle
+                                ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, true)
+                            navController.popBackStack()
+                        },
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.PinCheck> {
@@ -520,9 +596,27 @@ fun SendSheet(
                     val route = it.toRoute<SendRoute.Pending>()
                     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     SendPendingScreen(
+                        savedStateHandle = it.savedStateHandle,
+                        onNavigateToPin = { navController.navigateTo(SendRoute.RecoveryPinCheck) },
                         paymentHash = route.paymentHash,
                         amount = route.amount,
                         observeResolution = route.observeResolution,
+                        isOnchain = route.isOnchain,
+                        walletId = route.walletId,
+                        refusalReason = route.refusalReason,
+                        retryOriginal = appViewModel::retryOriginalOnchainSend,
+                        onRecoveredTransfer = appViewModel::onRecoveredTransfer,
+                        onRecovered = { txid, originalAmount ->
+                            appViewModel.onSendSuccess(
+                                NewTransactionSheetDetails(
+                                    type = NewTransactionSheetType.ONCHAIN,
+                                    direction = NewTransactionSheetDirection.SENT,
+                                    paymentHashOrTxId = txid,
+                                    sats = originalAmount,
+                                    activityWalletId = route.walletId,
+                                )
+                            )
+                        },
                         onPaymentSuccess = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
@@ -547,7 +641,7 @@ fun SendSheet(
                             }
                         },
                         onClose = { appViewModel.hideSheet() },
-                        onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId) },
+                        onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId, route.walletId) },
                         viewModel = hiltViewModel<SendPendingViewModel>(),
                     )
                 }
@@ -690,6 +784,9 @@ sealed interface SendRoute {
     data object PinCheck : InternalOnly
 
     @Serializable
+    data object RecoveryPinCheck : InternalOnly
+
+    @Serializable
     data object CoinSelection : DeepLinkStart
 
     @Serializable
@@ -721,6 +818,9 @@ sealed interface SendRoute {
         val paymentHash: String,
         val amount: Long,
         val observeResolution: Boolean = true,
+        val isOnchain: Boolean = false,
+        val walletId: String = WalletScope.default,
+        val refusalReason: String? = null,
         val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
         val paymentRequest: String? = null,
     ) : InternalOnly

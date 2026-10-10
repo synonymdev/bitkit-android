@@ -17,7 +17,6 @@ import com.synonym.bitkitcore.TrezorException
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
@@ -25,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -55,6 +55,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -77,6 +78,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
+import to.bitkit.models.WalletScope
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
@@ -89,6 +91,10 @@ import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendEvidence
+import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainTransferContext
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -142,6 +148,19 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.getOnchainAddress()).thenReturn(WALLET_ADDRESS)
         whenever(settingsStore.data).thenReturn(MutableStateFlow(SettingsData()))
+        whenever(cacheStore.data).thenReturn(MutableStateFlow(AppCacheData()))
+        whenever { transferRepo.persistAcceptedFunding(any(), any(), anyOrNull()) }.doSuspendableAnswer {
+            val originalOrder = it.getArgument<IBtOrder>(0)
+            cacheStore.addPaidOrder(originalOrder.id, it.getArgument(1))
+            Result.success(Unit)
+        }
+        whenever { transferRepo.findLspOrderIdByFundingTxId(any()) }.thenReturn(Result.success(null))
+        whenever {
+            transferRepo.createTransfer(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            )
+        }
+            .thenReturn(Result.success("transfer-id"))
         whenever { hwWalletRepo.needsPassphrase(any()) }.thenReturn(false)
         val nodeStatus = mock<NodeStatus>()
         whenever(nodeStatus.isRunning).thenReturn(true)
@@ -1147,7 +1166,28 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = eq(
+                OnchainTransferContext(
+                    txTotalSats = 100_000uL,
+                    preTransferOnchainSats = 100_000uL,
+                    originalOrderClientBalanceSats = order.clientBalanceSat,
+                    originalOrderFeeSats = order.feeSat,
+                ),
+            ),
+            payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+        verify(transferRepo).persistAcceptedFunding(
+            order, TXID,
+            OnchainTransferContext(
+                txTotalSats = 100_000uL,
+                preTransferOnchainSats = 100_000uL,
+                originalOrderClientBalanceSats = order.clientBalanceSat,
+                originalOrderFeeSats = order.feeSat,
+            ),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(blocktankRepo, times(1)).createOrder(eq(order.clientBalanceSat), eq(order.lspBalanceSat), any())
@@ -1186,7 +1226,19 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = eq(
+                OnchainTransferContext(
+                    txTotalSats = 38_171uL,
+                    preTransferOnchainSats = 41_000uL,
+                    originalOrderClientBalanceSats = order.clientBalanceSat,
+                    originalOrderFeeSats = order.feeSat,
+                ),
+            ),
+            payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1200,7 +1252,12 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
     }
@@ -1218,7 +1275,27 @@ class TransferViewModelTest : BaseUnitTest() {
         // 100000 - 98000 - 1000 = 1000, above dust → fixed send; drain would still cover order.
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        stubSendOnChain(Result.failure(AppError("Coin selection failed")))
+        whenever(
+            lightningRepo.sendOnChain(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            ),
+        ).thenReturn(Result.failure(AppError("Coin selection failed")))
 
         quoteOrder(order)
 
@@ -1239,7 +1316,12 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1253,9 +1335,293 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    @Test
+    fun `accepted confirmation rejects changed original client balance`() = test {
+        assertChangedFundingTermsRejected("balance")
+    }
+
+    @Test
+    fun `accepted confirmation rejects changed original service fee`() = test {
+        assertChangedFundingTermsRejected("fee")
+    }
+
+    @Test
+    fun `accepted confirmation rejects changed original funding address`() = test {
+        assertChangedFundingTermsRejected("address")
+    }
+
+    private suspend fun TestScope.assertChangedFundingTermsRejected(changedTerm: String) {
+        val originalOrder = spendingOrder(feeSat = 98_000uL)
+        val original = OnchainTransferContext(
+            99_000uL,
+            125_000uL,
+            originalOrderClientBalanceSats = originalOrder.clientBalanceSat,
+            originalOrderFeeSats = originalOrder.feeSat,
+        )
+        val attempt = acceptedFundingAttempt(originalOrder, original).let {
+            if (changedTerm == "address") it.copy(address = "different-original-address") else it
+        }
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        val changed = when (changedTerm) {
+            "balance" -> originalOrder.copy(clientBalanceSat = originalOrder.clientBalanceSat + 1uL)
+            "fee" -> originalOrder.copy(feeSat = originalOrder.feeSat + 1uL)
+            else -> originalOrder
+        }
+        quoteOrder(changed)
+        prepareConfirm()
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        verify(transferRepo, never()).persistAcceptedFunding(any(), any(), anyOrNull())
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        verifySendOnChain(sats = changed.feeSat, count = 0)
+        assertFalse(sut.spendingUiState.value.isConfirmPaying)
+    }
+
+    @Test
+    fun `accepted transfer resumes after transfer storage failure without another send`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val original = OnchainTransferContext(
+            99_000uL, 125_000uL,
+            originalOrderClientBalanceSats = order.clientBalanceSat,
+            originalOrderFeeSats = order.feeSat,
+        )
+        val attempt = acceptedFundingAttempt(order, original)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        whenever(transferRepo.persistAcceptedFunding(order, TXID, original))
+            .thenReturn(Result.failure(AppError("transfer storage unavailable")), Result.success(Unit))
+        val effects = mutableListOf<TransferEffect>()
+        backgroundScope.launch { sut.transferEffects.collect { effects.add(it) } }
+        quoteOrder(order)
+        prepareConfirm()
+        effects.clear()
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        assertEquals(order, sut.spendingUiState.value.order)
+        assertFalse(sut.spendingUiState.value.isConfirmPaying)
+        assertTrue(effects.isEmpty())
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, TXID)
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        verify(transferRepo, times(2)).persistAcceptedFunding(order, TXID, original)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        assertEquals(listOf<TransferEffect>(TransferEffect.OnSpendingFundingPaid), effects)
+    }
+
+    @Test
+    fun `durably paid accepted funding survives local followup failure without a second order`() = test {
+        assertPaidFundingSurvivesLocalFailure(resumedEvidence = null)
+    }
+
+    @Test
+    fun `durably paid resumed accepted funding survives local followup failure without a second order`() = test {
+        assertPaidFundingSurvivesLocalFailure(resumedEvidence = OnchainSendEvidence.Accepted)
+    }
+
+    @Test
+    fun `durably paid observed funding survives local followup failure without a second order`() = test {
+        assertPaidFundingSurvivesLocalFailure(resumedEvidence = OnchainSendEvidence.Observed)
+    }
+
+    private suspend fun TestScope.assertPaidFundingSurvivesLocalFailure(resumedEvidence: OnchainSendEvidence?) {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val original = OnchainTransferContext(
+            99_000uL, 110_000uL,
+            originalOrderClientBalanceSats = order.clientBalanceSat,
+            originalOrderFeeSats = order.feeSat,
+        )
+        val attempt = acceptedFundingAttempt(order, original).copy(
+            evidence = resumedEvidence ?: OnchainSendEvidence.Accepted,
+        )
+        var retainedAttempt = if (resumedEvidence == null) null else attempt
+        whenever(lightningRepo.currentOnchainSendAttempt()).doSuspendableAnswer { retainedAttempt }
+        whenever(lightningRepo.completeAcceptedTransferFollowup(order.id, TXID)).doSuspendableAnswer {
+            throw AppError("accepted activity readback unavailable")
+        }
+        stubSpendableBalances(spendable = 110_000uL)
+        stubSingleUtxoFunding(miningFee = 1_000uL)
+        stubSendOnChain()
+        val toasts = collectToasts()
+        val effects = mutableListOf<TransferEffect>()
+        backgroundScope.launch { sut.transferEffects.collect { effects.add(it) } }
+        quoteOrder(order)
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(
+            Result.success(order), Result.success(order.copy(id = "second-order")),
+        )
+        prepareConfirm()
+        effects.clear()
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        // Simulate the background resumer repairing the original activity and acknowledging the guard.
+        // A second swipe on the still-mounted confirmation must not create or fund another order.
+        retainedAttempt = attempt.copy(localFollowupComplete = true)
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verifySendOnChain(sats = order.feeSat, count = if (resumedEvidence == null) 1 else 0)
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        verify(transferRepo).persistAcceptedFunding(order, TXID, original)
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, TXID)
+        assertEquals(listOf<TransferEffect>(TransferEffect.OnSpendingFundingPaid), effects)
+        assertTrue(sut.spendingUiState.value.isConfirmPaying)
+        assertTrue(toasts.isEmpty())
+    }
+
+    @Test
+    fun `accepted transfer recovery preserves original balance totals`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        val original = OnchainTransferContext(
+            99_000uL, 125_000uL,
+            originalOrderClientBalanceSats = order.clientBalanceSat,
+            originalOrderFeeSats = order.feeSat,
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedFundingAttempt(order, original))
+        quoteOrder(order)
+        prepareConfirm()
+        stubSpendableBalances(7_000uL)
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        verify(transferRepo).persistAcceptedFunding(order, TXID, original)
+        verifySendOnChain(sats = order.feeSat, count = 0)
+    }
+
+    @Test
+    fun `accepted transfer without original context stays blocked instead of inventing balance totals`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedFundingAttempt(order, null))
+        whenever(transferRepo.persistAcceptedFunding(order, TXID, null))
+            .thenReturn(Result.failure(AppError("missing original context")))
+        quoteOrder(order)
+        prepareConfirm()
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
+        verifySendOnChain(sats = order.feeSat, count = 0)
+        assertFalse(sut.spendingUiState.value.isConfirmPaying)
+    }
+
+    private fun acceptedFundingAttempt(order: IBtOrder, original: OnchainTransferContext?) = OnchainSendAttempt(
+        walletId = WalletScope.default, attemptId = "attempt", requestId = null, orderId = order.id,
+        address = order.payment?.onchain?.address.orEmpty(), amountSats = order.feeSat,
+        isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
+        channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Accepted, txid = TXID,
+        transferContext = original?.copy(
+            originalOrderClientBalanceSats = original.originalOrderClientBalanceSats ?: order.clientBalanceSat,
+            originalOrderFeeSats = original.originalOrderFeeSats ?: order.feeSat,
+        ),
+    )
+
+    @Test
+    fun `unknown transfer funding does not mark order paid`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever { lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull()) }
+            .thenReturn(Result.success(listOf(stubUtxo(100_000u))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever(
+            lightningRepo.sendOnChain(
+                address = any(),
+                sats = any(),
+                speed = any(),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                isMaxAmount = any(),
+                tags = any(),
+                beforeSendAttempt = any(),
+                onBroadcast = any(),
+                requestId = anyOrNull(),
+                orderId = anyOrNull(),
+                transferContext = anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            ),
+        ).thenReturn(Result.success(OnchainSendOutcome.Unknown(TXID)))
+        quoteOrder(order)
+
+        prepareConfirm()
+        val retained = acceptedFundingAttempt(order, null).copy(evidence = OnchainSendEvidence.Unknown)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(null, retained)
+        val effects = mutableListOf<TransferEffect>()
+        val collector = launch { sut.transferEffects.collect { effects += it } }
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        assertEquals(listOf<TransferEffect>(TransferEffect.OnFundingPending(retained)), effects)
+        collector.cancel()
+
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+        verify(transferRepo, never()).createTransfer(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `blocked transfer opens the retained previous order`() = test {
+        val order = spendingOrder(feeSat = 98_000uL)
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever { lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull()) }
+            .thenReturn(Result.success(listOf(stubUtxo(100_000u))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever(
+            lightningRepo.sendOnChain(
+                address = any(),
+                sats = any(),
+                speed = any(),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                isMaxAmount = any(),
+                tags = any(),
+                beforeSendAttempt = any(),
+                onBroadcast = any(),
+                requestId = anyOrNull(),
+                orderId = anyOrNull(),
+                transferContext = anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            ),
+        ).thenReturn(Result.success(OnchainSendOutcome.Unknown(TXID)))
+        quoteOrder(order)
+
+        prepareConfirm()
+        val retained = acceptedFundingAttempt(order, null).copy(orderId = "previous-order", evidence = OnchainSendEvidence.Unknown)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(null, retained)
+        val effects = mutableListOf<TransferEffect>()
+        val collector = launch { sut.transferEffects.collect { effects += it } }
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+        assertEquals(listOf<TransferEffect>(TransferEffect.OnFundingPending(retained)), effects)
+        collector.cancel()
+
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+        verify(transferRepo, never()).createTransfer(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
     }
 
     @Test
@@ -1297,7 +1663,30 @@ class TransferViewModelTest : BaseUnitTest() {
         }.thenReturn(Result.success(listOf(stubUtxo(110_000u))))
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        stubSendOnChain(Result.failure(AppError("Coin selection failed")), Result.success(TXID))
+        whenever(
+            lightningRepo.sendOnChain(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            ),
+        ).thenReturn(
+            Result.failure(AppError("Coin selection failed")),
+            Result.success(OnchainSendOutcome.Accepted(TXID)),
+        )
         quoteOrder(order)
 
         prepareConfirm()
@@ -1553,7 +1942,12 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
     }
 
@@ -1736,7 +2130,12 @@ class TransferViewModelTest : BaseUnitTest() {
             any(),
             any(),
             anyOrNull(),
-        )
+            anyOrNull(),
+            anyOrNull(),
+            payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
@@ -1749,7 +2148,27 @@ class TransferViewModelTest : BaseUnitTest() {
         }.thenReturn(Result.success(listOf(stubUtxo(110_000u))))
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(1_000uL))
-        stubSendOnChain(Result.failure(AppError("Coin selection failed")))
+        whenever(
+            lightningRepo.sendOnChain(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            ),
+        ).thenReturn(Result.failure(AppError("Coin selection failed")))
         quoteOrder(order)
         prepareConfirm()
         sut.onTransferToSpendingConfirm()
@@ -1895,7 +2314,12 @@ class TransferViewModelTest : BaseUnitTest() {
             any(),
             any(),
             anyOrNull(),
-        )
+            anyOrNull(),
+            anyOrNull(),
+            payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
         verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
     }
 
@@ -3211,7 +3635,12 @@ class TransferViewModelTest : BaseUnitTest() {
             tags = any(),
             beforeSendAttempt = any(),
             onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
             paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
         )
     }
 
@@ -3364,9 +3793,16 @@ class TransferViewModelTest : BaseUnitTest() {
                 any(),
                 any(),
                 anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
             ),
-        ).thenReturn(result)
-        nextResult?.let { stubbing.thenReturn(it) }
+        )
+        fun typed(value: Result<String>) = value.map { OnchainSendOutcome.Accepted(it) }
+        stubbing.thenReturn(typed(result))
+        nextResult?.let { stubbing.thenReturn(typed(it)) }
     }
 
     private companion object {

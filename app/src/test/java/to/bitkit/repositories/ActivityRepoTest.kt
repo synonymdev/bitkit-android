@@ -24,6 +24,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
@@ -154,6 +155,33 @@ class ActivityRepoTest : BaseUnitTest() {
             cacheStore = cacheStore,
             transferRepo = transferRepo,
             clock = clock,
+        )
+    }
+
+    @Test
+    fun `observed hardware payment completes only after original Sent activity is durable`() = test {
+        val txid = "ab".repeat(32)
+        val wallet = "original-hardware-wallet"
+        val original = baseOnchainActivity.copy(walletId = wallet, txId = txid)
+        whenever(coreService.activity.restoreSentOnchainTags(txid, wallet)).thenReturn(false)
+        whenever(coreService.activity.getOnchainActivityByTxId(txid, wallet))
+            .thenReturn(null)
+            .thenReturn(original.copy(walletId = "different-wallet"))
+            .thenReturn(original)
+        val before = sut.activitiesChanged.value
+
+        assertTrue(sut.completeObservedHardwarePayment(wallet, txid, original.address, original.value,
+            original.fee, original.feeRate).isFailure)
+        assertEquals(before, sut.activitiesChanged.value)
+        assertTrue(sut.completeObservedHardwarePayment(wallet, txid, original.address, original.value,
+            original.fee, original.feeRate).isFailure)
+        assertEquals(before, sut.activitiesChanged.value)
+        sut.completeObservedHardwarePayment(wallet, txid, original.address, original.value,
+            original.fee, original.feeRate).getOrThrow()
+        assertTrue(sut.activitiesChanged.value > before)
+        verify(coreService.activity).restoreSentOnchainTags(txid, wallet)
+        verify(coreService.activity, times(3)).createSentOnchainActivityFromSendResult(
+            txid, original.address, original.value, original.fee, original.feeRate, false, null, wallet,
         )
     }
 
@@ -590,6 +618,44 @@ class ActivityRepoTest : BaseUnitTest() {
         }
 
         assertEquals(cancellation.message, thrown.message)
+    }
+
+    @Test
+    fun `failed contact assignment preserves manual detachment`() = test {
+        val activity = createOnchainActivity(id = "detached", txId = "detached-tx")
+        whenever(coreService.activity.getActivity("detached-tx", WalletScope.default)).thenReturn(activity)
+        whenever(coreService.activity.update(eq(activity.v1.id), any()))
+            .thenThrow(RuntimeException("Core write failed"))
+        val result = sut.setContact("new-contact", "detached-tx", syncLdkPayments = false)
+        assertTrue(result.isFailure)
+        verify(cacheStore, never()).setActivityContactDetached(any(), any(), eq(false))
+    }
+
+    @Test
+    fun `contact retry completes detachment cleanup and replacement after partial write`() = test {
+        val contact = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        var original = createOnchainActivity(id = "original", txId = "original-tx", doesExist = false)
+        val replacement = createOnchainActivity(id = "replacement", txId = "replacement-tx", boostTxIds = listOf("original-tx"))
+        whenever(coreService.activity.getActivity("original-tx", WalletScope.default)).thenAnswer { original }
+        whenever(coreService.activity.update(eq("original"), any())).doSuspendableAnswer {
+            original = it.getArgument(1)
+            Unit
+        }
+        whenever(coreService.activity.get(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenAnswer { listOf(original, replacement) }
+        var failCleanup = true
+        whenever(cacheStore.setActivityContactDetached("original", WalletScope.default, false)).doSuspendableAnswer {
+            if (failCleanup) {
+                failCleanup = false
+                error("detachment marker write failed")
+            }
+            Unit
+        }
+        assertTrue(sut.setContact(contact, "original-tx", syncLdkPayments = false).isFailure)
+        assertEquals(contact, original.v1.contact)
+        assertTrue(sut.setContact(contact, "original-tx", syncLdkPayments = false).isSuccess)
+        verify(cacheStore, times(2)).setActivityContactDetached("original", WalletScope.default, false)
+        verify(coreService.activity).update(eq("replacement"), argThat { this is Activity.Onchain && v1.contact == contact })
     }
 
     @Test
