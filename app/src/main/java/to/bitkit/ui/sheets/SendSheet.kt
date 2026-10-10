@@ -49,11 +49,14 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.screens.subscriptions.SubscriptionFirstPaymentProgress
 import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
+import to.bitkit.ui.screens.subscriptions.contactFor
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.screens.wallets.send.HwSendSignScreen
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
@@ -339,6 +342,12 @@ fun SendSheet(
                     }
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+                    val initialSubscriptionId = uiState.incomingPaymentRequestId
+                        ?.takeIf { uiState.isInitialSubscriptionPayment }
+                        ?.let { id -> PaykitSubscriptionId(id.paymentRequestId, id.counterparty) }
+                    val initialSubscription = remember(initialSubscriptionId) {
+                        initialSubscriptionId?.let(appViewModel::subscription)
+                    }
 
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
@@ -357,6 +366,14 @@ fun SendSheet(
                         onClickAddTag = { navController.navigateTo(SendRoute.AddTag) },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
+                        autoPayContent = initialSubscription?.let { subscription ->
+                            {
+                                SubscriptionFirstPaymentProgress(
+                                    subscription = subscription,
+                                    contact = contacts.contactFor(subscription),
+                                )
+                            }
+                        },
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.HardwareSign> {

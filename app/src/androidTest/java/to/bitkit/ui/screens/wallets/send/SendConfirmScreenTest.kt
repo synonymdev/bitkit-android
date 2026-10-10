@@ -28,6 +28,7 @@ import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.synonym.paykit.PaymentRequestLifecycleState
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Before
@@ -36,9 +37,14 @@ import org.junit.Test
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.repositories.PaykitRecurrenceUnit
+import to.bitkit.repositories.PaykitSubscription
+import to.bitkit.repositories.PaykitSubscriptionMetadata
+import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetHost
+import to.bitkit.ui.screens.subscriptions.SubscriptionFirstPaymentProgress
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.AppThemeSurface
@@ -47,6 +53,7 @@ import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @HiltAndroidTest
@@ -155,7 +162,28 @@ class SendConfirmScreenTest {
     }
 
     @Test
-    fun initialOnchainSubscriptionShowsFeeBeforeConfirmation() {
+    fun initialOnchainSubscriptionKeepsReviewLayoutWhilePaying() {
+        val startsAt = Clock.System.now()
+        val subscription = PaykitSubscription(
+            paymentRequestId = "subscription-id",
+            counterparty = "payee",
+            amountValue = "0.00003",
+            amountSats = 3_000uL,
+            note = "Journey Sub",
+            createdAt = startsAt,
+            proposalExpiresAt = null,
+            recurrence = PaykitSubscriptionRecurrence(
+                every = 1,
+                unit = PaykitRecurrenceUnit.Month,
+                startsAt = startsAt,
+                anchor = startsAt,
+                endsAt = null,
+            ),
+            metadata = PaykitSubscriptionMetadata(description = null, benefits = emptyList()),
+            acceptedPaymentEndpointIdentifiers = listOf("btc-regtest-p2wpkh"),
+            lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+            paidPeriods = emptyList(),
+        )
         val state = SendUiState(
             amount = 3_000u,
             payMethod = SendMethod.ONCHAIN,
@@ -172,16 +200,50 @@ class SendConfirmScreenTest {
                         isNodeRunning = true,
                         isLoading = false,
                         showBiometrics = false,
-                        initialShowDetails = true,
+                        autoPayContent = {
+                            SubscriptionFirstPaymentProgress(
+                                subscription = subscription,
+                                contact = PubkyProfile.placeholder("payee"),
+                            )
+                        },
                     )
                 }
             }
         }
 
-        composeTestRule.onNodeWithTag("SendConfirmAssetButton").assertIsDisplayed()
-        composeTestRule.onNodeWithText("422", substring = true).assertIsDisplayed()
-        composeTestRule.onNodeWithTag("SendConfirmToggleDetails").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Swipe To Subscribe & Pay").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Journey Sub").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("GRAB").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("GRAB").performTouchInput { swipeRight() }
+        composeTestRule.onNodeWithText("Journey Sub").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("SendConfirmToggleDetails").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Swipe To Subscribe & Pay").assertDoesNotExist()
+    }
+
+    @Test
+    fun initialOnchainSubscriptionShowsProgressWhenSubscriptionIsMissing() {
+        val state = SendUiState(
+            amount = 3_000u,
+            payMethod = SendMethod.ONCHAIN,
+            isAmountInputValid = true,
+            isInitialSubscriptionPayment = true,
+            initialSubscriptionPaymentAutoStartPending = true,
+            onchainFeeUi = OnchainFeeUi(rate = FeeRate.NORMAL, sats = 422),
+        )
+        composeTestRule.setContent {
+            AppThemeSurface {
+                CompositionLocalProvider(LocalInspectionMode provides true) {
+                    SendConfirmContent(
+                        uiState = state,
+                        isNodeRunning = true,
+                        isLoading = false,
+                        showBiometrics = false,
+                    )
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithTag("GRAB").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Swipe To Subscribe & Pay").assertDoesNotExist()
     }
 
     @Test
