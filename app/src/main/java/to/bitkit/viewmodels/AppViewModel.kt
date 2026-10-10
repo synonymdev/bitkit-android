@@ -209,7 +209,6 @@ import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
-import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.ServiceError
@@ -2501,16 +2500,6 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            showAddressValidationError(
-                titleRes = R.string.other__scan_err_decoding,
-                descriptionRes = R.string.other__scan__error__generic,
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
-
         val scanResult = runCatching { coreService.decode(input.removeLightningSchemes()) }
 
         if (scanResult.isFailure) {
@@ -3420,18 +3409,6 @@ class AppViewModel @Inject constructor(
         resetQuickPay()
 
         val fromMainScanner = isMainScanner
-
-        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(input)) {
-            if (clearIncomingPaymentRequestTarget()) return@withContext
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__scan_err_decoding),
-                description = context.getString(R.string.other__scan__error__generic),
-                testTag = "DuplicatedBip21Toast",
-            )
-            return@withContext
-        }
 
         SamRockSetupRequest.parse(input)?.let {
             handleSamRockSetup(it)
