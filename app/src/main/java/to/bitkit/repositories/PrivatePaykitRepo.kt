@@ -1462,6 +1462,17 @@ class PrivatePaykitRepo @Inject constructor(
         retry.prepareEndpoints || retry.refreshReadiness ||
             pendingPrivateMessageDrainKeys(listOf(retry.publicKey), priority = priority).isNotEmpty()
 
+    private suspend fun restoreLinkedPeerReadiness(
+        state: PrivateMessageDrainState,
+        receiveLinkedPeers: Boolean,
+    ): Boolean {
+        val retry = currentCoroutineContext()[PrivateMessageDrainRetry] ?: return receiveLinkedPeers
+        if (!retry.isMissing || state.linkedPeers[retry.publicKey] != LinkedPeerState.LINKED) return receiveLinkedPeers
+        retry.isMissing = false
+        retry.refreshReadiness = retry.interactiveUntil?.let { it > clock.now() } == true
+        return receiveLinkedPeers || retry.refreshReadiness
+    }
+
     private suspend fun pendingPrivateMessageDrainKeys(
         retryKeys: Collection<String>,
         retryMissingPeers: Boolean = false,
@@ -1477,6 +1488,7 @@ class PrivatePaykitRepo @Inject constructor(
         awaitContactPreparationActive(priority)
         if (generation != preparationGeneration) return emptySet()
         if (state == null) return retryKeys
+        val receiveLinkedPeers = restoreLinkedPeerReadiness(state, receiveLinkedPeers)
         val missingKey = currentCoroutineContext()[PrivateMessageDrainRetry]?.takeIf { it.isMissing }?.publicKey
         return retryKeys.filterTo(mutableSetOf()) { retryKey ->
             if (retryKey == missingKey && retryKey !in state.pendingOutbound) return@filterTo false
