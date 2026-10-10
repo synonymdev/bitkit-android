@@ -32,7 +32,7 @@
   <actions>
     <action>Run adb shell pm clear to.bitkit.dev</action>
     <action>Run adb shell monkey -p to.bitkit.dev -c android.intent.category.LAUNCHER 1</action>
-    <action>On the terms screen, tap both checkboxes (testTags "Check1" and "Check2"), then tap "Continue" (testTag "Continue")</action>
+    <action>On the terms screen, tap "Continue" (testTag "Continue") — the "Check1" and "Check2" blocks are text, not toggles, and "Continue" is always enabled</action>
     <action>Tap "Skip" (testTag "SkipIntro") to reach the last onboarding slide</action>
     <action>Tap "Restore" (testTag "RestoreWallet"), then confirm the multiple-devices warning (testTag "MultipleDevices-button")</action>
     <action>Enter the 12 words of the phrase above one field at a time, tapping each field (testTags "Word-0" through "Word-11") and typing only that one word — never paste or type the whole phrase in one go, adb drops characters from long strings</action>
