@@ -4,10 +4,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -15,7 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -27,11 +29,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -51,9 +52,9 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyImage
@@ -68,6 +69,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
+import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
@@ -282,20 +284,24 @@ private fun ColumnScope.WatchOnlyConsentContent(
     Column(
         modifier = Modifier
             .weight(1f)
-            .padding(horizontal = 16.dp)
             .testTag("PubkyAuthWatchOnlyConsent")
     ) {
-        FillHeight(min = 26.dp)
+        FillHeight(min = 32.dp)
 
         Image(
-            painter = painterResource(R.drawable.coin_stack),
+            painter = painterResource(R.drawable.coin_stack_4),
             contentDescription = null,
             modifier = Modifier
                 .size(256.dp)
-                .align(Alignment.CenterHorizontally),
+                .align(Alignment.CenterHorizontally)
+                .graphicsLayer {
+                    scaleX = COIN_SCALE
+                    scaleY = COIN_SCALE
+                    translationY = COIN_OFFSET_Y.toPx()
+                },
         )
 
-        VerticalSpacer(36.dp)
+        VerticalSpacer(32.dp)
 
         Display(
             text = stringResource(R.string.profile__auth_approval_watch_only_intro_title)
@@ -372,14 +378,17 @@ private fun ColumnScope.AuthorizingContent(
 ) {
     ApprovalDetails(uiState = uiState)
 
-    BodyMSB(
-        text = stringResource(R.string.profile__auth_approval_authorizing),
-        color = Colors.White32,
-        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 18.dp),
-    )
+            .height(ButtonSize.Large.height)
+    ) {
+        BodySSB(
+            text = stringResource(R.string.profile__auth_approval_authorizing),
+            color = Colors.White32,
+        )
+    }
     VerticalSpacer(16.dp)
 }
 
@@ -387,64 +396,62 @@ private fun ColumnScope.AuthorizingContent(
 private fun ColumnScope.ApprovalDetails(
     uiState: PubkyAuthApprovalUiState,
 ) {
-    Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-        VerticalSpacer(26.dp)
+    BoxWithConstraints(modifier = Modifier.weight(1f)) {
+        Column(
+            verticalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+        ) {
+            Column {
+                VerticalSpacer(8.dp)
 
-        if (uiState.createsIdentity) {
-            BodyM(text = stringResource(R.string.pubky_auth__signup_description), color = Colors.White64)
-            VerticalSpacer(16.dp)
-        }
-        if (uiState.permissions.isNotEmpty()) {
-            DescriptionText(serviceName = uiState.serviceName)
-            VerticalSpacer(8.dp)
-        }
-        if (uiState.clientId.isNotBlank()) {
-            BodyS(
-                text = stringResource(R.string.profile__auth_approval_requester, uiState.clientId),
-                color = Colors.White64,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            VerticalSpacer(32.dp)
-        } else {
-            VerticalSpacer(24.dp)
-        }
-
-        if (uiState.permissions.isNotEmpty()) {
-            PermissionsSection(permissions = uiState.permissions)
-        }
-        if (uiState.bitkitClaim?.includesPaykitAccess == true) {
-            VerticalSpacer(16.dp)
-            PaykitAccessSection()
-        }
-        VerticalSpacer(32.dp)
-
-        TrustWarning()
-        VerticalSpacer(16.dp)
-
-        uiState.homeserverPublicKey?.takeIf { uiState.createsIdentity }?.let { homeserver ->
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Colors.Gray6, RoundedCornerShape(16.dp))
-                    .padding(24.dp)
-                    .testTag("PubkySignupHomeserver")
-            ) {
-                Text13Up(text = stringResource(R.string.pubky_auth__homeserver), color = Colors.White64)
-                BodyMSB(text = homeserver)
+                if (uiState.createsIdentity) {
+                    BodyM(text = stringResource(R.string.pubky_auth__signup_description), color = Colors.White64)
+                    VerticalSpacer(16.dp)
+                }
+                if (uiState.permissions.isNotEmpty()) {
+                    DescriptionText(clientId = uiState.clientId, serviceName = uiState.serviceName)
+                    VerticalSpacer(32.dp)
+                    PermissionsSection(permissions = uiState.permissions)
+                }
+                if (uiState.bitkitClaim?.includesPaykitAccess == true) {
+                    VerticalSpacer(32.dp)
+                    PaykitAccessSection()
+                }
+                VerticalSpacer(32.dp)
             }
-        } ?: uiState.profile?.let { ProfileCard(it) }
-        VerticalSpacer(16.dp)
+
+            Column {
+                TrustWarning()
+                VerticalSpacer(16.dp)
+
+                uiState.homeserverPublicKey?.takeIf { uiState.createsIdentity }?.let { homeserver ->
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Colors.Gray6, RoundedCornerShape(16.dp))
+                            .padding(24.dp)
+                            .testTag("PubkySignupHomeserver")
+                    ) {
+                        Text13Up(text = stringResource(R.string.pubky_auth__homeserver), color = Colors.White64)
+                        BodyMSB(text = homeserver)
+                    }
+                } ?: uiState.profile?.let { ProfileCard(it) }
+                VerticalSpacer(24.dp)
+            }
+        }
     }
 }
 
 @Composable
 private fun PaykitAccessSection() {
-    Column(modifier = Modifier.testTag("PubkyAuthPaykitAccess")) {
-        BodyMSB(text = stringResource(R.string.profile__auth_approval_paykit_access_title))
-        VerticalSpacer(8.dp)
-        BodyM(text = stringResource(R.string.profile__auth_approval_paykit_access_description), color = Colors.White64)
+    Section(
+        title = stringResource(R.string.profile__auth_approval_details),
+        modifier = Modifier.testTag("PubkyAuthPaykitAccess")
+    ) {
+        BodyS(text = stringResource(R.string.profile__auth_approval_paykit_access_description))
     }
 }
 
@@ -453,25 +460,35 @@ private fun ColumnScope.SuccessContent(
     uiState: PubkyAuthApprovalUiState,
     onDismiss: () -> Unit,
 ) {
-    VerticalSpacer(26.dp)
+    BoxWithConstraints(modifier = Modifier.weight(1f)) {
+        Column(
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+        ) {
+            SuccessDescriptionText(
+                clientId = uiState.clientId,
+                serviceName = uiState.serviceName,
+                truncatedKey = uiState.profile?.authDisplayPublicKey.orEmpty(),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+            )
 
-    SuccessDescriptionText(
-        serviceName = uiState.serviceName,
-        truncatedKey = uiState.profile?.authDisplayPublicKey.orEmpty(),
-    )
-    VerticalSpacer(16.dp)
+            Image(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(256.dp)
+                    .graphicsLayer {
+                        scaleX = CHECK_SCALE
+                        scaleY = CHECK_SCALE
+                    },
+            )
 
-    FillHeight()
-
-    Image(
-        painter = painterResource(R.drawable.check),
-        contentDescription = null,
-        modifier = Modifier
-            .size(256.dp)
-            .align(Alignment.CenterHorizontally),
-    )
-
-    FillHeight()
+            VerticalSpacer(16.dp)
+        }
+    }
 
     PrimaryButton(
         text = stringResource(R.string.profile__auth_approval_ok),
@@ -482,56 +499,72 @@ private fun ColumnScope.SuccessContent(
 }
 
 @Composable
-private fun DescriptionText(serviceName: String) {
-    BodyM(
-        text = stringResource(R.string.profile__auth_approval_service, serviceName)
-            .withAccentBoldBright(),
-        color = Colors.White64,
-    )
+private fun DescriptionText(clientId: String, serviceName: String) {
+    val requester = clientId.withoutAccentMarkup()
+    val service = serviceName.withoutAccentMarkup()
+    val text = if (requester.isNotBlank()) {
+        stringResource(R.string.profile__auth_approval_service_named, requester, service)
+    } else {
+        stringResource(R.string.profile__auth_approval_service, service)
+    }
+    BodyM(text = text.withAccentBoldBright(), color = Colors.White64)
 }
 
 @Composable
-private fun SuccessDescriptionText(serviceName: String, truncatedKey: String) {
-    BodyM(
-        text = stringResource(R.string.profile__auth_approval_success_detail, truncatedKey, serviceName)
-            .withAccentBoldBright(),
-        color = Colors.White64,
-    )
+private fun SuccessDescriptionText(
+    clientId: String,
+    serviceName: String,
+    truncatedKey: String,
+    modifier: Modifier = Modifier,
+) {
+    val requester = clientId.withoutAccentMarkup()
+    val service = serviceName.withoutAccentMarkup()
+    val text = if (requester.isNotBlank()) {
+        stringResource(R.string.profile__auth_approval_success_detail_named, truncatedKey, requester, service)
+    } else {
+        stringResource(R.string.profile__auth_approval_success_detail, truncatedKey, service)
+    }
+    BodyM(text = text.withAccentBoldBright(), color = Colors.White64, modifier = modifier)
+}
+
+@Composable
+private fun Section(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Text13Up(text = title, color = Colors.White64)
+        content()
+    }
 }
 
 @Composable
 private fun PermissionsSection(permissions: ImmutableList<PubkyAuthPermission>) {
-    Text13Up(
-        text = stringResource(R.string.profile__auth_approval_permissions),
-        color = Colors.White64,
-    )
-    VerticalSpacer(8.dp)
-
-    permissions.forEach { permission ->
-        PermissionRow(permission)
-        VerticalSpacer(4.dp)
+    Section(title = stringResource(R.string.profile__auth_approval_permissions)) {
+        permissions.forEach { PermissionRow(it) }
     }
-
-    VerticalSpacer(4.dp)
-    HorizontalDivider(color = Colors.White10)
 }
 
 @Composable
 private fun PermissionRow(permission: PubkyAuthPermission) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_folder),
             contentDescription = null,
             tint = Colors.White,
-            modifier = Modifier.size(14.dp),
+            modifier = Modifier.size(16.dp)
         )
         HorizontalSpacer(4.dp)
         BodySSB(
             text = permission.displayPath,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f)
         )
         Text13Up(
             text = permission.displayAccess,
@@ -542,57 +575,71 @@ private fun PermissionRow(permission: PubkyAuthPermission) {
 
 @Composable
 private fun TrustWarning() {
-    BodyM(
-        text = stringResource(R.string.profile__auth_approval_trust_warning),
-        color = Colors.White64,
-    )
+    Section(title = stringResource(R.string.profile__auth_approval_before_continue)) {
+        BodyS(
+            text = stringResource(R.string.profile__auth_approval_trust_warning),
+            color = Colors.White64,
+        )
+    }
 }
 
 @Composable
 private fun ProfileCard(profile: PubkyProfile) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier
             .fillMaxWidth()
             .background(Colors.Gray6, RoundedCornerShape(16.dp))
-            .padding(24.dp),
+            .padding(24.dp)
     ) {
-        Text13Up(
-            text = profile.authDisplayPublicKey,
-            color = Colors.White64,
-        )
-        VerticalSpacer(16.dp)
-
         if (profile.imageUrl != null) {
-            PubkyImage(uri = profile.imageUrl, size = 96.dp)
+            PubkyImage(uri = profile.imageUrl, size = 48.dp)
         } else {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(96.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(Colors.Gray5),
+                    .background(Colors.Gray5)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_user_square),
                     contentDescription = null,
                     tint = Colors.White32,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
 
-        VerticalSpacer(16.dp)
-        Headline(
-            text = AnnotatedString(profile.name),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text13Up(
+                text = profile.authDisplayPublicKey,
+                color = Colors.White64,
+                maxLines = 1,
+            )
+            BodyMSB(
+                text = profile.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
+/** Figma draws the coin illustration at 329dp inside its 256dp slot, shifted 7dp down. */
+private const val COIN_SCALE = 329f / 256f
+private val COIN_OFFSET_Y = 7.dp
+
+/** Figma draws the check illustration at 274dp inside its 256dp slot. */
+private const val CHECK_SCALE = 274f / 256f
+
 private val PubkyProfile.authDisplayPublicKey: String
     get() = pubkyAuthDisplayPublicKey(publicKey)
+
+/** Request data is shown literally: accent tags inside it must not be read as markup by [withAccentBoldBright]. */
+internal fun String.withoutAccentMarkup(): String =
+    generateSequence(this) { current -> current.removeAccentTags().takeIf { it != current } }.last()
 
 internal fun pubkyAuthDisplayPublicKey(publicKey: String): String {
     val rawKey = publicKey.removePrefix("pubky")
@@ -630,12 +677,11 @@ private fun AuthorizePreview() {
                 uiState = PubkyAuthApprovalUiState(
                     state = ApprovalState.Authorize,
                     clientId = "app.paykit.server",
-                    serviceName = "pubky.app",
+                    serviceName = "paykit",
                     permissions = persistentListOf(
-                        PubkyAuthPermission(path = "/pub/pubky.app/", accessLevel = "rw"),
-                        PubkyAuthPermission(path = "/pub/paykit/v0/", accessLevel = "rw"),
+                        PubkyAuthPermission(path = "/pub/paykit/", accessLevel = "rw"),
                     ),
-                    bitkitClaim = PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1),
+                    bitkitClaim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
                     profile = PubkyProfile(
                         publicKey = "pk8e3qm5f4kgczagxhertyuiop1gxag",
                         name = "Satoshi Nakamoto",
@@ -664,7 +710,8 @@ private fun SuccessPreview() {
             Content(
                 uiState = PubkyAuthApprovalUiState(
                     state = ApprovalState.Success,
-                    serviceName = "pubky.app",
+                    clientId = "app.paykit.server",
+                    serviceName = "paykit",
                 ),
                 isCurrentRequest = true,
                 onAuthorize = {},
