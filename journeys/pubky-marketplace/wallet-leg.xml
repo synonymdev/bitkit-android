@@ -18,7 +18,10 @@
     <action>Tap Authorize (testTag "PubkyAuthAuthorize")</action>
     <action>Verify authorization succeeds (testTag "PubkyAuthOK")</action>
     <action>Tap OK (testTag "PubkyAuthOK")</action>
-    <action>Verify the fixture completes setup with the seller account xpub and generation-bound Paykit key, but no Pubky root secret or spending authority</action>
+    <action>Have the fixture request the seller's marketplace write grant and open it in the seller wallet</action>
+    <action>Verify the authorization screen shows exactly one row, /pub/locks.app with READ, WRITE access, requested by locks.app</action>
+    <action>Tap Authorize (testTag "PubkyAuthAuthorize"), verify authorization succeeds and tap OK (testTag "PubkyAuthOK")</action>
+    <action>Verify the fixture reports the Bitkit seller with its locks.app marketplace grant and a completed setup time, and holds no Pubky root secret or spending authority</action>
     <action>Open General Settings in both wallets and verify contact payments (testTag "ContactPaymentsToggle") are enabled</action>
     <action>Open Contacts in the buyer wallet and save the fixture's seller public key</action>
     <action>Verify the seller contact (testTag "Contact_&lt;seller-public-key&gt;") is visible</action>
