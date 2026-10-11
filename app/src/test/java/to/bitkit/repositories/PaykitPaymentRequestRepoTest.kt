@@ -14,6 +14,7 @@ import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.OutboundPrivateSendFailure
 import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
@@ -269,13 +270,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers(any())).doSuspendableAnswer {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers()
         }
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
-        whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
-        whenever(paykitSdkService.identityStatus(any())).doSuspendableAnswer { paykitSdkService.identityStatus() }
-        whenever(paykitSdkService.linkedPeers(any())).doSuspendableAnswer { paykitSdkService.linkedPeers() }
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull(), any())).doSuspendableAnswer {
-            paykitSdkService.allPaymentRequests(it.getArgument(0))
-        }
+        stubRequestReads()
         whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {
             paykitSdkService.processOutboundPrivateMessages(it.getArgument(0))
         }
@@ -311,9 +306,88 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.activate(LOCAL_IDENTITY)
     }
 
+    private fun stubRequestReads() {
+        whenever { paykitSdkService.allPaymentRequests(anyOrNull()) }.thenReturn(emptyList())
+        whenever { paykitSdkService.linkedPeers() }.thenReturn(emptyList())
+        whenever { paykitSdkService.identityStatus(any()) }.doSuspendableAnswer { paykitSdkService.identityStatus() }
+        whenever { paykitSdkService.linkedPeers(any()) }.doSuspendableAnswer { paykitSdkService.linkedPeers() }
+        whenever { paykitSdkService.allPaymentRequests(anyOrNull(), any()) }.doSuspendableAnswer {
+            paykitSdkService.allPaymentRequests(it.getArgument(0))
+        }
+        whenever { paykitSdkService.observeState(any(), any()) }.doSuspendableAnswer {
+            val records = paykitSdkService.allPaymentRequests(it.getArgument(0))
+            PaykitStateObservation(
+                publicKey = it.getArgument(0),
+                keyGeneration = 0uL,
+                observedAt = clock.now().toString(),
+                contacts = emptyList(),
+                linkedPeers = paykitSdkService.linkedPeers(),
+                paymentRequests = records,
+                receipts = emptyList(),
+            )
+        }
+    }
+
     @After
     fun tearDown() = test {
         sut.clear()
+    }
+
+    @Test
+    fun `warm request observations remain readable while refresh waits and clear on identity change`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        val pending = sut.pendingRequests.value
+        val history = sut.paymentRequestHistory.value
+        assertTrue(pending.isNotEmpty())
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            reading.complete(Unit)
+            resume.await()
+            listOf(record)
+        }
+        val refresh = async { sut.refresh(PaykitPaymentRequestRefreshMode.STORED) }
+        reading.await()
+        val started = testScheduler.currentTime
+        assertEquals(pending, sut.pendingRequests.value)
+        assertEquals(history, sut.paymentRequestHistory.value)
+        assertEquals(0L, testScheduler.currentTime - started)
+        assertFalse(refresh.isCompleted)
+        sut.activate(SECOND_IDENTITY)
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
+        resume.complete(Unit)
+        refresh.await().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
+    }
+
+    @Test
+    fun `failed state observation preserves warm requests and history but fails cold refresh`() = test {
+        val pending = paymentRequestRecord()
+        val rejected = paymentRequestRecord().copy(
+            paymentRequestId = "rejected",
+            state = PaymentRequestLifecycleState.REJECTED,
+        )
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(pending, rejected))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        val requests = sut.pendingRequests.value
+        val history = sut.paymentRequestHistory.value
+        assertTrue(requests.isNotEmpty())
+        assertTrue(history.isNotEmpty())
+        val failure = PaykitException.SharedStateBusy("shared_state_busy", "Unavailable")
+        whenever(paykitSdkService.observeState(any(), any())).doSuspendableAnswer { throw failure }
+
+        assertSame(failure, sut.refresh(PaykitPaymentRequestRefreshMode.STORED).exceptionOrNull())
+        assertEquals(requests, sut.pendingRequests.value)
+        assertEquals(history, sut.paymentRequestHistory.value)
+        sut.clear()
+        sut.activate(LOCAL_IDENTITY)
+        assertSame(failure, sut.refresh(PaykitPaymentRequestRefreshMode.STORED).exceptionOrNull())
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
     }
 
     @Test
@@ -336,8 +410,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(paykitSdkService).processPendingPrivateMessages()
         verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers()
-        verify(paykitSdkService, times(3)).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
-        verify(paykitSdkService, times(3)).linkedPeers(Priority.Background)
+        verify(paykitSdkService, times(3)).observeState(LOCAL_IDENTITY, Priority.Background)
+        verify(paykitSdkService, never()).allPaymentRequests(anyOrNull(), any())
+        verify(paykitSdkService, never()).linkedPeers(any())
         verify(paykitSdkService).processPendingPrivateMessages(Priority.Ordered)
         verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers(Priority.Ordered)
     }
@@ -360,7 +435,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refreshAfterStateChange().getOrThrow()
         verify(paykitSdkService).processPendingPrivateMessages(Priority.Ordered)
         verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers(Priority.Ordered)
-        verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Ordered)
+        verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Ordered)
         verify(paykitSdkService, never()).processPendingPrivateMessages(Priority.Background)
 
         val record = paymentRequestRecord()
@@ -419,7 +494,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertEquals(2, reads)
             verify(paykitSdkService, times(if (failure == null) 2 else 1)).processPendingPrivateMessages()
             verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers()
-            verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
+            verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Background)
             verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Ordered)
         }
     }
@@ -590,7 +665,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                     sut.paymentRequestHistory.value.single().lifecycleState,
                 )
             }
-            verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
+            verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Background)
             verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Ordered)
             verify(paykitSdkService, never()).processPendingPrivateMessages()
             verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
@@ -625,10 +700,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(sut.pendingRequests.value.isEmpty())
         verify(paykitSdkService, times(2)).linkedPeers()
-        verify(paykitSdkService).linkedPeers(Priority.Background)
-        verify(paykitSdkService).linkedPeers(Priority.Ordered)
-        verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Background)
-        verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, Priority.Ordered)
+        verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Background)
+        verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Ordered)
+        verify(paykitSdkService, never()).allPaymentRequests(anyOrNull(), any())
+        verify(paykitSdkService, never()).linkedPeers(any())
     }
 
     @Test

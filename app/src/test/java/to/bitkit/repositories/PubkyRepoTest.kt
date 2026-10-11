@@ -54,6 +54,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -154,6 +155,7 @@ class PubkyRepoTest : BaseUnitTest() {
             Unit
         }
         whenever(pubkyService.contactRecords()).thenReturn(emptyList())
+        whenever { pubkyService.observedContactRecords(any()) }.doSuspendableAnswer { pubkyService.contactRecords() }
         whenever { pubkyService.initializeAndImportSession(any()) }.doSuspendableAnswer {
             runSuspendCatching { pubkyService.importSession(it.getArgument(0)) }
         }
@@ -2788,7 +2790,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initialize should complete contacts load after contact fetch failure`() = test {
+    fun `initialize completes failed contact observation without marking a successful load`() = test {
         val session = "saved_session"
         val unprefixedPublicKey = VALID_SELF_KEY.removePrefix("pubky")
         val pubkyProfile = createPubkyProfile(name = "Restored User")
@@ -2797,13 +2799,14 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.importSession(session)).thenReturn(unprefixedPublicKey)
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
             .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = pubkyProfile))
-        whenever(pubkyService.contactRecords()).thenAnswer { throw TestAppError("Offline") }
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).thenAnswer { throw TestAppError("Offline") }
 
         sut.initialize()
 
         assertEquals(1L, sut.contactsLoadCompletionVersion.value)
         assertEquals(0L, sut.contactsLoadVersion.value)
         assertTrue(sut.contacts.value.isEmpty())
+        assertFalse(sut.isLoadingContacts.value)
     }
 
     @Test
@@ -3501,6 +3504,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed contact observation preserves warm display without advancing successful load`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).thenReturn(
+            listOf(createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Saved"))),
+        )
+        sut.loadContacts()
+        val contacts = sut.contacts.value
+        val version = sut.contactsLoadVersion.value
+        val completionVersion = sut.contactsLoadCompletionVersion.value
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY))
+            .doSuspendableAnswer { throw PaykitException.SharedStateBusy("shared_state_busy", "Unavailable") }
+
+        sut.loadContacts()
+
+        assertEquals(contacts, sut.contacts.value)
+        assertEquals(version, sut.contactsLoadVersion.value)
+        assertEquals(completionVersion + 1, sut.contactsLoadCompletionVersion.value)
+        assertFalse(sut.isLoadingContacts.value)
+    }
+
+    @Test
     fun `loadContacts should return early when no public key`() = test {
         sut.loadContacts()
 
@@ -3820,6 +3844,29 @@ class PubkyRepoTest : BaseUnitTest() {
         lookups.values.forEach { it.complete(Unit) }
 
         assertEquals(listOf("Edited"), sut.contacts.value.map { it.name })
+    }
+
+    @Test
+    fun `contact observation from an ended sign-in is hidden after the same identity returns`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val release = CompletableDeferred<Unit>()
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).doSuspendableAnswer {
+            release.await()
+            listOf(createContactRecord(VALID_CONTACT_KEY_A, "Stale"))
+        }
+        val load = async { sut.loadContacts() }
+        runCurrent()
+        assertTrue(sut.signOut().isSuccess)
+        assertTrue(sut.contacts.value.isEmpty())
+        doReturn(emptyList<ContactRecord>()).whenever(pubkyService).observedContactRecords(VALID_SELF_KEY)
+        val signIn = async { sut.initialize() }
+        runCurrent()
+        release.complete(Unit)
+        load.await()
+        signIn.await()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.contacts.value.isEmpty())
     }
 
     @Test

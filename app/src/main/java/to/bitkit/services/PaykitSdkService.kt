@@ -18,6 +18,7 @@ import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitProfileRecord
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitSdkDefaults
+import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentProofSubmission
@@ -957,6 +958,31 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun paymentRequests(): List<PaymentRequestRecord> = allPaymentRequests().filter(::isBitkitPaymentRequest)
+
+    /** Refreshes display projections only; payment authority remains with the action APIs. */
+    internal suspend fun observeState(
+        expectedIdentity: String,
+        priority: Priority = Priority.Background,
+    ): PaykitStateObservation {
+        isSetup.await()
+        val generation = runtimeGeneration
+        return operationLock.withLock(priority) {
+            check(runtimeGeneration == generation) { "Paykit runtime changed before observation" }
+            withPaykitKey { handle ->
+                val observation = completeSdkCall { handle.observeState() }
+                check(PubkyPublicKeyFormat.matches(observation.publicKey, expectedIdentity)) {
+                    "Paykit observation identity changed"
+                }
+                cachedPaykitKey?.let {
+                    check(
+                        PubkyPublicKeyFormat.matches(observation.publicKey, it.publicKey) &&
+                            observation.keyGeneration == it.generation,
+                    ) { "Paykit observation key changed" }
+                }
+                observation
+            }
+        }
+    }
 
     suspend fun allPaymentRequests(expectedIdentity: String? = null): List<PaymentRequestRecord> =
         allPaymentRequests(expectedIdentity, Priority.Ordered)

@@ -8963,22 +8963,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         enablePaykitUi()
         runCurrent()
-        clearInvocations(paykitPaymentRequestRepo)
+        clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
         paymentSubmissionActive.value = true
         repeat(3) {
             proofStateVersion.value++
             runCurrent()
         }
         verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        verify(paykitPaymentProofRepo, never()).reconcile()
 
         paymentSubmissionActive.value = false
         runCurrent()
         verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        verify(paykitPaymentProofRepo).reconcile()
         paymentSubmissionActive.value = true
         runCurrent()
         paymentSubmissionActive.value = false
         runCurrent()
         verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any())
+        verify(paykitPaymentProofRepo, times(1)).reconcile()
     }
 
     @Test
@@ -9047,7 +9050,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         completionStarted.await()
         verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
-        verify(paykitPaymentProofRepo, never()).reconcile()
+        verify(paykitPaymentProofRepo).reconcile()
         verify(paykitPaymentRequestRepo, never()).refresh(PaykitPaymentRequestRefreshMode.FULL)
         finishCompletion.complete(Unit)
         advanceUntilIdle()

@@ -104,6 +104,7 @@ class ContactSaveSessionChangeTest : BaseUnitTest() {
             Unit
         }
         whenever { pubkyService.contactRecords() }.thenReturn(emptyList())
+        whenever { pubkyService.observedContactRecords(any()) }.doSuspendableAnswer { pubkyService.contactRecords() }
         whenever { pubkyService.signOut() }.thenAnswer {
             sdkIdentity = null
             Unit

@@ -320,7 +320,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     it.kind == PaykitPaymentProofKind.Lightning &&
                         it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
                 }
-                persistAndSubmit(completedProofs, proofs)
+                persistAndSubmit(completedProofs, proofs, awaitDelivery = false)
             }.onFailure { Logger.warn("Failed to complete a Paykit Lightning payment proof", it, context = TAG) }
         }
     }
@@ -477,7 +477,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 }
                 if (!hasPositiveEvidence(proof)) return@runSuspendCatching false
                 if (index >= 0) proofs[index] = proof else proofs += proof
-                val retained = persistAndSubmit(listOf(proof), proofs)
+                val retained = persistAndSubmit(listOf(proof), proofs, awaitDelivery = false)
                 if (retained) publishOnchainResolution(proof, txid)
                 retained
             }
@@ -769,7 +769,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 val pending = original.copy(paymentIdentifier = txid.lowercase())
                 proofs[index] = pending
                 persist(proofs)
-                reconcileHardwareOnchainProof(pending)
+                reconcileHardwareOnchainProof(pending, awaitDelivery = false)
             }.onFailure { Logger.warn("Failed to retain or observe the original hardware Shop payment", it, context = TAG) }
                 .getOrDefault(false)
         }
@@ -1080,7 +1080,10 @@ class PaykitPaymentProofRepo @Inject constructor(
         return retained
     }
 
-    private suspend fun reconcileHardwareOnchainProof(proof: PendingPaykitPaymentProof): Boolean {
+    private suspend fun reconcileHardwareOnchainProof(
+        proof: PendingPaykitPaymentProof,
+        awaitDelivery: Boolean = true,
+    ): Boolean {
         val txid = proof.paymentIdentifier?.takeIf { it.isHex(HASH_BYTE_COUNT) } ?: return false
         if (!proof.paymentStarted || proof.onchainWalletId == WalletScope.default ||
             (proof.proofData != null && !proof.proofData.equals(txid, true))
@@ -1097,7 +1100,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (index < 0) return false
         val completed = proof.copy(proofData = txid.lowercase(), onchainAcceptanceVerified = true)
         proofs[index] = completed
-        val retained = persistAndSubmit(listOf(completed), proofs)
+        val retained = persistAndSubmit(listOf(completed), proofs, awaitDelivery)
         if (retained) publishOnchainResolution(completed, txid)
         // Hardware completion never acknowledges an unrelated node-wallet guard.
         return retained
@@ -1257,6 +1260,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     private suspend fun persistAndSubmit(
         completedProofs: List<PendingPaykitPaymentProof>,
         allProofs: List<PendingPaykitPaymentProof>,
+        awaitDelivery: Boolean = true,
     ): Boolean {
         val didPersist = runSuspendCatching { persist(allProofs) }
             .onFailure {
@@ -1266,6 +1270,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     context = TAG,
                 )
             }.isSuccess
+        if (didPersist && !awaitDelivery) return true
         var hasUndeliveredProof = false
         completedProofs.forEach { proof ->
             val wasDelivered = runSuspendCatching { submitReady(proof) }

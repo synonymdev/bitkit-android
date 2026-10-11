@@ -550,7 +550,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     } ?: return@refresh
                     val snapshot = runSuspendCatching {
                         val priority = if (forceFresh) Priority.Ordered else Priority.Background
-                        fetchRequestSnapshot(expectedIdentity, mode, priority, messagePriority)
+                        fetchRequestSnapshot(expectedIdentity, mode, priority, messagePriority, observationOnly = true)
                     }
                     operationMutex.withLock {
                         if (!isCurrentState(generation, expectedIdentity)) return@withLock
@@ -1137,14 +1137,23 @@ class PaykitPaymentRequestRepo @Inject constructor(
         mode: PaykitPaymentRequestRefreshMode,
         priority: Priority = Priority.Ordered,
         messagePriority: Priority = Priority.Ordered,
+        observationOnly: Boolean = false,
     ): RequestSnapshot {
         if (mode == PaykitPaymentRequestRefreshMode.FULL) processPendingMessages(priority = messagePriority)
         if (mode != PaykitPaymentRequestRefreshMode.STORED) {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers(messagePriority).also(::logIntakeFailures)
         }
-        val allRecords = paykitSdkService.allPaymentRequests(expectedIdentity, priority)
-        val blockedPeers = paykitSdkService.linkedPeers(priority).filter { it.state == LinkedPeerState.BLOCKED }
-        return RequestSnapshot(allRecords, blockedPeers)
+        if (observationOnly) {
+            val observation = paykitSdkService.observeState(requireNotNull(expectedIdentity), priority)
+            return RequestSnapshot(
+                observation.paymentRequests,
+                observation.linkedPeers.filter { it.state == LinkedPeerState.BLOCKED },
+            )
+        }
+        return RequestSnapshot(
+            paykitSdkService.allPaymentRequests(expectedIdentity, priority),
+            paykitSdkService.linkedPeers(priority).filter { it.state == LinkedPeerState.BLOCKED },
+        )
     }
 
     @Suppress("LongMethod", "CyclomaticComplexMethod")
