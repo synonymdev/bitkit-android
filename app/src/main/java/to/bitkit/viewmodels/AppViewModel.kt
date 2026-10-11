@@ -3905,6 +3905,17 @@ class AppViewModel @Inject constructor(
                     _sendUiState.update { it.copy(payMethod = SendMethod.ONCHAIN) }
                 }
             }
+            if (_sendUiState.value.payMethod == SendMethod.ONCHAIN && amount <= Defaults.dustLimit.toULong()) {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
+                    description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
+                        .replace("{amount}", formatMoneyValue(Defaults.dustLimit.toULong().safe() + 1uL.safe())),
+                    testTag = "PaymentRequestAmountTooLowToast",
+                )
+                clearActiveContactPaymentContext(retryIncomingRequest = false)
+                return
+            }
             if (
                 !validateAmount(amount) &&
                 _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
