@@ -1772,7 +1772,7 @@ class LightningRepo @Inject constructor(
         val needsExactFee = attempt.verifiedWinningFeeSats == null && (isSuccessor ||
             (attempt.candidateTxids.isNotEmpty() && originalFollowup?.feeSats?.toULongOrNull() == 0uL))
         val fee = attempt.verifiedWinningFeeSats ?: if (needsExactFee) {
-            requireNotNull(lightningService.observedOriginalSendFee(attempt)) {
+            requireNotNull(winningCandidateFee(attempt)) {
                 "Winning transaction fee is unavailable"
             }.also { onchainSendAttemptStore.retainWinningFee(attempt.attemptId, attempt.walletIndex, txId, it) }
         } else {
@@ -1812,6 +1812,10 @@ class LightningRepo @Inject constructor(
             "Accepted on-chain transaction has no durable local activity"
         }
     }
+
+    private suspend fun winningCandidateFee(attempt: OnchainSendAttempt): ULong? =
+        attempt.candidateMiningFees[requireNotNull(attempt.txid).lowercase()]
+            ?: lightningService.observedOriginalSendFee(attempt)
 
     private fun scheduleOrdinaryFollowupRetry() {
         val previous = ordinaryFollowupRetryJob.get()

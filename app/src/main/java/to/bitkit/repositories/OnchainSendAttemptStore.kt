@@ -89,6 +89,7 @@ data class OnchainSendAttempt(
     val originalInputs: List<OnchainSendInput>? = null,
     val candidateTxids: List<String> = emptyList(),
     val candidateFeeRates: Map<String, ULong> = emptyMap(),
+    val candidateMiningFees: Map<String, ULong> = emptyMap(),
     val backupFollowup: ActiveOnchainAttemptBackup.Followup? = null,
     val restoredFromBackup: Boolean = false,
     val preparationPending: Boolean = false,
@@ -297,6 +298,7 @@ class OnchainSendAttemptStore @Inject constructor(
                 originalInputs = current.originalInputs ?: receipt.inputs,
                 candidateTxids = (current.candidateTxids + receipt.txid.lowercase()).distinct(),
                 candidateFeeRates = current.candidateFeeRates + (receipt.txid.lowercase() to feeRate),
+                candidateMiningFees = retainedMiningFees(current, receipt),
                 txid = if (isRecovery) current.txid else receipt.txid.lowercase(),
                 evidence = if (isRecovery) current.evidence else OnchainSendEvidence.Pending,
                 refusalReason = if (isRecovery) current.refusalReason else null,
@@ -307,6 +309,14 @@ class OnchainSendAttemptStore @Inject constructor(
                 if (isRecovery) inFlightPreparations -= attemptId
             }
         }
+    }
+
+    private fun retainedMiningFees(current: OnchainSendAttempt, receipt: OnchainPreparedReceipt): Map<String, ULong> {
+        val fee = receipt.miningFeeSats ?: return current.candidateMiningFees
+        val txid = receipt.txid.lowercase()
+        val existingFee = current.candidateMiningFees[txid]
+        require(existingFee == null || existingFee == fee)
+        return current.candidateMiningFees + (txid to fee)
     }
 
     suspend fun discardUnsubmittedRetryCandidate(original: OnchainSendAttempt, txid: String) =
@@ -328,6 +338,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     refusalReason = if (current.hasPositiveEvidence) current.refusalReason else original.refusalReason,
                     candidateTxids = current.candidateTxids - candidate,
                     candidateFeeRates = current.candidateFeeRates - candidate,
+                    candidateMiningFees = current.candidateMiningFees - candidate,
                 ))
             }
         }
@@ -368,6 +379,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     originalInputs = null,
                     candidateTxids = emptyList(),
                     candidateFeeRates = emptyMap(),
+                    candidateMiningFees = emptyMap(),
                     preparationPending = current.requestId != null,
                 ))
                 // Shop proof cleanup still precedes guard deletion through the existing preparation path.
@@ -495,6 +507,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     localFollowupComplete = attempt.localFollowupComplete,
                     candidateTxids = attempt.candidateTxids,
                     candidateFeeRates = attempt.candidateFeeRates,
+                    candidateMiningFees = attempt.candidateMiningFees,
                     backupFollowup = existing.backupFollowup?.copy(feeSats = attempt.backupFollowup?.feeSats.orEmpty()),
                     restoredFromBackup = attempt.restoredFromBackup,
                     preparationPending = attempt.preparationPending,
@@ -535,6 +548,7 @@ class OnchainSendAttemptStore @Inject constructor(
                 require(!attempt.localFollowupComplete || attempt.hasPositiveEvidence)
                 require(attempt.candidateTxids.distinct().size == attempt.candidateTxids.size)
                 require(attempt.candidateTxids.all { it.matches(Regex("[0-9a-f]{64}")) })
+                require(attempt.candidateMiningFees.keys.all { it in attempt.candidateTxids })
                 if (attempt.originalInputs != null) {
                     require(attempt.originalInputs.isNotEmpty())
                     require(attempt.originalInputs.distinct().size == attempt.originalInputs.size)

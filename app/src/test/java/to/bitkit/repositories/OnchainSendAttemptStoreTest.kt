@@ -5,26 +5,77 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.WalletScope
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
+import java.io.FileOutputStream
 import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 
 @OptIn(kotlin.time.ExperimentalTime::class)
 class OnchainSendAttemptStoreTest : BaseUnitTest() {
     private val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+
+    @get:Rule
+    val temporaryFolder = TemporaryFolder()
+
+    @Test
+    fun `prepared candidate fees survive disk reopen without promoting unknown outcomes`() = test {
+        val file = temporaryFolder.newFile()
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { file.readText().takeIf(String::isNotEmpty) }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
+            FileOutputStream(file).use { output ->
+                output.write(it.getArgument<String>(1).toByteArray())
+                output.fd.sync()
+            }
+        }
+        val service = mock<LightningService>()
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, service, Clock.System)
+        val attempt = store.admitForTest(walletId = WalletScope.default)
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            attempt.address,
+            attempt.amountSats,
+            miningFeeSats = 141uL,
+        )
+        store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
+        store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Unknown(receipt.txid), 0)
+        val replacement = receipt.copy(txid = "cd".repeat(32), miningFeeSats = 281uL)
+        store.retainPreparedReceipt(attempt.attemptId, 0, replacement, true)
+        val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, Clock.System)
+        val pending = requireNotNull(reopened.current())
+        assertEquals(mapOf(receipt.txid to 141uL, replacement.txid to 281uL), pending.candidateMiningFees)
+        assertFalse(pending.hasPositiveEvidence)
+        assertTrue(pending.blocksNextSend)
+        assertNull(pending.verifiedWinningFeeSats)
+        assertFailsWith<IllegalArgumentException> {
+            reopened.retainPreparedReceipt(attempt.attemptId, 0, replacement.copy(miningFeeSats = 282uL), true)
+        }
+        assertEquals(pending, reopened.current())
+        val accepted = reopened.recordOutcome(attempt.attemptId, OnchainSendOutcome.Accepted(replacement.txid), 0)
+        val backup = ActiveOnchainAttemptBackup.from(accepted, "regtest", "11".repeat(32))
+        val restored = backup.restored("regtest", backup.wallet.binding, attempt.walletId, 0)
+        assertTrue(restored.candidateMiningFees.isEmpty())
+        reopened.restoreActive(restored)
+        assertEquals(accepted.candidateMiningFees, reopened.current()?.candidateMiningFees)
+    }
 
     @Test
     fun `backup proof capture blocks receipt retention until the snapshot is complete`() = test {
