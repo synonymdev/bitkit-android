@@ -1332,10 +1332,21 @@ class ActivityService(
             payment.direction == PaymentDirection.INBOUND && payment.status != PaymentStatus.FAILED &&
             !details?.outputs.isNullOrEmpty()
         ) {
-            privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
-                receivingAddress = resolvedAddress,
-                addresses = details.outputs.mapNotNull { it.scriptpubkeyAddress },
-            )
+            val contactCache = cacheStore.data.first()
+            val snapshot =
+                (getActivityById(walletId = defaultWalletId, activityId = payment.id) as? Activity.Onchain)?.v1
+                    ?: getActivityByTxId(walletId = defaultWalletId, txId = kind.txid)
+            if (
+                snapshot?.contact != null ||
+                contactCache.isContactDetached(snapshot?.id ?: payment.id, defaultWalletId)
+            ) {
+                null
+            } else {
+                privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
+                    receivingAddress = resolvedAddress,
+                    addresses = details.outputs.mapNotNull { it.scriptpubkeyAddress },
+                )
+            }
         } else {
             null
         }
