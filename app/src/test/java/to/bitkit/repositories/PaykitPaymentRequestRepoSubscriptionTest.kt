@@ -51,6 +51,7 @@ import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -604,13 +605,14 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
     @Test
     fun `accepting subscription returns current period and preserves payment targets`() = test {
-        val proposal = paymentRequestRecord()
-        val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        val proposal = paymentRequestRecord().copy(proposalStreamItemId = 41uL)
+        val active = proposal.copy(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposal), listOf(active))
         whenever(
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                41uL,
             )
         ).thenReturn(active)
         whenever(paykitSdkService.linkedPeers()).thenReturn(
@@ -638,6 +640,35 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `subscription acceptance rejects a replaced proposal with matching terms`() = test {
+        val original = paymentRequestRecord().copy(proposalStreamItemId = 41uL)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(original))
+        sut.refresh().getOrThrow()
+        val reviewed = sut.subscriptions.value.single()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(original.copy(proposalStreamItemId = 42uL)))
+        sut.refresh().getOrThrow()
+
+        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> { sut.accept(reviewed).getOrThrow() }
+
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
+        assertEquals(42uL, sut.subscriptions.value.single().proposalStreamItemId)
+    }
+
+    @Test
+    fun `subscription acceptance refuses a missing proposal stream item`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(paymentRequestRecord().copy(proposalStreamItemId = null)))
+        sut.refresh().getOrThrow()
+
+        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> {
+            sut.accept(sut.subscriptions.value.single()).getOrThrow()
+        }
+
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
+    }
+
+    @Test
     fun `subscription clock change refreshes periods after an overlapping refresh`() = test {
         val proposal = paymentRequestRecord()
         val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
@@ -646,6 +677,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                1uL,
             )
         ).thenReturn(active)
         sut.refresh().getOrThrow()
@@ -686,6 +718,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                1uL,
             )
         ).thenReturn(active)
         sut.refresh().getOrThrow()
@@ -718,6 +751,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                1uL,
             )
         ).thenReturn(active)
         sut.refresh().getOrThrow()
@@ -756,7 +790,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         val result = sut.accept(reviewedSubscription)
 
         assertTrue(result.exceptionOrNull() is PaykitPaymentRequestError.RequestUnavailable)
-        verifyBlocking(paykitSdkService, never()) { acceptPaymentRequest(any(), any()) }
+        verifyBlocking(paykitSdkService, never()) { acceptPaymentRequest(any(), any(), any()) }
     }
 
     @Test
@@ -770,6 +804,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                1uL,
             )
         ).thenReturn(active)
         sut.refresh().getOrThrow()
@@ -1212,7 +1247,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         val deadlineSubscription = subscriptions.first { it.paymentRequestId == "deadline" }
         assertEquals(null, deadlineSubscription.paymentDueOnAcceptance(clock.now()))
         assertTrue(sut.accept(deadlineSubscription).exceptionOrNull() is PaykitPaymentRequestError.RequestUnavailable)
-        verifyBlocking(paykitSdkService, never()) { acceptPaymentRequest(any(), any()) }
+        verifyBlocking(paykitSdkService, never()) { acceptPaymentRequest(any(), any(), any()) }
     }
 
     @Test

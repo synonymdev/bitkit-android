@@ -1078,11 +1078,14 @@ class PaykitSdkService @Inject constructor(
     suspend fun acceptPaymentRequest(
         counterparty: String,
         paymentRequestId: String,
+        expectedProposalStreamItemId: ULong,
     ): PaymentRequestRecord {
         isSetup.await()
         return operationLock.withLock(Priority.Interactive) {
             withStateRevisionTracking { handle ->
-                completeSdkCall { handle.claimAndAcceptPaymentRequest(counterparty, paymentRequestId) }
+                completeSdkCall {
+                    handle.claimAndAcceptPaymentRequest(counterparty, paymentRequestId, expectedProposalStreamItemId)
+                }
             }
         }
     }
