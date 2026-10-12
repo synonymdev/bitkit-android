@@ -1968,7 +1968,7 @@ class AppViewModel @Inject constructor(
     private suspend fun retryPendingMigrationData() {
         isCompletingMigration = true
         try {
-            if (!migrationService.hasPendingMigrationRetries()) return
+            if (!migrationService.shouldRetryPendingMigrationData()) return
             migrationService.reapplyMetadataAfterSync()
             if (migrationService.canCleanupAfterMigration) migrationService.cleanupAfterMigration()
         } finally {
