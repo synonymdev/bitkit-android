@@ -15,6 +15,9 @@ object PubkyPublicKeyFormat {
     private const val redactedLength = 16
     const val maximumInputLength = 57
 
+    /** Prefixes stripped from a key before it is shortened for display. */
+    private val displayPrefixes = listOf("pubky", "pk:")
+
     fun bounded(input: String): String {
         return input
             .trim()
@@ -40,7 +43,7 @@ object PubkyPublicKeyFormat {
     }
 
     fun display(input: String): String {
-        val rawKey = bounded(input).removePrefix("pubky")
+        val rawKey = displayPrefixes.fold(bounded(input)) { key, prefix -> key.removePrefix(prefix) }
         return if (rawKey.length > displayEdgeLength * 2) {
             "${rawKey.take(displayEdgeLength)}...${rawKey.takeLast(displayEdgeLength)}"
         } else {
