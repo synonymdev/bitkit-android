@@ -2,23 +2,35 @@ package to.bitkit.services
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
-import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.PreActivityMetadata
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Test
+import org.lightningdevkit.ldknode.ConfirmationStatus
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mockStatic
 import org.mockito.Mockito.never
-import kotlinx.coroutines.flow.flowOf
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
-import to.bitkit.ext.scopedActivityId
-import org.mockito.kotlin.mock
-import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.create
+import to.bitkit.ext.scopedActivityId
+import to.bitkit.models.WalletScope
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ActivityServiceTest : BaseUnitTest() {
     companion object {
@@ -174,6 +186,97 @@ class ActivityServiceTest : BaseUnitTest() {
                 kotlin.test.assertFails { sut.restoreSentOnchainTags(ACTIVITY_ID, WALLET_ID) }
                 native.verify({ upsertMetadata.invoke(null, any(List::class.java)) }, never())
             }
+        }
+    }
+
+    @Test
+    fun `sync overlapping send completion keeps one attributed activity through confirmation`() = test {
+        val walletId = WalletScope.default
+        val transactionId = "transaction"
+        val syncPaused = CompletableDeferred<Unit>()
+        val resumeSync = CompletableDeferred<Unit>()
+        var pauseOnce = true
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                if (pauseOnce) {
+                    pauseOnce = false
+                    syncPaused.complete(Unit)
+                    resumeSync.await()
+                }
+                emit(AppCacheData())
+            },
+        )
+        val payment = PaymentDetails(
+            id = "ldk-payment-id",
+            kind = PaymentKind.Onchain(transactionId, ConfirmationStatus.Unconfirmed),
+            amountMsat = 5_000_000uL,
+            feePaidMsat = 209_000uL,
+            direction = PaymentDirection.OUTBOUND,
+            status = PaymentStatus.SUCCEEDED,
+            latestUpdateTimestamp = 100uL,
+        )
+        withOnchainActivities(transactionId) { saved ->
+            val syncing = async { sut.syncLdkNodePaymentsToActivities(listOf(payment)) }
+            syncPaused.await()
+            sut.createSentOnchainActivityFromSendResult(
+                txid = transactionId,
+                address = "recipient",
+                amount = 5_000uL,
+                fee = 209uL,
+                feeRate = 1uL,
+                isTransfer = false,
+                channelId = null,
+                walletId = walletId,
+            )
+            sut.restoreSentOnchainContact(transactionId, walletId, "recipient-contact")
+            resumeSync.complete(Unit)
+            syncing.await()
+
+            assertEquals(listOf(transactionId), saved.keys.toList())
+            val confirmed = mock<ConfirmationStatus.Confirmed> { on { timestamp }.thenReturn(200uL) }
+            sut.syncLdkNodePaymentsToActivities(
+                listOf(
+                    payment.copy(
+                        kind = PaymentKind.Onchain(transactionId, confirmed),
+                        latestUpdateTimestamp = 200uL,
+                    ),
+                ),
+            )
+            val activity = saved.values.single().v1
+            assertEquals(transactionId, activity.id)
+            assertEquals("recipient-contact", activity.contact)
+            assertEquals("recipient", activity.address)
+            assertEquals(209uL, activity.fee)
+            assertTrue(activity.confirmed)
+        }
+    }
+
+    private suspend fun withOnchainActivities(
+        transactionId: String,
+        block: suspend CoroutineScope.(MutableMap<String, Activity.Onchain>) -> Unit,
+    ) = ServiceQueue.CORE.background {
+        val walletId = WalletScope.default
+        val saved = mutableMapOf<String, Activity.Onchain>()
+        val getByTx = binding.getMethod("getActivityByTxId", String::class.java, String::class.java)
+        val upsert = binding.getMethod("upsertActivity", Activity::class.java)
+        mockStatic(binding).use { native ->
+            native.`when`<Any?> { getActivityById.invoke(null, anyString(), anyString()) }.thenAnswer {
+                saved[it.getArgument<String>(1)]
+            }
+            native.`when`<Any?> { getByTx.invoke(null, walletId, transactionId) }.thenAnswer {
+                saved.values.firstOrNull { it.v1.txId == transactionId }?.v1
+            }
+            native.`when`<Any?> { upsert.invoke(null, any(Activity::class.java)) }.thenAnswer {
+                val activity = it.getArgument<Activity>(0) as Activity.Onchain
+                saved[activity.v1.id] = activity
+                Unit
+            }
+            native.`when`<Any?> { updateActivity.invoke(null, anyString(), any(Activity::class.java)) }.thenAnswer {
+                val activity = it.getArgument<Activity>(1) as Activity.Onchain
+                saved[activity.v1.id] = activity
+                Unit
+            }
+            block(saved)
         }
     }
 

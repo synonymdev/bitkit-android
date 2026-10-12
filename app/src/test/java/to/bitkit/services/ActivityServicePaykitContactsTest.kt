@@ -9,6 +9,8 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TransactionDetails
 import com.synonym.bitkitcore.TxOutput
 import com.synonym.bitkitcore.getActivities
+import com.synonym.bitkitcore.getActivityById
+import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getTransactionDetails
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.upsertActivity
@@ -463,6 +465,40 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         assertEquals(BUYER, (updates.single() as Activity.Onchain).v1.contact)
     }
 
+    @Test
+    fun `payment sync skips contact discovery for an attributed activity`() = coreTest {
+        val original = onchain("wallet-address").copy(id = "stored-id", contact = BUYER)
+        rows = listOf(Activity.Onchain(original))
+        val outputs = listOf(output("wallet-address"))
+        details = mock { on { this.outputs }.thenReturn(outputs) }
+
+        repeat(2) { sut.syncLdkNodePaymentsToActivities(listOf(payment())) }
+
+        assertEquals(2, updates.size)
+        assertTrue(updates.all { (it as Activity.Onchain).v1.contact == BUYER })
+        verify(reservations, never()).contactPublicKeyForReservedAddress(any())
+        verify(contacts, never()).contactsForAddresses(any())
+    }
+
+    @Test
+    fun `payment sync skips contact discovery for a manually detached activity`() = coreTest {
+        val original = onchain("wallet-address").copy(id = "stored-id")
+        rows = listOf(Activity.Onchain(original))
+        cacheData.value = cacheData.value.copy(
+            detachedActivityContacts = setOf(scopedActivityId(original.walletId, original.id)),
+        )
+        val outputs = listOf(output("wallet-address"))
+        details = mock { on { this.outputs }.thenReturn(outputs) }
+        sharedAddresses("wallet-address" to BUYER)
+
+        repeat(2) { sut.syncLdkNodePaymentsToActivities(listOf(payment())) }
+
+        assertEquals(2, updates.size)
+        assertTrue(updates.all { (it as Activity.Onchain).v1.contact == null })
+        verify(reservations, never()).contactPublicKeyForReservedAddress(any())
+        verify(contacts, never()).contactsForAddresses(any())
+    }
+
     private suspend fun receive(vararg addresses: String) {
         whenever(lightningService.listPayments()).thenReturn(listOf(payment()))
         sut.handleOnchainTransactionReceived(
@@ -509,6 +545,16 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
                 }.thenAnswer {
                     activityReads++
                     rows
+                }
+                native.`when`<Activity?> { getActivityById(any(), any()) }.thenAnswer { invocation ->
+                    rows.filterIsInstance<Activity.Onchain>().firstOrNull {
+                        it.v1.walletId == invocation.arguments[0] && it.v1.id == invocation.arguments[1]
+                    }
+                }
+                native.`when`<OnchainActivity?> { getActivityByTxId(any(), any()) }.thenAnswer { invocation ->
+                    rows.filterIsInstance<Activity.Onchain>().firstOrNull {
+                        it.v1.walletId == invocation.arguments[0] && it.v1.txId == invocation.arguments[1]
+                    }?.v1
                 }
                 native.`when`<TransactionDetails?> { getTransactionDetails(any(), any()) }.thenAnswer {
                     detailReads++
