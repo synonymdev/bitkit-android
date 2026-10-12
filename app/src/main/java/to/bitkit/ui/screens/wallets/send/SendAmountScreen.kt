@@ -32,6 +32,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -455,7 +457,9 @@ private fun PaymentMethodButton(
             onDismissRequest = { expanded = false },
             shape = RoundedCornerShape(16.dp),
             containerColor = Colors.Gray6,
-            modifier = Modifier.width(250.dp).testTag("SendFundingSources")
+            modifier = Modifier.width(250.dp)
+                .semantics { testTagsAsResourceId = true }
+                .testTag("SendFundingSources")
         ) {
             VerticalSpacer(4.dp)
             uiState.fundingOptions.forEachIndexed { index, option ->

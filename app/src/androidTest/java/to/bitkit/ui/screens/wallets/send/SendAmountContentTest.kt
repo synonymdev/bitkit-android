@@ -1,11 +1,14 @@
 package to.bitkit.ui.screens.wallets.send
 
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.collections.immutable.persistentListOf
 import org.junit.Rule
 import org.junit.Test
@@ -75,6 +78,11 @@ class SendAmountContentTest {
 
     @Test
     fun whenPaymentMethodSelected_shouldTriggerEvent() {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
         var selectedSource: SendFundingSource? = null
         composeTestRule.setContent {
             SendAmountContent(
@@ -87,6 +95,11 @@ class SendAmountContentTest {
 
         composeTestRule.onNodeWithTag("AssetButton-switch").performClick()
         composeTestRule.onNodeWithTag("SendFundingSources").assertExists()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            automation.windows.any { window ->
+                window.root?.containsResourceId("SendFundingSources") == true
+            }
+        }
         composeTestRule.runOnIdle { assertNull(selectedSource) }
 
         composeTestRule.onNodeWithText("SAVINGS").performClick()
@@ -156,4 +169,9 @@ class SendAmountContentTest {
         composeTestRule.onNodeWithTag("ContinueAmount").assertIsNotEnabled()
         assertFalse(eventTriggered)
     }
+
+    private fun AccessibilityNodeInfo.containsResourceId(resourceId: String): Boolean =
+        viewIdResourceName == resourceId || (0 until childCount).any {
+            getChild(it)?.containsResourceId(resourceId) == true
+        }
 }
