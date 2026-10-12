@@ -97,7 +97,7 @@ internal data class RNMigrationRetrySchedule(val attemptedAtMillis: Long, val de
 
 @Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
-class MigrationService @Inject constructor(
+class MigrationService internal constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
     private val settingsStore: SettingsStore,
@@ -108,6 +108,7 @@ class MigrationService @Inject constructor(
     private val rnBackupClient: RNBackupClient,
     private val bip39Service: Bip39Service,
     private val transferDao: TransferDao,
+    private val rnMigrationStore: DataStore<Preferences>,
 ) {
     companion object {
         private const val TAG = "Migration"
@@ -140,7 +141,31 @@ class MigrationService @Inject constructor(
 
     fun unlockChannelMigration() = channelMigrationMutex.unlock()
 
-    private val rnMigrationStore = context.rnMigrationDataStore
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        keychain: Keychain,
+        settingsStore: SettingsStore,
+        widgetsStore: WidgetsStore,
+        cacheStore: CacheStore,
+        activityRepo: ActivityRepo,
+        coreService: CoreService,
+        rnBackupClient: RNBackupClient,
+        bip39Service: Bip39Service,
+        transferDao: TransferDao,
+    ) : this(
+        context,
+        keychain,
+        settingsStore,
+        widgetsStore,
+        cacheStore,
+        activityRepo,
+        coreService,
+        rnBackupClient,
+        bip39Service,
+        transferDao,
+        context.rnMigrationDataStore,
+    )
 
     private inline fun <reified T> decodeBackupData(data: ByteArray): T {
         val jsonElement = json.parseToJsonElement(String(data))
