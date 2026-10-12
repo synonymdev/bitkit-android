@@ -5344,6 +5344,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `reset send flow ignores a pending invoice routing fee and confirmation`() = test {
+        val bolt11 = "lnbcrt1pendingfee"
+        val estimateStarted = CompletableDeferred<Unit>()
+        val feeEstimate = CompletableDeferred<Result<ULong>>()
+        stubLightningScan(bolt11 = bolt11, amountSats = 1_000uL)
+        whenever(lightningRepo.estimateRoutingFees(bolt11)).doSuspendableAnswer {
+            estimateStarted.complete(Unit)
+            feeEstimate.await()
+        }
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        estimateStarted.await()
+        val newSheet = Sheet.Send(SendRoute.Recipient)
+        sut.showSheet(newSheet)
+        sut.resetSendState()
+        advanceUntilIdle()
+        val newState = sut.sendUiState.value
+
+        feeEstimate.complete(Result.success(2uL))
+        advanceUntilIdle()
+
+        assertEquals(newState, sut.sendUiState.value)
+        assertEquals(newSheet, sut.currentSheet.value)
+    }
+
+    @Test
     fun `fixed LNURL payment has valid amount`() = test {
         val lnurl = "lnurl1fixedamount"
         whenever { coreService.decode(lnurl) }.thenReturn(
