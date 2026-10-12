@@ -6222,7 +6222,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `background tag retry does not sweep new activities or restart the node`() = test {
         whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
         whenever(migrationService.needsPostMigrationSync()).thenReturn(false)
-        whenever(migrationService.hasPendingMigrationRetries()).thenReturn(true)
+        whenever(migrationService.shouldRetryPendingMigrationData(any())).thenReturn(true)
         whenever(migrationService.canCleanupAfterMigration).thenReturn(false)
 
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
@@ -6231,6 +6231,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(migrationService).reapplyMetadataAfterSync()
         verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
         verify(lightningRepo, never()).stop()
+        verify(migrationService, never()).cleanupAfterMigration()
+    }
+
+    @Test
+    fun `sync events during migration backoff do not reapply metadata or rebuild payment history`() = test {
+        whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(false)
+        whenever(migrationService.shouldRetryPendingMigrationData(any())).thenReturn(false)
+
+        repeat(6) {
+            emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+            advanceUntilIdle()
+        }
+
+        verify(migrationService, never()).reapplyMetadataAfterSync()
+        verify(lightningRepo, never()).getPayments()
+        verify(activityRepo, never()).markAllUnseenActivitiesAsSeen(anyOrNull())
         verify(migrationService, never()).cleanupAfterMigration()
     }
 
