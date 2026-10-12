@@ -4533,7 +4533,6 @@ class AppViewModel @Inject constructor(
         if (amount > 0uL) {
             Logger.info("Found amount in invoice, proceeding with payment", context = TAG)
 
-            estimateLightningRoutingFeesIfNeeded()
             navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
             estimateLightningRoutingFeesIfNeeded()
             return
