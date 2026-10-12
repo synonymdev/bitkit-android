@@ -500,8 +500,8 @@ private fun ColumnScope.SuccessContent(
 
 @Composable
 private fun DescriptionText(clientId: String, serviceName: String) {
-    val requester = clientId.withoutAccentMarkup()
-    val service = serviceName.withoutAccentMarkup()
+    val requester = clientId.asLiteralRequestText()
+    val service = serviceName.asLiteralRequestText()
     val text = if (requester.isNotBlank()) {
         stringResource(R.string.profile__auth_approval_service_named, requester, service)
     } else {
@@ -517,8 +517,8 @@ private fun SuccessDescriptionText(
     truncatedKey: String,
     modifier: Modifier = Modifier,
 ) {
-    val requester = clientId.withoutAccentMarkup()
-    val service = serviceName.withoutAccentMarkup()
+    val requester = clientId.asLiteralRequestText()
+    val service = serviceName.asLiteralRequestText()
     val text = if (requester.isNotBlank()) {
         stringResource(R.string.profile__auth_approval_success_detail_named, truncatedKey, requester, service)
     } else {
@@ -637,9 +637,26 @@ private const val CHECK_SCALE = 274f / 256f
 private val PubkyProfile.authDisplayPublicKey: String
     get() = pubkyAuthDisplayPublicKey(publicKey)
 
-/** Request data is shown literally: accent tags inside it must not be read as markup by [withAccentBoldBright]. */
-internal fun String.withoutAccentMarkup(): String =
-    generateSequence(this) { current -> current.removeAccentTags().takeIf { it != current } }.last()
+/** Unicode categories that are dropped from request data: line breaks, bidi and other invisible controls. */
+private val HIDDEN_CHARACTER_TYPES = setOf(
+    Character.CONTROL,
+    Character.FORMAT,
+    Character.LINE_SEPARATOR,
+    Character.PARAGRAPH_SEPARATOR,
+)
+
+/**
+ * Request data is shown literally: control and bidi characters are dropped so it cannot add lines or reorder the
+ * sentence, and accent tags inside it must not be read as markup by [withAccentBoldBright].
+ */
+internal fun String.asLiteralRequestText(): String {
+    val visible = buildString {
+        this@asLiteralRequestText.codePoints()
+            .filter { Character.getType(it).toByte() !in HIDDEN_CHARACTER_TYPES }
+            .forEach { appendCodePoint(it) }
+    }
+    return generateSequence(visible) { current -> current.removeAccentTags().takeIf { it != current } }.last()
+}
 
 internal fun pubkyAuthDisplayPublicKey(publicKey: String): String {
     val rawKey = publicKey.removePrefix("pubky")
