@@ -48,6 +48,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
 import to.bitkit.env.Env
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
@@ -75,6 +76,24 @@ import java.io.File
 import java.security.KeyStore
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+
+@Serializable
+internal data class RNMigrationRetrySchedule(val attemptedAtMillis: Long, val delayMillis: Long) {
+    companion object {
+        private val initialDelay = 1.minutes
+        private val maximumDelay = 1.hours
+
+        fun afterAttempt(previous: RNMigrationRetrySchedule?, now: Long): RNMigrationRetrySchedule {
+            val previousDelay = previous?.delayMillis?.coerceIn(0, maximumDelay.inWholeMilliseconds) ?: 0
+            val delay = (previousDelay * 2).coerceIn(initialDelay.inWholeMilliseconds, maximumDelay.inWholeMilliseconds)
+            return RNMigrationRetrySchedule(now, delay)
+        }
+    }
+
+    fun isDue(now: Long): Boolean = now < attemptedAtMillis || now - attemptedAtMillis >= delayMillis
+}
 
 @Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
@@ -98,6 +117,7 @@ class MigrationService @Inject constructor(
         private const val RN_PENDING_BLOCKTANK_ORDER_IDS_KEY = "rnPendingBlocktankOrderIds"
         private const val RN_PENDING_PAID_ORDERS_KEY = "rnPendingPaidOrders"
         private const val RN_PENDING_METADATA_KEY = "rnPendingMetadata"
+        private const val RN_RETRY_SCHEDULE_KEY = "rnMigrationRetrySchedule"
         private const val RN_PENDING_TRANSFERS_KEY = "rnPendingTransfers"
         private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
         private const val RN_CHANNEL_RECOVERY_CHECKED_KEY = "rnChannelRecoveryChecked"
@@ -315,6 +335,7 @@ class MigrationService @Inject constructor(
             it.remove(stringPreferencesKey(RN_PENDING_BLOCKTANK_ORDER_IDS_KEY))
             it.remove(stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY))
             it.remove(stringPreferencesKey(RN_PENDING_METADATA_KEY))
+            it.remove(stringPreferencesKey(RN_RETRY_SCHEDULE_KEY))
             it.remove(stringPreferencesKey(RN_PENDING_TRANSFERS_KEY))
             it.remove(stringPreferencesKey(RN_PENDING_BOOSTS_KEY))
         }
@@ -329,6 +350,26 @@ class MigrationService @Inject constructor(
     suspend fun hasPendingMigrationRetries(): Boolean {
         loadPersistedMigrationData()
         return !canCleanupAfterMigration
+    }
+
+    suspend fun shouldRetryPendingMigrationData(now: Long = nowMillis()): Boolean {
+        if (!hasPendingMigrationRetries()) return false
+        return readRetrySchedule()?.isDue(now) ?: true
+    }
+
+    private suspend fun readRetrySchedule(): RNMigrationRetrySchedule? {
+        val data = rnMigrationStore.data.first()[stringPreferencesKey(RN_RETRY_SCHEDULE_KEY)] ?: return null
+        return runCatching { json.decodeFromString<RNMigrationRetrySchedule>(data) }
+            .onFailure { Logger.warn("Failed to load migration retry schedule", it, context = TAG) }
+            .getOrNull()
+    }
+
+    private suspend fun recordPendingMigrationRetry() {
+        val schedule = if (canCleanupAfterMigration) null else RNMigrationRetrySchedule.afterAttempt(readRetrySchedule(), nowMillis())
+        rnMigrationStore.edit {
+            val key = stringPreferencesKey(RN_RETRY_SCHEDULE_KEY)
+            if (schedule == null) it.remove(key) else it[key] = json.encodeToString(schedule)
+        }
     }
 
     val canCleanupAfterMigration: Boolean
@@ -1776,6 +1817,7 @@ class MigrationService @Inject constructor(
                 pendingRemotePaidOrders = null
             }
         }
+        recordPendingMigrationRetry()
     }
 
     private suspend fun applyRemotePaidOrders(paidOrders: Map<String, String>) {
