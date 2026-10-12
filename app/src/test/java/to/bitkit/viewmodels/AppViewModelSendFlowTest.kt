@@ -9308,6 +9308,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `subscription acceptance pays a due period materialized during acceptance`() = test {
         val subscription = subscriptionStartingAt(Clock.System.now() + 60.seconds)
         val dueRequest = paymentRequest().copy(
+            paymentRequestId = subscription.paymentRequestId,
             lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING,
             billingPeriod = PaykitBillingPeriod(
                 startsAt = Clock.System.now(),
@@ -9323,10 +9324,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
         advanceUntilIdle()
 
-        val startedPayment = sut.acceptSubscriptionAndStartPayment(subscription).getOrThrow()
-        advanceUntilIdle()
-
-        assertTrue(startedPayment)
+        sut.currentSheet.test {
+            assertTrue(awaitItem() is Sheet.Subscription)
+            assertTrue(sut.acceptSubscriptionAndStartPayment(subscription).getOrThrow())
+            advanceUntilIdle()
+            assertTrue((awaitItem() as Sheet.Send).route is SendRoute.Error)
+            expectNoEvents()
+        }
         verify(privatePaykitRepo).beginPaymentRequestWaitingForUpdatedList(dueRequest)
         assertTrue(sut.currentSheet.value is Sheet.Send)
         assertTrue(sut.sendUiState.value.isInitialSubscriptionPayment)
@@ -9335,19 +9339,71 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initial subscription send dismisses review before presentation`() = test {
+    fun `initial subscription send replaces the matching review without dismissal`() = test {
         val subscription = subscriptionStartingAt(Clock.System.now())
         val destination = Sheet.Send(SendRoute.Confirm)
-        sut.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
+        val review = Sheet.Subscription(SubscriptionRoute.Review(subscription.id))
+        sut.showSheet(review)
         advanceUntilIdle()
-        setSendState(SendUiState(isInitialSubscriptionPayment = true))
+        setSendState(
+            SendUiState(
+                isInitialSubscriptionPayment = true,
+                incomingPaymentRequestId = PaykitPaymentRequestId(
+                    subscription.paymentRequestId,
+                    subscription.counterparty,
+                ),
+            )
+        )
 
-        sut.showSheet(destination)
-        runCurrent()
+        sut.currentSheet.test {
+            assertEquals(review, awaitItem())
+            sut.showSheet(destination)
+            runCurrent()
 
-        assertNull(sut.currentSheet.value)
-        advanceUntilIdle()
-        assertEquals(destination, sut.currentSheet.value)
+            assertEquals(destination, awaitItem())
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `other subscription sheet transitions still dismiss before presentation`() = test {
+        val subscription = subscriptionStartingAt(Clock.System.now())
+        val review = Sheet.Subscription(SubscriptionRoute.Review(subscription.id))
+        val destination = Sheet.Send(SendRoute.Confirm)
+        val initialState = SendUiState(
+            isInitialSubscriptionPayment = true,
+            incomingPaymentRequestId = PaykitPaymentRequestId(subscription.paymentRequestId, subscription.counterparty),
+        )
+        val otherReview = Sheet.Subscription(
+            SubscriptionRoute.Review(subscription.id.copy(paymentRequestId = "other-subscription"))
+        )
+        val otherCounterparty = Sheet.Subscription(
+            SubscriptionRoute.Review(subscription.id.copy(counterparty = "other-counterparty"))
+        )
+        val details = Sheet.Subscription(SubscriptionRoute.Details(subscription.id))
+        listOf(
+            Triple(review, initialState.copy(isInitialSubscriptionPayment = false), destination),
+            Triple(otherReview, initialState, destination),
+            Triple(otherCounterparty, initialState, destination),
+            Triple(details, initialState, destination),
+            Triple(review, initialState, Sheet.Receive()),
+        ).forEach { (source, state, target) ->
+            sut.showSheet(source)
+            advanceUntilIdle()
+            setSendState(state)
+
+            sut.currentSheet.test {
+                assertEquals(source, awaitItem())
+                sut.showSheet(target)
+                runCurrent()
+
+                assertNull(awaitItem())
+                advanceUntilIdle()
+                assertEquals(target, awaitItem())
+                expectNoEvents()
+            }
+        }
     }
 
     @Test

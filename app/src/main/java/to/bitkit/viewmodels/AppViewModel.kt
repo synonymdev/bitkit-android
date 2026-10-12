@@ -5823,7 +5823,7 @@ class AppViewModel @Inject constructor(
         val previousJob = sheetTransitionJob
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
-            _currentSheet.value?.let {
+            if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
                 _currentSheet.update { null }
                 delay(SCREEN_TRANSITION_DELAY)
             }
@@ -5844,6 +5844,13 @@ class AppViewModel @Inject constructor(
         }
         previousJob?.cancel()
         nextJob.start()
+    }
+
+    private fun replacesSubscriptionReview(sheet: Sheet): Boolean {
+        if (sheet !is Sheet.Send || !_sendUiState.value.isInitialSubscriptionPayment) return false
+        val review = (_currentSheet.value as? Sheet.Subscription)?.route as? SubscriptionRoute.Review ?: return false
+        val requestId = _sendUiState.value.incomingPaymentRequestId ?: return false
+        return review.id == PaykitSubscriptionId(requestId.paymentRequestId, requestId.counterparty)
     }
 
     fun hideSheet() = hideSheet(shouldFlushDeferredScan = true)
