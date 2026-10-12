@@ -4152,10 +4152,8 @@ class AppViewModel @Inject constructor(
         if (amount > 0uL) {
             Logger.info("Found amount in invoice, proceeding with payment", context = TAG)
 
-            val generation = sendStateGeneration
-            estimateLightningRoutingFeesIfNeeded()
-            if (generation != sendStateGeneration) return
             navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
+            estimateLightningRoutingFeesIfNeeded()
             return
         }
         Logger.info("No amount found in invoice, proceeding to enter amount", context = TAG)

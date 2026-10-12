@@ -5288,18 +5288,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fixed lightning invoice opens confirmation with its amount and routing fee`() = test {
+    fun `fixed lightning invoice opens confirmation before its routing fee returns`() = test {
         val bolt11 = "lnbcrt1fixedamount"
+        val estimateStarted = CompletableDeferred<Unit>()
+        val feeEstimate = CompletableDeferred<Result<ULong>>()
         stubLightningScan(bolt11 = bolt11, amountSats = 1_000uL)
-        whenever(lightningRepo.estimateRoutingFees(bolt11)).thenReturn(Result.success(2uL))
+        whenever(lightningRepo.estimateRoutingFees(bolt11)).doSuspendableAnswer {
+            estimateStarted.complete(Unit)
+            feeEstimate.await()
+        }
         sut.setIsAuthenticated(true)
 
         sut.onScanResult(bolt11)
+        estimateStarted.await()
+        advanceUntilIdle()
+        val pendingSheet = sut.currentSheet.value
+        val pendingState = sut.sendUiState.value
+        feeEstimate.complete(Result.success(2uL))
         advanceUntilIdle()
 
+        assertEquals(Sheet.Send(SendRoute.Confirm), pendingSheet)
+        assertTrue(pendingState.isAmountInputValid)
+        assertEquals(1_000uL, pendingState.amount)
+        assertNull(pendingState.lightningFeeSats)
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
-        assertTrue(sut.sendUiState.value.isAmountInputValid)
-        assertEquals(1_000uL, sut.sendUiState.value.amount)
         assertEquals(2L, sut.sendUiState.value.lightningFeeSats)
     }
 
@@ -5318,7 +5330,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `new scan cancels pending routing fee estimation before opening confirmation`() = test {
+    fun `new scan replaces an invoice with pending routing fee estimation`() = test {
         val firstInvoice = "lnbcrt1pendingfee"
         val latestInvoice = "lnbcrt1latestfee"
         val estimateStarted = CompletableDeferred<Unit>()
@@ -5333,7 +5345,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.onScanResult(firstInvoice)
         estimateStarted.await()
-        assertNull(sut.currentSheet.value)
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         sut.onScanResult(latestInvoice)
         advanceUntilIdle()
 
