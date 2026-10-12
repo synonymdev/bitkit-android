@@ -1,0 +1,20 @@
+<journey name="onchain send activity confirmation">
+  <description>
+    Verifies that one accepted Savings payment keeps one activity entry through wallet sync,
+    confirmation and restart, with the selected contact and fee preserved. Preconditions: two owned
+    regtest wallets linked as contacts, a synced sending wallet with at least 6,000 confirmed sats,
+    and access to the configured regtest backend's block-mining helper. Keep both apps running.
+  </description>
+  <actions>
+    <action>On the receiving wallet, create a fresh 5,000-sat payment request for the sending contact with Savings as its only accepted payment method</action>
+    <action>On the sending wallet, open the received payment request and tap Pay</action>
+    <action>Verify the review shows 5,000 sats, Savings and the receiving contact; record the fee</action>
+    <action>Swipe the send handle fully to the right and wait for Bitcoin Sent</action>
+    <action>Open Details, then Explore, and record the exact transaction ID</action>
+    <action>Return to the sending wallet's activity list and verify exactly one outgoing entry has that transaction ID and receiving contact</action>
+    <action>Mine one regtest block using the configured fixture backend and wait for the recorded transaction to confirm</action>
+    <action>Open the outgoing activity and verify its status is Confirmed, its transaction ID is unchanged, and it preserves the contact, 5,000-sat recipient amount and recorded fee</action>
+    <action>Return to the activity list and verify no second entry exists for that transaction ID</action>
+    <action>Restart the sending app normally, open its activity list, and verify the same single confirmed payment and contact remain</action>
+  </actions>
+</journey>

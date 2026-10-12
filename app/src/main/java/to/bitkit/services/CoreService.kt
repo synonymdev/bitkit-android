@@ -1311,21 +1311,6 @@ class ActivityService(
         val timestamp = payment.latestUpdateTimestamp
         val confirmationData = getConfirmationStatus(kind, timestamp)
 
-        var existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
-        if (existingActivity == null) {
-            getOnchainActivityByTxId(kind.txid)?.let {
-                existingActivity = Activity.Onchain(it)
-            }
-        }
-
-        val existingOnchainActivity = existingActivity as? Activity.Onchain
-        if (existingOnchainActivity != null &&
-            (existingOnchainActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
-            !(existingOnchainActivity.v1.contact == null && payment.direction == PaymentDirection.INBOUND)
-        ) {
-            return
-        }
-
         var resolvedChannelId = channelId
 
         // Check if this transaction is a channel transfer
@@ -1343,10 +1328,8 @@ class ActivityService(
         val details = transactionDetails ?: payment.takeIf { it.direction == PaymentDirection.INBOUND }
             ?.let { fetchTransactionDetails(kind.txid) }
         val resolvedAddress = resolveAddressForInboundPayment(kind, payment, details)
-        val existingContact = existingOnchainActivity?.v1?.contact
-        val contact = existingContact ?: if (
+        val resolvedContact = if (
             payment.direction == PaymentDirection.INBOUND && payment.status != PaymentStatus.FAILED &&
-            !cacheStore.data.first().isContactDetached(payment.id, defaultWalletId) &&
             !details?.outputs.isNullOrEmpty()
         ) {
             privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
@@ -1355,6 +1338,21 @@ class ActivityService(
             )
         } else {
             null
+        }
+
+        val cache = cacheStore.data.first()
+        val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
+            ?: getActivityByTxId(walletId = defaultWalletId, txId = kind.txid)?.let { Activity.Onchain(it) }
+        val existingOnchainActivity = existingActivity as? Activity.Onchain
+        if (existingOnchainActivity != null &&
+            (existingOnchainActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
+            !(existingOnchainActivity.v1.contact == null && payment.direction == PaymentDirection.INBOUND)
+        ) {
+            return
+        }
+        val activityId = existingOnchainActivity?.v1?.id ?: payment.id
+        val contact = existingOnchainActivity?.v1?.contact ?: resolvedContact.takeUnless {
+            cache.isContactDetached(activityId, defaultWalletId)
         }
 
         val ldkValue = payment.amountSats ?: 0u
@@ -1379,12 +1377,12 @@ class ActivityService(
             )
         }
 
-        if (cacheStore.data.first().isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
+        if (cache.isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
             Logger.verbose("Activity ${onChain.id} was already deleted, skipping", context = TAG)
             return
         }
 
-        if (existingActivity != Activity.Onchain(onChain)) invalidatePaykitContactBackfill()
+        if (existingActivity != Activity.Onchain(onChain)) paykitActivityRevision++
         if (existingActivity != null && existingActivity is Activity.Onchain) {
             val existingOnchain = existingActivity.v1
             updateActivity(activityId = existingOnchain.id, activity = Activity.Onchain(onChain))
