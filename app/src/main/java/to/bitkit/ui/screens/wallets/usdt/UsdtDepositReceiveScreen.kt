@@ -389,7 +389,6 @@ private fun ColumnScope.DepositHistory(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
     ) {
-        BodyS(stringResource(R.string.usdt__deposit_status_note), color = Colors.White64)
         if (state.detail != null) {
             DepositDetail(state.detail, refundAddress, hideBalance, state.busy, onRefundAddress, onRefund)
         } else {
@@ -403,7 +402,7 @@ private fun ColumnScope.DepositHistory(
                 ActivityRowSurface(onClick = { if (!state.busy) onDetail(deposit.id) }) {
                     Column(modifier = Modifier.weight(1f)) {
                         BodySSB(deposit.network.uppercase())
-                        BodyS(stringResource(depositStatus(deposit.status, deposit.code)), color = Colors.White64)
+                        BodyS(stringResource(R.string.wallet__send_details), color = Colors.White64)
                     }
                     BodySSB(if (deposit.asset == "USDT") deposit.amount.usdtText(hideBalance) else deposit.asset)
                 }
@@ -519,6 +518,7 @@ private fun DepositDetail(
         BodySSB(deposit.asset + " · " + deposit.network.uppercase())
     }
     DepositField(R.string.wallet__activity_status, stringResource(detail.statusResource()))
+    BodyS(stringResource(R.string.usdt__deposit_status_note), color = Colors.White64)
     DepositField(R.string.usdt__deposit_reference, deposit.id)
     DepositField(R.string.wallet__activity_tx_id, deposit.sourceTx)
     code?.let { BodyS(it, color = Colors.White64) }

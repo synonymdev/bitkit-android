@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.UsdtPaymentRequest
 import com.synonym.bitkitcore.UsdtQuote
 import com.synonym.bitkitcore.UsdtTransfer
 import com.synonym.bitkitcore.usdtFormatAmount
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -182,6 +183,28 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `durably recorded send failure retains the payment and prevents resubmission`() = test {
+        val retained: UsdtTransfer = mock()
+        whenever(retained.id).thenReturn(quote.id)
+        val viewModel = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.BackupUnavailable()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+
+        viewModel.confirm().join()
+
+        assertTrue(viewModel.state.value.submitted)
+        assertTrue(viewModel.state.value.busy)
+        assertEquals(quote, viewModel.state.value.quote)
+        assertNull(viewModel.state.value.error)
+        viewModel.waitForTransfer()
+        assertFalse(viewModel.state.value.busy)
+        viewModel.confirm().join()
+        verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+    }
+
+    @Test
     fun `amount warnings require acknowledgment before payment authentication`() = test {
         val viewModel = createViewModel()
         val large = quote.copy(amount = 200_000_000u, receivedAmount = 200_000_000u)
@@ -275,8 +298,11 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertNull(viewModel.state.value.error)
     }
 
-    private suspend fun createViewModel(settingsFlow: Flow<SettingsData> = settings): UsdtViewModel {
-        whenever(repo.state).thenReturn(MutableStateFlow(UsdtWalletState()))
+    private suspend fun createViewModel(
+        settingsFlow: Flow<SettingsData> = settings,
+        walletState: UsdtWalletState = UsdtWalletState(),
+    ): UsdtViewModel {
+        whenever(repo.state).thenReturn(MutableStateFlow(walletState))
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(quote))
         whenever(repo.send(eq(quote), anyOrNull(), any())).thenReturn(Result.success(mock<UsdtTransfer>()))

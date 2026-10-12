@@ -200,6 +200,9 @@ class UsdtRepo @Inject constructor(
                         )
                     }
                 }
+            }.onFailure {
+                runSuspendCatching { service.wallet().history().toImmutableList() }
+                    .onSuccess { transfers -> _state.update { it.copy(transfers = transfers) } }
             }
         }
     }

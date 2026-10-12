@@ -4,15 +4,22 @@ import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import kotlinx.collections.immutable.persistentListOf
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.test.annotations.ComposeUi
+import to.bitkit.viewmodels.SendFundingOption
+import to.bitkit.viewmodels.SendFundingSource
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.previewAmountInputViewModel
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @ComposeUi
 class SendAmountContentTest {
@@ -23,7 +30,13 @@ class SendAmountContentTest {
     private val uiState = SendUiState(
         payMethod = SendMethod.LIGHTNING,
         amount = 100u,
-        isUnified = true
+        isAmountInputValid = true,
+        isUnified = true,
+        canSwitchFundingSource = true,
+        fundingOptions = persistentListOf(
+            SendFundingOption(SendFundingSource.Savings, enabled = true),
+            SendFundingOption(SendFundingSource.Spending, enabled = true),
+        ),
     )
 
     private val nodeLifecycleState = NodeLifecycleState.Running
@@ -61,20 +74,25 @@ class SendAmountContentTest {
     }
 
     @Test
-    fun whenPaymentMethodButtonClicked_shouldTriggerEvent() {
-        var eventTriggered = false
+    fun whenPaymentMethodSelected_shouldTriggerEvent() {
+        var selectedSource: SendFundingSource? = null
         composeTestRule.setContent {
             SendAmountContent(
                 nodeLifecycleState = nodeLifecycleState,
                 uiState = uiState,
                 amountInputViewModel = previewAmountInputViewModel(),
-                onClickPayMethod = { eventTriggered = true }
+                onClickPayMethod = { selectedSource = it }
             )
         }
 
         composeTestRule.onNodeWithTag("AssetButton-switch").performClick()
+        composeTestRule.onNodeWithTag("SendFundingSources").assertExists()
+        composeTestRule.runOnIdle { assertNull(selectedSource) }
 
-        assert(eventTriggered)
+        composeTestRule.onNodeWithText("SAVINGS").performClick()
+
+        composeTestRule.runOnIdle { assertEquals(SendFundingSource.Savings, selectedSource) }
+        composeTestRule.onNodeWithTag("SendFundingSources").assertDoesNotExist()
     }
 
     @Test
@@ -92,7 +110,7 @@ class SendAmountContentTest {
         composeTestRule.onNodeWithTag("ContinueAmount")
             .performClick()
 
-        assert(eventTriggered)
+        assertTrue(eventTriggered)
     }
 
     @Test
@@ -100,7 +118,7 @@ class SendAmountContentTest {
         composeTestRule.setContent {
             SendAmountContent(
                 nodeLifecycleState = nodeLifecycleState,
-                uiState = uiState.copy(amount = 0u),
+                uiState = uiState.copy(amount = 0u, isAmountInputValid = false),
                 amountInputViewModel = previewAmountInputViewModel(),
             )
         }
@@ -109,20 +127,16 @@ class SendAmountContentTest {
     }
 
     @Test
-    fun whenFundingSourceLoading_sourceAndContinueButtonsShouldBeDisabled() {
+    fun whenFundingSourceLoading_sourceIgnoresClicksAndContinueIsDisabled() {
         composeTestRule.setContent {
             SendAmountContent(
                 nodeLifecycleState = nodeLifecycleState,
-                uiState = uiState.copy(
-                    isAmountInputValid = true,
-                    canSwitchFundingSource = true,
-                    isFundingSourceLoading = true,
-                ),
+                uiState = uiState.copy(isFundingSourceLoading = true),
                 amountInputViewModel = previewAmountInputViewModel(),
             )
         }
 
-        composeTestRule.onNodeWithTag("AssetButton-switch").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("AssetButton-switch").assertHasNoClickAction()
         composeTestRule.onNodeWithTag("ContinueAmount").assertIsNotEnabled()
     }
 
@@ -132,11 +146,7 @@ class SendAmountContentTest {
         composeTestRule.setContent {
             SendAmountContent(
                 nodeLifecycleState = nodeLifecycleState,
-                uiState = uiState.copy(
-                    isAmountInputValid = true,
-                    canSwitchFundingSource = true,
-                    isLoading = true,
-                ),
+                uiState = uiState.copy(isLoading = true),
                 amountInputViewModel = previewAmountInputViewModel(),
                 onClickPayMethod = { eventTriggered = true },
             )

@@ -70,7 +70,7 @@ Requires funded Arbitrum accounts, controlled billing time, and controlled recei
 
 Requires disposable wallets and controlled VSS/RPC/bundler/storage endpoints; no Android device harness providing these controls is supplied here.
 
-- [ ] Make VSS unavailable before approving one payment. Verify a visible backup failure and no bundler submission. Restore VSS and verify only the original approved operation can continue.
+- [ ] Make VSS unavailable before approving one payment. Verify no bundler submission. If core has recorded the operation, the send screen must track that payment without offering another Continue or approval. Otherwise it must show the backup error. Restore VSS and verify only the original approved operation continues, with one activity entry.
 - [ ] Restore its encrypted envelope on the opposite platform with the same authorized seed. Verify one operation, request attribution and proof delivery, without a second approval or transfer.
 - [ ] Restore with unavailable local storage. Verify restore remains incomplete and no replacement wallet backup is uploaded.
 

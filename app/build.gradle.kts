@@ -297,6 +297,7 @@ android {
         unitTests {
             isReturnDefaultValues = true // mockito
             isIncludeAndroidResources = true // robolectric
+            all { it.maxHeapSize = "2g" }
         }
     }
     lint {

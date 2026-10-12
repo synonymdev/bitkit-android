@@ -173,6 +173,25 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed send publishes its durably queued transfer and preserves the error`() = test {
+        val quote: UsdtQuote = mock()
+        val error = UsdtException.BackupUnavailable()
+        val queued = incoming("queued").copy(
+            isIncoming = false,
+            status = UsdtTransferStatus.PENDING,
+            txHash = null,
+        )
+        whenever(service.send(quote)).thenAnswer { throw error }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(wallet.history()).thenReturn(listOf(queued))
+        val repo = UsdtRepo(service, testDispatcher)
+
+        assertEquals(error, repo.send(quote).exceptionOrNull())
+        assertEquals(listOf(queued), repo.state.value.transfers)
+        verify(service).send(quote)
+    }
+
+    @Test
     fun `only new confirmed receipts celebrate after initial sync`() = test {
         whenever(service.wallet()).thenReturn(wallet)
         whenever(wallet.receiveAddress()).thenReturn("address")

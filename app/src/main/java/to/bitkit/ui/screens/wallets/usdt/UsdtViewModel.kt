@@ -226,11 +226,13 @@ class UsdtViewModel @Inject constructor(
             }
             .onFailure { error ->
                 Logger.warn("Failed to send USDT with '${error.javaClass.simpleName}'", context = TAG)
+                val recorded = wallet.value.transfers.any { it.id == quote.id }
                 _state.update {
                     it.copy(
-                        busy = false,
-                        quote = null,
-                        error = error.messageResource()
+                        submitted = recorded,
+                        busy = recorded,
+                        quote = quote.takeIf { recorded },
+                        error = error.messageResource().takeUnless { recorded }
                     )
                 }
             }
