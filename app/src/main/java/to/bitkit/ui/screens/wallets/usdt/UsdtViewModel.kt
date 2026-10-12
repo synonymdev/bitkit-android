@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
 import com.synonym.bitkitcore.UsdtPaymentRequest
 import com.synonym.bitkitcore.UsdtQuote
+import com.synonym.bitkitcore.usdtFormatAmount
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -26,6 +27,7 @@ import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.parseUsdtPaymentRequest
@@ -33,6 +35,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.SanityWarning
 import javax.inject.Inject
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class UsdtViewModel @Inject constructor(
     private val repo: UsdtRepo,
@@ -65,6 +68,7 @@ class UsdtViewModel @Inject constructor(
     )
     var sendPayment: (suspend (UsdtQuote) -> Unit)? = null
     private val _state = MutableStateFlow(UsdtSendState())
+    private var maximumQuote: UsdtQuote? = null
     val state = _state.asStateFlow()
 
     var isSendPresented: Boolean
@@ -97,13 +101,14 @@ class UsdtViewModel @Inject constructor(
         }
     }
 
+    fun isValidRecipient(value: String, destination: UsdtDestination) = parseUsdtPaymentRequest(
+        value,
+        destination
+    ).isSuccess
+
     fun validateRecipient(value: String, destination: UsdtDestination, onValid: (UsdtPaymentRequest) -> Unit) {
         parseUsdtPaymentRequest(value, destination)
             .onSuccess { request ->
-                if (request.chainId != null && destination != UsdtDestination.ARBITRUM) {
-                    _state.update { it.copy(error = UsdtException.WrongNetwork().messageResource()) }
-                    return@onSuccess
-                }
                 _state.update { it.copy(error = null) }
                 onValid(request)
             }
@@ -113,11 +118,36 @@ class UsdtViewModel @Inject constructor(
     fun quote(recipient: String, amount: String, destination: UsdtDestination) = viewModelScope.launch {
         if (_state.value.busy || _state.value.authenticationRequired || _state.value.warning != null) return@launch
         _state.update { UsdtSendState(busy = true, refreshError = it.refreshError) }
-        repo.quote(recipient, amount, destination)
-            .onSuccess { quote -> _state.update { it.copy(quote = quote, busy = false) } }
+        val maximum = maximumQuote?.takeIf {
+            it.recipient == recipient && it.destination == destination && usdtFormatAmount(it.amount) == amount
+        }
+        val result = when {
+            maximum == null -> repo.quote(recipient, amount, destination)
+            maximum.expiresAt > nowTimestamp().epochSecond.toULong() + 5u -> Result.success(maximum)
+            else -> repo.quoteMaximum(recipient, destination)
+        }
+        result.onSuccess { quote -> _state.update { it.copy(quote = quote, busy = false) } }
             .onFailure { error ->
                 Logger.warn("Failed to quote USDT with '${error.javaClass.simpleName}'", context = TAG)
                 _state.update { it.copy(error = error.messageResource(), busy = false) }
+            }
+    }
+
+    fun quoteMaximum(
+        recipient: String,
+        destination: UsdtDestination,
+        onAmount: (String) -> Unit,
+    ) = viewModelScope.launch {
+        if (_state.value.busy || _state.value.authenticationRequired || _state.value.warning != null) return@launch
+        _state.update { UsdtSendState(busy = true, preparingMaximum = true, refreshError = it.refreshError) }
+        repo.quoteMaximum(recipient, destination)
+            .onSuccess { quote ->
+                maximumQuote = quote
+                onAmount(usdtFormatAmount(quote.amount))
+                _state.update { it.copy(busy = false, preparingMaximum = false) }
+            }
+            .onFailure { error ->
+                _state.update { it.copy(error = error.messageResource(), busy = false, preparingMaximum = false) }
             }
     }
 
@@ -185,6 +215,7 @@ class UsdtViewModel @Inject constructor(
     private fun send(quote: UsdtQuote) = viewModelScope.launch {
         if (_state.value.quote?.id != quote.id) return@launch
         if (_state.value.busy) return@launch
+        maximumQuote = null
         _state.update { it.copy(busy = true, error = null) }
         runSuspendCatching {
             val payment = sendPayment
@@ -208,6 +239,7 @@ class UsdtViewModel @Inject constructor(
 
 @Stable
 data class UsdtSendState(
+    val preparingMaximum: Boolean = false,
     val quote: UsdtQuote? = null,
     val busy: Boolean = false,
     val submitted: Boolean = false,

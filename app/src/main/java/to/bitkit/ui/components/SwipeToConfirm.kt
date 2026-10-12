@@ -81,7 +81,7 @@ fun SwipeToConfirm(
     val panX = remember { Animatable(0f) }
     val startedConfirmed = remember { confirmed }
     val loadingOpacity = remember { Animatable(0f) }
-    val contentAlpha = if (enabled || loading) 1f else 0.5f
+    val contentAlpha = if (enabled || loading || confirmed) 1f else 0.5f
 
     LaunchedEffect(loading) {
         loadingOpacity.animateTo(

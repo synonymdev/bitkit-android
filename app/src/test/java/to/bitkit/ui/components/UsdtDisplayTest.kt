@@ -22,10 +22,11 @@ class UsdtDisplayTest {
     @Test
     fun `overview amounts round to cents without hiding small balances`() {
         listOf(
-            0uL to "0",
+            0uL to "0.00",
             1uL to "<0.01",
             9999uL to "<0.01",
             10000uL to "0.01",
+            10000000uL to "10.00",
             123456789uL to "123.46",
             1025000uL to "1.03",
             1234567890uL to "1,234.57",

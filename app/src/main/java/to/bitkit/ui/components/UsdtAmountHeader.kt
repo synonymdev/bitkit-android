@@ -49,6 +49,7 @@ private const val USDT_CENT = 10_000uL
 
 internal fun usdtOverviewAmount(amount: ULong, locale: Locale = Locale.getDefault()): String {
     val format = NumberFormat.getNumberInstance(locale).apply {
+        minimumFractionDigits = 2
         maximumFractionDigits = 2
         roundingMode = RoundingMode.HALF_UP
     }

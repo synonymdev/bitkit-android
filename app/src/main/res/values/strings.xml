@@ -1221,7 +1221,7 @@
     <string name="sweep__utxos_format">%1$s, %2$d UTXOs</string>
     <string name="usdt__activity">Activity</string>
     <string name="usdt__address">Recipient address</string>
-    <string name="usdt__amount">Amount (USDT)</string>
+    <string name="usdt__amount">Amount</string>
     <string name="usdt__balance">Balance</string>
     <string name="usdt__bridge_attention">Bridge needs attention</string>
     <string name="usdt__bridge_deducted_fee">Estimated bridge cost (included)</string>
@@ -1285,10 +1285,14 @@
     <string name="usdt__error_wallet">Could not access your USDT wallet. Reopen Bitkit and try again.</string>
     <string name="usdt__expected_amount">Expected amount</string>
     <string name="usdt__failed">Failed</string>
-    <string name="usdt__fee_note">All fees are paid in USDT. The final network fee may be lower than this maximum.</string>
+    <string name="usdt__fee_note">All fees are paid in USDT. Final fee may be lower.</string>
     <string name="usdt__history_sync">Older activity is still syncing. Your balance is up to date when the connection is available.</string>
     <string name="usdt__maximum_fee">Maximum fee</string>
     <string name="usdt__maximum_total">Maximum total debit</string>
+    <string name="usdt__pay_from">Pay from</string>
+    <string name="usdt__network">Network</string>
+    <string name="usdt__sender_network">Sender network</string>
+    <string name="usdt__sent_title">Sent USDT</string>
     <string name="usdt__network_warning">Select the network used by the recipient. Sending to an address on the wrong network can lose funds.</string>
     <string name="usdt__payment_received">Received USDT</string>
     <string name="usdt__payment_sent">USDT Sent</string>
@@ -1383,6 +1387,7 @@
     <string name="wallet__activity_transfer_spending_pending">From Savings ({duration})</string>
     <string name="wallet__activity_transfer_to_savings">To Savings</string>
     <string name="wallet__activity_transfer_to_spending">To Spending</string>
+    <string name="wallet__activity_transferring">Transferring</string>
     <string name="wallet__activity_tx_id">Transaction ID</string>
     <string name="wallet__balance_hidden_message">Swipe your wallet balance to reveal it again.</string>
     <string name="wallet__balance_hidden_title">Wallet Balance Hidden</string>
@@ -1724,4 +1729,7 @@
     <string name="widgets__widget__size_small">Small</string>
     <string name="widgets__widget__size_wide">Wide</string>
     <string name="widgets__widgets">Widgets</string>
+    <string name="usdt__to_network">To network {network}</string>
+    <string name="usdt__from_address">From address</string>
+    <string name="usdt__to_address">To address</string>
 </resources>

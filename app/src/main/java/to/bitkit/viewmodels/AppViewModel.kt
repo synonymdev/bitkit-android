@@ -365,7 +365,7 @@ class AppViewModel @Inject constructor(
                 amountContinuePending = true
             }
 
-            SendEvent.PaymentMethodSwitch -> {
+            SendEvent.PaymentMethodSwitch, is SendEvent.PaymentMethodSelect -> {
                 if (fundingSourceSwitchPending) return
                 fundingSourceSwitchPending = true
             }
@@ -563,6 +563,11 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             quickPayRepo.unhandledFailures.collect {
                 notifyPaymentFailed((it as? QuickPayPaymentFailedError)?.reason)
+            }
+        }
+        viewModelScope.launch {
+            hwWalletRepo.wallets.collect {
+                if (_sendUiState.value.fundingOptions.isNotEmpty()) updateCanSwitchWallet()
             }
         }
         viewModelScope.launch {
@@ -2531,8 +2536,8 @@ class AppViewModel @Inject constructor(
                     } finally {
                         amountContinuePending = false
                     }
-                    SendEvent.PaymentMethodSwitch -> try {
-                        onPaymentMethodSwitch()
+                    SendEvent.PaymentMethodSwitch, is SendEvent.PaymentMethodSelect -> try {
+                        onPaymentMethodSwitch((it as? SendEvent.PaymentMethodSelect)?.source)
                     } finally {
                         fundingSourceSwitchPending = false
                         _sendUiState.update { state -> state.copy(isFundingSourceLoading = false) }
@@ -3332,20 +3337,21 @@ class AppViewModel @Inject constructor(
             it.copy(
                 canSwitchWallet = canSwitchWallet,
                 canSwitchFundingSource = availableFundingSources(state).size > 1,
+                fundingOptions = fundingOptions(state),
             )
         }
     }
 
-    private suspend fun onPaymentMethodSwitch() {
+    private suspend fun onPaymentMethodSwitch(requested: SendFundingSource? = null) {
         val current = _sendUiState.value
         if (current.isRetainedHardwarePayment) return
         val sources = availableFundingSources(current)
-        if (sources.size < 2) return
+        if (sources.size < 2 || requested != null && requested !in sources) return
+        val selected = current.selectedFundingSource()
+        val nextSource = requested ?: sources.nextAfter(selected)
+        if (nextSource == selected) return
         sendStateGeneration++
         onchainSendRefreshJob?.cancel()
-        val selected = current.selectedFundingSource()
-        val selectedIndex = sources.indexOf(selected).takeIf { it >= 0 } ?: 0
-        val nextSource = sources[(selectedIndex + 1) % sources.size]
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
             paymentAmountForSource(current, nextSource)
@@ -4436,6 +4442,33 @@ class AppViewModel @Inject constructor(
 
     private fun maximumAvailableOnchainSats(selectedMax: ULong, hardwareWalletId: String?): ULong =
         if (hardwareWalletId == null) maxOf(selectedMax, maximumHardwareFundingBalanceSats()) else selectedMax
+
+    private fun List<SendFundingSource>.nextAfter(selected: SendFundingSource): SendFundingSource {
+        val selectedIndex = indexOf(selected).takeIf { it >= 0 } ?: 0
+        return this[(selectedIndex + 1) % size]
+    }
+
+    private fun fundingOptions(state: SendUiState): ImmutableList<SendFundingOption> {
+        val enabled = availableFundingSources(state)
+        return buildList {
+            add(SendFundingOption(SendFundingSource.Savings, enabled = SendFundingSource.Savings in enabled))
+            add(SendFundingOption(SendFundingSource.Spending, enabled = SendFundingSource.Spending in enabled))
+            hwWalletRepo.wallets.value.forEach { wallet ->
+                val source = SendFundingSource.Hardware(wallet.id)
+                add(
+                    SendFundingOption(
+                        source = source,
+                        name = wallet.name,
+                        balance = wallet.fundingBalanceSats,
+                        enabled = source in enabled,
+                        transportType = wallet.transportType,
+                        isConnected = wallet.isConnected,
+                    )
+                )
+            }
+            add(SendFundingOption(SendFundingSource.Usdt, enabled = SendFundingSource.Usdt in enabled))
+        }.toImmutableList()
+    }
 
     private fun availableFundingSources(state: SendUiState): List<SendFundingSource> = buildList {
         if (state.isRetainedHardwarePayment) {
@@ -7490,6 +7523,7 @@ data class SendUiState(
     val isUnified: Boolean = false,
     val canSwitchWallet: Boolean = false,
     val canSwitchFundingSource: Boolean = false,
+    val fundingOptions: ImmutableList<SendFundingOption> = persistentListOf(),
     val isFundingSourceLoading: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: ImmutableList<String> = persistentListOf(),
@@ -7557,12 +7591,21 @@ enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
 
-private sealed interface SendFundingSource {
+sealed interface SendFundingSource {
     data object Spending : SendFundingSource
     data object Savings : SendFundingSource
     data object Usdt : SendFundingSource
     data class Hardware(val walletId: String) : SendFundingSource
 }
+
+data class SendFundingOption(
+    val source: SendFundingSource,
+    val name: String? = null,
+    val balance: ULong = 0uL,
+    val enabled: Boolean,
+    val transportType: TransportType? = null,
+    val isConnected: Boolean = false,
+)
 
 data class ContactPaymentContext(
     val publicKey: String,
@@ -7654,6 +7697,7 @@ sealed interface SendEvent {
     data object CancelInitialSubscriptionPayment : SendEvent
     data object SpeedAndFee : SendEvent
     data object PaymentMethodSwitch : SendEvent
+    data class PaymentMethodSelect(val source: SendFundingSource) : SendEvent
     data class ConfirmAmountWarning(val warning: SanityWarning) : SendEvent
     data object EstimateMaxRoutingFee : SendEvent
     data object DismissAmountWarning : SendEvent

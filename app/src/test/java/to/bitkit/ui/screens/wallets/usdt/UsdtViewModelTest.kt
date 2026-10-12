@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.UsdtException
 import com.synonym.bitkitcore.UsdtPaymentRequest
 import com.synonym.bitkitcore.UsdtQuote
 import com.synonym.bitkitcore.UsdtTransfer
+import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -24,6 +25,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.repositories.parseUsdtPaymentRequest
@@ -80,8 +82,8 @@ class UsdtViewModelTest : BaseUnitTest() {
             assertNull(request)
             assertEquals(R.string.usdt__error_address, viewModel.state.value.error)
             viewModel.validateRecipient("valid request", UsdtDestination.POLYGON) { request = it }
-            assertNull(request)
-            assertEquals(R.string.usdt__error_address, viewModel.state.value.error)
+            assertEquals(42161uL, request?.chainId)
+            assertNull(viewModel.state.value.error)
             viewModel.validateRecipient("valid request", UsdtDestination.ARBITRUM) { request = it }
             assertEquals(quote.recipient, request?.recipient)
             assertEquals(1_500_000uL, request?.amount)
@@ -89,6 +91,54 @@ class UsdtViewModelTest : BaseUnitTest() {
             verify(repo, never()).send(any(), anyOrNull(), any())
             assertNull(viewModel.state.value.error)
         } finally { parser.close() }
+    }
+
+    @Test
+    fun `maximum amount reuses its funded quote only until submission`() = test {
+        val viewModel = createViewModel()
+        val maximum = quote.copy(amount = 900_000u, expiresAt = nowTimestamp().epochSecond.toULong() + 3600u)
+        whenever(repo.quoteMaximum(quote.recipient, quote.destination)).thenReturn(Result.success(maximum))
+        Mockito.mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")).use { core ->
+            core.`when`<String> { usdtFormatAmount(maximum.amount) }.thenReturn("0.9")
+            var amount: String? = null
+
+            viewModel.quoteMaximum(quote.recipient, quote.destination) { amount = it }.join()
+
+            assertEquals("0.9", amount)
+            assertFalse(viewModel.state.value.busy)
+            assertFalse(viewModel.state.value.preparingMaximum)
+            assertNull(viewModel.state.value.quote)
+            viewModel.quote(quote.recipient, "0.9", quote.destination).join()
+            assertEquals(maximum, viewModel.state.value.quote)
+            verify(repo, never()).quote(any(), any(), any(), any())
+            verify(repo, never()).send(any(), anyOrNull(), any())
+
+            settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+            whenever(repo.send(eq(maximum), anyOrNull(), any())).thenReturn(Result.success(mock<UsdtTransfer>()))
+            viewModel.confirm().join()
+            verify(repo).send(eq(maximum), anyOrNull(), any())
+            viewModel.waitForTransfer()
+            viewModel.edit()
+            viewModel.quote(quote.recipient, "0.9", quote.destination).join()
+            verify(repo).quote(eq(quote.recipient), eq("0.9"), eq(quote.destination), any())
+        }
+    }
+
+    @Test
+    fun `maximum quote failure preserves the entered amount and permits retry`() = test {
+        val viewModel = createViewModel()
+        whenever(repo.quoteMaximum(quote.recipient, quote.destination))
+            .thenReturn(Result.failure(UsdtException.InsufficientBalance()))
+        var amount = "0.5"
+
+        viewModel.quoteMaximum(quote.recipient, quote.destination) { amount = it }.join()
+
+        assertEquals("0.5", amount)
+        assertEquals(R.string.usdt__error_balance, viewModel.state.value.error)
+        assertFalse(viewModel.state.value.busy)
+        assertFalse(viewModel.state.value.preparingMaximum)
+        assertNull(viewModel.state.value.quote)
+        verify(repo, never()).send(any(), anyOrNull(), any())
     }
 
     @Test

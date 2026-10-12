@@ -1,6 +1,6 @@
 # USDT configuration
 
-Normal builds use published bitkit-core `0.8.0-rc2`, including its matching native libraries and generated bindings.
+Normal builds use published bitkit-core `0.8.0-rc4`, including its matching native libraries and generated bindings.
 
 USDT uses Arbitrum One regardless of the Bitcoin network setting. Builds use the credential-free Bitkit gateway by default:
 
@@ -22,6 +22,10 @@ For a local emulator gateway, use loopback URLs and ADB reverse port forwarding.
 USDT follows the existing UI → ViewModel → repository → Rust ownership. The repository manages foreground refresh, receive/pending refresh and rate-limit backoff. Native payment authentication precedes signing. Transaction IDs and explorer links appear when a transaction hash is available; Arbiscan links are built by the app. Failed/replaced payment details do not claim recipient delivery. Wallet wipe closes core handles before deleting wallet-specific USDT files.
 
 Protocol and recovery behavior belong to bitkit-core's USDT module documentation; provider deployment belongs to the service documentation.
+
+USDT amounts can be entered with up to six decimal places. Overview and review amounts display cents; formatting does not change the exact transfer amount.
+
+MAX reserves the quoted USDT fee and reuses that funded quote for payment review. It requires the gateway to support Core's pinned USDT balance override during gas estimation. That override is not used for final authorization or transaction submission.
 
 History catch-up is deferred while the USDT send sheet is open. Balance and pending-payment recovery continue; a history scan already in progress is allowed to finish. Unknown deposit-provider statuses require attention instead of appearing as ordinary pending deposits. Cross-network payment details label the recipient amount as expected until delivery is confirmed.
 

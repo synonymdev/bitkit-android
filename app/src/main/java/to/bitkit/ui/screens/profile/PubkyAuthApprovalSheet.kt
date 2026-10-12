@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -58,7 +59,7 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.PubkyContactAvatar
+import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.Text13Up
@@ -718,6 +719,7 @@ private fun ProfileCard(profile: PubkyProfile) {
             .fillMaxWidth()
             .background(Colors.Gray6, RoundedCornerShape(16.dp))
             .padding(24.dp)
+            .testTag("PubkyAuthProfile")
     ) {
         if (profile.imageUrl != null) {
             PubkyImage(uri = profile.imageUrl, size = 48.dp)

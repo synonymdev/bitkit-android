@@ -259,6 +259,7 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     private fun incoming(id: String) = UsdtTransfer(
+        sender = null,
         id = id, txHash = id, userOperationHash = null, bridgeGuid = null, orchestra = null, recipient = "recipient",
         destination = UsdtDestination.ARBITRUM, amount = 1_000_000uL, receivedAmount = 1_000_000uL,
         fee = null, isIncoming = true, status = UsdtTransferStatus.CONFIRMED,

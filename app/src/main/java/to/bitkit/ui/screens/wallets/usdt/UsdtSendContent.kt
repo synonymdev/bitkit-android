@@ -1,5 +1,8 @@
 package to.bitkit.ui.screens.wallets.usdt
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
@@ -36,6 +40,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.UsdtBridgeProvider
@@ -45,6 +50,7 @@ import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
@@ -58,12 +64,13 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadActionButton
-import to.bitkit.ui.components.NumberPadAmountText
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PaymentAddressInput
 import to.bitkit.ui.components.PaymentRequestInvoiceNote
@@ -107,6 +114,7 @@ internal fun ColumnScope.UsdtPaymentContent(
     onConfirm: () -> Unit,
     onDone: () -> Unit,
     onDetails: () -> Unit = {},
+    onMaximum: (() -> Unit)? = null,
     hideBalance: Boolean = false,
     amountEditable: Boolean = true,
     isPaymentRequest: Boolean = false,
@@ -115,10 +123,18 @@ internal fun ColumnScope.UsdtPaymentContent(
     onDestinationChange: ((UsdtDestination) -> Unit)? = null,
     destinations: ImmutableList<UsdtDestination> = Env.usdtDestinations.toImmutableList(),
 ) {
-    val showSubmitted = state.submitted && !state.busy
     val quote = state.quote
     val status = wallet.transfers.firstOrNull { it.id == quote?.id }?.status
-    if (showSubmitted && quote != null && status == UsdtTransferStatus.CONFIRMED) {
+    val completed = state.submitted && !state.busy && status == UsdtTransferStatus.CONFIRMED
+    var showSuccess by rememberSaveable(quote?.id) { mutableStateOf(false) }
+    LaunchedEffect(completed) {
+        if (completed) {
+            delay(1_000)
+            showSuccess = true
+        }
+    }
+    val showSubmitted = state.submitted && !state.busy && (!completed || showSuccess)
+    if (showSuccess && completed && quote != null) {
         NewTransactionSheetView(
             details = NewTransactionSheetDetails(
                 type = NewTransactionSheetType.ONCHAIN,
@@ -166,6 +182,7 @@ internal fun ColumnScope.UsdtPaymentContent(
             paymentRequestNote,
             contact,
             onConfirm,
+            completed,
             onEditAmount = { onPageChange(UsdtPage.AMOUNT) },
         )
         page == UsdtPage.AMOUNT -> UsdtAmountContent(
@@ -175,8 +192,11 @@ internal fun ColumnScope.UsdtPaymentContent(
             state,
             onAmountChange,
             onReview,
+            onMaximum,
             hideBalance,
-            amountEditable
+            amountEditable,
+            onDestinationChange,
+            destinations
         )
         page == UsdtPage.MANUAL -> UsdtManualContent(
             recipient,
@@ -248,30 +268,36 @@ private fun UsdtNetwork(
     onChange: ((UsdtDestination) -> Unit)?,
     destinations: ImmutableList<UsdtDestination>
 ) {
-    SendCell(caption = stringResource(R.string.usdt__destination)) {
-        if (onChange == null || destinations.size == 1) {
-            BodySSB(destination.label, modifier = Modifier.height(28.dp).testTag("UsdtNetwork"))
-        } else {
-            var expanded by remember { mutableStateOf(false) }
-            Box {
-                NumberPadActionButton(
-                    destination.label,
-                    onClick = { expanded = true },
-                    color = Colors.Usdt,
-                    modifier = Modifier.testTag("UsdtNetwork")
-                )
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    containerColor = Colors.Gray6,
-                ) {
-                    destinations.forEach { network ->
-                        DropdownMenuItem(text = { BodySSB(network.label) }, onClick = {
-                            expanded = false
-                            onChange(network)
-                        })
-                    }
-                }
+    SendCell(caption = stringResource(R.string.usdt__network)) {
+        UsdtNetworkButton(destination, onChange, destinations)
+    }
+}
+
+@Composable
+private fun UsdtNetworkButton(
+    destination: UsdtDestination,
+    onChange: ((UsdtDestination) -> Unit)?,
+    destinations: ImmutableList<UsdtDestination>
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.height(28.dp).background(Colors.White06, CircleShape)
+                .border(1.dp, Colors.White10, CircleShape)
+                .clickable(enabled = onChange != null && destinations.size > 1) { expanded = true }
+                .padding(horizontal = 8.dp).testTag("UsdtNetwork")
+        ) {
+            Icon(painterResource(R.drawable.usdt_network), null, tint = Colors.Usdt, modifier = Modifier.size(16.dp))
+            CaptionB(destination.label, color = Colors.White64, maxLines = 1)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Colors.Gray6) {
+            destinations.forEach { network ->
+                DropdownMenuItem(text = { BodySSB(network.label) }, onClick = {
+                    expanded = false
+                    onChange?.invoke(network)
+                })
             }
         }
     }
@@ -373,21 +399,22 @@ private fun UsdtAmountContent(
     state: UsdtSendState,
     onAmountChange: (String) -> Unit,
     onReview: () -> Unit,
+    onMaximum: (() -> Unit)?,
     hideBalance: Boolean,
     amountEditable: Boolean,
+    onDestinationChange: ((UsdtDestination) -> Unit)?,
+    destinations: ImmutableList<UsdtDestination>,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        Caption13Up("USDT · " + destination.label, color = Colors.White64)
-        VerticalSpacer(8.dp)
-        NumberPadAmountText(value = amount.ifEmpty { "0" }, symbol = "$", modifier = Modifier.testTag("UsdtAmount"))
+        UsdtAmountHeader(amount.ifEmpty { "0" }, modifier = Modifier.testTag("UsdtAmount"))
         VerticalSpacer(32.dp)
         state.error?.let {
             BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
             VerticalSpacer(16.dp)
         }
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Column(modifier = Modifier.weight(1f)) {
-                Caption13Up(stringResource(R.string.usdt__balance), color = Colors.White64)
+                Caption13Up(stringResource(R.string.wallet__send_available), color = Colors.White64)
                 VerticalSpacer(8.dp)
                 BodySSB(
                     (
@@ -395,16 +422,33 @@ private fun UsdtAmountContent(
                             UiConstants.HIDE_BALANCE_SHORT
                         } else {
                             wallet.balance?.let {
-                                usdtFormatAmount(it)
+                                "$ " + usdtOverviewAmount(it)
                             } ?: "—"
                         }
-                        ) + " USDT"
+                        )
                 )
             }
             NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
+            if (onMaximum != null && amountEditable) {
+                NumberPadActionButton(
+                    text = stringResource(R.string.common__max),
+                    color = Colors.Usdt,
+                    onClick = onMaximum,
+                    enabled = !state.busy,
+                    isLoading = state.preparingMaximum,
+                    modifier = Modifier.testTag("UsdtMax")
+                )
+            }
+            if (onDestinationChange != null) {
+                UsdtNetworkButton(
+                    destination,
+                    onDestinationChange.takeUnless { state.busy },
+                    destinations,
+                )
+            }
         }
         VerticalSpacer(16.dp)
-        HorizontalDivider()
+        HorizontalDivider(color = Colors.White10)
         BoxWithConstraints(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth()) {
             NumberPad(
                 type = NumberPadType.DECIMAL,
@@ -420,8 +464,8 @@ private fun UsdtAmountContent(
         PrimaryButton(
             text = stringResource(R.string.common__continue),
             onClick = onReview,
-            enabled = amount.isNotEmpty(),
-            isLoading = state.busy,
+            enabled = amount.isNotEmpty() && !state.busy,
+            isLoading = state.busy && !state.preparingMaximum,
             modifier = Modifier.testTag("UsdtReview")
         )
     }
@@ -435,70 +479,71 @@ private fun UsdtConfirmation(
     paymentRequestNote: String?,
     contact: PubkyProfile?,
     onConfirm: () -> Unit,
+    completed: Boolean,
     onEditAmount: () -> Unit,
 ) {
     var showDetails by rememberSaveable(quote.id) { mutableStateOf(false) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val note = paymentRequestNote?.trim()?.takeIf { it.isNotEmpty() }
     Column(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            UsdtAmountHeader(
-                usdtFormatAmount(quote.amount),
-                onClick = { if (!state.busy) onEditAmount() }
-            )
-            VerticalSpacer(if (!isPaymentRequest) 44.dp else 24.dp)
-            if (showDetails) {
-                UsdtQuoteDetails(quote, contact)
-                note?.let {
-                    VerticalSpacer(16.dp)
-                    PaymentRequestInvoiceNote(it)
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            Column(
+                verticalArrangement = if (showDetails) Arrangement.Top else Arrangement.SpaceBetween,
+                modifier = Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight)
+            ) {
+                UsdtReviewHeader(quote, contact, note, isPaymentRequest, showDetails) {
+                    if (!state.busy && !completed) onEditAmount()
                 }
-            } else if (quote.destination == UsdtDestination.ARBITRUM) {
-                if (isPaymentRequest) {
-                    PaymentRequestSummary(profile = contact, note = note)
-                    VerticalSpacer(16.dp)
+                Column {
+                    if (!showDetails) {
+                        PaymentReviewIllustration(
+                            swipeProgress = { swipeProgress.floatValue },
+                            modifier = Modifier.height(256.dp)
+                        )
+                    }
+                    if (quote.destination != UsdtDestination.ARBITRUM) {
+                        VerticalSpacer(16.dp)
+                        UsdtBridgeCosts(quote)
+                    }
+                    state.error?.let {
+                        BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
+                    }
+                    PrimaryButton(
+                        text = stringResource(
+                            if (showDetails) R.string.common__hide_details else R.string.common__show_details
+                        ),
+                        size = ButtonSize.Small,
+                        onClick = { showDetails = !showDetails },
+                        fullWidth = false,
+                        color = Colors.White06,
+                        enableGradient = false,
+                        icon = {
+                            Icon(
+                                painterResource(
+                                    if (showDetails) R.drawable.ic_eye_slash else R.drawable.ic_speed_normal
+                                ),
+                                null,
+                                tint = Colors.Usdt,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier.align(
+                            Alignment.CenterHorizontally
+                        ).padding(vertical = 24.dp).testTag("UsdtReviewDetails")
+                    )
                 }
-                PaymentReviewIllustration(
-                    swipeProgress = { swipeProgress.floatValue },
-                    modifier = Modifier.heightIn(max = 220.dp)
-                )
-            }
-            VerticalSpacer(16.dp)
-            UsdtQuoteCosts(quote)
-            state.error?.let {
-                BodyS(
-                    stringResource(it),
-                    color = Colors.Brand,
-                    modifier = Modifier.testTag("UsdtError")
-                )
             }
         }
-        PrimaryButton(
-            text = stringResource(if (showDetails) R.string.common__hide_details else R.string.common__show_details),
-            size = ButtonSize.Small,
-            onClick = { showDetails = !showDetails },
-            fullWidth = false,
-            color = Colors.Gray65,
-            enableGradient = false,
-            icon = {
-                Icon(
-                    painterResource(if (showDetails) R.drawable.ic_eye_slash else R.drawable.ic_coins),
-                    null,
-                    tint = Colors.Usdt,
-                    modifier = Modifier.size(16.dp)
-                )
-            },
-            modifier = Modifier.align(
-                Alignment.CenterHorizontally
-            ).padding(vertical = 24.dp).testTag("UsdtReviewDetails")
-        )
+        if (showDetails) {
+            UsdtFeeNote(quote)
+        }
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = Colors.Usdt,
             onConfirm = onConfirm,
-            enabled = !state.busy,
-            loading = state.busy,
-            confirmed = state.busy || state.authenticationRequired,
+            enabled = !state.busy && !completed,
+            loading = state.busy && !completed,
+            confirmed = state.busy || state.authenticationRequired || completed,
             progress = swipeProgress,
             modifier = Modifier.fillMaxWidth().testTag("UsdtConfirm")
         )
@@ -506,38 +551,8 @@ private fun UsdtConfirmation(
 }
 
 @Composable
-private fun UsdtQuoteCosts(quote: UsdtQuote) {
-    if (quote.destination != UsdtDestination.ARBITRUM) {
-        SendCell(
-            caption = stringResource(
-                if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
-                    R.string.usdt__expected_amount
-                } else {
-                    R.string.usdt__recipient_gets
-                }
-            )
-        ) {
-            BodySSB(usdtFormatAmount(quote.receivedAmount) + " USDT")
-        }
-        VerticalSpacer(16.dp)
-        if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
-            SendCell(caption = stringResource(R.string.usdt__bridge_deducted_fee)) {
-                BodySSB(usdtFormatAmount(quote.amount - minOf(quote.amount, quote.receivedAmount)) + " USDT")
-            }
-            VerticalSpacer(16.dp)
-        }
-    }
-    SendCell(
-        caption = stringResource(R.string.usdt__maximum_fee)
-    ) { BodySSB(usdtFormatAmount(quote.maximumFee) + " USDT") }
-    VerticalSpacer(12.dp)
-    if (quote.destination != UsdtDestination.ARBITRUM) {
-        SendCell(
-            caption = stringResource(R.string.usdt__maximum_total)
-        ) { BodySSB(usdtFormatAmount(quote.amount + quote.maximumFee) + " USDT") }
-        VerticalSpacer(12.dp)
-    }
-    BodyS(
+private fun UsdtFeeNote(quote: UsdtQuote) {
+    Caption(
         stringResource(
             if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
                 R.string.usdt__bridge_estimate_note
@@ -545,35 +560,104 @@ private fun UsdtQuoteCosts(quote: UsdtQuote) {
                 R.string.usdt__fee_note
             }
         ),
-        color = Colors.White64
+        color = Colors.White64,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
     )
+}
+
+@Composable
+private fun UsdtReviewHeader(
+    quote: UsdtQuote,
+    contact: PubkyProfile?,
+    note: String?,
+    isPaymentRequest: Boolean,
+    showDetails: Boolean,
+    onEditAmount: () -> Unit,
+) {
+    Column {
+        UsdtAmountHeader(
+            usdtFormatAmount(quote.amount),
+            displayAmount = usdtOverviewAmount(quote.amount),
+            onClick = onEditAmount
+        )
+        VerticalSpacer(32.dp)
+        if (showDetails) {
+            UsdtQuoteDetails(quote, contact)
+            note?.let {
+                VerticalSpacer(16.dp)
+                PaymentRequestInvoiceNote(it)
+            }
+        } else if (isPaymentRequest) {
+            PaymentRequestSummary(profile = contact, note = note)
+            VerticalSpacer(16.dp)
+        }
+    }
+}
+
+@Composable
+private fun UsdtBridgeCosts(quote: UsdtQuote) {
+    SendCell(
+        caption = stringResource(
+            if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
+                R.string.usdt__expected_amount
+            } else {
+                R.string.usdt__recipient_gets
+            }
+        )
+    ) { BodySSB(usdtFormatAmount(quote.receivedAmount) + " USDT") }
+    VerticalSpacer(16.dp)
+    if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
+        SendCell(caption = stringResource(R.string.usdt__bridge_deducted_fee)) {
+            BodySSB(usdtFormatAmount(quote.amount - minOf(quote.amount, quote.receivedAmount)) + " USDT")
+        }
+        VerticalSpacer(16.dp)
+    }
+    SendCell(caption = stringResource(R.string.usdt__maximum_total)) {
+        BodySSB(usdtFormatAmount(quote.amount + quote.maximumFee) + " USDT")
+    }
 }
 
 @Composable
 private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        SendCell(caption = stringResource(R.string.wallet__send_from), modifier = Modifier.weight(1f)) {
+        SendCell(caption = stringResource(R.string.usdt__pay_from), modifier = Modifier.weight(1f)) {
             NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
         }
-        SendCell(
-            caption = stringResource(
-                if (contact == null) R.string.usdt__destination else R.string.wallet__payment_request_contact
-            ),
+        UsdtDetailCell(
+            stringResource(R.string.usdt__network),
+            quote.destination.label,
+            R.drawable.usdt_network,
             modifier = Modifier.weight(1f)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(28.dp)) {
-                if (contact != null) {
-                    PubkyContactAvatar(profile = contact, size = 20.dp)
-                    HorizontalSpacer(4.dp)
-                }
-                BodySSB(contact?.name ?: quote.destination.label, maxLines = 1)
-            }
-        }
+        )
     }
     VerticalSpacer(16.dp)
-    SendCell(
-        caption = stringResource(R.string.wallet__send_to)
-    ) { SelectionContainer { BodySSB(quote.recipient) } }
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        UsdtDetailCell(
+            stringResource(R.string.wallet__activity_payment),
+            usdtOverviewAmount(quote.amount),
+            R.drawable.ic_user,
+            modifier = Modifier.weight(1f)
+        )
+        UsdtDetailCell(
+            stringResource(R.string.wallet__activity_fee),
+            usdtOverviewAmount(quote.maximumFee),
+            R.drawable.ic_speed_normal,
+            modifier = Modifier.weight(1f)
+        )
+    }
+    VerticalSpacer(16.dp)
+    if (contact != null) {
+        SendCell(caption = stringResource(R.string.wallet__payment_request_contact)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PubkyContactAvatar(profile = contact, size = 20.dp)
+                HorizontalSpacer(4.dp)
+                BodySSB(contact.name, maxLines = 1)
+            }
+        }
+        VerticalSpacer(16.dp)
+    }
+    SendCell(caption = stringResource(R.string.usdt__address)) { SelectionContainer { BodySSB(quote.recipient) } }
     quote.bridgeProvider?.let { provider ->
         VerticalSpacer(16.dp)
         SendCell(caption = stringResource(R.string.usdt__bridge_provider)) {

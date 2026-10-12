@@ -82,7 +82,7 @@ fun PaykitUsdtReview(
     }
     val transfer = wallet.transfers.firstOrNull { it.id == state.quote?.id }
     if (details && transfer != null) {
-        UsdtActivityDetail(transfer, settings.hideBalance) { details = false }
+        UsdtActivityDetail(transfer, settings.hideBalance, wallet.address) { details = false }
     } else {
         Column(
             Modifier.sheetHeight().gradientBackground().padding(

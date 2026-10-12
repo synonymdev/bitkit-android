@@ -37,6 +37,7 @@ import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
+@Suppress("TooManyFunctions")
 @Singleton
 class UsdtRepo @Inject constructor(
     private val service: UsdtService,
@@ -174,6 +175,12 @@ class UsdtRepo @Inject constructor(
                     destination
                 )
             }
+        }
+    }
+
+    suspend fun quoteMaximum(recipient: String, destination: UsdtDestination) = withContext(ioDispatcher) {
+        mutex.withLock {
+            runSuspendCatching { service.wallet().quoteMaxTransfer(recipient, destination) }
         }
     }
 

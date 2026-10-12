@@ -15,6 +15,7 @@ class UsdtSupportDetailsTest {
     @Test
     fun `transfer support includes provider references and transactions`() {
         val transfer = UsdtTransfer(
+            sender = null,
             id = "local-id",
             txHash = "source-tx",
             userOperationHash = null,

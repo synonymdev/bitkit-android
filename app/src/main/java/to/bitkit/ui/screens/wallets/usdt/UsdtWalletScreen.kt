@@ -142,8 +142,8 @@ fun UsdtWalletScreen(
     var page by remember { mutableStateOf(if (initialRecipient.isEmpty()) UsdtPage.WALLET else UsdtPage.AMOUNT) }
     val sending = page in listOf(UsdtPage.RECIPIENT, UsdtPage.MANUAL, UsdtPage.AMOUNT)
     DisposableEffect(viewModel, sending) {
-        viewModel.isSendPresented = sending
-        onDispose { viewModel.isSendPresented = false }
+        if (sending) viewModel.isSendPresented = true
+        onDispose { if (sending) viewModel.isSendPresented = false }
     }
     var selectedTransferId by rememberSaveable(initialTransferId) { mutableStateOf(initialTransferId) }
     var recipient by remember { mutableStateOf(initialRecipient) }
@@ -191,7 +191,7 @@ fun UsdtWalletScreen(
     }
     val selectedTransfer = wallet.transfers.firstOrNull { it.id == selectedTransferId }
     if (selectedTransfer != null) {
-        UsdtActivityDetail(selectedTransfer, settings.hideBalance) {
+        UsdtActivityDetail(selectedTransfer, settings.hideBalance, wallet.address) {
             if (initialTransferId == null) selectedTransferId = null else onBack()
         }
     } else {
@@ -253,8 +253,9 @@ fun UsdtWalletScreen(
                         onDestinationChange = {
                             if (destination != it) {
                                 destination = it
-                                recipient = ""
-                                amount = ""
+                                if (recipient.isNotEmpty() && !viewModel.isValidRecipient(recipient, it)) {
+                                    page = UsdtPage.MANUAL
+                                }
                                 viewModel.edit()
                             }
                         },
@@ -265,8 +266,9 @@ fun UsdtWalletScreen(
                         onAmountChange = { amount = it },
                         onRecipientContinue = { value ->
                             viewModel.validateRecipient(value, destination) { request ->
+                                if (request.chainId != null) destination = UsdtDestination.ARBITRUM
                                 recipient = request.recipient
-                                amount = request.amount?.let { usdtFormatAmount(it) }.orEmpty()
+                                amount = request.amount?.let { usdtFormatAmount(it) } ?: amount
                                 page = UsdtPage.AMOUNT
                             }
                         },
@@ -277,6 +279,7 @@ fun UsdtWalletScreen(
                             }
                         },
                         onBack = back, onReview = { viewModel.quote(recipient, amount, destination) },
+                        onMaximum = { viewModel.quoteMaximum(recipient, destination) { amount = it } },
                         onConfirm = { viewModel.confirm() }, onDone = dismiss,
                         hideBalance = settings.hideBalance,
                         onDetails = {
