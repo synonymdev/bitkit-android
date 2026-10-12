@@ -4485,6 +4485,10 @@ class AppViewModel @Inject constructor(
                 _sendUiState.update { it.copy(initialSubscriptionPaymentNeedsConfirmation = true) }
                 return@launch
             }
+            val current = _sendUiState.value
+            if (current.payMethod == SendMethod.ONCHAIN && current.selectedUtxos == null) {
+                _sendUiState.update { it.copy(initialSubscriptionPaymentNeedsConfirmation = true) }
+            }
             onSwipeToPay()
         }
     }

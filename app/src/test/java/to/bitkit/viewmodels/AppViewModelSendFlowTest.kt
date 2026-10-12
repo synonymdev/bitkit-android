@@ -9474,6 +9474,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initial onchain subscription payment requires confirmation after manual coin selection`() = test {
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                isAmountInputValid = true,
+                onchainFeeUi = OnchainFeeUi(sats = 141),
+                isInitialSubscriptionPayment = true,
+                initialSubscriptionPaymentAutoStartPending = true,
+            )
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
+            assertEquals(SendEffect.NavigateToCoinSelection, awaitItem())
+        }
+
+        assertTrue(sut.sendUiState.value.initialSubscriptionPaymentNeedsConfirmation)
+        assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
     fun `initial hardware subscription payment requires confirmation`() = test {
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
         setSendState(
