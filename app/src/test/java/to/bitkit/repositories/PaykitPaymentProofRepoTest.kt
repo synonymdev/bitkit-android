@@ -2011,6 +2011,48 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.single().onchainAcceptanceVerified)
         assertEquals(walletId, storedProofs.single().onchainWalletId)
         assertEquals(request.id, repo.onchainPaymentResolutions.value.single().requestId)
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats))
+            .thenReturn(Result.success(false))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+            .thenReturn(paymentRequestRecord())
+        repo.reconcile()
+        assertTrue(storedProofs.isEmpty())
+        verify(hwWalletRepo).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats)
+        verify(paykitSdkService).submitPaymentProof(
+            any(),
+            any(),
+            any(),
+            eq(MethodId.P2wpkh.rawValue),
+            eq("""{"data":"$txid","type":"bitcoin-onchain-txid"}"""),
+            isNull(),
+        )
+        verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
+    }
+
+    @Test
+    fun `restoring an observed hardware proof requires activity reconstruction again`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val txid = "cd".repeat(32)
+        val walletId = "original-hardware-wallet"
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats))
+            .thenReturn(Result.success(true))
+        assertTrue(repo.completeHardwareOnchainPayment(request.id, walletId, txid, LOCAL_IDENTITY))
+        val completed = storedProofs.single()
+        repo.restoreBackup(repo.backupSnapshot())
+        assertEquals(completed, storedProofs.single())
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats))
+            .thenReturn(Result.success(false))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+
+        repo.reconcile()
+
+        assertEquals(completed, storedProofs.single())
+        verify(hwWalletRepo, times(2)).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 

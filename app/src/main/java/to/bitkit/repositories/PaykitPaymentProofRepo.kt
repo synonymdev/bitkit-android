@@ -123,6 +123,9 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     private val operationMutex = Mutex()
 
+    // Process-local activity handoffs only; restored proofs must reconstruct their activity.
+    private val observedHardwareProofs = mutableSetOf<PendingPaykitPaymentProof>()
+
     fun paymentRequestStateChanges(identity: Flow<String?>): Flow<Unit> =
         combine(identity, store.backupStateVersion) { publicKey, _ ->
             runSuspendCatching {
@@ -159,7 +162,10 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     suspend fun restoreBackup(proofs: List<PaykitPaymentStateBackup.Proof>) = withContext(ioDispatcher) {
         val restored = proofs.map { it.restored() }
-        operationMutex.withLock { persist(restored) }
+        operationMutex.withLock {
+            observedHardwareProofs.clear()
+            persist(restored)
+        }
     }
     private val _onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     val onchainPaymentResolutions = _onchainPaymentResolutions.asStateFlow()
@@ -917,7 +923,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             runSuspendCatching { finishAlreadyQueuedOnchainProof(attempt) }
                 .onFailure { Logger.warn("Failed to check queued Shop proof", it, context = TAG) }
         }
-        if (!store.hasPendingProofs()) return@withContext
+        if (!hasPendingProofs()) return@withContext
 
         // Snapshot immutable proofs, finish their exact accepted activity without the proof lock,
         // then revalidate the same record under the lock before marking or delivering its proof.
@@ -1003,7 +1009,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 if (!proof.paymentStarted || !proof.proofData.isHex(HASH_BYTE_COUNT) ||
                     !proof.paymentIdentifier.equals(proof.proofData, ignoreCase = true)
                 ) return false
-                if (proof.onchainWalletId != WalletScope.default) return reconcileHardwareOnchainProof(proof)
+                if (proof.onchainWalletId != WalletScope.default) return reconcileCompletedHardwareProof(proof)
                 if (proof.onchainAcceptanceVerified != true) {
                     if (!attempt.matchesPositiveShopProof(proof)) return false
                     val proofs = loadProofs().toMutableList()
@@ -1080,6 +1086,9 @@ class PaykitPaymentProofRepo @Inject constructor(
         return retained
     }
 
+    private suspend fun reconcileCompletedHardwareProof(proof: PendingPaykitPaymentProof): Boolean =
+        if (proof in observedHardwareProofs) submitReady(proof) else reconcileHardwareOnchainProof(proof)
+
     private suspend fun reconcileHardwareOnchainProof(
         proof: PendingPaykitPaymentProof,
         awaitDelivery: Boolean = true,
@@ -1101,7 +1110,10 @@ class PaykitPaymentProofRepo @Inject constructor(
         val completed = proof.copy(proofData = txid.lowercase(), onchainAcceptanceVerified = true)
         proofs[index] = completed
         val retained = persistAndSubmit(listOf(completed), proofs, awaitDelivery)
-        if (retained) publishOnchainResolution(completed, txid)
+        if (retained) {
+            observedHardwareProofs += completed
+            publishOnchainResolution(completed, txid)
+        }
         // Hardware completion never acknowledges an unrelated node-wallet guard.
         return retained
     }
@@ -1319,10 +1331,17 @@ class PaykitPaymentProofRepo @Inject constructor(
         )
     }
 
-    private fun loadProofs(): List<PendingPaykitPaymentProof> = store.load()
+    private suspend fun hasPendingProofs(): Boolean = operationMutex.withLock {
+        store.hasPendingProofs().also { if (!it) observedHardwareProofs.clear() }
+    }
+
+    private fun loadProofs(): List<PendingPaykitPaymentProof> = store.load().also {
+        observedHardwareProofs.retainAll(it.toSet())
+    }
 
     private suspend fun persist(proofs: List<PendingPaykitPaymentProof>) {
         store.save(proofs)
+        observedHardwareProofs.retainAll(proofs.toSet())
     }
 }
 
