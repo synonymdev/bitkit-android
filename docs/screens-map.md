@@ -225,8 +225,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| UsdtDepositReceiveScreen.kt | `todo` |
-| UsdtWalletScreen.kt | `todo` |
+| UsdtDepositReceiveScreen.kt | Receive USDT › HW QR / Recipient / Specify Amount (populated) / Fee To Add Liquidity |
+| UsdtWalletScreen.kt | Savings, Spending, Hardware, USDT Balances › Wallet USDT (funds & activity) / Wallet USDT (empty) |
 
 ## ui/screens/wallets/withdraw
 
@@ -358,4 +358,4 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 [Figma](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49861-374947):
 Receive Dollars, network selection, amount entry, estimated fees, QR and address details share the existing Receive sheet.
-The BTC/USD input toggle preserves the USDT request amount. See `journeys/usdt-receive-amount-and-units.xml`.
+Amount entry stays in dollars with a BTC equivalent; QR and shared payment amounts preserve USDT precision. See `journeys/usdt-receive-amount-and-units.xml`.

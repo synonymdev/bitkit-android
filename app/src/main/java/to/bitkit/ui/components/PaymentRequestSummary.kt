@@ -30,6 +30,7 @@ internal fun PaymentRequestSummary(
     profile: PubkyProfile?,
     note: String?,
     modifier: Modifier = Modifier,
+    accentColor: Color = Colors.White,
 ) {
     if (profile == null) return
     val noteColor = if (note != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
@@ -45,6 +46,7 @@ internal fun PaymentRequestSummary(
             PaymentRequestSummaryValue(
                 text = profile.name,
                 icon = R.drawable.ic_user,
+                iconColor = accentColor,
                 testTag = "PaymentRequestFrom",
             )
         }
@@ -56,6 +58,7 @@ internal fun PaymentRequestSummary(
                 text = note ?: stringResource(R.string.wallet__payment_request_not_specified),
                 textColor = noteColor,
                 icon = R.drawable.ic_note,
+                iconColor = accentColor,
                 testTag = "PaymentRequestFor",
             )
         }
@@ -66,6 +69,7 @@ internal fun PaymentRequestSummary(
 private fun PaymentRequestSummaryValue(
     text: String,
     @DrawableRes icon: Int,
+    iconColor: Color,
     testTag: String,
     modifier: Modifier = Modifier,
     textColor: Color = MaterialTheme.colorScheme.primary,
@@ -78,7 +82,7 @@ private fun PaymentRequestSummaryValue(
         Icon(
             painter = painterResource(icon),
             contentDescription = null,
-            tint = Colors.White,
+            tint = iconColor,
             modifier = Modifier.size(16.dp)
         )
         BodySSB(

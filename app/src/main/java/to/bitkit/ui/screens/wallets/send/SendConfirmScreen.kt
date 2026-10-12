@@ -436,6 +436,7 @@ private fun ContentRunning(
                         PaymentRequestSummary(
                             profile = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
                             note = if (isPreparing) preparingRequest.note else uiState.oneOffPaymentRequestNote,
+                            accentColor = accentColor,
                         )
                         VerticalSpacer(16.dp)
                     }

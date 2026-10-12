@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -85,16 +86,16 @@ fun PaykitUsdtReview(
         UsdtActivityDetail(transfer, settings.hideBalance, wallet.address) { details = false }
     } else {
         Column(
-            Modifier.sheetHeight().gradientBackground().padding(
-                horizontal = if (state.submitted && transfer?.status == UsdtTransferStatus.CONFIRMED) 0.dp else 16.dp
-            )
+            Modifier.sheetHeight().gradientBackground()
         ) {
             if (state.authenticationRequired) {
-                UsdtAuthentication(
-                    settings.isBiometricEnabled,
-                    viewModel::cancelAuthentication,
-                    viewModel::authenticationVerified
-                )
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    UsdtAuthentication(
+                        settings.isBiometricEnabled,
+                        viewModel::cancelAuthentication,
+                        viewModel::authenticationVerified
+                    )
+                }
             } else {
                 UsdtPaymentContent(
                     wallet, state, UsdtPage.AMOUNT,

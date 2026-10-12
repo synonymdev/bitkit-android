@@ -1286,14 +1286,13 @@
     <string name="usdt__expected_amount">Expected amount</string>
     <string name="usdt__failed">Failed</string>
     <string name="usdt__fee_note">All fees are paid in USDT. Final fee may be lower.</string>
+    <string name="usdt__from_address">From address</string>
     <string name="usdt__history_sync">Older activity is still syncing. Your balance is up to date when the connection is available.</string>
     <string name="usdt__maximum_fee">Maximum fee</string>
     <string name="usdt__maximum_total">Maximum total debit</string>
-    <string name="usdt__pay_from">Pay from</string>
     <string name="usdt__network">Network</string>
-    <string name="usdt__sender_network">Sender network</string>
-    <string name="usdt__sent_title">Sent USDT</string>
     <string name="usdt__network_warning">Select the network used by the recipient. Sending to an address on the wrong network can lose funds.</string>
+    <string name="usdt__pay_from">Pay from</string>
     <string name="usdt__payment_received">Received USDT</string>
     <string name="usdt__payment_sent">USDT Sent</string>
     <string name="usdt__pending">Pending</string>
@@ -1314,9 +1313,13 @@
     <string name="usdt__send">Send</string>
     <string name="usdt__send_failed_description">Your payment was not completed. Check Activity for details.</string>
     <string name="usdt__send_title">Send USDT</string>
+    <string name="usdt__sender_network">Sender network</string>
     <string name="usdt__sent">Sent</string>
+    <string name="usdt__sent_title">Sent USDT</string>
     <string name="usdt__submitted">Payment submitted</string>
     <string name="usdt__submitted_description">Your payment is being processed. You can track its status in Activity.</string>
+    <string name="usdt__to_address">To address</string>
+    <string name="usdt__to_network">To network {network}</string>
     <string name="usdt__track_bridge">Track cross-network delivery</string>
     <string name="wallet__activity">Activity</string>
     <string name="wallet__activity_address">Address</string>
@@ -1729,7 +1732,4 @@
     <string name="widgets__widget__size_small">Small</string>
     <string name="widgets__widget__size_wide">Wide</string>
     <string name="widgets__widgets">Widgets</string>
-    <string name="usdt__to_network">To network {network}</string>
-    <string name="usdt__from_address">From address</string>
-    <string name="usdt__to_address">To address</string>
 </resources>

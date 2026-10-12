@@ -181,8 +181,6 @@ fun UsdtWalletScreen(
             }
         }
     }
-    val submittedStatus = wallet.transfers.firstOrNull { it.id == state.quote?.id }?.status
-    val paymentSent = state.submitted && !state.busy && submittedStatus == UsdtTransferStatus.CONFIRMED
     UsdtRefreshEffect(
         viewModel,
         pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING },
@@ -236,15 +234,16 @@ fun UsdtWalletScreen(
             Column(
                 modifier = Modifier.sheetHeight(isModal = true).gradientBackground()
                     .navigationBarsPadding().imePadding()
-                    .padding(horizontal = if (paymentSent) 0.dp else 16.dp)
                     .padding(bottom = 16.dp)
             ) {
                 when {
-                    state.authenticationRequired -> UsdtAuthentication(
-                        useBiometrics = settings.isBiometricEnabled,
-                        onCancel = viewModel::cancelAuthentication,
-                        onVerified = viewModel::authenticationVerified,
-                    )
+                    state.authenticationRequired -> Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        UsdtAuthentication(
+                            useBiometrics = settings.isBiometricEnabled,
+                            onCancel = viewModel::cancelAuthentication,
+                            onVerified = viewModel::authenticationVerified,
+                        )
+                    }
 
                     else -> UsdtPaymentContent(
                         wallet = wallet, state = state, page = page, recipient = recipient, amount = amount,

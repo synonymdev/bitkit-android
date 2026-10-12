@@ -62,6 +62,7 @@ import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.ActivityRowSurface
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
@@ -340,21 +341,19 @@ private fun ColumnScope.Content(
             onCreate
         )
         ReceivePage.FEES -> state.address?.let { address ->
-            UsdtAmountHeader(usdtFormatAmount(address.amount))
+            UsdtAmountHeader(usdtFormatAmount(address.amount), displayAmount = usdtOverviewAmount(address.amount))
             VerticalSpacer(24.dp)
             BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64)
             VerticalSpacer(24.dp)
             EstimateRow(
                 stringResource(R.string.usdt__receive_fee),
                 if (address.amount >= address.estimatedReceived) {
-                    usdtFormatAmount(
-                        address.amount - address.estimatedReceived
-                    )
+                    usdtOverviewAmount(address.amount - address.estimatedReceived)
                 } else {
                     "—"
                 }
             )
-            EstimateRow(stringResource(R.string.usdt__receive_estimate), usdtFormatAmount(address.estimatedReceived))
+            EstimateRow(stringResource(R.string.usdt__receive_estimate), usdtOverviewAmount(address.estimatedReceived))
             FillHeight()
             PrimaryButton(stringResource(R.string.common__continue), onClick = {
                 onPage(ReceivePage.ADDRESS)
@@ -472,7 +471,7 @@ private fun NetworkRow(title: String, selected: Boolean, onClick: () -> Unit, is
             RoundedCornerShape(16.dp)
         ).clickableAlpha(onClick = onClick).padding(16.dp).testTag("UsdtNetwork-$title")
     ) {
-        Image(painterResource(R.drawable.tether), null, modifier = Modifier.size(40.dp))
+        Image(painterResource(R.drawable.tether_circle), null, modifier = Modifier.size(40.dp))
         BodyMSB(title)
         if (isDefault) BodyS(stringResource(R.string.common__default), color = Colors.White64)
         FillWidth()
@@ -513,6 +512,7 @@ private fun DepositDetail(
     if (deposit.asset == "USDT") {
         UsdtAmountHeader(
             deposit.amount?.let { usdtFormatAmount(it) } ?: "—",
+            displayAmount = deposit.amount?.let { usdtOverviewAmount(it) },
             hideBalance = hideBalance
         )
     } else {
@@ -582,9 +582,7 @@ private fun ULong?.usdtText(hidden: Boolean) = (
     if (hidden) {
         "•••••"
     } else {
-        this?.let {
-            usdtFormatAmount(it)
-        } ?: "—"
+        this?.let { usdtOverviewAmount(it) } ?: "—"
     }
     ) + " USDT"
 internal fun String.usdCents(locale: Locale = Locale.getDefault()): String = toULongOrNull()?.let {

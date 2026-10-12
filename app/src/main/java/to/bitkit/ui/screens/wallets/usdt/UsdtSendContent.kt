@@ -95,10 +95,11 @@ import to.bitkit.ui.sheets.NewTransactionSheetView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
-internal fun ColumnScope.UsdtPaymentContent(
+internal fun UsdtPaymentContent(
     wallet: UsdtWalletState,
     state: UsdtSendState,
     page: UsdtPage,
@@ -129,7 +130,7 @@ internal fun ColumnScope.UsdtPaymentContent(
     var showSuccess by rememberSaveable(quote?.id) { mutableStateOf(false) }
     LaunchedEffect(completed) {
         if (completed) {
-            delay(1_000)
+            delay(1.seconds)
             showSuccess = true
         }
     }
@@ -162,59 +163,61 @@ internal fun ColumnScope.UsdtPaymentContent(
         page == UsdtPage.AMOUNT -> R.string.usdt__amount
         else -> R.string.usdt__send_title
     }
-    SheetTopBar(stringResource(title), onBack = onBack.takeUnless { showSubmitted || state.busy }, action = {
-        if (contact != null && !showSubmitted) { PubkyContactAvatar(profile = contact, size = 32.dp) }
-    })
-    VerticalSpacer(16.dp)
-    when {
-        showSubmitted -> UsdtSubmittedContent(
-            quote,
-            failed,
-            bridgeNeedsAttention,
-            status == UsdtTransferStatus.BRIDGE_REFUNDED,
-            onDetails,
-            onDone
-        )
-        quote != null -> UsdtConfirmation(
-            quote,
-            state,
-            isPaymentRequest,
-            paymentRequestNote,
-            contact,
-            onConfirm,
-            completed,
-            onEditAmount = { onPageChange(UsdtPage.AMOUNT) },
-        )
-        page == UsdtPage.AMOUNT -> UsdtAmountContent(
-            amount,
-            destination,
-            wallet,
-            state,
-            onAmountChange,
-            onReview,
-            onMaximum,
-            hideBalance,
-            amountEditable,
-            onDestinationChange,
-            destinations
-        )
-        page == UsdtPage.MANUAL -> UsdtManualContent(
-            recipient,
-            destination,
-            onRecipientChange,
-            onRecipientContinue,
-            state.error,
-            onDestinationChange,
-            destinations
-        )
-        else -> UsdtRecipientContent(
-            destination,
-            onRecipientContinue,
-            onPageChange,
-            state.error,
-            onDestinationChange,
-            destinations
-        )
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        SheetTopBar(stringResource(title), onBack = onBack.takeUnless { showSubmitted || state.busy }, action = {
+            if (contact != null && !showSubmitted) { PubkyContactAvatar(profile = contact, size = 32.dp) }
+        })
+        VerticalSpacer(16.dp)
+        when {
+            showSubmitted -> UsdtSubmittedContent(
+                quote,
+                failed,
+                bridgeNeedsAttention,
+                status == UsdtTransferStatus.BRIDGE_REFUNDED,
+                onDetails,
+                onDone
+            )
+            quote != null -> UsdtConfirmation(
+                quote,
+                state,
+                isPaymentRequest,
+                paymentRequestNote,
+                contact,
+                onConfirm,
+                completed,
+                onEditAmount = { onPageChange(UsdtPage.AMOUNT) },
+            )
+            page == UsdtPage.AMOUNT -> UsdtAmountContent(
+                amount,
+                destination,
+                wallet,
+                state,
+                onAmountChange,
+                onReview,
+                onMaximum,
+                hideBalance,
+                amountEditable,
+                onDestinationChange,
+                destinations
+            )
+            page == UsdtPage.MANUAL -> UsdtManualContent(
+                recipient,
+                destination,
+                onRecipientChange,
+                onRecipientContinue,
+                state.error,
+                onDestinationChange,
+                destinations
+            )
+            else -> UsdtRecipientContent(
+                destination,
+                onRecipientContinue,
+                onPageChange,
+                state.error,
+                onDestinationChange,
+                destinations
+            )
+        }
     }
 }
 
@@ -589,7 +592,7 @@ private fun UsdtReviewHeader(
                 PaymentRequestInvoiceNote(it)
             }
         } else if (isPaymentRequest) {
-            PaymentRequestSummary(profile = contact, note = note)
+            PaymentRequestSummary(profile = contact, note = note, accentColor = Colors.Usdt)
             VerticalSpacer(16.dp)
         }
     }
@@ -605,16 +608,16 @@ private fun UsdtBridgeCosts(quote: UsdtQuote) {
                 R.string.usdt__recipient_gets
             }
         )
-    ) { BodySSB(usdtFormatAmount(quote.receivedAmount) + " USDT") }
+    ) { BodySSB(usdtOverviewAmount(quote.receivedAmount) + " USDT") }
     VerticalSpacer(16.dp)
     if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
         SendCell(caption = stringResource(R.string.usdt__bridge_deducted_fee)) {
-            BodySSB(usdtFormatAmount(quote.amount - minOf(quote.amount, quote.receivedAmount)) + " USDT")
+            BodySSB(usdtOverviewAmount(quote.amount - minOf(quote.amount, quote.receivedAmount)) + " USDT")
         }
         VerticalSpacer(16.dp)
     }
     SendCell(caption = stringResource(R.string.usdt__maximum_total)) {
-        BodySSB(usdtFormatAmount(quote.amount + quote.maximumFee) + " USDT")
+        BodySSB(usdtOverviewAmount(quote.amount + quote.maximumFee) + " USDT")
     }
 }
 
@@ -671,7 +674,7 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
 private fun Preview2() {
     AppThemeSurface {
         BottomSheetPreview {
-            Column(modifier = Modifier.sheetHeight().gradientBackground().padding(horizontal = 16.dp)) {
+            Column(modifier = Modifier.sheetHeight().gradientBackground()) {
                 UsdtPaymentContent(
                     UsdtWalletState(), UsdtSendState(), UsdtPage.AMOUNT, "", "125", UsdtDestination.ARBITRUM,
                     {}, {}, {}, {}, {}, {}, {}, {}

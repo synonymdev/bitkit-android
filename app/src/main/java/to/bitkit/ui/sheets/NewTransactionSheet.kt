@@ -176,6 +176,11 @@ fun NewTransactionSheetView(
                     amount = usdtFormatAmount(details.usdtAmount),
                     displayAmount = usdtOverviewAmount(details.usdtAmount),
                     hideBalance = hideBalance,
+                    onClick = {
+                        val hasDetails = details.activityId != null || details.paymentHashOrTxId != null ||
+                            details.usdtTransferId != null
+                        if (!details.isLoadingDetails && hasDetails) onDetailClick()
+                    },
                     modifier = Modifier.testTag("ReceivedTransaction")
                 )
             } else {

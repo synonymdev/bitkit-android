@@ -18,7 +18,12 @@ fun PaykitAmountDisplay(amount: PaykitAmount, modifier: Modifier = Modifier, pre
             modifier = modifier
         )
     } else {
-        NumberPadAmountText(value = prefix + amount.value, symbol = "$", modifier = modifier)
+        val displayAmount = if (amount.asset == PaykitAsset.USDT) usdtOverviewAmount(amount.atomic) else amount.value
+        NumberPadAmountText(
+            value = prefix + displayAmount,
+            symbol = "$",
+            modifier = modifier
+        )
     }
 }
 
@@ -37,8 +42,9 @@ fun PaykitAmountCell(
             fiatReplacement = status
         )
     } else {
+        val displayAmount = if (amount.asset == PaykitAsset.USDT) usdtOverviewAmount(amount.atomic) else amount.value
         Column(horizontalAlignment = Alignment.End) {
-            BodyMSB(text = prefix + "$" + amount.value)
+            BodyMSB(text = prefix + "$" + displayAmount)
             status?.let { BodyS(text = it, color = Colors.White64) }
         }
     }
