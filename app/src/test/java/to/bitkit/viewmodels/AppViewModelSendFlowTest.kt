@@ -546,6 +546,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2u))
         whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever { lightningRepo.estimateRoutingFees(any()) }.thenReturn(Result.failure(Exception("No route")))
+        whenever { lightningRepo.estimateRoutingFeesForAmount(any(), any()) }
+            .thenReturn(Result.failure(Exception("No route")))
         whenever(toastManager.currentToast).thenReturn(toastState)
     }
 
@@ -5285,14 +5288,99 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fixed lightning invoice has valid amount`() = test {
+    fun `fixed lightning invoice opens confirmation before its routing fee returns`() = test {
         val bolt11 = "lnbcrt1fixedamount"
+        val estimateStarted = CompletableDeferred<Unit>()
+        val feeEstimate = CompletableDeferred<Result<ULong>>()
         stubLightningScan(bolt11 = bolt11, amountSats = 1_000uL)
+        whenever(lightningRepo.estimateRoutingFees(bolt11)).doSuspendableAnswer {
+            estimateStarted.complete(Unit)
+            feeEstimate.await()
+        }
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        estimateStarted.await()
+        advanceUntilIdle()
+        val pendingSheet = sut.currentSheet.value
+        val pendingState = sut.sendUiState.value
+        feeEstimate.complete(Result.success(2uL))
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), pendingSheet)
+        assertTrue(pendingState.isAmountInputValid)
+        assertEquals(1_000uL, pendingState.amount)
+        assertNull(pendingState.lightningFeeSats)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(2L, sut.sendUiState.value.lightningFeeSats)
+    }
+
+    @Test
+    fun `fixed lightning invoice remains reviewable when routing fee estimation fails`() = test {
+        val bolt11 = "lnbcrt1unavailablefee"
+        stubLightningScan(bolt11 = bolt11, amountSats = 1_000uL)
+        sut.setIsAuthenticated(true)
 
         sut.onScanResult(bolt11)
         advanceUntilIdle()
 
-        assertTrue(sut.sendUiState.value.isAmountInputValid)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(1_000uL, sut.sendUiState.value.amount)
+        assertNull(sut.sendUiState.value.lightningFeeSats)
+    }
+
+    @Test
+    fun `new scan replaces an invoice with pending routing fee estimation`() = test {
+        val firstInvoice = "lnbcrt1pendingfee"
+        val latestInvoice = "lnbcrt1latestfee"
+        val estimateStarted = CompletableDeferred<Unit>()
+        stubLightningScan(bolt11 = firstInvoice, amountSats = 1_000uL)
+        stubLightningScan(bolt11 = latestInvoice, amountSats = 2_000uL)
+        whenever(lightningRepo.estimateRoutingFees(firstInvoice)).doSuspendableAnswer {
+            estimateStarted.complete(Unit)
+            awaitCancellation()
+        }
+        whenever(lightningRepo.estimateRoutingFees(latestInvoice)).thenReturn(Result.success(3uL))
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(firstInvoice)
+        estimateStarted.await()
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        sut.onScanResult(latestInvoice)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(latestInvoice, sut.sendUiState.value.decodedInvoice?.bolt11)
+        assertEquals(2_000uL, sut.sendUiState.value.amount)
+        assertEquals(3L, sut.sendUiState.value.lightningFeeSats)
+    }
+
+    @Test
+    fun `reset send flow ignores a pending invoice routing fee and confirmation`() = test {
+        val bolt11 = "lnbcrt1pendingfee"
+        val estimateStarted = CompletableDeferred<Unit>()
+        val feeEstimate = CompletableDeferred<Result<ULong>>()
+        stubLightningScan(bolt11 = bolt11, amountSats = 1_000uL)
+        whenever(lightningRepo.estimateRoutingFees(bolt11)).doSuspendableAnswer {
+            estimateStarted.complete(Unit)
+            feeEstimate.await()
+        }
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        estimateStarted.await()
+        val newSheet = Sheet.Send(SendRoute.Recipient)
+        sut.showSheet(newSheet)
+        sut.resetSendState()
+        advanceUntilIdle()
+        val newState = sut.sendUiState.value
+
+        feeEstimate.complete(Result.success(2uL))
+        advanceUntilIdle()
+
+        assertEquals(newState, sut.sendUiState.value)
+        assertEquals(newSheet, sut.currentSheet.value)
     }
 
     @Test
@@ -7447,6 +7535,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
         whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
+        whenever(lightningRepo.estimateRoutingFeesForAmount(bolt11, request.amountSats))
+            .thenReturn(Result.success(4uL))
         val privateContext = stubOpenedPaymentRequest(request, bolt11)
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
 
@@ -7458,6 +7548,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(request.amountSats, sut.sendUiState.value.amount)
+        assertEquals(4L, sut.sendUiState.value.lightningFeeSats)
         assertTrue(sut.sendUiState.value.isAmountInputValid)
         assertTrue(sut.sendUiState.value.isPaymentRequest)
         assertEquals(

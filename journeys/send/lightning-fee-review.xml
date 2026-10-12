@@ -1,0 +1,19 @@
+<journey name="lightning fee review">
+  <description>
+    Verifies that fixed-amount Lightning invoices and Paykit requests show an available numeric
+    routing-fee estimate before payment approval. Preconditions: two owned regtest wallets linked
+    as contacts, usable Spending channels with a nonzero route fee, and QuickPay disabled on the
+    sending wallet. Keep both apps running. Review and cancel each payment without submitting it.
+  </description>
+  <actions>
+    <action>On the receiving wallet, create a fresh 1,000-sat Lightning invoice from Receive and copy its complete invoice</action>
+    <action>Open that invoice on the sending wallet with a lightning: deep link</action>
+    <action>Verify confirmation shows 1,000 sats without requiring amount entry</action>
+    <action>Open Show Details and verify Spending, the recipient invoice and a numeric estimated fee</action>
+    <action>Dismiss the send review without swiping to pay and verify no outgoing payment was created</action>
+    <action>On the receiving wallet, create a fresh 1,000-sat payment request for the sending contact with Spending as its only accepted payment method</action>
+    <action>On the sending wallet, open the received payment request and tap Pay if it has not opened automatically</action>
+    <action>Open Show Details and verify confirmation shows 1,000 sats, Spending, the receiving contact and a numeric estimated fee</action>
+    <action>Dismiss the send review without swiping to pay and verify the request remains unpaid</action>
+  </actions>
+</journey>

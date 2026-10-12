@@ -4164,6 +4164,7 @@ class AppViewModel @Inject constructor(
             Logger.info("Found amount in invoice, proceeding with payment", context = TAG)
 
             navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
+            estimateLightningRoutingFeesIfNeeded()
             return
         }
         Logger.info("No amount found in invoice, proceeding to enter amount", context = TAG)
@@ -5559,6 +5560,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun estimateLightningRoutingFeesIfNeeded() {
+        val generation = sendStateGeneration
         val currentState = _sendUiState.value
         if (currentState.payMethod != SendMethod.LIGHTNING) return
         val decodedInvoice = currentState.decodedInvoice ?: return
@@ -5571,6 +5573,7 @@ class AppViewModel @Inject constructor(
 
         feeResult.onSuccess { fee ->
             _sendUiState.update {
+                if (generation != sendStateGeneration) return@update it
                 it.copy(
                     lightningFeeSats = fee.toLong(),
                     lastLightningFee = fee.toLong(),
