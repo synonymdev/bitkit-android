@@ -7510,6 +7510,157 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `incoming onchain requests below minimum explain the minimum instead of a shortfall`() = test {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_min__title)).thenReturn("Amount Too Low")
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_min__description))
+            .thenReturn("The minimum amount for this invoice is ₿ {amount}.")
+        whenever(formatMoneyValue(547uL)).thenReturn("547")
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        for (amount in listOf(0uL, 1uL, 546uL)) {
+            val request = paymentRequest().copy(amountSats = amount)
+            stubIncomingOnchainRequest(request)
+            sut.openContactPayment(
+                paymentRequest = REGTEST_ADDRESS,
+                publicKey = testPublicKey,
+                incomingPaymentRequest = request,
+            )
+            runCurrent()
+
+            assertFalse(sut.sendUiState.value.isAmountInputValid)
+            assertNull(activeContactPaymentContext())
+        }
+
+        verify(toastManager, times(3)).enqueue(
+            check {
+                assertEquals("PaymentRequestAmountTooLowToast", it.testTag)
+                assertEquals("Amount Too Low", it.title)
+                assertEquals("The minimum amount for this invoice is ₿ 547.", it.description)
+            },
+        )
+        verify(context, never()).getString(R.string.other__pay_insufficient_savings_amount_description)
+        verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
+    }
+
+    @Test
+    fun `below minimum request closes preparation and does not block another request`() = test {
+        val request = paymentRequest().copy(amountSats = 100uL)
+        stubIncomingOnchainRequest(request)
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_min__title)).thenReturn("Amount Too Low")
+        whenever(context.getString(R.string.wallet__lnurl_pay__error_min__description)).thenReturn("Minimum: {amount}")
+        whenever(formatMoneyValue(547uL)).thenReturn("547")
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer {
+            delay(250)
+            Result.success(PublicPaykitPaymentResult.Opened(REGTEST_ADDRESS, privatePaymentContext(7uL)))
+        }
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        sut.setIsAuthenticated(true)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+
+        advanceTimeBy(250)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        assertNull(activeContactPaymentContext())
+        assertEquals(listOf(request), pendingPaykitPaymentRequests.value)
+        verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
+
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS + 250)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+
+        val payable = paymentRequest().copy(paymentRequestId = "payable-request", amountSats = 547uL)
+        stubIncomingOnchainRequest(payable)
+        pendingPaykitPaymentRequests.value = listOf(request, payable)
+        runCurrent()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(payable, activeContactPaymentContext()?.incomingPaymentRequest)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `incoming onchain request at minimum remains payable`() = test {
+        val request = paymentRequest().copy(amountSats = 547uL)
+        stubIncomingOnchainRequest(request)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        runCurrent()
+
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+        verify(context, never()).getString(R.string.wallet__lnurl_pay__error_min__description)
+    }
+
+    @Test
+    fun `incoming onchain request with insufficient savings still reports the actual shortfall`() = test {
+        val request = paymentRequest()
+        stubIncomingOnchainRequest(request)
+        balanceState.value = BalanceState(maxSendOnchainSats = 1_000u)
+        whenever(context.getString(R.string.other__pay_insufficient_savings)).thenReturn("Insufficient Savings")
+        whenever(context.getString(R.string.other__pay_insufficient_savings_amount_description))
+            .thenReturn("₿ {amount} more needed to pay this Bitcoin invoice.")
+        whenever(formatMoneyValue(1_500uL)).thenReturn("1500")
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.openContactPayment(
+            paymentRequest = REGTEST_ADDRESS,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        runCurrent()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("Insufficient Savings", it.title)
+                assertEquals("₿ 1500 more needed to pay this Bitcoin invoice.", it.description)
+            },
+        )
+        assertNull(activeContactPaymentContext())
+        verify(context, never()).getString(R.string.wallet__lnurl_pay__error_min__description)
+    }
+
+    @Test
+    fun `small incoming unified request remains payable over Lightning`() = test {
+        val request = paymentRequest().copy(amountSats = 100uL)
+        val uri = "bitcoin:$REGTEST_ADDRESS?lightning=lnbcrt1smallrequest"
+        stubUnifiedScan(uri, "lnbcrt1smallrequest", request.amountSats, FOREIGN_NODE_ID.fromHex())
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
+        whenever(lightningRepo.estimateRoutingFees("lnbcrt1smallrequest")).thenReturn(Result.success(1uL))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.openContactPayment(
+            paymentRequest = uri,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        runCurrent()
+
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        verify(context, never()).getString(R.string.wallet__lnurl_pay__error_min__description)
+    }
+
+    @Test
     fun `outgoing payment request creation continues after backgrounding`() = test {
         val request = paymentRequest().copy(counterparty = "pubkyrecipient")
         val target = PaykitPaymentRequestTarget(request.counterparty)
@@ -11271,6 +11422,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
         ),
     )
+
+    private suspend fun stubIncomingOnchainRequest(request: PaykitPaymentRequest) {
+        whenever { coreService.decode(REGTEST_ADDRESS) }.thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, emptyMap())),
+        )
+        whenever(coreService.validateBitcoinAddress(REGTEST_ADDRESS)).thenReturn(
+            ValidationResult(REGTEST_ADDRESS, NetworkType.REGTEST, AddressType.P2WPKH),
+        )
+        stubOpenedPaymentRequest(request, REGTEST_ADDRESS)
+    }
 
     private suspend fun stubOpenedPaymentRequest(
         request: PaykitPaymentRequest,

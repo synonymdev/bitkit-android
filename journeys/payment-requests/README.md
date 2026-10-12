@@ -96,6 +96,7 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Contact Detail pay action: `ContactPay`
 - Request or Pay sheet: `RequestOrPaySheet` (its Pay and Request buttons carry no tag; find them by text)
 - Payment Request amount screen: `PaymentRequestAmount`
+- Below-minimum on-chain request toast: `PaymentRequestAmountTooLowToast`
 
 `android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI Automator hierarchy when a documented container tag is not present in the formatted layout output.
 
@@ -162,6 +163,8 @@ An endpoint rejected as `endpoint_not_payable`, including an already-paid one-ti
 ends preparation immediately with `PaymentRequestUnavailableToast`. The request stays pending
 for manual retry, but does not automatically reopen during the current identity's app session.
 `unpayable-endpoint.xml` checks this using an address already recorded as paid by the payer.
+`minimum-onchain-amount.xml` checks requests below the on-chain minimum, including
+the boundary at 546 sats, manual retry, and preparation of a new request for 547 sats.
 Closing during preparation leaves the request pending and suppresses automatic reopening for the
 current identity's app session; Pay from the request list or details explicitly retries it.
 An unfunded wallet can verify loading followed by native rejection, not an enabled payment control.
