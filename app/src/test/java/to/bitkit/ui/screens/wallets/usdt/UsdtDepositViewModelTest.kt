@@ -89,6 +89,33 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deposit status distinguishes refund progress from actionable errors`() {
+        val cases = listOf(
+            Triple("completed", "standing_route_unavailable", R.string.usdt__confirmed),
+            Triple("refunded", "xchain_amount_too_small", R.string.usdt__deposit_refunded),
+            Triple("refund_requested", "standing_refund_pending", R.string.usdt__deposit_refunding),
+            Triple("refunding", "standing_refund_pending", R.string.usdt__deposit_refunding),
+            Triple(
+                "refund_requested",
+                "standing_tron_refund_requires_operator",
+                R.string.usdt__deposit_needs_attention,
+            ),
+            Triple("refunding", "refund_error", R.string.usdt__deposit_needs_attention),
+            Triple("pending", "standing_route_unavailable", R.string.usdt__deposit_needs_attention),
+            Triple("below_minimum", "xchain_amount_too_small", R.string.usdt__deposit_needs_attention),
+        )
+        cases.forEach { (status, code, expected) ->
+            val deposit = UsdtDeposit("deposit", "bsc", "USDT", 100u, "tx", status, code, null)
+            val order = UsdtDepositOrder(status, 100u, 90u, null, null, code)
+            listOf(null, order).forEach { linkedOrder ->
+                val detail = UsdtDepositDetail(deposit, linkedOrder)
+                assertEquals(expected, detail.statusResource(), status)
+                assertEquals(code, detail.statusCode, status)
+            }
+        }
+    }
+
+    @Test
     fun `deposit source names resolve to every supported network`() {
         UsdtDepositNetwork.entries.forEach { network ->
             assertEquals(network, network.name.lowercase().depositNetwork())
@@ -139,5 +166,30 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
         assertTrue(model.back())
         assertTrue(model.back())
         assertFalse(model.state.value.history)
+    }
+
+    @Test
+    fun `completed refund clears pending acknowledgment after refresh`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf()))
+        whenever(repo.refundDeposit("deposit", 0u, "source-address", UsdtDepositNetwork.BSC))
+            .thenReturn(Result.success(Unit))
+        val deposit = UsdtDeposit("deposit", "bsc", "USDT", 100u, "source-tx", "held", "xchain_amount_too_small", null)
+        val pending = deposit.copy(status = "refund_requested", code = "standing_refund_pending")
+        val refunded = deposit.copy(status = "refunded", refundTx = "refund-tx")
+        whenever(repo.depositDetail("deposit", 0u)).thenReturn(
+            Result.success(UsdtDepositDetail(deposit, null)),
+            Result.success(UsdtDepositDetail(pending, null)),
+            Result.success(UsdtDepositDetail(refunded, null)),
+        )
+        val model = UsdtDepositViewModel(repo)
+        model.detail("deposit")
+        model.refund("deposit", 0u, "source-address", UsdtDepositNetwork.BSC).join()
+        model.detail("deposit")
+        assertEquals(R.string.usdt__deposit_refund_requested, model.state.value.message)
+        assertEquals(R.string.usdt__deposit_refunding, model.state.value.detail?.statusResource())
+        model.detail("deposit")
+        assertNull(model.state.value.message)
+        assertEquals(R.string.usdt__deposit_refunded, model.state.value.detail?.statusResource())
+        assertEquals("refund-tx", model.state.value.detail?.deposit?.refundTx)
     }
 }

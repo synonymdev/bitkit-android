@@ -554,7 +554,7 @@ private fun DepositSettlement(detail: UsdtDepositDetail, hideBalance: Boolean) {
             SelectionContainer { BodySSB(it) }
         }
     }
-    (detail.order?.refundTx ?: deposit.refundTx)?.let { DepositField(R.string.usdt__deposit_refund, it) }
+    (detail.order?.refundTx ?: deposit.refundTx)?.let { DepositField(R.string.usdt__refund_tx, it) }
     val sent = order?.amountIn
     val received = order?.amountOut
     if (sent != null && received != null && sent >= received) {
@@ -591,12 +591,15 @@ internal fun String.usdCents(locale: Locale = Locale.getDefault()): String = toU
     val whole = NumberFormat.getIntegerInstance(locale).format((it / 100u).toLong())
     "$$whole.${(it % 100u).toString().padStart(2, '0')}"
 } ?: "—"
-private fun depositStatus(status: String, code: String?): Int = when {
-    code != null -> R.string.usdt__deposit_needs_attention
-    status == "completed" -> R.string.usdt__confirmed
-    status == "refunded" -> R.string.usdt__deposit_refunded
-    status in listOf("refunding", "refund_requested") -> R.string.usdt__deposit_refunding
-    status in listOf("pending", "processing") -> R.string.usdt__pending
+private fun depositStatus(status: String, code: String?): Int = when (status) {
+    "completed" -> R.string.usdt__confirmed
+    "refunded" -> R.string.usdt__deposit_refunded
+    "refunding", "refund_requested" -> if (code == null || code == "standing_refund_pending") {
+        R.string.usdt__deposit_refunding
+    } else {
+        R.string.usdt__deposit_needs_attention
+    }
+    "pending", "processing" -> if (code == null) R.string.usdt__pending else R.string.usdt__deposit_needs_attention
     else -> R.string.usdt__deposit_needs_attention
 }
 

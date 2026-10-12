@@ -81,7 +81,20 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
             repo.depositDetail(
                 id,
                 pageOffsets[id] ?: _state.value.offset
-            ).onSuccess { detail -> _state.update { it.copy(detail = detail, offset = pageOffsets[id] ?: it.offset) } }
+            ).onSuccess { detail ->
+                val status = detail.order?.status ?: detail.deposit.status
+                _state.update {
+                    it.copy(
+                        detail = detail,
+                        offset = pageOffsets[id] ?: it.offset,
+                        message = if (status in listOf("completed", "refunded")) {
+                            null
+                        } else {
+                            it.message
+                        },
+                    )
+                }
+            }
         }
     }
 
