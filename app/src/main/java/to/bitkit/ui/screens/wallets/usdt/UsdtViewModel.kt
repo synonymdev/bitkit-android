@@ -18,12 +18,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.parseUsdtPaymentRequest
@@ -40,14 +42,14 @@ class UsdtViewModel @Inject constructor(
         private const val TAG = "UsdtViewModel"
     }
 
-    val destinations = kotlinx.coroutines.flow.flow {
+    val destinations = flow {
         repo.sendDestinations()
             .onSuccess { emit(it) }
             .onFailure { Logger.warn("Could not load USDT bridge destinations", it, context = TAG) }
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        to.bitkit.env.Env.usdtDestinations.toImmutableList()
+        Env.usdtDestinations.toImmutableList()
     )
 
     val wallet = repo.state
@@ -231,6 +233,7 @@ internal fun Throwable.messageResource(): Int = when (this) {
     is UsdtException.InvalidAddress, is UsdtException.WrongNetwork -> R.string.usdt__error_address
     is UsdtException.InsufficientBalance -> R.string.usdt__error_balance
     is UsdtException.QuoteExpired -> R.string.usdt__error_expired
+    is UsdtException.SubmissionDeadlineExpired -> R.string.wallet__payment_request_expired
     is UsdtException.PendingTransfer -> R.string.usdt__error_pending
     is UsdtException.DepositNeedsAttention -> R.string.usdt__deposit_attention
     is UsdtException.DepositNotFound -> R.string.usdt__deposit_not_found

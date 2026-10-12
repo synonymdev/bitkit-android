@@ -84,3 +84,14 @@ Reference: [USDT designs](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bi
 - [ ] Open address details, verify Copy and QR target the same address, and return to the QR.
 - [ ] Back out of an unprepared network and verify the displayed network always matches the QR. Return to Arbitrum and verify its original wallet address.
 - [ ] With an authorized incoming transfer or an explicitly identified fixture, verify teal receive confetti, Details and OK; Details opens that transfer.
+
+## Paykit quoted reviews and history
+
+Requires two linked owned wallets and funded payment rails: Arbitrum One USDT or the local Arbitrum fork fixture for USDT review, and usable Bitcoin balances for Bitcoin review. A Bitcoin regtest balance does not fund USDT. The differing-rate checks require a controlled request issuer and BTC/USD rate source; proof-status checks require controlled receipt evidence. No payment is submitted by the review steps.
+
+- [ ] Open an unpaid USD request accepting only USDT. Continue from Amount to review. Verify Payment Request, the requester avatar, From and For summary, the exact dollar amount and additional fee. Open details and verify Contact, recipient address and invoice note. Close without swiping to pay.
+- [ ] Open a quoted request for 1000 USD requiring 1 BTC while Bitkit's controlled BTC/USD rate is 2000. Verify details label 1000 USD as Requested amount, while payment review shows 1 BTC and Bitkit's approximately 2000 USD valuation. Close without paying.
+- [ ] Open a BTC request with different quoted prices for Bitcoin and Lightning. Switch Savings and Spending and verify each method's payable BTC amount, Bitkit's own fiat valuation and explicit payment approval. Close without paying.
+- [ ] Open a linked USDT-only contact with a published private payment list, enter 0.01 USDT and continue to review. Verify the owned recipient address and fee, then close without paying.
+- [ ] Using an existing request paid in USDT, open history on payer and requester. Verify the sent or received arrow, its background and the date/time icons use USDT teal even when the request denomination is BTC or USD.
+- [ ] In request history, verify an unverified delivered proof says Proof submitted, not Paid. A received USDT request stays Pending until its matching proof is verified, then shows Payment verified, Received underpaid or Received after expiry with the actual USDT amount and no conflicting proof-delivery label.

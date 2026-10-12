@@ -56,6 +56,7 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.PaykitPaymentStateBackup
+import to.bitkit.models.PaykitUsdtStateBackup
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -167,7 +168,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(paykitSdkService.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever { paykitPaymentProofRepo.backupSnapshot() }.thenReturn(emptyList())
         whenever { paykitUsdtPaymentRepo.backupSnapshot() }.thenReturn(
-            to.bitkit.models.PaykitUsdtStateBackup(emptyList(), emptyList())
+            PaykitUsdtStateBackup(emptyList(), emptyList())
         )
         whenever(usdtRepo.state).thenReturn(MutableStateFlow(UsdtWalletState()))
         whenever(paykitUsdtPaymentRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))

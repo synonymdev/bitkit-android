@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.time.ExperimentalTime::class)
+@file:OptIn(ExperimentalTime::class)
 
 package to.bitkit.viewmodels
 
@@ -2875,7 +2875,7 @@ class AppViewModel @Inject constructor(
         suppressQuickPay: Boolean = false,
     ): Job? {
         if (contactPaymentContext == null &&
-            data.trim().startsWith("ethereum:", ignoreCase = true) && usdtRepo.isSendPresented
+            data.trim().startsWith("ethereum:", ignoreCase = true) && hasActiveUsdtSend()
         ) {
             return null
         }
@@ -2945,6 +2945,12 @@ class AppViewModel @Inject constructor(
         }
         return nextJob
     }
+
+    private fun hasActiveUsdtSend(): Boolean = usdtRepo.isSendPresented ||
+        (
+            currentSheet.value is Sheet.Send && _sendUiState.value.usdtRecipient != null &&
+                hasActiveContactPaymentContext()
+            )
 
     private suspend fun awaitPubkyDeeplinkInitialization(
         source: ScanSource,
@@ -3157,7 +3163,8 @@ class AppViewModel @Inject constructor(
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
             paykitUsdtPayments.send(
-                quote
+                quote,
+                submissionDeadline = current.incomingPaymentRequest?.submissionDeadline(paymentTerms),
             ) { authorizeUsdtExecution(current, reviewedAmount, paymentTerms) }.getOrThrow()
         } finally {
             isSubmittingPaymentRequest = false
@@ -3209,7 +3216,7 @@ class AppViewModel @Inject constructor(
             it.copy(
                 address = address, addressInput = address, isAddressInputValid = address.isNotEmpty(),
                 decodedInvoice = invoice, lnurl = lnurl, paykitUsesUsdt = useUsdt, usdtRecipient = recipient,
-                amount = 0u,
+                amount = invoice?.amountSatoshis ?: 0u,
                 paykitAmount = "",
                 payMethod = if (invoice != null || lnurl != null) SendMethod.LIGHTNING else SendMethod.ONCHAIN
             )
@@ -3239,7 +3246,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onAmountChange(amount: ULong) {
-        if (_sendUiState.value.paykitUsesUsdt) return
+        if (_sendUiState.value.paykitUsesUsdt || _sendUiState.value.fixedLightningAmount != null) return
         _sendUiState.update {
             it.copy(
                 amount = amount,
@@ -3388,6 +3395,11 @@ class AppViewModel @Inject constructor(
 
     private fun paymentAmountForSource(current: SendUiState, source: SendFundingSource): PaykitAmount? {
         val target = if (source == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
+        if (source == SendFundingSource.Spending) {
+            fixedContactLightningAmount(current)?.let {
+                return PaykitAmount(PaykitAsset.BTC, it)
+            }
+        }
         val input = activeIncomingPaymentRequest()?.amount ?: if (current.paykitUsesUsdt) {
             runCatching { PaykitAmount.parse(PaykitAsset.USDT, current.paykitAmount) }.getOrNull()
         } else {
@@ -3397,6 +3409,11 @@ class AppViewModel @Inject constructor(
             ?: input?.takeIf { it.atomic > 0u }
                 ?.convertedTo(target, currencyRepo.currencyState.value.paykitRate, nowMillis())
     }
+
+    private fun fixedContactLightningAmount(state: SendUiState): ULong? =
+        state.decodedInvoice?.amountSatoshis?.takeIf {
+            it > 0u && state.lnurl == null && activeIncomingPaymentRequest() == null
+        }
 
     private suspend fun selectFundingSource(nextSource: SendFundingSource, current: SendUiState) {
         when (nextSource) {
@@ -3491,6 +3508,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             sendStateGeneration++
             val previous = _sendUiState.value
+            val amount = fixedContactLightningAmount(previous) ?: previous.amount
             _sendUiState.update {
                 it.copy(
                     payMethod = SendMethod.LIGHTNING,
@@ -3498,7 +3516,8 @@ class AppViewModel @Inject constructor(
                     hardwareWalletName = null,
                     hardwareAvailableSats = 0uL,
                     lightningFeeSats = 0,
-                    isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
+                    amount = amount,
+                    isAmountInputValid = validateAmount(amount, SendMethod.LIGHTNING),
                     confirmedWarnings = persistentListOf(),
                 )
             }
@@ -5678,10 +5697,10 @@ class AppViewModel @Inject constructor(
             return false
         }
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        if (
-            (_sendUiState.value.isPaymentRequest && incomingPaymentRequest == null) ||
-            hasMismatchedIncomingPaymentRequest(contactPaymentContext)
-        ) {
+        val state = _sendUiState.value
+        val missingRequest = state.isPaymentRequest && incomingPaymentRequest == null
+        val invoiceAmountMismatch = state.fixedLightningAmount?.let { it != state.amount } == true
+        if (missingRequest || invoiceAmountMismatch || hasMismatchedIncomingPaymentRequest(contactPaymentContext)) {
             rejectMismatchedPaymentRequest()
             return false
         }
@@ -7507,6 +7526,14 @@ data class SendUiState(
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
+    val fixedLightningAmount: ULong?
+        get() = decodedInvoice?.amountSatoshis?.takeIf {
+            it > 0u && !paykitUsesUsdt && payMethod == SendMethod.LIGHTNING && lnurl == null
+        }
+
+    val isAmountEditable: Boolean
+        get() = !isPaymentRequest && fixedLightningAmount == null
+
     val shouldAutomaticallyPay: Boolean
         get() = isInitialSubscriptionPayment && hardwareWalletId == null &&
             !initialSubscriptionPaymentNeedsConfirmation && !requiresAmountReview

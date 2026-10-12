@@ -218,7 +218,7 @@ internal fun SubscriptionsContent(
                 ) {
                     item {
                         SubscriptionMetrics(
-                            monthlyCosts = subscriptionMonthlyCosts(subscriptions, now),
+                            monthlyCosts = subscriptionMonthlyCosts(subscriptions, now).toImmutableList(),
                             activeCount = sections.active.size,
                             createdCount = sections.created.size,
                         )
@@ -393,7 +393,7 @@ private fun SubscriptionEmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SubscriptionMetrics(monthlyCosts: List<PaykitAmount>, activeCount: Int, createdCount: Int) {
+private fun SubscriptionMetrics(monthlyCosts: ImmutableList<PaykitAmount>, activeCount: Int, createdCount: Int) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),

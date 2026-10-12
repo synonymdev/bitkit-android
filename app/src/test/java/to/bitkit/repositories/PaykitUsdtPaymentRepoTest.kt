@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.time.ExperimentalTime::class)
+@file:OptIn(ExperimentalTime::class)
 
 package to.bitkit.repositories
 
@@ -18,6 +18,7 @@ import com.synonym.paykit.ConversionRate
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentConversionQuoteRecord
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
@@ -36,9 +37,13 @@ import org.junit.Test
 import org.mockito.MockedStatic
 import org.mockito.Mockito
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
@@ -52,10 +57,13 @@ import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.ContactPaymentContext
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
@@ -142,7 +150,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
 
     private fun stubStoredTransfer(result: Result<UsdtTransfer?>) {
         result.getOrNull()?.let { whenever(it.id).thenReturn(quote.id) }
-        org.mockito.kotlin.doAnswer { result.getOrThrow()?.let(::listOf).orEmpty() }.whenever(wallet).history()
+        doAnswer { result.getOrThrow()?.let(::listOf).orEmpty() }.whenever(wallet).history()
     }
 
     private suspend fun stubVerification(
@@ -157,9 +165,9 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     }
 
     private suspend fun stubSend(result: Result<UsdtTransfer>) {
-        whenever(usdt.send(any(), any())).doSuspendableAnswer { invocation ->
+        whenever(usdt.send(any(), anyOrNull(), any())).doSuspendableAnswer { invocation ->
             runSuspendCatching {
-                invocation.getArgument<suspend () -> Unit>(1).invoke()
+                invocation.getArgument<suspend () -> Unit>(2).invoke()
                 result.getOrThrow()
             }
         }
@@ -179,7 +187,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
 
     @Test
     fun `cancellation protection reads durable started state and scopes wallet and identity`() = test {
-        val period = PaykitBillingPeriod(clock.now(), clock.now() + kotlin.time.Duration.parse("1d"))
+        val period = PaykitBillingPeriod(clock.now(), clock.now() + Duration.parse("1d"))
         val recurring = request.copy(billingPeriod = period)
         val subscription = PaykitSubscriptionId(request.paymentRequestId, contact)
         val repo = repo()
@@ -191,12 +199,14 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         ).getOrThrow()
         assertTrue(repo.protectedRequestIdsForSubscriptionCancellation(identity, subscription).getOrThrow().isEmpty())
         stubSend(Result.success(mock()))
-        repo.send(quote) {
+        val deadline = clock.now() + Duration.parse("1h")
+        repo.send(quote, deadline) {
             assertEquals(
                 setOf(recurring.id),
                 repo().protectedRequestIdsForSubscriptionCancellation(identity, subscription).getOrThrow(),
             )
         }.getOrThrow()
+        verify(usdt).send(eq(quote), eq(deadline), any())
         val restarted = repo()
         restarted.prepare(
             context(recurring),
@@ -275,32 +285,6 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restored started payment remains protected without local core history`() = test {
-        val original = repo()
-        original.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
-        val unstartedState = stored
-        stubSend(Result.success(mock()))
-        original.send(quote).getOrThrow()
-        val backup = original.backupSnapshot()
-        for (localState in listOf(null, unstartedState)) {
-            stored = localState
-            val restored = repo()
-            restored.restoreBackup(backup)
-            restored.reconcile().getOrThrow()
-            assertTrue(restored.resumableRequests.value.isEmpty())
-            assertTrue(
-                restored.prepare(
-                    context(),
-                    quote.copy(id = "replacement"),
-                    amount,
-                    request.payment(MethodId.UsdtArbitrum, clock.now())
-                ).isFailure
-            )
-            assertEquals(backup, restored.backupSnapshot())
-        }
-    }
-
-    @Test
     fun `failed send allows replacement only when its execution journal confirms no submission`() = test {
         val pending = mock<UsdtTransfer> { on { status }.thenReturn(UsdtTransferStatus.PENDING) }
         val histories = listOf(
@@ -328,6 +312,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     @Test
     fun `unreadable persistence prevents sending and is preserved`() = test {
         stored = "unreadable"
+        assertTrue(repo().hasBinding(request.id))
         assertTrue(
             repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).isFailure
         )
@@ -415,6 +400,39 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unchanged receipt verification preserves backup state after restart`() = test {
+        val records = listOf(receivedRequest(), receivedRequest("550e8400-e29b-41d4-a716-446655440001"))
+        whenever(sdk.paymentRequests()).thenReturn(records)
+        val payment = UsdtVerifiedPayment(
+            "42161:transaction:0",
+            "transaction:0",
+            "sender",
+            address,
+            50_000u,
+            1_800_000_000u,
+        )
+        val secondPayment = payment.copy(paymentId = "42161:transaction:1", transferId = "transaction:1")
+        stubVerification(Result.success(payment), Result.success(secondPayment))
+        val repo = repo()
+        repo.reconcile().getOrThrow()
+        val receipts = repo.receipts.value
+        val persisted = stored
+        assertEquals(2, receipts.size)
+        assertEquals(2L, repo.backupStateVersion.value)
+
+        for (current in listOf(repo, repo())) {
+            val version = current.backupStateVersion.value
+            stubVerification(Result.success(payment), Result.success(secondPayment))
+            current.reconcile().getOrThrow()
+            assertEquals(receipts, current.receipts.value)
+            assertEquals(version, current.backupStateVersion.value)
+            assertEquals(persisted, stored)
+        }
+        verify(keychain, times(2)).upsertString(any(), any())
+        verify(wallet, times(6)).verifyPaymentProof(any(), any())
+    }
+
+    @Test
     fun `recurring receipt verifies the selected quote and verbatim proof period`() = test {
         val period = BillingPeriod("2027-01-01T08:00:00.000Z", "2027-02-01T08:00:00.000Z")
         val quoteId = "650e8400-e29b-41d4-a716-446655440000"
@@ -485,7 +503,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         val record = receivedRequest().let {
             it.copy(
                 terms = it.terms?.copy(
-                    paymentDeadline = com.synonym.paykit.PaymentDeadline.At(clock.now().toString())
+                    paymentDeadline = PaymentDeadline.At(clock.now().toString())
                 )
             )
         }
@@ -503,17 +521,21 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         val restarted = repo()
         restarted.reconcile().getOrThrow()
         assertTrue(restarted.receipts.value.single().satisfied)
+        assertEquals(0L, restarted.backupStateVersion.value)
         stubVerification(Result.failure(UsdtException.NetworkUnavailable()))
         assertTrue(restarted.reconcile().isFailure)
         assertTrue(restarted.receipts.value.single().verified)
+        assertEquals(0L, restarted.backupStateVersion.value)
         stubVerification(Result.success(null))
         restarted.reconcile().getOrThrow()
         assertEquals(false, restarted.receipts.value.single().verified)
+        assertEquals(1L, restarted.backupStateVersion.value)
         stubVerification(Result.success(paid.copy(timestamp = paid.timestamp + 1u)))
         restarted.reconcile().getOrThrow()
         assertTrue(restarted.receipts.value.single().verified)
         assertTrue(restarted.receipts.value.single().afterExpiry)
         assertEquals(false, restarted.receipts.value.single().satisfied)
+        assertEquals(2L, restarted.backupStateVersion.value)
     }
 
     @Test
@@ -522,7 +544,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         // The rc63 envelope and largest ERC-20 receipt proof reserve 692 bytes before the reference.
         val exactLimit = binding.copy(paymentReference = "é".repeat(154))
         PaykitUsdtPaymentRepo.validateProofSize(exactLimit)
-        kotlin.test.assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> {
+        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> {
             PaykitUsdtPaymentRepo.validateProofSize(
                 exactLimit.copy(paymentReference = exactLimit.paymentReference + "x")
             )

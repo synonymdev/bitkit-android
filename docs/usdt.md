@@ -27,6 +27,8 @@ History catch-up is deferred while the USDT send sheet is open. Balance and pend
 
 ## Paykit
 
+USDT request sends pass the earlier of the approved conversion quote expiry and request payment deadline to Core as the original precise timestamp. Core persists that cutoff with the signed operation and enforces it before the initial submission and recovery retries. Expired pending operations remain tracked for settlement evidence. Operations created before deadline support have no stored cutoff and retain their existing recovery behavior.
+
 Paykit uses a direct Arbitrum USDT0 endpoint (`usdt-arbitrum-address`). Existing public/private sharing settings control publication. The payload binds the address, chain 42161 and pinned token; bridge routes are excluded from Paykit choices.
 
 Bitkit creates BTC or USD requests and also reads USDT-denominated requests from other wallets. The accepted methods are immutable request terms. Every accepted cross-asset currency has an explicit requester-supplied rate; the denominating asset needs no conversion. USD/USDT is exactly 1:1. Bitcoin rates come from the existing BTC/USD source when issuing terms, not when verifying received funds. External requests without rates allow only same-asset payment. A listed method without its required rate cannot be used.

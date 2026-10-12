@@ -312,7 +312,7 @@ fun PaymentRequestDetailsScreen(
 
     PaymentRequestDetailsContent(
         initialDraft = draft,
-        availableMethods = receivingMethods,
+        availableMethods = receivingMethods.toImmutableList(),
         contact = contact,
         isCreating = isCreating,
         onBack = onBack,
@@ -324,7 +324,7 @@ fun PaymentRequestDetailsScreen(
 @Composable
 internal fun PaymentRequestDetailsContent(
     initialDraft: PaykitPaymentRequestDraft,
-    availableMethods: List<String> = emptyList(),
+    availableMethods: ImmutableList<String> = persistentListOf(),
     contact: PubkyProfile,
     isCreating: Boolean,
     onBack: () -> Unit,

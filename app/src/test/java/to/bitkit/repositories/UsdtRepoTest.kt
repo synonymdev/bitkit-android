@@ -20,6 +20,7 @@ import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class UsdtRepoTest : BaseUnitTest() {
@@ -163,9 +164,11 @@ class UsdtRepoTest : BaseUnitTest() {
             status = UsdtTransferStatus.PENDING,
             txHash = null,
         )
-        whenever(service.send(quote)).thenReturn(submitted)
+        val deadline = Instant.parse("2026-10-12T12:00:00.123456789Z")
+        whenever(service.send(quote, deadline)).thenReturn(submitted)
         val repo = UsdtRepo(service, testDispatcher)
-        assertEquals(submitted, repo.send(quote).getOrThrow())
+        assertEquals(submitted, repo.send(quote, deadline).getOrThrow())
+        verify(service).send(quote, deadline)
         assertEquals(listOf(submitted), repo.state.value.transfers)
     }
 

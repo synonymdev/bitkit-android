@@ -30,6 +30,7 @@ import to.bitkit.models.BTC_SCALE
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
+import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.STUB_RATE
@@ -275,10 +276,10 @@ data class CurrencyState(
     val lastSuccessfulRefresh: Long? = null,
 )
 
-val CurrencyState.paykitRate: to.bitkit.models.PaykitExchangeRate?
+val CurrencyState.paykitRate: PaykitExchangeRate?
     get() = rates.firstOrNull {
         it.quote == "USD"
-    }?.let { to.bitkit.models.PaykitExchangeRate(it.lastPrice, it.lastUpdatedAt) }
+    }?.let { PaykitExchangeRate(it.lastPrice, it.lastUpdatedAt) }
 
 interface AmountInputHandler {
     fun convertSatsToFiatString(sats: Long): String

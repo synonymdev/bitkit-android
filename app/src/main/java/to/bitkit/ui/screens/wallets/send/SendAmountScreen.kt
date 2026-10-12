@@ -40,6 +40,7 @@ import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.FillHeight
@@ -56,6 +57,8 @@ import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -237,7 +240,7 @@ private fun SendAmountNodeRunning(
 ) {
     val app = appViewModel
     val usdtWallet = app?.usdtWallet?.collectAsStateWithLifecycle()?.value
-    val hideBalance = to.bitkit.ui.settingsViewModel?.hideBalance?.collectAsStateWithLifecycle()?.value == true
+    val hideBalance = settingsViewModel?.hideBalance?.collectAsStateWithLifecycle()?.value == true
     BoxWithConstraints {
         val maxHeight = this.maxHeight
         val isLnurlWithdraw = uiState.lnurl is LnurlParams.LnurlWithdraw
@@ -284,7 +287,7 @@ private fun SendAmountNodeRunning(
 
             FillHeight(min = 12.dp)
             if (uiState.paykitRateUnavailable) {
-                to.bitkit.ui.components.BodyS(
+                BodyS(
                     stringResource(R.string.wallet__payment_request_rate_unavailable),
                     color = Colors.White64
                 )
@@ -305,7 +308,7 @@ private fun SendAmountNodeRunning(
                 Column(
                     modifier = Modifier
                         .clickableAlpha(
-                            enabled = !uiState.isPaymentRequest && !uiState.paykitUsesUsdt
+                            enabled = uiState.isAmountEditable && !uiState.paykitUsesUsdt
                         ) { onClickMax(availableAmount) }
                         .testTag("AvailableAmount")
                 ) {
@@ -317,7 +320,7 @@ private fun SendAmountNodeRunning(
                     VerticalSpacer(4.dp)
                     if (uiState.paykitUsesUsdt) {
                         val balance = if (hideBalance) {
-                            to.bitkit.ui.shared.UiConstants.HIDE_BALANCE_SHORT
+                            UiConstants.HIDE_BALANCE_SHORT
                         } else {
                             usdtWallet?.balance?.let(::usdtFormatAmount) ?: "—"
                         }
@@ -362,7 +365,7 @@ private fun SendAmountNodeRunning(
             if (uiState.paykitUsesUsdt) {
                 NumberPad(
                     type = NumberPadType.DECIMAL,
-                    enabled = !uiState.isPaymentRequest,
+                    enabled = uiState.isAmountEditable,
                     onPress = {
                         app?.onUsdtAmountChange(
                             NumberPadInputHandler.handleInput(it, uiState.paykitAmount, maxLength = 21, maxDecimals = 6)
@@ -372,7 +375,7 @@ private fun SendAmountNodeRunning(
                 )
             } else {
                 NumberPad(
-                    enabled = !uiState.isPaymentRequest,
+                    enabled = uiState.isAmountEditable,
                     viewModel = amountInputViewModel,
                     currencies = currencies,
                     availableHeight = maxHeight,

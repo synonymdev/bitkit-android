@@ -20,6 +20,7 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.time.Instant
 
 @Singleton
 class UsdtService @Inject constructor(
@@ -123,9 +124,10 @@ class UsdtService @Inject constructor(
         keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
     )
 
-    suspend fun send(quote: UsdtQuote) = wallet().send(
+    suspend fun send(quote: UsdtQuote, submissionDeadline: Instant? = null) = wallet().sendWithDeadline(
         quote.id,
         keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw UsdtException.InvalidCredentials(),
-        keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name),
+        submissionDeadline?.toString(),
     )
 }

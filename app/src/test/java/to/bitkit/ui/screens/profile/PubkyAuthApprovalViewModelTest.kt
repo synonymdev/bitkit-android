@@ -40,6 +40,8 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.UsdtRepo
@@ -958,8 +960,8 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.usdtUnavailable)
         sut.setShareUsdt(true)
         assertFalse(sut.uiState.value.canAuthorize)
-        val endpoint = to.bitkit.repositories.Endpoint(
-            methodId = to.bitkit.repositories.MethodId.UsdtArbitrum,
+        val endpoint = Endpoint(
+            methodId = MethodId.UsdtArbitrum,
             value = "reviewed-address",
             rawPayload = "{}"
         )

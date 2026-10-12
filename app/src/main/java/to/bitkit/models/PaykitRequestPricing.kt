@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.time.ExperimentalTime::class)
+@file:OptIn(ExperimentalTime::class)
 
 package to.bitkit.models
 
@@ -12,6 +12,7 @@ import to.bitkit.repositories.PaykitBillingPeriod
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 /** Market rates are only used when creating request terms. */
@@ -20,6 +21,43 @@ data class PaykitRequestPricing(
     val deadline: PaymentDeadline? = null,
     val quotes: List<PaymentConversionQuoteRecord> = emptyList(),
 ) {
+    companion object {
+        fun subscriptionEndpoints(requested: PaykitAsset, available: List<String>): List<String> = available.filter {
+            val method = MethodId.fromRawValue(it) ?: return@filter false
+            when (requested) {
+                PaykitAsset.BTC -> method != MethodId.UsdtArbitrum
+                PaykitAsset.USD -> method == MethodId.UsdtArbitrum
+                PaykitAsset.USDT -> false
+            }
+        }
+
+        fun rates(
+            requested: PaykitAsset,
+            endpoints: List<String>,
+            market: PaykitExchangeRate?,
+            at: Instant,
+        ): List<ConversionRate> = endpoints.mapNotNull { MethodId.fromRawValue(it) }
+            .map { if (it == MethodId.UsdtArbitrum) PaykitAsset.USDT else PaykitAsset.BTC }
+            .distinct().sortedBy { it.code }.filter { it != requested }.map { asset ->
+                val value = if ((requested == PaykitAsset.BTC) != (asset == PaykitAsset.BTC)) {
+                    val price = market?.value(at.toEpochMilliseconds()) ?: throw PaykitAmountError.RateUnavailable
+                    if (requested == PaykitAsset.BTC) {
+                        price
+                    } else {
+                        BigDecimal.ONE.divide(
+                            price,
+                            18,
+                            RoundingMode.HALF_EVEN
+                        )
+                    }
+                } else {
+                    BigDecimal.ONE
+                }
+                if (value <= BigDecimal.ZERO) throw PaykitAmountError.RateUnavailable
+                ConversionRate(asset.code, value.stripTrailingZeros().toPlainString())
+            }
+    }
+
     fun payment(
         requested: PaykitAmount,
         endpoint: String,
@@ -100,43 +138,6 @@ data class PaykitRequestPricing(
             if (period == null || value.seconds > Long.MAX_VALUE.toULong()) throw PaykitAmountError.InvalidAmount
             period.startsAt + value.seconds.toLong().seconds
         }
-    }
-
-    companion object {
-        fun subscriptionEndpoints(requested: PaykitAsset, available: List<String>): List<String> = available.filter {
-            val method = MethodId.fromRawValue(it) ?: return@filter false
-            when (requested) {
-                PaykitAsset.BTC -> method != MethodId.UsdtArbitrum
-                PaykitAsset.USD -> method == MethodId.UsdtArbitrum
-                PaykitAsset.USDT -> false
-            }
-        }
-
-        fun rates(
-            requested: PaykitAsset,
-            endpoints: List<String>,
-            market: PaykitExchangeRate?,
-            at: Instant,
-        ): List<ConversionRate> = endpoints.mapNotNull { MethodId.fromRawValue(it) }
-            .map { if (it == MethodId.UsdtArbitrum) PaykitAsset.USDT else PaykitAsset.BTC }
-            .distinct().sortedBy { it.code }.filter { it != requested }.map { asset ->
-                val value = if ((requested == PaykitAsset.BTC) != (asset == PaykitAsset.BTC)) {
-                    val price = market?.value(at.toEpochMilliseconds()) ?: throw PaykitAmountError.RateUnavailable
-                    if (requested == PaykitAsset.BTC) {
-                        price
-                    } else {
-                        BigDecimal.ONE.divide(
-                            price,
-                            18,
-                            RoundingMode.HALF_EVEN
-                        )
-                    }
-                } else {
-                    BigDecimal.ONE
-                }
-                if (value <= BigDecimal.ZERO) throw PaykitAmountError.RateUnavailable
-                ConversionRate(asset.code, value.stripTrailingZeros().toPlainString())
-            }
     }
 }
 

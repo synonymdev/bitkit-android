@@ -3,7 +3,7 @@
   <actions>
     <action>Open an ethereum: USDT receive link with chain 42161, the pinned Arbitrum token, an owned recipient and uint256=10001. Verify the USDT amount or review screen preserves recipient and 0.010001 USDT. Verify no payment occurs without approval.</action>
     <action>Cancel the send, then reopen the identical URI. Verify the amount or review screen opens again. Cancel and open a different owned recipient and amount, verifying only the new values appear.</action>
-    <action>While a USDT contact payment or direct-send review is open, open another USDT link. Verify the active recipient, amount and contact are preserved. Where PIN is enabled, repeat while its approval screen is visible, then cancel without paying.</action>
+    <action>While a USDT contact amount screen or direct-send review is open, open another USDT link. Verify the active recipient, amount and contact are preserved. Where PIN is enabled, repeat while its approval screen is visible, then cancel without paying.</action>
     <action>Cancel the send. Open the same link without uint256. Verify the amount screen opens with no amount and accepts a new amount.</action>
     <action>Cancel the send. From the main scanner, paste or import a QR containing the same amount-bearing URI. Verify it opens the USDT send flow with the same recipient and amount.</action>
     <action>Cancel the send. From the ordinary Send options, paste the URI. Verify it opens the USDT send flow. Cancel, then open Send again from the USDT wallet and verify the previous recipient and amount are cleared.</action>

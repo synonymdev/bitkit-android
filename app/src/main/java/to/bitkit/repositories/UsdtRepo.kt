@@ -25,6 +25,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.di.IoDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitUsdt
@@ -34,6 +35,7 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @Singleton
 class UsdtRepo @Inject constructor(
@@ -122,7 +124,7 @@ class UsdtRepo @Inject constructor(
     suspend fun paymentEndpoint(): Result<Endpoint> = operation { PaykitUsdt.endpoint(wallet().receiveAddress()) }
 
     suspend fun sendDestinations() = operation {
-        (to.bitkit.env.Env.usdtDestinations + service.wallet().orchestraDestinations()).distinct().toImmutableList()
+        (Env.usdtDestinations + service.wallet().orchestraDestinations()).distinct().toImmutableList()
     }
 
     fun backupSnapshot(): String? = service.backupSnapshot()
@@ -175,11 +177,15 @@ class UsdtRepo @Inject constructor(
         }
     }
 
-    suspend fun send(quote: UsdtQuote, beforeSend: suspend () -> Unit = {}) = withContext(ioDispatcher) {
+    suspend fun send(
+        quote: UsdtQuote,
+        submissionDeadline: Instant? = null,
+        beforeSend: suspend () -> Unit = {},
+    ) = withContext(ioDispatcher) {
         mutex.withLock {
             runSuspendCatching {
                 beforeSend()
-                service.send(quote).also { transfer ->
+                service.send(quote, submissionDeadline).also { transfer ->
                     _state.update {
                         it.copy(
                             transfers = (listOf(transfer) + it.transfers.filter { saved -> saved.id != transfer.id })

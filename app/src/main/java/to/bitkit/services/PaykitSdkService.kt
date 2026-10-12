@@ -20,6 +20,8 @@ import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitSdkDefaults
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentAmountContext
+import com.synonym.paykit.PaymentConversion
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentProofSubmission
 import com.synonym.paykit.PaymentReference
@@ -149,8 +151,8 @@ data class PaykitPaymentRequestProposalTerms(
     val acceptedPaymentEndpointIdentifiers: List<String>,
     val metadataJson: String,
     val recurrence: PaykitPaymentRequestRecurrenceTerms? = null,
-    val conversion: com.synonym.paykit.PaymentConversion? = null,
-    val paymentDeadline: com.synonym.paykit.PaymentDeadline? = null,
+    val conversion: PaymentConversion? = null,
+    val paymentDeadline: PaymentDeadline? = null,
 )
 
 data class PaykitPaymentRequestRecurrenceTerms(

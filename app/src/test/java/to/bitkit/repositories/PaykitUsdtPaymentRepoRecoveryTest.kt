@@ -1,0 +1,231 @@
+@file:OptIn(ExperimentalTime::class)
+
+package to.bitkit.repositories
+
+import com.synonym.bitkitcore.UsdtDestination
+import com.synonym.bitkitcore.UsdtException
+import com.synonym.bitkitcore.UsdtPaymentRequest
+import com.synonym.bitkitcore.UsdtQuote
+import com.synonym.bitkitcore.UsdtTransfer
+import com.synonym.bitkitcore.UsdtTransferStatus
+import com.synonym.bitkitcore.UsdtWallet
+import com.synonym.bitkitcore.usdtParsePaymentRequest
+import com.synonym.paykit.ConversionRate
+import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.PaymentConversion
+import com.synonym.paykit.PubkyIdentityCapability
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.mockito.MockedStatic
+import org.mockito.Mockito
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
+import to.bitkit.data.keychain.Keychain
+import to.bitkit.di.json
+import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
+import to.bitkit.models.PaykitUsdt
+import to.bitkit.models.WalletBackupV1
+import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.UsdtService
+import to.bitkit.test.BaseUnitTest
+import to.bitkit.viewmodels.ContactPaymentContext
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
+
+class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
+    private val identity = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    private val contact = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    private val address = "0x1111111111111111111111111111111111111111"
+    private val keychain: Keychain = mock()
+    private val sdk: PaykitSdkService = mock()
+    private val proofs: PaykitPaymentProofRepo = mock()
+    private val usdt: UsdtRepo = mock()
+    private val service: UsdtService = mock()
+    private val wallet: UsdtWallet = mock()
+    private val clock = object : Clock { override fun now() = Instant.fromEpochSeconds(1_800_000_000) }
+    private var stored: String? = null
+    private lateinit var core: MockedStatic<*>
+    private val request = PaykitPaymentRequest(
+        paymentRequestId = "550e8400-e29b-41d4-a716-446655440000",
+        counterparty = contact,
+        amount = PaykitAmount(PaykitAsset.USD, 5u),
+        paymentReference = "payment-reference",
+        pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("usdt", "1")))),
+        expiresAt = null,
+        acceptedPaymentEndpointIdentifiers = listOf(MethodId.UsdtArbitrum.rawValue),
+    )
+    private val quote = UsdtQuote(
+        id = "quote",
+        bridgeProvider = null,
+        recipient = address,
+        destination = UsdtDestination.ARBITRUM,
+        amount = 50_000u,
+        receivedAmount = 50_000u,
+        maximumFee = 100u,
+        expiresAt = 1_800_000_100u,
+    )
+    private val amount = PaykitAmount(PaykitAsset.USDT, 50_000u)
+
+    @Before
+    fun setUp() = test {
+        core = Mockito.mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt"))
+        core.`when`<UsdtPaymentRequest> { usdtParsePaymentRequest(address) }
+            .thenReturn(UsdtPaymentRequest(address, null, null))
+        val endpoint = PaykitUsdt.endpoint(address)
+        whenever(keychain.loadString(any())).thenAnswer { stored }
+        whenever(keychain.upsertString(any(), any())).doSuspendableAnswer { stored = it.getArgument(1) }
+        whenever(
+            sdk.identityStatus()
+        ).thenReturn(IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(sdk.paymentRequests()).thenReturn(emptyList())
+        whenever(usdt.paymentEndpoint()).thenReturn(Result.success(endpoint))
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(usdt.operation<Any?>(any())).doSuspendableAnswer {
+            val block = it.getArgument<suspend UsdtService.() -> Any?>(0)
+            runCatching { block(service) }
+        }
+        stubStoredTransfer(Result.success(null))
+    }
+
+    @After
+    fun tearDown() { if (::core.isInitialized) core.close() }
+
+    private fun stubStoredTransfer(result: Result<UsdtTransfer?>) {
+        result.getOrNull()?.let { whenever(it.id).thenReturn(quote.id) }
+        doAnswer { result.getOrThrow()?.let(::listOf).orEmpty() }.whenever(wallet).history()
+    }
+
+    private suspend fun stubSend(result: Result<UsdtTransfer>) {
+        whenever(usdt.send(any(), anyOrNull(), any())).doSuspendableAnswer { invocation ->
+            runSuspendCatching {
+                invocation.getArgument<suspend () -> Unit>(2).invoke()
+                result.getOrThrow()
+            }
+        }
+    }
+
+    private fun repo() = PaykitUsdtPaymentRepo(testDispatcher, keychain, sdk, proofs, usdt, clock)
+    private fun context(request: PaykitPaymentRequest = this.request) =
+        ContactPaymentContext(
+            contact,
+            privatePaymentContext = PrivatePaykitPaymentContext(
+                mapOf(MethodId.UsdtArbitrum.rawValue to "bitkit"),
+                null
+            ),
+            incomingPaymentRequest = request,
+            endpoints = listOf(PaykitUsdt.endpoint(address))
+        )
+
+    @Test
+    fun `started payment remains bound after restart before reconciliation`() = test {
+        val original = repo()
+        original.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        stubSend(Result.success(mock()))
+        original.send(quote).getOrThrow()
+
+        val restarted = repo()
+        assertTrue(restarted.hasBinding(request.id))
+        assertFalse(restarted.hasBinding(request.id.copy(paymentRequestId = "different-request")))
+        assertFalse(restarted.hasBinding(request.id.copy(counterparty = identity)))
+        assertFalse(restarted.hasBinding(request.id.copy(billingPeriodStartsAt = clock.now().toString())))
+    }
+
+    @Test
+    fun `wallet backup restores contact attempts with omitted optional fields`() = test {
+        val fixture = """
+            {"version":1,"createdAt":1,"transfers":[],"paykitPaymentState":{
+              "subscriptions":{},"pendingProofs":[],"usdt":{"attempts":[{
+                "quoteId":"quote","wallet":"$address","identity":"$identity","contact":"$contact",
+                "proofQueued":false,"paymentStarted":true
+              }],"receipts":[]}
+            }}
+        """.trimIndent()
+        val walletBackup = json.decodeFromString<WalletBackupV1>(fixture)
+        val repo = repo()
+        repo.restoreBackup(requireNotNull(walletBackup.paykitPaymentState?.usdt))
+        repo.reconcile().getOrThrow()
+        val expected = PaykitUsdtAttempt("quote", address, identity, contact, paymentStarted = true)
+        assertEquals(listOf(expected), repo.attempts.value)
+        assertEquals(listOf(expected), repo().backupSnapshot().attempts)
+    }
+
+    @Test
+    fun `restored started payment remains protected without local core history`() = test {
+        val original = repo()
+        original.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        val unstartedState = stored
+        stubSend(Result.success(mock()))
+        original.send(quote).getOrThrow()
+        val backup = original.backupSnapshot()
+        for (localState in listOf(null, unstartedState)) {
+            stored = localState
+            val restored = repo()
+            restored.restoreBackup(backup)
+            restored.reconcile().getOrThrow()
+            assertTrue(restored.resumableRequests.value.isEmpty())
+            assertTrue(
+                restored.prepare(
+                    context(),
+                    quote.copy(id = "replacement"),
+                    amount,
+                    request.payment(MethodId.UsdtArbitrum, clock.now())
+                ).isFailure
+            )
+            assertEquals(backup, restored.backupSnapshot())
+        }
+    }
+
+    @Test
+    fun `cancelled send allows replacement only when its execution journal confirms no submission`() = test {
+        val pending = mock<UsdtTransfer> { on { status }.thenReturn(UsdtTransferStatus.PENDING) }
+        val histories = listOf(
+            Result.success(null),
+            Result.success(pending),
+            Result.failure<UsdtTransfer?>(UsdtException.Storage("unreadable history")),
+        )
+        for (history in histories) {
+            stored = null
+            val repo = repo()
+            stubStoredTransfer(history)
+            stubSend(Result.success(mock()))
+            repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+            val sending = CompletableDeferred<Unit>()
+            var returned = false
+            val job = launch {
+                repo.send(quote) {
+                    sending.complete(Unit)
+                    awaitCancellation()
+                }
+                returned = true
+            }
+            sending.await()
+            job.cancelAndJoin()
+            assertFalse(returned)
+            val canReplace = history.isSuccess && history.getOrNull() == null
+            assertEquals(!canReplace, repo().backupSnapshot().attempts.single().paymentStarted)
+            val replacement = repo().prepare(
+                context(),
+                quote.copy(id = "replacement"),
+                amount,
+                request.payment(MethodId.UsdtArbitrum, clock.now()),
+            )
+            assertEquals(canReplace, replacement.isSuccess)
+        }
+    }
+}

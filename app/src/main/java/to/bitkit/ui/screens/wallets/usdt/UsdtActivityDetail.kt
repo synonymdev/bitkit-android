@@ -21,12 +21,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.UsdtDestination
+import com.synonym.bitkitcore.UsdtOrchestraTransfer
 import com.synonym.bitkitcore.UsdtTransfer
 import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import to.bitkit.R
 import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.uiDateStyleFor
+import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -219,18 +222,18 @@ internal val UsdtTransfer.activityAmount: ULong get() {
 
 @Composable
 private fun paykitContactName(transferId: String): String? {
-    val app = to.bitkit.ui.appViewModel ?: return null
+    val app = appViewModel ?: return null
     val attempts by app.paykitUsdtPayments.attempts.collectAsStateWithLifecycle()
     val receipts by app.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
     val contacts by app.pubkyContacts.collectAsStateWithLifecycle()
     val key = attempts.firstOrNull { it.quoteId == transferId }?.contact
         ?: receipts.firstOrNull { it.transferId == transferId }?.requestId?.counterparty ?: return null
-    return contacts.firstOrNull { to.bitkit.models.PubkyPublicKeyFormat.matches(it.publicKey, key) }?.name
-        ?: to.bitkit.models.PubkyPublicKeyFormat.display(key)
+    return contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, key) }?.name
+        ?: PubkyPublicKeyFormat.display(key)
 }
 
 @Composable
-private fun UsdtOrchestraDetails(bridge: com.synonym.bitkitcore.UsdtOrchestraTransfer, hideBalance: Boolean) {
+private fun UsdtOrchestraDetails(bridge: UsdtOrchestraTransfer, hideBalance: Boolean) {
     SendCell(caption = stringResource(R.string.usdt__bridge_provider)) { BodySSB("Orchestra") }
     SendCell(caption = stringResource(R.string.usdt__bridge_reference)) { SelectionContainer { BodyS(bridge.quoteId) } }
     bridge.destinationTx?.let { hash ->

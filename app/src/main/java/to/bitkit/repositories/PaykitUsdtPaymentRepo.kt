@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.time.ExperimentalTime::class)
+@file:OptIn(ExperimentalTime::class)
 
 package to.bitkit.repositories
 
@@ -16,6 +16,7 @@ import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -44,6 +45,7 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @Serializable
@@ -70,9 +72,9 @@ data class PaykitUsdtAttempt(
     val wallet: String,
     val identity: String,
     val contact: String,
-    val requestId: PaykitPaymentRequestId?,
-    val binding: UsdtPaymentProofBinding?,
-    val billingPeriod: PaykitBillingPeriod?,
+    val requestId: PaykitPaymentRequestId? = null,
+    val binding: UsdtPaymentProofBinding? = null,
+    val billingPeriod: PaykitBillingPeriod? = null,
     val proof: PaykitUsdtProof? = null,
     val proofQueued: Boolean = false,
     val paymentStarted: Boolean = false,
@@ -214,17 +216,25 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         }
     }
 
-    suspend fun send(quote: UsdtQuote, beforeSend: suspend () -> Unit = {}): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun send(
+        quote: UsdtQuote,
+        submissionDeadline: Instant? = null,
+        beforeSend: suspend () -> Unit = {},
+    ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             setPaymentStarted(quote.id, true).getOrThrow()
-            val result = runSuspendCatching {
-                usdt.send(quote, beforeSend).getOrThrow()
+            var sent = false
+            try {
+                usdt.send(quote, submissionDeadline, beforeSend).getOrThrow()
+                sent = true
+            } finally {
+                if (!sent) {
+                    withContext(NonCancellable) {
+                        val history = storedTransfer(quote.id)
+                        if (history.isSuccess && history.getOrNull() == null) setPaymentStarted(quote.id, false)
+                    }
+                }
             }
-            if (result.isFailure) {
-                val history = storedTransfer(quote.id)
-                if (history.isSuccess && history.getOrNull() == null) setPaymentStarted(quote.id, false)
-            }
-            result.getOrThrow()
             Unit
         }
     }
@@ -302,10 +312,9 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         }
     }
 
-    fun hasBinding(requestId: PaykitPaymentRequestId): Boolean = _attempts.value.any { it.requestId == requestId }
-
-    fun contact(transferId: String): String? = _attempts.value.firstOrNull { it.quoteId == transferId }?.contact
-        ?: _receipts.value.firstOrNull { it.transferId == transferId }?.requestId?.counterparty
+    fun hasBinding(requestId: PaykitPaymentRequestId): Boolean =
+        _attempts.value.any { it.requestId == requestId } ||
+            runCatching { load().attempts.any { it.requestId == requestId } }.getOrDefault(true)
 
     suspend fun prepare(
         context: ContactPaymentContext,
@@ -560,7 +569,9 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                 underpaid = amount.atomic < terms.amount.atomic,
                 afterExpiry = !terms.isValid(receivedAt),
             )
-            save(current.copy(receipts = current.receipts - samePayment.toSet() + receipt))
+            if (samePayment.singleOrNull() != receipt) {
+                save(current.copy(receipts = current.receipts - samePayment.toSet() + receipt))
+            }
         }
     }
 

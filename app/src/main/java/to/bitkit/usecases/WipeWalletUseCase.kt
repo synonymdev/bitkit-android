@@ -16,6 +16,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -47,7 +48,7 @@ class WipeWalletUseCase @Inject constructor(
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
     private val paykitSdkService: PaykitSdkService,
-    private val usdtRepo: to.bitkit.repositories.UsdtRepo,
+    private val usdtRepo: UsdtRepo,
 ) {
     private val wipeMutex = Mutex()
 

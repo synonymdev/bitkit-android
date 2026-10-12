@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.time.ExperimentalTime::class)
+@file:OptIn(ExperimentalTime::class)
 
 package to.bitkit.models
 
@@ -14,6 +14,7 @@ import kotlin.test.assertFails
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 class PaykitRequestPricingTest {

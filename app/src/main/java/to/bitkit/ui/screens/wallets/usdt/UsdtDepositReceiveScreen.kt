@@ -89,6 +89,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
     val state by deposits.state.collectAsStateWithLifecycle()
     var page by remember { mutableStateOf(ReceivePage.ADDRESS) }
     var amount by remember { mutableStateOf("") }
+    var draftAmount by remember { mutableStateOf("") }
     var refundAddress by remember(state.detail?.deposit?.id) { mutableStateOf("") }
     var approved by remember { mutableStateOf<RefundApproval?>(null) }
     var confirmation by remember { mutableStateOf(false) }
@@ -106,6 +107,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                     page = ReceivePage.AMOUNT
                 }
                 ReceivePage.AMOUNT -> {
+                    draftAmount = amount
                     if (state.network != null && state.address == null) deposits.selectNetwork(null)
                     page = ReceivePage.ADDRESS
                 }
@@ -185,12 +187,13 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
             wallet = wallet,
             receiveError = walletUi.refreshError,
             state = state,
-            amount = amount,
+            amount = if (page == ReceivePage.AMOUNT) draftAmount else amount,
             refundAddress = refundAddress,
             hideBalance = settings.hideBalance,
             onNetwork = {
                 if (state.network != it) {
                     amount = ""
+                    draftAmount = ""
                     deposits.selectNetwork(it)
                 }
                 page = if (it == null || state.address != null && state.network == it) {
@@ -200,18 +203,24 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                 }
             },
             onAmount = {
-                if (amount != it) deposits.clearAmountError()
-                amount = it
+                if (draftAmount != it) deposits.clearAmountError()
+                draftAmount = it
             },
             onRefundAddress = { refundAddress = it },
             onCreate = {
-                if (state.network == null) page = ReceivePage.ADDRESS else deposits.prepare(amount)
+                if (state.network == null) {
+                    amount = draftAmount
+                    page = ReceivePage.ADDRESS
+                } else {
+                    deposits.prepare(draftAmount)
+                }
             },
             onHistory = { deposits.history() },
             onMore = { state.nextOffset?.let { deposits.history(it) } },
             onDetail = { scope.launch { deposits.detail(it) } },
             onRefund = { if (!deposits.state.value.busy) confirmation = true },
             onRefresh = {
+                draftAmount = if (state.network == null) amount else draftAmount
                 deposits.selectNetwork(state.network)
                 page = ReceivePage.AMOUNT
             },

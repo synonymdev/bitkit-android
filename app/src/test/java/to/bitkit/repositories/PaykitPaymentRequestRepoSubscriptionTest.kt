@@ -147,7 +147,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             clock,
             subscriptionClock,
             mock { on { canReceive() }.thenReturn(true) },
-            mock { on { currencyState }.thenReturn(kotlinx.coroutines.flow.MutableStateFlow(CurrencyState())) },
+            mock { on { currencyState }.thenReturn(MutableStateFlow(CurrencyState())) },
         )
         sut.activate(LOCAL_IDENTITY)
     }

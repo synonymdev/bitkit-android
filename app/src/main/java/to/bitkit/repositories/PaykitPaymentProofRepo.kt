@@ -46,6 +46,7 @@ import to.bitkit.utils.asNodeException
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -1462,7 +1463,7 @@ private fun PendingPaykitPaymentProof.matchesOnchainPaymentAmount(request: Payki
 internal fun PendingPaykitPaymentProof.onchainPaymentTerms(request: PaykitPaymentRequest): PaykitRequestPayment {
     val method = MethodId.entries.firstOrNull { it.rawValue == paymentEndpointIdentifier && it.isOnchain }
         ?: throw PaykitPaymentRequestError.RequestUnavailable
-    val now = kotlin.time.Clock.System.now()
+    val now = Clock.System.now()
     val payment = request.payment(method, now, conversionQuoteId)
     if (!payment.isValid(now) || payment.amount.atomic != onchainAmountSats) {
         throw PaykitPaymentRequestError.RequestUnavailable
