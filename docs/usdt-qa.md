@@ -20,8 +20,8 @@ A funded Arbitrum wallet uses the real gateway with USDT0 and Orchestra enabled.
 USDT is configured against the real gateway; both app and service enable Polygon through USDT_BRIDGE_NETWORKS, and USDT_BRIDGES_URL enables Orchestra destinations. Use a funded wallet and an owned destination address. Mainnet transfers require authorization. Preserve wallet data, keep authentication out of recordings, and record actual transaction hashes and fees.
 
 - [ ] Open the home screen and verify the USDT balance, then open USDT and Send.
-- [ ] Choose Polygon in UsdtNetwork and open manual address entry. Verify an invalid address and an Arbitrum-specific payment URI cannot advance.
-- [ ] Select Arbitrum and accept an Arbitrum payment URI. Go back from amount entry and change to Polygon. Verify the previous recipient and amount are cleared and must be entered again.
+- [ ] Choose Polygon in UsdtNetwork and open manual address entry. Verify an invalid address cannot advance. Enter an Arbitrum-specific payment URI and verify the selected network changes to Arbitrum and uses the URI recipient and amount.
+- [ ] Change to Polygon from amount entry. Verify the valid EVM recipient and entered amount are retained. Change to Solana and verify a compatible recipient is required; entering a plain Solana address preserves the amount, while a supported payment URI with an explicit amount replaces it.
 - [ ] Enter the owned destination address and a small USDT amount. Verify the review shows Polygon, the full recipient, selected provider, estimated received amount, included Orchestra routing cost where applicable, additional maximum source fee and maximum total debit in USDT.
 - [ ] Authorize one payment. Verify it appears in activity as awaiting cross-network delivery rather than claiming delivery from source-chain execution alone.
 - [ ] Restart the app and verify the same transfer continues tracking without sending a second payment.
