@@ -9,5 +9,6 @@
     <action>Open a BTC request with different quoted prices for Bitcoin and Lightning. Switch Savings and Spending and verify the payable BTC amount changes to the selected method's quoted amount. Verify the confirmation uses Bitkit's own fiat valuation and requires approval. Close without paying.</action>
     <action>Create a USD subscription. Verify only USDT is accepted at fixed 1:1 parity. Propose it to the linked contact. On the payer, review its dollar amount, recurrence and USDT payment method; close before subscribing.</action>
     <action>Create a BTC subscription and verify that only enabled Savings and Spending methods are accepted, with no USDT choice. Close without proposing.</action>
+    <action>With an existing request paid in USDT, open its history entry on the payer and requester. Verify the sent or received arrow and its background use the USDT teal in the list and details, and the date and time icons in details use the same teal. The color follows the payment method even when the request is denominated in BTC or USD.</action>
   </actions>
 </journey>

@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -40,6 +41,7 @@ import to.bitkit.R
 import to.bitkit.ext.UiDateStyle
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestId
@@ -176,6 +178,7 @@ internal fun IncomingPaymentRequestDetailsContent(
                     value = request.createdAt?.let { uiDateText(it.epochSeconds.toULong(), UiDateStyle.DATE) }
                         ?: stringResource(R.string.wallet__payment_request_status_unavailable),
                     iconRes = R.drawable.ic_calendar,
+                    iconColor = request.dateTimeIconColor,
                     modifier = Modifier.weight(1f)
                 )
                 RequestDetailCell(
@@ -183,6 +186,7 @@ internal fun IncomingPaymentRequestDetailsContent(
                     value = request.createdAt?.let { uiDateText(it.epochSeconds.toULong(), UiDateStyle.TIME) }
                         ?: stringResource(R.string.wallet__payment_request_status_unavailable),
                     iconRes = R.drawable.ic_clock,
+                    iconColor = request.dateTimeIconColor,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -315,6 +319,9 @@ internal fun PaykitPaymentRequest.detailsAmountPrefix(): String = when {
 internal fun PaykitPaymentRequest.detailsAmountText(amount: String): String =
     "${detailsAmountPrefix()} $amount".trimStart()
 
+private val PaykitPaymentRequest.dateTimeIconColor
+    get() = if (paymentProofKind == PaykitPaymentProofKind.Usdt) Colors.Usdt else Colors.Purple
+
 @Composable
 private fun PaymentRequestDetailsIcon(request: PaykitPaymentRequest) {
     val isIncomingRequest = request.direction == PaykitPaymentRequestDirection.Incoming
@@ -333,6 +340,7 @@ private fun RequestDetailCell(
     title: String,
     value: String,
     @DrawableRes iconRes: Int,
+    iconColor: Color,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -345,7 +353,7 @@ private fun RequestDetailCell(
             Icon(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                tint = Colors.Purple,
+                tint = iconColor,
                 modifier = Modifier.size(16.dp)
             )
             BodySSB(text = value, maxLines = 1, overflow = TextOverflow.Ellipsis)

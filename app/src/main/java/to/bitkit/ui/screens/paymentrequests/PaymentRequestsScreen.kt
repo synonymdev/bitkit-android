@@ -690,10 +690,18 @@ private val PaykitPaymentRequest.lazyListKey: String
     get() = "$paymentRequestId|$counterparty|${billingPeriod?.startsAt ?: ""}"
 
 internal val PaykitPaymentRequest.paymentRailIconColor
-    get() = if (paymentProofKind == PaykitPaymentProofKind.Lightning) Colors.Purple else Colors.Brand
+    get() = when (paymentProofKind) {
+        PaykitPaymentProofKind.Usdt -> Colors.Usdt
+        PaykitPaymentProofKind.Lightning -> Colors.Purple
+        else -> Colors.Brand
+    }
 
 internal val PaykitPaymentRequest.paymentRailBackgroundColor
-    get() = if (paymentProofKind == PaykitPaymentProofKind.Lightning) Colors.Purple16 else Colors.Brand16
+    get() = when (paymentProofKind) {
+        PaykitPaymentProofKind.Usdt -> Colors.Usdt16
+        PaykitPaymentProofKind.Lightning -> Colors.Purple16
+        else -> Colors.Brand16
+    }
 
 private fun PaykitPaymentRequest.showsPaymentRailIcon(isOutgoingPayment: Boolean): Boolean =
     isOutgoingPayment || hasPaymentEvidence
