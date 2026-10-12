@@ -22,6 +22,7 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.ValidationResult
 import com.synonym.paykit.ConversionRate
 import com.synonym.paykit.PaymentConversion
+import com.synonym.paykit.PaymentConversionQuoteRecord
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
@@ -1538,6 +1539,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
         sut.setTransactionSpeed(TransactionSpeed.Fast)
         assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
+    }
+
+    @Test
+    fun `reopened hardware request preserves its original quote deadline`() = test {
+        val now = Clock.System.now()
+        val quote = recurringQuote(now, listOf(ConversionRate("usdt", "100000")))
+        val (request, _) = reopenRetainedHardwareRequest(balanceSats = 0uL, quote = quote)
+        assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertEquals(request.amount.atomic, sut.sendUiState.value.amount)
+        assertEquals(Instant.parse(quote.expiresAt), sut.hardwarePaymentDeadlineAt)
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
     }
 
     @Test
@@ -10434,8 +10446,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `payment deadline crossed during LNURL callback prevents Lightning submission`() = test {
-        val request = paymentRequest().copy(paymentDeadlineAt = Instant.parse("2026-10-06T12:00:00Z"))
+    fun `quoted payment carries its earlier deadline through LNURL and hardware submission`() = test {
+        val now = Clock.System.now()
+        val period = PaykitBillingPeriod(now - 60.seconds, now + 3_600.seconds)
+        val quote = recurringQuote(now, listOf(ConversionRate("btc", "0.00002")))
+        val request = paymentRequest().copy(
+            amount = PaykitAmount.parse(PaykitAsset.USD, "1.25"),
+            pricing = PaykitRequestPricing(PaymentConversion.PerPeriod, quotes = listOf(quote)),
+            billingPeriod = period,
+            paymentDeadlineAt = now + 120.seconds,
+        )
+        val amountSats = request.payment(MethodId.Bolt11, now).amount.atomic
         val privateContext = privatePaymentContext(7uL)
         val lnurl = LnurlPayData(
             uri = "lnurl1deadline",
@@ -10452,23 +10473,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
-        whenever(lightningRepo.fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(request.amount.atomic), null))
+        whenever(lightningRepo.fetchLnurlInvoice(lnurl, lnurl.callbackAmountMsats(amountSats), null))
             .doSuspendableAnswer {
                 whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
                     .thenReturn(Result.failure(PaykitPaymentRequestError.RequestExpired))
-                Result.success(lightningInvoice("lnbcrt1deadline", request.amount.atomic))
+                Result.success(lightningInvoice("lnbcrt1deadline", amountSats))
             }
-        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setActiveContactPaymentContext(
+            testPublicKey,
+            privateContext,
+            request,
+            endpoints = listOf(Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = "")),
+        )
         setSendState(
             SendUiState(
                 address = lnurl.uri,
-                amount = request.amount.atomic,
+                amount = amountSats,
                 payMethod = SendMethod.LIGHTNING,
                 lnurl = LnurlParams.LnurlPay(lnurl),
                 isPaymentRequest = true,
             ),
         )
 
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        assertEquals(Instant.parse(quote.expiresAt), sut.hardwarePaymentDeadlineAt)
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
 
@@ -10476,7 +10505,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
-        verify(lightningRepo).payInvoice(any(), anyOrNull(), eq(request.paymentDeadlineAt), any())
+        verify(lightningRepo).payInvoice(any(), anyOrNull(), eq(Instant.parse(quote.expiresAt)), any())
     }
 
     @Test
@@ -12441,15 +12470,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         wasPublishedToActiveState = wasPublishedToActiveState,
     )
 
+    private fun recurringQuote(now: Instant, rates: List<ConversionRate>) = PaymentConversionQuoteRecord(
+        eventId = "original",
+        billingPeriod = PaykitBillingPeriod(now - 60.seconds, now + 3_600.seconds).sdkValue,
+        rates = rates,
+        validFrom = (now - 60.seconds).toString(),
+        expiresAt = (now + 60.seconds).toString(),
+        outboundStatus = null,
+    )
+
     private suspend fun TestScope.reopenRetainedHardwareRequest(
         balanceSats: ULong,
         amountSats: ULong = 1_000uL,
+        quote: PaymentConversionQuoteRecord? = null,
     ): Pair<PaykitPaymentRequest, HwFundingSignedTx> {
         sut.setIsAuthenticated(true)
         val request = paymentRequest().copy(
             lifecycleState = PaymentRequestLifecycleState.ACCEPTED,
             amount = PaykitAmount(PaykitAsset.BTC, amountSats),
-
+            pricing = if (quote == null) {
+                PaykitRequestPricing()
+            } else {
+                PaykitRequestPricing(PaymentConversion.PerPeriod, quotes = listOf(quote))
+            },
+            billingPeriod = quote?.let {
+                PaykitBillingPeriod(Instant.parse(it.billingPeriod.startsAt), Instant.parse(it.billingPeriod.endsAt))
+            },
         )
         val signed = hardwareSignedReceipt()
         val proof = to.bitkit.repositories.PendingPaykitPaymentProof(
@@ -12458,6 +12504,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
             paymentAppId = "bitkit",
             kind = PaykitPaymentProofKind.Onchain,
+            conversionQuoteId = quote?.eventId,
             paymentStarted = true,
             paymentIdentifier = to.bitkit.utils.SignedTransactionId.fromHex(signed.serializedTx),
             onchainAddress = REGTEST_ADDRESS,

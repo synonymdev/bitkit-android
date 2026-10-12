@@ -210,6 +210,7 @@ import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.repositories.incomingPaymentRequestFailureReason
+import to.bitkit.repositories.onchainPaymentTerms
 import to.bitkit.repositories.paykitRate
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
@@ -1402,6 +1403,10 @@ class AppViewModel @Inject constructor(
             toast(it)
             return true
         }
+        val originalTerms = runCatching { proof.onchainPaymentTerms(request) }.getOrElse {
+            toast(it)
+            return true
+        }
         resetSendState(
             isPaymentRequest = true,
             paymentRequestNote = request.note,
@@ -1414,6 +1419,8 @@ class AppViewModel @Inject constructor(
         ) {
             return true
         }
+        paykitPaymentTerms = originalTerms
+        paykitReviewedAmount = originalTerms.amount
         // The retained receipt authorizes only reopening the same signed payment, not preparing another spend.
         setActiveContactPaymentContext(
             ContactPaymentContext(publicKey = request.counterparty, incomingPaymentRequest = request),
@@ -5061,7 +5068,7 @@ class AppViewModel @Inject constructor(
             requestId = incomingPaymentRequest?.id,
             payerIdentity = originalPayer,
             contactPublicKey = contactPaymentContext?.publicKey,
-            paymentDeadlineAt = incomingPaymentRequest?.paymentDeadlineAt,
+            paymentDeadlineAt = incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
             beforeSendAttempt = {
                 if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(
@@ -5249,11 +5256,16 @@ class AppViewModel @Inject constructor(
         if (original.requestId != null && request == null) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
+        val paymentDeadline = request?.let {
+            paykitPaymentProofRepo.authorizeOnchainRecovery(it, original).getOrElse { error ->
+                return Result.failure(error)
+            }
+        }
         val result = lightningRepo.retryOriginalOnchainSend(
             original.attemptId,
             original.walletId,
             feeRateSatsPerVByte,
-            paymentDeadlineAt = request?.paymentDeadlineAt,
+            paymentDeadlineAt = paymentDeadline,
             approvePrepared = { receipt ->
                 val fee = requireNotNull(receipt.miningFeeSats)
                 check(fee <= Long.MAX_VALUE.toULong())
@@ -5391,7 +5403,11 @@ class AppViewModel @Inject constructor(
         val lnurlComment = savePendingLnurlComment(decodedInvoice, paymentHash)
 
         var authorizationError: Throwable? = null
-        val result = sendLightning(decodedInvoice.bolt11, paymentAmount, incomingPaymentRequest?.paymentDeadlineAt) {
+        val result = sendLightning(
+            decodedInvoice.bolt11,
+            paymentAmount,
+            incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
+        ) {
             authorizationError = incomingPaymentRequest?.let {
                 paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
             }
@@ -6563,7 +6579,7 @@ class AppViewModel @Inject constructor(
 
     val hardwarePaymentDeadlineAt: Instant?
         get() = synchronized(contactPaymentContextLock) {
-            activeContactPaymentContext?.incomingPaymentRequest?.paymentDeadlineAt
+            activeContactPaymentContext?.incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms)
         }
 
     suspend fun onHardwarePaymentDeadlineExpired(

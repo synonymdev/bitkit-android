@@ -108,6 +108,9 @@ data class PaykitPaymentRequest(
     fun payment(method: MethodId, at: Instant, quoteId: String? = null): PaykitRequestPayment =
         pricing.payment(amount, method.rawValue, billingPeriod, at, quoteId)
 
+    fun submissionDeadline(payment: PaykitRequestPayment?): Instant? =
+        listOfNotNull(paymentDeadlineAt, payment?.expiresAt).minOrNull()
+
     enum class ParseFailure(
         val logValue: String,
         val shouldLogIncomingRejection: Boolean = true,

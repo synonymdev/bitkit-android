@@ -1347,7 +1347,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             candidateTxids = listOf(original),
         )
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        repo.authorizeOnchainRecovery(request, attempt).getOrThrow()
+        assertEquals(payment.expiresAt, repo.authorizeOnchainRecovery(request, attempt).getOrThrow())
 
         val expired = quote.copy(expiresAt = (now - 1.seconds).toString())
         val replacement = quote.copy(eventId = "750e8400-e29b-41d4-a716-446655440000")
@@ -1597,12 +1597,15 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val txid = "ab".repeat(32)
         storedProofs = listOf(
             PendingPaykitPaymentProof(
-                identity = LOCAL_IDENTITY, requestId = request.id, paymentEndpointIdentifier = MethodId.P2wpkh.rawValue, paymentAppId = "bitkit",
+                identity = LOCAL_IDENTITY,
+                requestId = request.id,
+                paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+                paymentAppId = "bitkit",
                 kind = PaykitPaymentProofKind.Onchain,
                 paymentStarted = true,
                 paymentIdentifier = txid,
                 proofData = txid,
-            )
+            ),
         )
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(
             acceptedAttempt(request, txid).copy(evidence = OnchainSendEvidence.Observed),

@@ -63,6 +63,7 @@ Requires funded Arbitrum accounts, controlled billing time, and controlled recei
 - [ ] Create a BTC request accepting Bitcoin and USDT. Switch the payer between Savings, Spending when enabled, and USDT; verify the requested value is preserved and the quoted amount and fee appear before approval.
 - [ ] Using a controlled billing clock, advance to the next installment with the requester offline. Verify its USD amount still maps exactly to USDT, the fee remains additional, and earlier paid periods remain unchanged.
 - [ ] Using controlled payment evidence, verify underpayment and payment after expiry show actual received funds and the corresponding status, without reporting the transfer as failed.
+- [ ] In the local test setup, prepare a recurring request whose conversion quote expires before the request deadline. Wait for quote expiry before submitting through Savings, Spending and a prepared hardware-wallet retry. Verify no new payment is dispatched; any previously attempted transaction remains recoverable under its original quote.
 - [ ] Pay a contact directly without a request and verify the normal asset selector, send review and activity attribution still work. Verify selecting USDT does not request camera access for an already resolved recipient.
 
 ## Backup and dependency failures

@@ -377,7 +377,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     suspend fun authorizeOnchainRecovery(
         request: PaykitPaymentRequest,
         attempt: OnchainSendAttempt
-    ): Result<Unit> = withContext(
+    ): Result<Instant?> = withContext(
         ioDispatcher
     ) {
         runSuspendCatching {
@@ -398,12 +398,12 @@ class PaykitPaymentProofRepo @Inject constructor(
                 val proof = loadProofs().singleOrNull {
                     PubkyPublicKeyFormat.matches(it.identity, identity) && it.matchesOriginalShopAttempt(attempt)
                 } ?: throw PaykitPaymentRequestError.RequestUnavailable
-                if (!proof.matchesRecoveryPayment(request)) {
-                    throw PaykitPaymentRequestError.RequestUnavailable
-                }
+                if (proof.requestId != request.id) throw PaykitPaymentRequestError.RequestUnavailable
+                val payment = proof.onchainPaymentTerms(request)
                 if (proof.proofData != null || proof.onchainAcceptanceVerified) {
                     throw PaykitPaymentRequestError.OperationInProgress
                 }
+                request.submissionDeadline(payment)
             }
         }
     }
@@ -1456,15 +1456,18 @@ internal fun PendingPaykitPaymentProof.matchesHardwareRetryRequest(request: Payk
     requestId == request.id && billingPeriod == request.billingPeriod && matchesOnchainPaymentAmount(request) &&
         paymentEndpointIdentifier in request.acceptedPaymentEndpointIdentifiers
 
-private fun PendingPaykitPaymentProof.matchesRecoveryPayment(request: PaykitPaymentRequest): Boolean =
-    requestId == request.id && matchesOnchainPaymentAmount(request)
+private fun PendingPaykitPaymentProof.matchesOnchainPaymentAmount(request: PaykitPaymentRequest): Boolean =
+    runCatching { onchainPaymentTerms(request) }.isSuccess
 
-private fun PendingPaykitPaymentProof.matchesOnchainPaymentAmount(request: PaykitPaymentRequest): Boolean {
+internal fun PendingPaykitPaymentProof.onchainPaymentTerms(request: PaykitPaymentRequest): PaykitRequestPayment {
     val method = MethodId.entries.firstOrNull { it.rawValue == paymentEndpointIdentifier && it.isOnchain }
-        ?: return false
+        ?: throw PaykitPaymentRequestError.RequestUnavailable
     val now = kotlin.time.Clock.System.now()
-    val payment = runCatching { request.payment(method, now, conversionQuoteId) }.getOrNull() ?: return false
-    return payment.isValid(now) && payment.amount.atomic == onchainAmountSats
+    val payment = request.payment(method, now, conversionQuoteId)
+    if (!payment.isValid(now) || payment.amount.atomic != onchainAmountSats) {
+        throw PaykitPaymentRequestError.RequestUnavailable
+    }
+    return payment
 }
 
 private fun PaymentProofRecord.matchesSubmission(proof: PendingPaykitPaymentProof, proofJson: String): Boolean =
