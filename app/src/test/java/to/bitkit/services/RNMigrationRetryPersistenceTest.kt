@@ -69,7 +69,9 @@ class RNMigrationRetryPersistenceTest : BaseUnitTest() {
             assertFalse(service.shouldRetryPendingMigrationData(schedule.attemptedAtMillis + schedule.delayMillis - 1))
             assertTrue(service.shouldRetryPendingMigrationData(schedule.attemptedAtMillis + schedule.delayMillis))
             service.reapplyMetadataAfterSync()
-            val doubled = json.decodeFromString<RNMigrationRetrySchedule>(assertNotNull(store.data.first()[scheduleKey]))
+            val doubled = json.decodeFromString<RNMigrationRetrySchedule>(
+                assertNotNull(store.data.first()[scheduleKey]),
+            )
             assertEquals(120_000L, doubled.delayMillis)
 
             whenever(activityRepo.getOnchainActivityByTxId("late")).thenReturn(onchain("late"))
@@ -122,10 +124,26 @@ class RNMigrationRetryPersistenceTest : BaseUnitTest() {
         }
     }
 
-    private fun createService(store: DataStore<Preferences>, activityRepo: ActivityRepo, coreService: CoreService): MigrationService {
+    private fun createService(
+        store: DataStore<Preferences>,
+        activityRepo: ActivityRepo,
+        coreService: CoreService,
+    ): MigrationService {
         val context = mock<Context>()
         whenever(context.applicationContext).thenReturn(context)
-        return MigrationService(context, mock(), mock(), mock(), mock(), activityRepo, coreService, mock(), mock(), mock(), store)
+        return MigrationService(
+            context,
+            mock(),
+            mock(),
+            mock(),
+            mock(),
+            activityRepo,
+            coreService,
+            mock(),
+            mock(),
+            mock(),
+            store,
+        )
     }
 
     private fun onchain(id: String) = OnchainActivity.create(
