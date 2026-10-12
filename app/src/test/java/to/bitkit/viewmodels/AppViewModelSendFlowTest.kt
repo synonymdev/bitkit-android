@@ -9402,6 +9402,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initial onchain subscription payment shows the fee warning without a usd rate`() = test {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(600uL))
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("no rate")))
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                isAmountInputValid = true,
+                onchainFeeUi = OnchainFeeUi(sats = 600),
+                selectedUtxos = persistentListOf(mock<SpendableUtxo>()),
+                isInitialSubscriptionPayment = true,
+                initialSubscriptionPaymentAutoStartPending = true,
+            )
+        )
+
+        sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
+        advanceUntilIdle()
+
+        assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
     fun `initial onchain subscription payment checks the fee of the preselected coins`() = test {
         val selectionStarted = CompletableDeferred<Unit>()
         val finishSelection = CompletableDeferred<Unit>()

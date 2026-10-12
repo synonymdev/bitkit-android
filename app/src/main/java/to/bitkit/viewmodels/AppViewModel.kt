@@ -4534,8 +4534,9 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull() ?: return
+        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull()
         if (
+            amountInUsd != null &&
             amountInUsd.value > BigDecimal(SEND_AMOUNT_WARNING_THRESHOLD) &&
             settings.enableSendAmountWarning &&
             SanityWarning.VALUE_OVER_100_USD !in _sendUiState.value.confirmedWarnings
