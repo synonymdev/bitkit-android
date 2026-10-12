@@ -4477,7 +4477,27 @@ class AppViewModel @Inject constructor(
         if (!state.initialSubscriptionPaymentAutoStartPending) return
         _sendUiState.update { it.copy(initialSubscriptionPaymentAutoStartPending = false) }
         if (!state.shouldAutomaticallyPay) return
-        onSwipeToPay()
+        val generation = sendStateGeneration
+        viewModelScope.launch {
+            val isFeeKnown = awaitAutomaticOnchainFee()
+            if (generation != sendStateGeneration) return@launch
+            if (!isFeeKnown) {
+                _sendUiState.update { it.copy(initialSubscriptionPaymentNeedsConfirmation = true) }
+                return@launch
+            }
+            onSwipeToPay()
+        }
+    }
+
+    private suspend fun awaitAutomaticOnchainFee(): Boolean {
+        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN) return true
+        while (true) {
+            val job = onchainSendRefreshJob?.takeIf { it.isActive } ?: break
+            job.join()
+        }
+        val state = _sendUiState.value
+        if (state.onchainFeeUi.sats == null) return false
+        return state.selectedUtxos != null || !settingsStore.data.first().coinSelectAuto
     }
 
     private fun onCancelInitialSubscriptionPayment() {
@@ -7013,10 +7033,12 @@ data class SendUiState(
     val isSubscriptionPayment: Boolean = false,
     val isInitialSubscriptionPayment: Boolean = false,
     val initialSubscriptionPaymentAutoStartPending: Boolean = false,
+    val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
     val shouldAutomaticallyPay: Boolean
-        get() = isInitialSubscriptionPayment && hardwareWalletId == null
+        get() = isInitialSubscriptionPayment && hardwareWalletId == null &&
+            !initialSubscriptionPaymentNeedsConfirmation
 }
 
 @Immutable

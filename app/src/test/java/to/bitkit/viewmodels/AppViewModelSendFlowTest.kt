@@ -9349,6 +9349,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = 1_000u,
                 payMethod = SendMethod.ONCHAIN,
                 isAmountInputValid = true,
+                onchainFeeUi = OnchainFeeUi(sats = 150),
+                selectedUtxos = persistentListOf(mock<SpendableUtxo>()),
                 isInitialSubscriptionPayment = true,
                 initialSubscriptionPaymentAutoStartPending = true,
             )
@@ -9385,6 +9387,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = 1_000u,
                 payMethod = SendMethod.ONCHAIN,
                 isAmountInputValid = true,
+                onchainFeeUi = OnchainFeeUi(sats = 600),
+                selectedUtxos = persistentListOf(mock<SpendableUtxo>()),
                 isInitialSubscriptionPayment = true,
                 initialSubscriptionPaymentAutoStartPending = true,
             )
@@ -9394,6 +9398,78 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `initial onchain subscription payment checks the fee of the preselected coins`() = test {
+        val selectionStarted = CompletableDeferred<Unit>()
+        val finishSelection = CompletableDeferred<Unit>()
+        val selectedUtxos = persistentListOf(mock<SpendableUtxo>())
+        whenever(lightningRepo.determineUtxosToSpend(any(), any())).doSuspendableAnswer {
+            selectionStarted.complete(Unit)
+            finishSelection.await()
+            selectedUtxos
+        }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(150uL))
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), eq(selectedUtxos), anyOrNull()) }
+            .thenReturn(Result.success(600uL))
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal.ZERO,
+                    formatted = "0.00",
+                    symbol = "$",
+                    currency = USD,
+                    flag = "",
+                    sats = 0,
+                )
+            )
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        setUnifiedState(amount = 1_000u, payMethod = SendMethod.LIGHTNING)
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        selectionStarted.await()
+        setSendState(
+            sut.sendUiState.value.copy(
+                isInitialSubscriptionPayment = true,
+                initialSubscriptionPaymentAutoStartPending = true,
+            )
+        )
+
+        sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
+        advanceUntilIdle()
+        assertNull(sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+
+        finishSelection.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(selectedUtxos, sut.sendUiState.value.selectedUtxos)
+        assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `initial onchain subscription payment requires confirmation when the fee is unknown`() = test {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                isAmountInputValid = true,
+                isInitialSubscriptionPayment = true,
+                initialSubscriptionPaymentAutoStartPending = true,
+            )
+        )
+
+        sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.initialSubscriptionPaymentNeedsConfirmation)
+        assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
         assertFalse(sut.sendUiState.value.shouldConfirmPay)
     }
 

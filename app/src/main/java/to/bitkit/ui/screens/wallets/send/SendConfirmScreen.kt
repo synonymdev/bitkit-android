@@ -182,6 +182,10 @@ fun SendConfirmScreen(
         currentOnEvent(SendEvent.StartInitialSubscriptionPayment)
     }
 
+    LaunchedEffect(uiState.initialSubscriptionPaymentNeedsConfirmation) {
+        if (uiState.initialSubscriptionPaymentNeedsConfirmation) isLoading = false
+    }
+
     SendConfirmContent(
         uiState = uiState,
         isNodeRunning = isNodeRunning,
@@ -353,7 +357,7 @@ private fun ContentRunning(
     onClickTag: (String) -> Unit = {},
     onSwipeToConfirm: () -> Unit = {},
 ) {
-    var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
+    var showDetails by rememberSaveable(initialShowDetails) { mutableStateOf(initialShowDetails) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val isPreparing = preparingRequest != null
     val isLnurlPay = !isPreparing && uiState.lnurl is LnurlParams.LnurlPay
