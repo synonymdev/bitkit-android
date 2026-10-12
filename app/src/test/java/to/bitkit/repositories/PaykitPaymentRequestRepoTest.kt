@@ -334,9 +334,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             diagnostics,
             paymentProofStore,
             paymentProofRepo,
+            usdtPayments,
             subscriptionNotificationScheduler,
             clock,
             clock,
+            lightningRepo,
+            currencyRepoWithRate(),
         )
         sut.activate(LOCAL_IDENTITY)
     }

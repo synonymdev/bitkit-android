@@ -123,6 +123,7 @@ import to.bitkit.ext.walletId
 import to.bitkit.ext.watchUntil
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.FeeRate
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -152,7 +153,6 @@ import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
-import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -168,8 +168,8 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
-import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
 import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
@@ -5288,7 +5288,7 @@ class AppViewModel @Inject constructor(
                         ?: throw PaykitPaymentRequestError.RequestUnavailable
                 check(currentRequest.paymentDeadlineAt == request.paymentDeadlineAt)
                 paykitPaymentRequestRepo.ensurePaymentAllowed(currentRequest).getOrThrow()
-                paykitPaymentProofRepo.authorizeOnchainRecovery(attempt).getOrThrow()
+                paykitPaymentProofRepo.authorizeOnchainRecovery(currentRequest, attempt).getOrThrow()
             }
         }
         if (result.getOrNull() is OnchainSendOutcome.Accepted) {
@@ -5564,7 +5564,7 @@ class AppViewModel @Inject constructor(
     ): Result<Unit> = request?.let {
         val privateContext = contactPaymentContext?.privatePaymentContext
         paykitPaymentProofRepo.markOnchainPaymentStarted(
-            it, address, walletId,
+            it, address, _sendUiState.value.amount, walletId,
             privatePaymentListVersion = privateContext?.paymentListVersion,
             previousPrivatePaymentListVersion = privateContext?.previousPaymentListVersion,
         )
@@ -6509,11 +6509,17 @@ class AppViewModel @Inject constructor(
         signedTx: HwFundingSignedTx? = null,
     ): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        if (contactPaymentContext?.incomingPaymentRequest?.let { paykitUsdtPayments.hasBinding(it.id) } == true) {
+            rejectMismatchedPaymentRequest()
+            return false
+        }
         if (contactPaymentContext?.incomingPaymentRequest?.id != requestId) return false
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
         if (incomingPaymentRequest != null &&
             (identity == null || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value))
-        ) return false
+        ) {
+            return false
+        }
         if (incomingPaymentRequest != null && signedTx == null) return false
         // A retry of the original signed transaction skips this hook in HwSendViewModel.
         // A new Shop payment must consult the durable paymentStarted guard again.
@@ -6532,6 +6538,7 @@ class AppViewModel @Inject constructor(
                     paykitPaymentProofRepo.markOnchainPaymentStarted(
                         requireNotNull(incomingPaymentRequest),
                         address,
+                        _sendUiState.value.amount,
                         walletId ?: WalletScope.default,
                         contactPaymentContext.privatePaymentContext?.paymentListVersion,
                         signedTx,
@@ -6568,8 +6575,19 @@ class AppViewModel @Inject constructor(
         val context = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         val request = context?.incomingPaymentRequest ?: return
         if (request.id != requestId || identity == null || walletId == null ||
-            walletId != _sendUiState.value.hardwareWalletId || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)) return
-        handleHardwarePaymentFailure(PaykitPaymentRequestError.RequestExpired, context, request, walletId, identity, hasAttemptedBroadcast)
+            walletId != _sendUiState.value.hardwareWalletId ||
+            !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+        ) {
+            return
+        }
+        handleHardwarePaymentFailure(
+            PaykitPaymentRequestError.RequestExpired,
+            context,
+            request,
+            walletId,
+            identity,
+            hasAttemptedBroadcast
+        )
     }
 
     suspend fun authorizeHardwareContactPayment(
@@ -6579,6 +6597,10 @@ class AppViewModel @Inject constructor(
         walletId: String? = _sendUiState.value.hardwareWalletId,
     ): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        if (contactPaymentContext?.incomingPaymentRequest?.let { paykitUsdtPayments.hasBinding(it.id) } == true) {
+            rejectMismatchedPaymentRequest()
+            return false
+        }
         if (contactPaymentContext?.incomingPaymentRequest?.id != requestId) return false
         val request = contactPaymentContext?.incomingPaymentRequest ?: return true
         if (identity == null || walletId == null) return false
@@ -6591,9 +6613,18 @@ class AppViewModel @Inject constructor(
         if (walletId != _sendUiState.value.hardwareWalletId ||
             !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value) ||
             synchronized(contactPaymentContextLock) { activeContactPaymentContext } != contactPaymentContext
-        ) return false
+        ) {
+            return false
+        }
         if (error == null) return true
-        return handleHardwarePaymentFailure(error, contactPaymentContext, request, walletId, identity, hasAttemptedBroadcast)
+        return handleHardwarePaymentFailure(
+            error,
+            contactPaymentContext,
+            request,
+            walletId,
+            identity,
+            hasAttemptedBroadcast
+        )
     }
 
     private suspend fun handleHardwarePaymentFailure(

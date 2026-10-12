@@ -311,7 +311,13 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `enabling sharing reschedules current contacts after pending cleanup skipped preparation`() = test {
-        settingsData.update { SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false) }
+        settingsData.update {
+            SettingsData(
+                sharesPrivatePaykitEndpoints = true,
+                publicPaykitLightningEnabled = false,
+                publicPaykitUsdtEnabled = false
+            )
+        }
         cacheData.update {
             it.copy(cleanupPending = true, contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
         }
@@ -350,7 +356,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `handleOnchainActivity skips SDK access when publication is locally unnecessary`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
         clearInvocations(paykitSdkService, pubkyService)
 
@@ -452,7 +462,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `prepareSavedContacts propagates identity errors and cancellation`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         val failures = listOf(AppError("Identity unavailable"), CancellationException("Cancelled"))
         var failure: Throwable = failures.first()
         whenever(paykitSdkService.identityStatus()).thenAnswer { throw failure }
@@ -472,7 +486,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `publication checks identity capability and settings after identity lookup`() = test {
         for (unavailable in listOf("identity", "capability", "sharing", "cleanup")) {
-            settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+            settingsData.value = SettingsData(
+                sharesPrivatePaykitEndpoints = true,
+                publicPaykitLightningEnabled = false,
+                publicPaykitUsdtEnabled = false,
+            )
             cacheData.value = PrivatePaykitCacheData()
             val status = CompletableDeferred<IdentityStatus>()
             whenever(paykitSdkService.identityStatus()) doSuspendableAnswer { status.await() }
@@ -504,7 +522,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `publication rechecks identity after wallet reservation`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         val address = CompletableDeferred<String>()
         whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)) doSuspendableAnswer {
             Result.success(address.await())
@@ -565,7 +587,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `explicit publication retries queue failures after its priority window expires`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(clock.now()).thenAnswer {
             Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
         }
@@ -714,7 +740,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `unavailable peer retains queued delivery until drained`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(clock.now()).thenAnswer {
             Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
         }
@@ -755,7 +785,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `unavailable peer that links during queued delivery retries failed intake`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(clock.now()).thenAnswer {
             Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
         }
@@ -808,7 +842,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `unavailable peer that links after identity check failure retries failed intake`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(clock.now()).thenAnswer {
             Instant.fromEpochSeconds(NOW_SECONDS) + testDispatcher.scheduler.currentTime.milliseconds
         }
@@ -856,7 +894,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `blocked peer retires an unpublished explicit retry`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.BLOCKED)))
 
         try {
@@ -1312,7 +1354,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `backgrounding queued retry publication does not block explicit publication`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
         val completion = CompletableDeferred<Unit>()
         var firstLookup = true
@@ -1432,7 +1478,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `transport recovery waits for foreground and preserves background priority`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(paykitSdkService.linkedPeers(any())).thenReturn(emptyList())
         val completion = CompletableDeferred<Unit>()
         whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
@@ -1459,7 +1509,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `profile deletion invalidates paused transport recovery`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(paykitSdkService.linkedPeers(any())).thenReturn(emptyList())
         val completion = CompletableDeferred<Unit>()
         whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).doSuspendableAnswer {
@@ -2563,7 +2617,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `profile deletion stops preparation and avoids repeated withdrawal`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         sut.beginProfileDeletion()
         sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
         runCurrent()
@@ -2582,7 +2640,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `cleanup stops a stalled preparation before later contacts are visited`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         val linkStarted = CompletableDeferred<Unit>()
         val resumeLink = CompletableDeferred<Unit>()
         whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)) doSuspendableAnswer {
@@ -2608,7 +2670,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `preparation drops contacts removed while linking`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         val resumeLink = CompletableDeferred<Unit>()
         whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)) doSuspendableAnswer {
             resumeLink.await()
@@ -2627,7 +2693,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `unavailable contacts are retried after a cooldown`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
             .thenAnswer { throw PaykitException.NotFound("not_found", "No App Registry") }
         repeat(3) { sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow() }
@@ -2641,7 +2711,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `transport failures only defer contacts without a handshake after advancement`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         var state: LinkedPeerState? = null
         var nextState: LinkedPeerState? = null
         whenever(paykitSdkService.linkedPeers()).thenAnswer {
@@ -2678,7 +2752,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `removed contacts do not retain unavailable link cooldown`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitLightningEnabled = false)
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY))
             .thenAnswer { throw PaykitException.NotFound("not_found", "No App Registry") }
 

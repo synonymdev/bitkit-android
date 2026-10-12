@@ -538,7 +538,7 @@ class BackupRepo @Inject constructor(
             }
 
             val upload = if (category == BackupCategory.WALLET) {
-                persistWalletBackup()
+                uploadWalletBackup(null)
             } else {
                 runSuspendCatching {
                     vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
@@ -566,7 +566,10 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    suspend fun persistWalletBackup(usdt: String? = null): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun persistWalletBackup(usdt: String? = null): Result<Unit> =
+        uploadWalletBackup(usdt).onFailure { markBackupRequired(BackupCategory.WALLET) }
+
+    private suspend fun uploadWalletBackup(usdt: String?): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             walletBackupMutex.withLock {
                 if (shouldSkipBackup()) throw UsdtException.BackupUnavailable()
@@ -574,7 +577,7 @@ class BackupRepo @Inject constructor(
                 val data = getWalletBackupDataBytes(usdt)
                 vssBackupClient.putObject(key = BackupCategory.WALLET.name, data = data).getOrThrow()
             }
-        }.map { }.onFailure { markBackupRequired(BackupCategory.WALLET) }
+        }.map { }
     }
 
     private suspend fun markBackupFailed(category: BackupCategory, backupRequired: Long, e: Throwable) {
@@ -702,8 +705,9 @@ class BackupRepo @Inject constructor(
                     it.originalInputs == null && it.candidateTxids.isEmpty()
             } != true
         ) { "Waiting for signed receipt before wallet backup" }
-        check(privateRepo.backupStateVersion.value == privateVersion &&
-            paykitSdkService.backupStateVersion.value == sdkVersion
+        check(
+            privateRepo.backupStateVersion.value == privateVersion &&
+                paykitSdkService.backupStateVersion.value == sdkVersion
         ) { "Private payment state changed during wallet snapshot" }
         val proofs = snapshotProofs
         val active = snapshotAttempt?.let { attempt ->
