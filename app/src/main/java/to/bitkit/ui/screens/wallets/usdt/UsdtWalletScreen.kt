@@ -131,21 +131,23 @@ fun UsdtWalletCard(onClick: () -> Unit, viewModel: UsdtViewModel = hiltViewModel
 fun UsdtWalletScreen(
     onBack: () -> Unit,
     initialTransferId: String? = null,
+    initialRecipient: String = "",
+    initialAmount: String = "",
     viewModel: UsdtViewModel = hiltViewModel()
 ) {
     val app = appViewModel
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    var page by remember { mutableStateOf(UsdtPage.WALLET) }
+    var page by remember { mutableStateOf(if (initialRecipient.isEmpty()) UsdtPage.WALLET else UsdtPage.AMOUNT) }
     val sending = page in listOf(UsdtPage.RECIPIENT, UsdtPage.MANUAL, UsdtPage.AMOUNT)
     DisposableEffect(viewModel, sending) {
         viewModel.isSendPresented = sending
         onDispose { viewModel.isSendPresented = false }
     }
     var selectedTransferId by rememberSaveable(initialTransferId) { mutableStateOf(initialTransferId) }
-    var recipient by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
+    var recipient by remember { mutableStateOf(initialRecipient) }
+    var amount by remember { mutableStateOf(initialAmount) }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     var destination by remember { mutableStateOf(UsdtDestination.ARBITRUM) }
     val dismissalBlocked = state.busy || state.authenticationRequired

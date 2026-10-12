@@ -211,6 +211,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.repositories.incomingPaymentRequestFailureReason
 import to.bitkit.repositories.onchainPaymentTerms
+import to.bitkit.repositories.parseUsdtPaymentRequest
 import to.bitkit.repositories.paykitRate
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
@@ -2873,6 +2874,11 @@ class AppViewModel @Inject constructor(
         allowPubkyAuth: Boolean = isMainScanner,
         suppressQuickPay: Boolean = false,
     ): Job? {
+        if (contactPaymentContext == null &&
+            data.trim().startsWith("ethereum:", ignoreCase = true) && usdtRepo.isSendPresented
+        ) {
+            return null
+        }
         val previousPreparation = paymentRequestPreparation.value?.takeUnless {
             it.request.id == contactPaymentContext?.incomingPaymentRequest?.id
         }
@@ -3768,6 +3774,11 @@ class AppViewModel @Inject constructor(
 
         val input = normalizedScanInput(result, routePubkyKeys) ?: return@withContext
 
+        if (contactPaymentContext == null && input.trim().startsWith("ethereum:", ignoreCase = true)) {
+            handleUsdtPaymentInput(input.trim())
+            return@withContext
+        }
+
         val contactPaymentProfile = activeContactPaymentProfile()
         val incomingPaymentRequest = activeIncomingPaymentRequest()
         val isPaymentRequest = incomingPaymentRequest != null
@@ -3882,6 +3893,25 @@ class AppViewModel @Inject constructor(
         } else {
             result.removeLightningSchemes()
         }
+    }
+
+    private fun handleUsdtPaymentInput(input: String) {
+        val request = if (Env.isUsdtEnabled && activeHardwareWalletId == null && !usdtRepo.isSendPresented) {
+            parseUsdtPaymentRequest(input).getOrNull()
+        } else {
+            null
+        }
+        if (request == null) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__qr_error_header),
+                description = context.getString(R.string.other__qr_error_text),
+            )
+            return
+        }
+        val amount = request.amount?.let { PaykitAmount(PaykitAsset.USDT, it).value }.orEmpty()
+        hideSheet()
+        mainScreenEffect(MainScreenEffect.Navigate(Routes.UsdtPayment(request.recipient, amount)))
     }
 
     private fun requiresPaykitAssetSelection(payment: ContactPaymentContext): Boolean =

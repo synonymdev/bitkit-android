@@ -19,6 +19,9 @@ import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.UsdtDestination
+import com.synonym.bitkitcore.UsdtException
+import com.synonym.bitkitcore.UsdtPaymentRequest
 import com.synonym.bitkitcore.ValidationResult
 import com.synonym.paykit.ConversionRate
 import com.synonym.paykit.PaymentConversion
@@ -62,6 +65,7 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.TransactionDetails
+import org.mockito.Mockito
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
@@ -187,6 +191,7 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.repositories.parseUsdtPaymentRequest
 import to.bitkit.services.ActivityService
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
@@ -3952,6 +3957,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.sendUiState.value.canSwitchWallet)
+    }
+
+    @Test
+    fun `USDT URI scans preserve the amount and bypass Bitcoin decoding`() = test {
+        val recipient = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
+        val uri = "ethereum:0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9@42161/transfer?address=$recipient"
+        Mockito.mockStatic(Class.forName("to.bitkit.repositories.UsdtRepoKt")).use { parser ->
+            val cases = listOf(Triple("", null, ""), Triple("&uint256=10001", 10001uL, "0.010001"))
+            for ((suffix, amount, display) in cases) {
+                parser.`when`<Result<UsdtPaymentRequest>> {
+                    parseUsdtPaymentRequest(uri + suffix, UsdtDestination.ARBITRUM)
+                }
+                    .thenReturn(Result.success(UsdtPaymentRequest(recipient, amount, 42161u)))
+                sut.mainScreenEffect.test {
+                    sut.onScanResult(uri + suffix)
+                    advanceUntilIdle()
+                    if (Env.isUsdtEnabled) {
+                        assertEquals(MainScreenEffect.Navigate(Routes.UsdtPayment(recipient, display)), awaitItem())
+                    }
+                    expectNoEvents()
+                }
+            }
+        }
+        verify(coreService, never()).decode(any())
+        verify(usdtRepo, never()).quote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `invalid USDT links and active USDT sends cannot open another payment`() = test {
+        val uri = "ethereum:invalid"
+        Mockito.mockStatic(Class.forName("to.bitkit.repositories.UsdtRepoKt")).use { parser ->
+            parser.`when`<Result<UsdtPaymentRequest>> { parseUsdtPaymentRequest(uri, UsdtDestination.ARBITRUM) }
+                .thenReturn(Result.failure(UsdtException.WrongNetwork()))
+            sut.mainScreenEffect.test {
+                sut.onScanResult(uri)
+                advanceUntilIdle()
+                expectNoEvents()
+                parser.`when`<Result<UsdtPaymentRequest>> { parseUsdtPaymentRequest(uri, UsdtDestination.ARBITRUM) }
+                    .thenReturn(Result.success(UsdtPaymentRequest("owned recipient", 10001u, 42161u)))
+                whenever(usdtRepo.isSendPresented).thenReturn(true)
+                setActiveContactPaymentContext(testPublicKey)
+                sut.onScanResult(uri)
+                advanceUntilIdle()
+                expectNoEvents()
+                assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
+            }
+        }
+        verify(coreService, never()).decode(any())
+        verify(usdtRepo, never()).quote(any(), any(), any(), any())
     }
 
     @Test

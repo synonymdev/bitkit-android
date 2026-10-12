@@ -1228,6 +1228,14 @@ private fun NavGraphBuilder.home(
     deepLinkableComposable<Routes.UsdtWallet> {
         UsdtWalletScreen(onBack = { navController.popBackStack() })
     }
+    composableWithDefaultTransitions<Routes.UsdtPayment> { entry ->
+        val payment = entry.toRoute<Routes.UsdtPayment>()
+        UsdtWalletScreen(
+            onBack = { navController.popBackStack() },
+            initialRecipient = payment.recipient,
+            initialAmount = payment.amount,
+        )
+    }
     deepLinkableComposable<Routes.Savings> {
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
@@ -2248,6 +2256,9 @@ sealed interface Routes {
 
     @Serializable
     data class UsdtActivity(val transferId: String) : Routes.InternalOnly
+
+    @Serializable
+    data class UsdtPayment(val recipient: String, val amount: String) : Routes.InternalOnly
 
     @Serializable
     data object Settings : Routes.DeepLinkable
