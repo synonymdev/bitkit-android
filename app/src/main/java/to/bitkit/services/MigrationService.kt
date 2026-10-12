@@ -365,7 +365,14 @@ class MigrationService @Inject constructor(
     }
 
     private suspend fun recordPendingMigrationRetry() {
-        val schedule = if (canCleanupAfterMigration) null else RNMigrationRetrySchedule.afterAttempt(readRetrySchedule(), nowMillis())
+        val schedule = if (canCleanupAfterMigration) {
+            null
+        } else {
+            RNMigrationRetrySchedule.afterAttempt(
+                readRetrySchedule(),
+                nowMillis(),
+            )
+        }
         rnMigrationStore.edit {
             val key = stringPreferencesKey(RN_RETRY_SCHEDULE_KEY)
             if (schedule == null) it.remove(key) else it[key] = json.encodeToString(schedule)
