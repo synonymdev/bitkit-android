@@ -320,11 +320,23 @@ androidComponents {
         val buildConfigFields = requireNotNull(variant.buildConfigFields) {
             "buildFeatures.buildConfig must stay enabled for '${variant.name}'."
         }
-        buildConfigFields.put("USDT_BUNDLER_URL", localProp("USDT_BUNDLER_URL").orElse("").stringField())
-        buildConfigFields.put("USDT_BRIDGES_URL", localProp("USDT_BRIDGES_URL").orElse("").stringField())
-        buildConfigFields.put("USDT_DEPOSITS_URL", localProp("USDT_DEPOSITS_URL").orElse("").stringField())
+        buildConfigFields.put(
+            "USDT_BUNDLER_URL",
+            localProp("USDT_BUNDLER_URL").orElse("https://bitkit.to/v1/usdt/rpc").stringField(),
+        )
+        buildConfigFields.put(
+            "USDT_BRIDGES_URL",
+            localProp("USDT_BRIDGES_URL").orElse("https://bitkit.to/v1/usdt/bridges").stringField(),
+        )
+        buildConfigFields.put(
+            "USDT_DEPOSITS_URL",
+            localProp("USDT_DEPOSITS_URL").orElse("https://bitkit.to/v1/usdt/deposits").stringField(),
+        )
         buildConfigFields.put("USDT_BRIDGE_NETWORKS", localProp("USDT_BRIDGE_NETWORKS").orElse("").stringField())
-        buildConfigFields.put("USDT_RPC_URL", localProp("USDT_RPC_URL").orElse("").stringField())
+        buildConfigFields.put(
+            "USDT_RPC_URL",
+            localProp("USDT_RPC_URL").orElse("https://bitkit.to/v1/usdt/chain-rpc").stringField(),
+        )
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
         buildConfigFields.put("E2E_LOCAL_HOST", e2eLocalHostEnv.stringField())

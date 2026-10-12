@@ -2,9 +2,18 @@
 
 Normal builds use published bitkit-core `0.8.0-rc2`, including its matching native libraries and generated bindings.
 
-USDT uses Arbitrum One regardless of the Bitcoin network setting. Gradle reads `USDT_RPC_URL` and `USDT_BUNDLER_URL` from local properties/environment configuration. Both must point to the controlled service's credential-free HTTPS chain and bundler routes. Missing endpoints hide the wallet entry.
+USDT uses Arbitrum One regardless of the Bitcoin network setting. Builds use the credential-free Bitkit gateway by default:
 
-Optional `USDT_DEPOSITS_URL` enables wallet-signed Orchestra deposits. Provider keys remain on the service. Source support covers Ethereum, Tron, Solana, Polygon, Base and BNB Smart Chain, subject to explicit service enablement and live route availability. Each source requires funded acceptance before release. Users approve a source-network refund address when requesting an eligible refund; unconverted Tron refunds require provider support. History and addresses recover under the same provider partner account. Linked order amounts are batch totals. Outbound USDT0 destinations are enabled with `USDT_BRIDGE_NETWORKS`, a comma-separated subset of `ethereum,polygon,plasma,stable`, matching the service configuration. Empty configuration offers Arbitrum only. Paykit always uses direct Arbitrum payments.
+| Setting | Default |
+| --- | --- |
+| `USDT_BRIDGES_URL` | `https://bitkit.to/v1/usdt/bridges` |
+| `USDT_BUNDLER_URL` | `https://bitkit.to/v1/usdt/rpc` |
+| `USDT_DEPOSITS_URL` | `https://bitkit.to/v1/usdt/deposits` |
+| `USDT_RPC_URL` | `https://bitkit.to/v1/usdt/chain-rpc` |
+
+Gradle properties, environment variables or `local.properties` override these defaults. For local E2E testing, override all four URLs with the matching local service routes. Clearing the RPC or bundler build setting disables USDT; clearing the deposits or bridges setting disables that provider API.
+
+Optional `USDT_DEPOSITS_URL` enables wallet-signed Orchestra deposits. Provider keys remain on the service. Source support covers Ethereum, Tron, Solana, Polygon, Base and BNB Smart Chain, subject to explicit service enablement and live route availability. Each source requires funded acceptance before release. Users approve a source-network refund address when requesting an eligible refund; unconverted Tron refunds require provider support. History and addresses recover under the same provider partner account. Linked order amounts are batch totals. Outbound USDT0 destinations are enabled with `USDT_BRIDGE_NETWORKS`, a comma-separated subset of `ethereum,polygon,plasma,stable`, matching the service configuration. An empty USDT0 network list disables USDT0 bridging; Orchestra destinations are discovered separately through `USDT_BRIDGES_URL`. Paykit always uses direct Arbitrum payments.
 
 The `bitkitCoreAar` Gradle property selects an absolute local release AAR. Bindings and native libraries must come from the same core build.
 
