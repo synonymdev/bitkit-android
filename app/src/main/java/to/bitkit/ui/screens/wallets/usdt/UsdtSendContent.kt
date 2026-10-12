@@ -124,6 +124,8 @@ internal fun UsdtPaymentContent(
     onDestinationChange: ((UsdtDestination) -> Unit)? = null,
     destinations: ImmutableList<UsdtDestination> = Env.usdtDestinations.toImmutableList(),
 ) {
+    if (page == UsdtPage.WALLET) return
+
     val quote = state.quote
     val status = wallet.transfers.firstOrNull { it.id == quote?.id }?.status
     val completed = state.submitted && !state.busy && status == UsdtTransferStatus.CONFIRMED
@@ -540,6 +542,7 @@ private fun UsdtConfirmation(
         if (showDetails) {
             UsdtFeeNote(quote)
         }
+        UsdtMaximumTotal(quote)
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = Colors.Usdt,
@@ -551,6 +554,16 @@ private fun UsdtConfirmation(
             modifier = Modifier.fillMaxWidth().testTag("UsdtConfirm")
         )
     }
+}
+
+@Composable
+private fun UsdtMaximumTotal(quote: UsdtQuote) {
+    if (quote.destination == UsdtDestination.ARBITRUM) return
+    SendCell(
+        caption = stringResource(R.string.usdt__maximum_total),
+        modifier = Modifier.testTag("UsdtMaximumTotal")
+    ) { BodySSB(usdtOverviewAmount(quote.amount + quote.maximumFee) + " USDT") }
+    VerticalSpacer(16.dp)
 }
 
 @Composable
@@ -609,15 +622,11 @@ private fun UsdtBridgeCosts(quote: UsdtQuote) {
             }
         )
     ) { BodySSB(usdtOverviewAmount(quote.receivedAmount) + " USDT") }
-    VerticalSpacer(16.dp)
     if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
+        VerticalSpacer(16.dp)
         SendCell(caption = stringResource(R.string.usdt__bridge_deducted_fee)) {
             BodySSB(usdtOverviewAmount(quote.amount - minOf(quote.amount, quote.receivedAmount)) + " USDT")
         }
-        VerticalSpacer(16.dp)
-    }
-    SendCell(caption = stringResource(R.string.usdt__maximum_total)) {
-        BodySSB(usdtOverviewAmount(quote.amount + quote.maximumFee) + " USDT")
     }
 }
 
