@@ -597,7 +597,9 @@ private fun depositStatus(status: String, code: String?): Int = when (status) {
     } else {
         R.string.usdt__deposit_needs_attention
     }
-    "pending", "processing" -> if (code == null) R.string.usdt__pending else R.string.usdt__deposit_needs_attention
+    "pending", "processing", "funded", "confirming", "swapping", "bridging", "delivering" -> {
+        if (code == null) R.string.usdt__pending else R.string.usdt__deposit_needs_attention
+    }
     else -> R.string.usdt__deposit_needs_attention
 }
 

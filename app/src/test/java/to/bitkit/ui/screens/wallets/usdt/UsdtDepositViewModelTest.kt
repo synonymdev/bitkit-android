@@ -28,6 +28,22 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
     private val repo: UsdtDepositRepo = mock()
 
     @Test
+    fun `bridge cost rejection shows no deposit address or invented minimum`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf(UsdtDepositNetwork.TRON)))
+        whenever(repo.prepareDeposit(UsdtDepositNetwork.TRON, "3.5"))
+            .thenReturn(Result.failure(UsdtException.BridgeAmountTooSmall()))
+        val model = UsdtDepositViewModel(repo)
+        model.selectNetwork(UsdtDepositNetwork.TRON)
+        model.prepare("3.5").join()
+        assertEquals(R.string.usdt__error_bridge_amount, model.state.value.error)
+        assertNull(model.state.value.amountLimits)
+        assertNull(model.state.value.address)
+        assertFalse(model.state.value.busy)
+        model.clearAmountError()
+        assertNull(model.state.value.error)
+    }
+
+    @Test
     fun `editing a rejected amount clears its error and limits`() = test {
         whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf(UsdtDepositNetwork.POLYGON)))
         val error = UsdtException.DepositAmountOutOfRange("200", "1200000000")
@@ -101,6 +117,12 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
                 R.string.usdt__deposit_needs_attention,
             ),
             Triple("refunding", "refund_error", R.string.usdt__deposit_needs_attention),
+            Triple("funded", null, R.string.usdt__pending),
+            Triple("confirming", null, R.string.usdt__pending),
+            Triple("swapping", null, R.string.usdt__pending),
+            Triple("bridging", null, R.string.usdt__pending),
+            Triple("delivering", null, R.string.usdt__pending),
+            Triple("swapping", "order_error", R.string.usdt__deposit_needs_attention),
             Triple("pending", "standing_route_unavailable", R.string.usdt__deposit_needs_attention),
             Triple("below_minimum", "xchain_amount_too_small", R.string.usdt__deposit_needs_attention),
         )

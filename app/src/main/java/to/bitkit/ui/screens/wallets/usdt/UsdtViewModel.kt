@@ -266,6 +266,7 @@ internal fun Throwable.messageResource(): Int = when (this) {
     is UsdtSelfSendError -> R.string.usdt__error_self_send
     is UsdtException.NotConfigured -> R.string.usdt__error_configuration
     is UsdtException.InvalidAmount -> R.string.usdt__error_amount
+    is UsdtException.BridgeAmountTooSmall -> R.string.usdt__error_bridge_amount
     is UsdtException.InvalidAddress, is UsdtException.WrongNetwork -> R.string.usdt__error_address
     is UsdtException.InsufficientBalance -> R.string.usdt__error_balance
     is UsdtException.QuoteExpired -> R.string.usdt__error_expired

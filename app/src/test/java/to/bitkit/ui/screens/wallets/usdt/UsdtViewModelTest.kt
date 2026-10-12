@@ -56,6 +56,18 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertEquals(R.string.usdt__error_address, UsdtException.InvalidAddress().messageResource())
     }
 
+    @Test
+    fun `bridge cost rejection prevents payment review and keeps the amount editable`() = test {
+        val viewModel = createViewModel()
+        whenever(repo.quote(eq(quote.recipient), eq("3.5"), eq(UsdtDestination.TRON), any()))
+            .thenReturn(Result.failure(UsdtException.BridgeAmountTooSmall()))
+        viewModel.quote(quote.recipient, "3.5", UsdtDestination.TRON).join()
+        assertEquals(R.string.usdt__error_bridge_amount, viewModel.state.value.error)
+        assertNull(viewModel.state.value.quote)
+        assertFalse(viewModel.state.value.busy)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
     private val repo: UsdtRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val settings = MutableStateFlow(SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true))
