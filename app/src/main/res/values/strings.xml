@@ -1281,6 +1281,7 @@
     <string name="usdt__error_rejected">The USDT network rejected the request. Please try again.</string>
     <string name="usdt__error_response">The USDT service returned an invalid response. Please try again later.</string>
     <string name="usdt__error_route">This network is currently unavailable.</string>
+    <string name="usdt__error_self_send">You can’t send USDT to your own address.</string>
     <string name="usdt__error_storage">Could not access USDT wallet data. Please try again.</string>
     <string name="usdt__error_wallet">Could not access your USDT wallet. Reopen Bitkit and try again.</string>
     <string name="usdt__expected_amount">Expected amount</string>

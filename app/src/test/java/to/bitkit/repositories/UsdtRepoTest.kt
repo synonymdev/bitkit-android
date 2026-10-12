@@ -6,11 +6,13 @@ import com.synonym.bitkitcore.UsdtQuote
 import com.synonym.bitkitcore.UsdtTransfer
 import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.UsdtWallet
+import com.synonym.bitkitcore.usdtParseAmount
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Test
+import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -27,6 +29,27 @@ class UsdtRepoTest : BaseUnitTest() {
     private val service: UsdtService = mock()
     private val wallet: UsdtWallet = mock()
     private val transfer: UsdtTransfer = mock()
+
+    @Test
+    fun `own address has a specific error for exact and maximum sends`() = test {
+        val address = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn(address)
+        val repo = UsdtRepo(service, testDispatcher)
+        val recipient = " ${address.lowercase()} "
+        assertTrue(repo.quote(recipient, "1", UsdtDestination.ARBITRUM).exceptionOrNull() is UsdtSelfSendError)
+        assertTrue(repo.quoteMaximum(recipient, UsdtDestination.ARBITRUM).exceptionOrNull() is UsdtSelfSendError)
+        verify(wallet, never()).quoteTransfer(recipient, 1_000_000u, UsdtDestination.ARBITRUM)
+        verify(wallet, never()).quoteMaxTransfer(recipient, UsdtDestination.ARBITRUM)
+
+        mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")).use { native ->
+            native.`when`<ULong> { usdtParseAmount("1") }.thenReturn(1_000_000u)
+            val other = "0x1111111111111111111111111111111111111111"
+            val quote: UsdtQuote = mock()
+            whenever(wallet.quoteTransfer(other, 1_000_000u, UsdtDestination.ARBITRUM)).thenReturn(quote)
+            assertEquals(quote, repo.quote(other, "1", UsdtDestination.ARBITRUM).getOrThrow())
+        }
+    }
 
     @Test
     fun `deposit operations finish before wipe clears wallet credentials`() = test {

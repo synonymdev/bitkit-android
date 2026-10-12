@@ -30,6 +30,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.UsdtRepo
+import to.bitkit.repositories.UsdtSelfSendError
 import to.bitkit.repositories.parseUsdtPaymentRequest
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.SanityWarning
@@ -262,6 +263,7 @@ private fun UsdtQuote.warnings(balance: ULong?, warnOver100: Boolean): List<Sani
 @StringRes
 @Suppress("CyclomaticComplexMethod")
 internal fun Throwable.messageResource(): Int = when (this) {
+    is UsdtSelfSendError -> R.string.usdt__error_self_send
     is UsdtException.NotConfigured -> R.string.usdt__error_configuration
     is UsdtException.InvalidAmount -> R.string.usdt__error_amount
     is UsdtException.InvalidAddress, is UsdtException.WrongNetwork -> R.string.usdt__error_address

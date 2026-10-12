@@ -68,7 +68,7 @@ internal fun ColumnScope.UsdtReceiveContent(
             } else {
                 ReceiveQrView(
                     uri = uri,
-                    copyText = address,
+                    copyText = uri,
                     qrLogoPainter = painterResource(R.drawable.tether_circle),
                     onClickEditInvoice = onEdit,
                     accentColor = Colors.Usdt,

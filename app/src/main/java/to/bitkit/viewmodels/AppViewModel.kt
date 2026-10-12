@@ -2644,6 +2644,21 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
+        if (input.startsWith("ethereum:", ignoreCase = true)) {
+            if (activeHardwareWalletId != null) {
+                showHardwareOnchainOnlyValidationError()
+            } else if (Env.isUsdtEnabled && parseUsdtPaymentRequest(input).isSuccess) {
+                _sendUiState.update { it.copy(isAddressInputValid = true) }
+            } else {
+                showAddressValidationError(
+                    titleRes = R.string.other__scan_err_decoding,
+                    descriptionRes = R.string.other__scan__error__generic,
+                    testTag = "InvalidAddressToast",
+                )
+            }
+            return@withContext
+        }
+
         val scanResult = runCatching { coreService.decode(input.removeLightningSchemes()) }
 
         if (scanResult.isFailure) {

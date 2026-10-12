@@ -3991,6 +3991,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `manual USDT URI validation preserves routing and hardware restrictions`() = test {
+        val recipient = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
+        val uri = "ethereum:0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9@42161/transfer?address=$recipient&uint256=10001"
+        Mockito.mockStatic(Class.forName("to.bitkit.repositories.UsdtRepoKt")).use { parser ->
+            parser.`when`<Result<UsdtPaymentRequest>> { parseUsdtPaymentRequest(uri, UsdtDestination.ARBITRUM) }
+                .thenReturn(Result.success(UsdtPaymentRequest(recipient, 10001u, 42161u)))
+            sut.showSheet(Sheet.Send())
+            sut.setSendEvent(SendEvent.AddressChange(uri))
+            advanceUntilIdle()
+            assertEquals(Env.isUsdtEnabled, sut.sendUiState.value.isAddressInputValid)
+            sut.mainScreenEffect.test {
+                sut.setSendEvent(SendEvent.AddressContinue(uri))
+                advanceUntilIdle()
+                if (Env.isUsdtEnabled) {
+                    assertEquals(MainScreenEffect.Navigate(Routes.UsdtPayment(recipient, "0.010001")), awaitItem())
+                }
+                expectNoEvents()
+            }
+            sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+            sut.setSendEvent(SendEvent.AddressChange(uri))
+            advanceUntilIdle()
+            assertFalse(sut.sendUiState.value.isAddressInputValid)
+
+            sut.showSheet(Sheet.Send())
+            parser.`when`<Result<UsdtPaymentRequest>> { parseUsdtPaymentRequest(uri, UsdtDestination.ARBITRUM) }
+                .thenReturn(Result.failure(UsdtException.WrongNetwork()))
+            sut.setSendEvent(SendEvent.AddressChange(uri))
+            advanceUntilIdle()
+            assertFalse(sut.sendUiState.value.isAddressInputValid)
+        }
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
     fun `invalid USDT links and active USDT sends cannot open another payment`() = test {
         val uri = "ethereum:invalid"
         Mockito.mockStatic(Class.forName("to.bitkit.repositories.UsdtRepoKt")).use { parser ->

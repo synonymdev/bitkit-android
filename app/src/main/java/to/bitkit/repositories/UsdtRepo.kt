@@ -30,6 +30,7 @@ import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.UsdtService
+import to.bitkit.utils.AppError
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import javax.inject.Inject
@@ -169,7 +170,9 @@ class UsdtRepo @Inject constructor(
     ) = withContext(ioDispatcher) {
         mutex.withLock {
             runSuspendCatching {
-                service.wallet().quoteTransfer(
+                val wallet = service.wallet()
+                if (recipient.trim().equals(wallet.receiveAddress(), ignoreCase = true)) throw UsdtSelfSendError()
+                wallet.quoteTransfer(
                     recipient,
                     usdtParseAmount(amount.replace(DecimalFormatSymbols.getInstance(locale).decimalSeparator, '.')),
                     destination
@@ -180,7 +183,11 @@ class UsdtRepo @Inject constructor(
 
     suspend fun quoteMaximum(recipient: String, destination: UsdtDestination) = withContext(ioDispatcher) {
         mutex.withLock {
-            runSuspendCatching { service.wallet().quoteMaxTransfer(recipient, destination) }
+            runSuspendCatching {
+                val wallet = service.wallet()
+                if (recipient.trim().equals(wallet.receiveAddress(), ignoreCase = true)) throw UsdtSelfSendError()
+                wallet.quoteMaxTransfer(recipient, destination)
+            }
         }
     }
 
@@ -224,3 +231,5 @@ data class UsdtWalletState(
     val transfers: ImmutableList<UsdtTransfer> = persistentListOf(),
     val historyComplete: Boolean = false,
 )
+
+class UsdtSelfSendError : AppError("Cannot send USDT to own address")

@@ -28,6 +28,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.repositories.UsdtRepo
+import to.bitkit.repositories.UsdtSelfSendError
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.repositories.parseUsdtPaymentRequest
 import to.bitkit.test.BaseUnitTest
@@ -51,6 +52,8 @@ class UsdtViewModelTest : BaseUnitTest() {
             UsdtException.TransactionRejected("Provider rejected the request").messageResource(),
         )
         assertEquals(R.string.usdt__error_balance, UsdtException.InsufficientBalance().messageResource())
+        assertEquals(R.string.usdt__error_self_send, UsdtSelfSendError().messageResource())
+        assertEquals(R.string.usdt__error_address, UsdtException.InvalidAddress().messageResource())
     }
 
     private val repo: UsdtRepo = mock()
