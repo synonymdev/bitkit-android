@@ -6555,18 +6555,8 @@ class AppViewModel @Inject constructor(
         signedTx: HwFundingSignedTx? = null,
     ): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-        if (contactPaymentContext?.incomingPaymentRequest?.let { paykitUsdtPayments.hasBinding(it.id) } == true) {
-            rejectMismatchedPaymentRequest()
-            return false
-        }
-        if (contactPaymentContext?.incomingPaymentRequest?.id != requestId) return false
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        if (incomingPaymentRequest != null &&
-            (identity == null || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value))
-        ) {
-            return false
-        }
-        if (incomingPaymentRequest != null && signedTx == null) return false
+        if (!validateHardwarePaymentRequest(incomingPaymentRequest, requestId, identity, signedTx)) return false
         // A retry of the original signed transaction skips this hook in HwSendViewModel.
         // A new Shop payment must consult the durable paymentStarted guard again.
         if (incomingPaymentRequest == null && isPreparedContactPayment(contactPaymentContext)) return true
@@ -6605,6 +6595,25 @@ class AppViewModel @Inject constructor(
             return false
         }
         return incomingPaymentRequest == null || PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value)
+    }
+
+    private fun validateHardwarePaymentRequest(
+        request: PaykitPaymentRequest?,
+        requestId: PaykitPaymentRequestId?,
+        identity: String?,
+        signedTx: HwFundingSignedTx?,
+    ): Boolean {
+        if (request?.let { paykitUsdtPayments.hasBinding(it.id) } == true) {
+            rejectMismatchedPaymentRequest()
+            return false
+        }
+        if (request?.id != requestId) return false
+        if (request != null &&
+            (identity == null || !PubkyPublicKeyFormat.matches(identity, pubkyRepo.publicKey.value))
+        ) {
+            return false
+        }
+        return request == null || signedTx != null
     }
 
     val hardwarePaymentDeadlineAt: Instant?
