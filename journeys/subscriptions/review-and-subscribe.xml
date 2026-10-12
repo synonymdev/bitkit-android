@@ -15,7 +15,8 @@
     <action>Verify the Review and Subscribe sheet appears with 5,000 sats and the creator contact card</action>
     <action>Verify the swipe control reads "Swipe To Subscribe &amp; Pay" when the first period is due on acceptance, otherwise "Swipe To Subscribe"</action>
     <action>Swipe the confirm control to the end</action>
-    <action>If the first period was due on acceptance: complete the send flow that opens, then verify the Subscribed confirmation appears</action>
+    <action>If the first period was due on acceptance: verify the sheet stays expanded as Review and Subscribe changes to the send flow, without closing, exposing Home or the subscriptions list, and sliding back in</action>
+    <action>If the first period was due on acceptance: complete the send flow inside the same sheet, then verify the Subscribed confirmation appears</action>
     <action>If no payment was due: verify the Subscribed confirmation appears directly, with no send flow</action>
     <action>Tap Close on the Subscribed confirmation</action>
     <action>If a payment was made: verify its billing period is no longer offered with Pay or Dismiss, no Payment Requests sheet opens for it, and the home payment-request bell is absent when no other requests are pending</action>
