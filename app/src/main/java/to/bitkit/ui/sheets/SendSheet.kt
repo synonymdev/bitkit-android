@@ -108,6 +108,14 @@ internal fun NavController.navigateToCoinSelection() {
     navigateTo(SendRoute.CoinSelection)
 }
 
+internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
+    navigateTo(SendRoute.Amount) {
+        if (startDestination == SendRoute.Confirm) {
+            popUpTo(SendRoute.Confirm) { inclusive = true }
+        }
+    }
+}
+
 @Suppress("CyclomaticComplexMethod")
 @Composable
 fun SendSheet(
@@ -232,7 +240,7 @@ fun SendSheet(
             LaunchedEffect(appViewModel, navController) {
                 appViewModel.sendEffect.collect {
                     when (it) {
-                        is SendEffect.NavigateToAmount -> navController.navigateTo(SendRoute.Amount)
+                        is SendEffect.NavigateToAmount -> navController.navigateToSendAmount(startDestination)
                         is SendEffect.NavigateToAddress -> navController.navigateTo(SendRoute.Address)
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
                         is SendEffect.NavigateToCoinSelection -> navController.navigateToCoinSelection()
