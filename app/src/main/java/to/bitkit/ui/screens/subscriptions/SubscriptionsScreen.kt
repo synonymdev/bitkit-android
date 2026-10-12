@@ -501,7 +501,7 @@ fun SubscriptionDetailScreen(
                         payments.forEach { payment ->
                             PaymentRequestCard(
                                 request = payment,
-                                receipt = receipts.lastOrNull { it.requestId == payment.id },
+                                receipt = receipts.lastOrNull { it.matches(payment) },
                                 contact = contacts.contactFor(subscription),
                                 title = subscription.note?.takeIf(String::isNotBlank)
                                     ?: stringResource(R.string.subscriptions__subscription),

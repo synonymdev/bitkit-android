@@ -244,6 +244,10 @@ internal fun Throwable.messageResource(): Int = when (this) {
     is UsdtException.InvalidBackup, is UsdtException.Storage -> R.string.usdt__error_storage
     is UsdtException.RateLimited -> R.string.usdt__error_rate_limit
     is UsdtException.LogRangeTooLarge, is UsdtException.InvalidResponse -> R.string.usdt__error_response
-    is UsdtException.TransactionRejected -> R.string.usdt__error_rejected
+    is UsdtException.TransactionRejected -> if (reason == "Paymaster fee collection failed") {
+        R.string.usdt__error_fee_collection
+    } else {
+        R.string.usdt__error_rejected
+    }
     else -> R.string.usdt__error_network
 }

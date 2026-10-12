@@ -93,6 +93,9 @@ data class PaykitUsdtReceipt(
     val afterExpiry: Boolean,
 ) {
     val satisfied: Boolean get() = verified && !underpaid && !afterExpiry
+
+    fun matches(request: PaykitPaymentRequest): Boolean =
+        requestId == request.id && proofEventId == request.paymentProofEventId
 }
 
 @Singleton

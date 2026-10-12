@@ -1268,6 +1268,7 @@
     <string name="usdt__error_configuration">USDT is currently unavailable. Please try again later.</string>
     <string name="usdt__error_delegation">This address uses another wallet’s smart account. Disable its smart account mode there before sending with Bitkit.</string>
     <string name="usdt__error_expired">The fee quote expired. Review the payment again.</string>
+    <string name="usdt__error_fee_collection">Unable to pay the transaction fee in USDT. Try a smaller amount.</string>
     <string name="usdt__error_network">Could not update USDT. Check your connection and try again.</string>
     <string name="usdt__error_pending">A payment is still pending. Wait for confirmation before sending again.</string>
     <string name="usdt__error_rate_limit">Too many requests. Please try again shortly.</string>

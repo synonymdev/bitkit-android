@@ -9,5 +9,6 @@
     <action>Cancel the send. From the ordinary Send options, paste the URI. Verify it opens the USDT send flow. Cancel, then open Send again from the USDT wallet and verify the previous recipient and amount are cleared.</action>
     <action>Open or scan variants with the wrong chain, wrong token, duplicate amount and malformed recipient. Verify an error and no payable review. Check an ordinary Bitcoin or Lightning invoice still opens its existing send flow.</action>
     <action>On iOS, open a USDT link while Lightning is stopped but the wallet is ready. Verify it routes without starting Lightning. Open two different USDT links while the main scanner sheet is dismissing; verify an older delayed link cannot replace the review that opened first.</action>
+    <action>Enter the entire available USDT balance and continue. Verify the fee-collection error explains that the transaction fee could not be paid in USDT and suggests a smaller amount. Reduce the amount, reach review and close without signing.</action>
   </actions>
 </journey>

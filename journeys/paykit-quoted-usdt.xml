@@ -11,5 +11,7 @@
     <action>Create a USD subscription. Verify only USDT is accepted at fixed 1:1 parity. Propose it to the linked contact. On the payer, review its dollar amount, recurrence and USDT payment method; close before subscribing.</action>
     <action>Create a BTC subscription and verify that only enabled Savings and Spending methods are accepted, with no USDT choice. Close without proposing.</action>
     <action>With an existing request paid in USDT, open its history entry on the payer and requester. Verify the sent or received arrow and its background use the USDT teal in the list and details, and the date and time icons in details use the same teal. The color follows the payment method even when the request is denominated in BTC or USD.</action>
+    <action>Open a linked USDT-only contact that has published a private payment list. Verify the amount screen offers only USDT, enter 0.01 and continue to review. Verify the owned recipient address and fee, then close without paying.</action>
+    <action>Open request history on both wallets. A delivered proof without independent receipt verification says Proof submitted, not Paid. A received USDT request shows Pending until its matching proof is verified, then Payment verified, Received underpaid or Received after expiry with the actual USDT amount, without a second conflicting proof-delivery label.</action>
   </actions>
 </journey>

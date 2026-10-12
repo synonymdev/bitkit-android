@@ -35,6 +35,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class UsdtViewModelTest : BaseUnitTest() {
+    @Test
+    fun `fee collection failures offer an actionable message without classifying other rejections`() {
+        assertEquals(
+            R.string.usdt__error_fee_collection,
+            UsdtException.TransactionRejected("Paymaster fee collection failed").messageResource(),
+        )
+        assertEquals(
+            R.string.usdt__error_rejected,
+            UsdtException.TransactionRejected("Provider rejected the request").messageResource(),
+        )
+        assertEquals(R.string.usdt__error_balance, UsdtException.InsufficientBalance().messageResource())
+    }
+
     private val repo: UsdtRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val settings = MutableStateFlow(SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true))

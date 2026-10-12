@@ -99,6 +99,7 @@ data class PaykitPaymentRequest(
     val lifecycleState: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
     val billingPeriod: PaykitBillingPeriod? = null,
     val paymentProofKind: PaykitPaymentProofKind? = null,
+    val paymentProofEventId: String? = null,
     val paymentDeadlineAt: Instant? = null,
     val isPaymentInFlight: Boolean = false,
     val proposalStreamItemId: ULong? = null,
@@ -1973,6 +1974,7 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     } else {
         state
     },
+    paymentProofEventId = paymentProofs.lastOrNull()?.eventId,
     paymentProofKind = paymentProofs.lastOrNull()?.let {
         PaykitPaymentProofKind.fromPaymentEndpointIdentifier(it.paymentEndpointIdentifier)
     },

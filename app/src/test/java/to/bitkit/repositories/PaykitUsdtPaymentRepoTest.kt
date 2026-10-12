@@ -52,6 +52,7 @@ import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.ContactPaymentContext
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -90,6 +91,27 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         expiresAt = 1_800_000_100u,
     )
     private val amount = PaykitAmount(PaykitAsset.USDT, 50_000u)
+
+    @Test
+    fun `receipt status belongs only to the same request and proof`() {
+        val request = request.copy(paymentProofEventId = "proof")
+        val receipt = PaykitUsdtReceipt(
+            wallet = address,
+            identity = identity,
+            requestId = request.id,
+            paymentId = "payment",
+            proofEventId = "proof",
+            verified = true,
+            transferId = "transfer",
+            amount = amount,
+            receivedAtMillis = 0,
+            underpaid = false,
+            afterExpiry = false,
+        )
+        assertTrue(receipt.matches(request))
+        assertFalse(receipt.matches(request.copy(paymentProofEventId = "replacement-proof")))
+        assertFalse(receipt.matches(request.copy(paymentRequestId = "different-request")))
+    }
 
     @Before
     fun setUp() = test {

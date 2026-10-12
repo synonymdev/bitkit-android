@@ -4,6 +4,8 @@ import android.app.Activity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.UsdtPaymentRequest
+import com.synonym.bitkitcore.usdtParsePaymentRequest
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerHandshakeReport
@@ -37,6 +39,7 @@ import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
@@ -61,6 +64,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
@@ -2926,6 +2930,38 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             result,
         )
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `USDT only private contacts retain their endpoint and list version`() = test {
+        val address = "0x1111111111111111111111111111111111111111"
+        Mockito.mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")).use { core ->
+            core.`when`<UsdtPaymentRequest> { usdtParsePaymentRequest(address) }
+                .thenReturn(UsdtPaymentRequest(address, null, null))
+            val endpoint = PaykitUsdt.endpoint(address).copy(appId = "bitkit")
+            sut.prepareSavedContacts(listOf(CONTACT_KEY))
+            whenever {
+                paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
+            }.thenReturn(
+                resolution(
+                    PaykitResolvedPaymentEndpoint(
+                        appId = "bitkit",
+                        identifier = endpoint.methodId.rawValue,
+                        payload = endpoint.rawPayload,
+                    ),
+                    version = 7uL,
+                )
+            )
+
+            val result = assertIs<PublicPaykitPaymentResult.Opened>(
+                sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+            )
+
+            assertEquals(listOf(endpoint), result.endpoints)
+            assertEquals(PaykitUsdt.paymentUri(address), result.paymentRequest)
+            assertEquals(7uL, result.privatePaymentContext?.paymentListVersion)
+            verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        }
     }
 
     @Test

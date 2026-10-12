@@ -89,7 +89,7 @@ fun IncomingPaymentRequestDetailsScreen(
 
     IncomingPaymentRequestDetailsContent(
         request = request,
-        receipt = receipts.lastOrNull { it.requestId == id },
+        receipt = request?.let { paymentRequest -> receipts.lastOrNull { it.matches(paymentRequest) } },
         contact = contact,
         isPending = isPending,
         isPreparing = requestedPaymentRequestId == id,
@@ -162,12 +162,8 @@ internal fun IncomingPaymentRequestDetailsContent(
                     PubkyContactAvatar(profile = contact, size = 48.dp)
                 }
             }
-            receipt?.let {
-                VerticalSpacer(8.dp)
-                BodyM(text = paykitUsdtReceiptText(it), color = Colors.White64)
-            }
             BodyM(
-                text = paymentRequestStatus(request, isPending = isPending),
+                text = paymentRequestStatus(request, isPending = isPending, receipt = receipt),
                 color = Colors.White64,
                 modifier = Modifier.testTag("PaymentRequestDetailsStatus")
             )

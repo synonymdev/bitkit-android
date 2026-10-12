@@ -344,7 +344,7 @@ internal fun PaymentRequestsContent(
                                     paymentRequestStatus(request)
                                 },
                                 showSignedAmount = request.hasPaymentEvidence,
-                                receipt = receipts.lastOrNull { it.requestId == request.id },
+                                receipt = receipts.lastOrNull { it.matches(request) },
                                 onClick = { onDetails(request.id) },
                             )
                         }
@@ -484,7 +484,23 @@ internal fun paymentRequestDate(request: PaykitPaymentRequest): String = request
 } ?: paymentRequestStatus(request)
 
 @Composable
-internal fun paymentRequestStatus(request: PaykitPaymentRequest, isPending: Boolean = false): String {
+internal fun paymentRequestStatus(
+    request: PaykitPaymentRequest,
+    isPending: Boolean = false,
+    receipt: PaykitUsdtReceipt? = null,
+): String {
+    if (request.direction == PaykitPaymentRequestDirection.Outgoing &&
+        request.paymentProofKind == PaykitPaymentProofKind.Usdt
+    ) {
+        return receipt?.takeIf { it.matches(request) }?.let { paykitUsdtReceiptText(it) }
+            ?: stringResource(R.string.wallet__payment_request_pending)
+    }
+
+    return paymentRequestLifecycleStatus(request, isPending)
+}
+
+@Composable
+private fun paymentRequestLifecycleStatus(request: PaykitPaymentRequest, isPending: Boolean): String {
     if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(Clock.System.now())) {
         return stringResource(R.string.wallet__payment_request_status_expired)
     }
@@ -494,7 +510,7 @@ internal fun paymentRequestStatus(request: PaykitPaymentRequest, isPending: Bool
         PaymentRequestLifecycleState.PROPOSAL_EXPIRED ->
             stringResource(R.string.wallet__payment_request_status_expired)
         PaymentRequestLifecycleState.ACCEPTED ->
-            stringResource(R.string.wallet__payment_request_status_accepted)
+            stringResource(R.string.wallet__payment_request_pending)
         PaymentRequestLifecycleState.REJECTED ->
             stringResource(R.string.wallet__payment_request_status_rejected)
         PaymentRequestLifecycleState.CANCELED ->

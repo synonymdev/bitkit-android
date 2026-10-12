@@ -190,6 +190,7 @@ data class PaykitSubscription(
     val lifecycleState: PaymentRequestLifecycleState,
     val paidPeriods: List<PaykitBillingPeriod>,
     val paymentProofKinds: Map<PaykitBillingPeriod, PaykitPaymentProofKind> = emptyMap(),
+    val paymentProofEventIds: Map<PaykitBillingPeriod, String> = emptyMap(),
     val submittedPeriods: List<PaykitBillingPeriod> = paidPeriods,
     val proposalStreamItemId: ULong? = null,
 ) {
@@ -264,6 +265,7 @@ data class PaykitSubscription(
                 billingPeriod = period,
                 paymentDeadlineAt = pricing.paymentDeadline(period),
                 paymentProofKind = paymentProofKinds[period],
+                paymentProofEventId = paymentProofEventIds[period],
             )
         }
     }
@@ -291,6 +293,7 @@ data class PaykitSubscription(
                 billingPeriod = period,
                 paymentDeadlineAt = pricing.paymentDeadline(period),
                 paymentProofKind = paymentProofKinds[period],
+                paymentProofEventId = paymentProofEventIds[period],
             )
         }
     }
@@ -361,6 +364,9 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
         paidPeriods = paidSubscriptionPeriods(payments, role, verifiedUsdtReceipts),
         submittedPeriods = payments.map { it.first }.distinct(),
         paymentProofKinds = payments.mapNotNull { (period, kind) -> kind?.let { period to it } }.toMap(),
+        paymentProofEventIds = paymentProofs.mapNotNull { proof ->
+            proof.toSubscriptionPayment(recurrence)?.first?.let { it to proof.eventId }
+        }.toMap(),
 
     )
 }
