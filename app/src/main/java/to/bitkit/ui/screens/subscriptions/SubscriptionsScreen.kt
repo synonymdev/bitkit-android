@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -637,6 +638,11 @@ private fun SubscriptionDetailFooter(
     }
 }
 
+/** Figma draws the review clock at 288dp inside its 256dp slot, rotated 15 degrees and shifted 7dp left. */
+private const val CLOCK_SCALE = 288f / 256f
+private const val CLOCK_ROTATION_DEGREES = 15f
+private val CLOCK_OFFSET_X = (-7).dp
+
 @Composable
 fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRoute) {
     var route by remember(initialRoute) { mutableStateOf(initialRoute) }
@@ -672,11 +678,9 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
                 VerticalSpacer(16.dp)
             }
         } else {
-            val payOnAcceptance = subscription.paymentDueOnAcceptance(now, Clock.System.now()) != null
             when (route) {
                 is SubscriptionRoute.Review -> SubscriptionReview(
                     subscription = subscription,
-                    payOnAcceptance = payOnAcceptance,
                     now = now,
                     contact = contacts.contactFor(subscription),
                     onDetails = {
@@ -746,19 +750,38 @@ private val SubscriptionRoute.id: PaykitSubscriptionId
         is SubscriptionRoute.Cancel -> id
     }
 
+/** Keeps the Review & Subscribe layout on screen while the first payment of an accepted subscription is sent. */
+@Composable
+fun SubscriptionFirstPaymentProgress(
+    subscription: PaykitSubscription,
+    contact: PubkyProfile,
+    modifier: Modifier = Modifier,
+) {
+    SubscriptionReview(
+        subscription = subscription,
+        contact = contact,
+        now = rememberSubscriptionNow(persistentListOf(subscription)),
+        onDetails = null,
+        onSubscribe = { true },
+        isPaying = true,
+        modifier = modifier
+    )
+}
+
 @Composable
 private fun SubscriptionReview(
     subscription: PaykitSubscription,
     contact: PubkyProfile,
-    payOnAcceptance: Boolean,
     now: Instant,
-    onDetails: () -> Unit,
+    onDetails: (() -> Unit)?,
     onSubscribe: suspend () -> Boolean,
+    modifier: Modifier = Modifier,
+    isPaying: Boolean = false,
 ) {
-    var loading by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(isPaying) }
     val scope = rememberCoroutineScope()
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
@@ -769,18 +792,7 @@ private fun SubscriptionReview(
         }
         MoneyDisplay(sats = subscription.displaySats, showSymbol = true)
         VerticalSpacer(24.dp)
-        SubscriptionProviderCard(subscription, contact, onClick = onDetails)
-        subscription.paymentDueOnAcceptance(now, Clock.System.now())?.billingPeriod?.let { period ->
-            VerticalSpacer(16.dp)
-            BodyS(
-                text = stringResource(
-                    R.string.subscriptions__first_period_ends,
-                    dateTimeFormatterOf("MMM d, yyyy, HH:mm")
-                        .format(java.time.Instant.ofEpochMilli(period.endsAt.toEpochMilliseconds())),
-                ),
-                color = Colors.White64,
-            )
-        }
+        SubscriptionProviderCard(subscription, contact, onClick = onDetails, showAsCard = true)
         if (!subscription.recurrence.unit.isSupported) {
             VerticalSpacer(16.dp)
             BodyM(text = stringResource(R.string.subscriptions__unsupported_description), color = Colors.White64)
@@ -795,20 +807,23 @@ private fun SubscriptionReview(
         Image(
             painter = painterResource(R.drawable.subscription_clock),
             contentDescription = null,
-            modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally)
+            modifier = Modifier
+                .size(256.dp)
+                .align(Alignment.CenterHorizontally)
+                .graphicsLayer {
+                    scaleX = CLOCK_SCALE
+                    scaleY = CLOCK_SCALE
+                    rotationZ = CLOCK_ROTATION_DEGREES
+                    translationX = CLOCK_OFFSET_X.toPx()
+                }
         )
         FillHeight()
-        if (subscription.isProposalActionable(now)) {
+        if (loading || subscription.isProposalActionable(now)) {
             SwipeToConfirm(
-                text = stringResource(
-                    if (payOnAcceptance) {
-                        R.string.subscriptions__swipe_to_subscribe_and_pay
-                    } else {
-                        R.string.subscriptions__swipe_to_subscribe
-                    }
-                ),
+                text = stringResource(R.string.subscriptions__swipe_to_subscribe),
                 color = Colors.Brand,
                 loading = loading,
+                confirmed = isPaying,
                 onConfirm = {
                     loading = true
                     scope.launch {
@@ -827,16 +842,17 @@ private fun SubscriptionProviderCard(
     contact: PubkyProfile,
     subtitle: String? = null,
     onClick: (() -> Unit)? = null,
+    showAsCard: Boolean = onClick != null,
 ) {
     val displayedSubtitle = subtitle ?: subscription.subscriptionFrequencyText()
-    val cardModifier = if (onClick == null) {
+    val cardModifier = if (!showAsCard) {
         Modifier.fillMaxWidth()
     } else {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Colors.Gray6)
-            .clickable(onClick = onClick)
+            .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
             .padding(16.dp)
     }
     Row(
@@ -857,7 +873,7 @@ private fun SubscriptionProviderCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (onClick != null) {
+        if (showAsCard) {
             Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null, tint = Colors.White64)
         }
     }
@@ -1002,7 +1018,7 @@ private fun SubscriptionCancel(
     }
 }
 
-private fun List<PubkyProfile>.contactFor(subscription: PaykitSubscription): PubkyProfile =
+internal fun List<PubkyProfile>.contactFor(subscription: PaykitSubscription): PubkyProfile =
     firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, subscription.counterparty) }
         ?: PubkyProfile.placeholder(subscription.counterparty)
 
