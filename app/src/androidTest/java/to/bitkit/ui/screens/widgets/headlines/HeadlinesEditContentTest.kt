@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.widgets.headlines
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
@@ -59,7 +60,7 @@ class HeadlinesEditContentTest {
         composeTestRule.onNodeWithTag("WidgetEditScrollView").assertExists()
 
         // Verify description
-        composeTestRule.onNodeWithTag("edit_description").assertExists()
+        composeTestRule.onNodeWithTag("content_section_header").assertExists()
 
         // Verify time setting row
         composeTestRule.onNodeWithTag("time_setting_row").assertExists()
@@ -75,7 +76,6 @@ class HeadlinesEditContentTest {
 
         // Verify source setting row
         composeTestRule.onNodeWithTag("source_setting_row").assertExists()
-        composeTestRule.onNodeWithTag("source_label").assertExists()
         composeTestRule.onNodeWithTag("source_text").assertExists()
         composeTestRule.onNodeWithTag("source_toggle_button").assertExists()
         composeTestRule.onNodeWithTag("source_toggle_icon").assertExists()
@@ -101,7 +101,7 @@ class HeadlinesEditContentTest {
         assert(previewClicked)
 
         // Reset button should be disabled when both options are enabled (default state)
-        composeTestRule.onNodeWithTag("WidgetEditReset").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("WidgetEditReset").onChild().assertIsNotEnabled()
     }
 
     @Test
@@ -210,7 +210,7 @@ class HeadlinesEditContentTest {
         // Assert all tagged elements exist
         composeTestRule.onNodeWithTag("headlines_edit_screen").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditScrollView").assertExists()
-        composeTestRule.onNodeWithTag("edit_description").assertExists()
+        composeTestRule.onNodeWithTag("content_section_header").assertExists()
         composeTestRule.onNodeWithTag("time_setting_row").assertExists()
         composeTestRule.onNodeWithTag("time_text").assertExists()
         composeTestRule.onNodeWithTag("time_toggle_button").assertExists()
@@ -221,7 +221,6 @@ class HeadlinesEditContentTest {
         composeTestRule.onNodeWithTag("title_toggle_icon").assertExists()
         composeTestRule.onNodeWithTag("title_divider").assertExists()
         composeTestRule.onNodeWithTag("source_setting_row").assertExists()
-        composeTestRule.onNodeWithTag("source_label").assertExists()
         composeTestRule.onNodeWithTag("source_text").assertExists()
         composeTestRule.onNodeWithTag("source_toggle_button").assertExists()
         composeTestRule.onNodeWithTag("source_toggle_icon").assertExists()
@@ -278,7 +277,7 @@ class HeadlinesEditContentTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("WidgetEditReset").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("WidgetEditReset").onChild().assertIsNotEnabled()
     }
 
     @Test
