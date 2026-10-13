@@ -66,19 +66,19 @@ class HeadlinesEditContentTest {
         composeTestRule.onNodeWithTag("time_setting_row").assertExists()
         composeTestRule.onNodeWithTag("time_text").assertExists()
         composeTestRule.onNodeWithTag("time_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("time_toggle_icon").assertExists()
+        composeTestRule.onNodeWithTag("time_toggle_icon", useUnmergedTree = true).assertExists()
 
         // Verify title setting row
         composeTestRule.onNodeWithTag("title_setting_row").assertExists()
         composeTestRule.onNodeWithTag("title_text").assertExists()
         composeTestRule.onNodeWithTag("title_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("title_toggle_icon").assertExists()
+        composeTestRule.onNodeWithTag("title_toggle_icon", useUnmergedTree = true).assertExists()
 
         // Verify source setting row
         composeTestRule.onNodeWithTag("source_setting_row").assertExists()
         composeTestRule.onNodeWithTag("source_text").assertExists()
         composeTestRule.onNodeWithTag("source_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("source_toggle_icon").assertExists()
+        composeTestRule.onNodeWithTag("source_toggle_icon", useUnmergedTree = true).assertExists()
 
         // Verify dividers
         composeTestRule.onNodeWithTag("time_divider").assertExists()
@@ -218,12 +218,12 @@ class HeadlinesEditContentTest {
         composeTestRule.onNodeWithTag("title_setting_row").assertExists()
         composeTestRule.onNodeWithTag("title_text").assertExists()
         composeTestRule.onNodeWithTag("title_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("title_toggle_icon").assertExists()
+        composeTestRule.onNodeWithTag("title_toggle_icon", useUnmergedTree = true).assertExists()
         composeTestRule.onNodeWithTag("title_divider").assertExists()
         composeTestRule.onNodeWithTag("source_setting_row").assertExists()
         composeTestRule.onNodeWithTag("source_text").assertExists()
         composeTestRule.onNodeWithTag("source_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("source_toggle_icon").assertExists()
+        composeTestRule.onNodeWithTag("source_toggle_icon", useUnmergedTree = true).assertExists()
         composeTestRule.onNodeWithTag("source_divider").assertExists()
         composeTestRule.onNodeWithTag("buttons_row").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditReset").assertExists()
