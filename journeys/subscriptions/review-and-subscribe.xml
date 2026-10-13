@@ -25,5 +25,10 @@
     <action>Verify the sheet dismisses and "Journey Sub" moves from PROPOSALS into the ACTIVE section</action>
     <action>Tap the "Journey Sub" row and verify the detail shows STATUS "Active" and a RENEWS date one month ahead, with no year</action>
     <action>Only when a payment was made: verify the PAYMENTS section lists it titled "Journey Sub" with the payment date as its subtitle. With no payment yet, the section is absent.</action>
+    <action>Have the creator send a second proposal for 2 USD monthly, accepting only USDT, with its first period due on acceptance; open its Review and Subscribe sheet on the payer with USDT enabled and enough USDT for 2 USDT plus the payment fee</action>
+    <action>Verify the requested amount is $2, USDT is the only payment method and the swipe knob is USDT teal; swipe to subscribe</action>
+    <action>Verify the Amount screen keeps $2 locked and USDT as its only payment source; no Bitcoin amount, Savings source or editable amount is offered</action>
+    <action>Tap Continue and verify the USDT review shows 2 USDT, the creator's address and the fee; do not swipe to pay</action>
+    <action>Close the send sheet, reopen this subscription's unpaid first period from Payments, and verify it still offers the locked 2 USDT payment; cancel without sending</action>
   </actions>
 </journey>
