@@ -85,6 +85,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
+import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputUiState
 import to.bitkit.viewmodels.AmountInputViewModel
@@ -346,9 +347,9 @@ private fun SendAmountNodeRunning(
                         val balance = if (hideBalance) {
                             UiConstants.HIDE_BALANCE_SHORT
                         } else {
-                            usdtWallet?.balance?.let { "$ " + usdtOverviewAmount(it) } ?: "—"
+                            usdtWallet?.balance?.let { "<accent>$</accent> " + usdtOverviewAmount(it) } ?: "—"
                         }
-                        BodySSB(balance)
+                        BodySSB(balance.withAccent(accentColor = Colors.White64))
                     } else {
                         MoneySSB(sats = availableAmount, showSymbol = true)
                     }

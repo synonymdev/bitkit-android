@@ -40,6 +40,7 @@ import to.bitkit.models.PaykitUsdt
 import to.bitkit.models.PaykitUsdtStateBackup
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ContactPaymentContext
 import java.util.UUID
 import javax.inject.Inject
@@ -111,6 +112,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
 ) {
     companion object {
         private val KEY = Keychain.Key.PAYKIT_USDT_PAYMENTS.name
+        private const val TAG = "PaykitUsdtPaymentRepo"
 
         fun binding(
             request: PaykitPaymentRequest,
@@ -185,6 +187,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     val receipts = _receipts.asStateFlow()
     private val _resumableRequests = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
     val resumableRequests = _resumableRequests.asStateFlow()
+    private val unsubmittedAttempts = MutableStateFlow<List<PaykitUsdtAttempt>>(emptyList())
 
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion = _backupStateVersion.asStateFlow()
@@ -196,6 +199,8 @@ class PaykitUsdtPaymentRepo @Inject constructor(
 
     suspend fun restoreBackup(backup: PaykitUsdtStateBackup) = withContext(ioDispatcher) {
         mutex.withLock {
+            unsubmittedAttempts.update { emptyList() }
+            _resumableRequests.update { emptySet() }
             val state = load()
             val attempts = state.attempts.associateBy { it.wallet to it.quoteId }.toMutableMap()
             for (restored in backup.attempts) {
@@ -269,6 +274,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     private fun publish(state: State) {
         _attempts.update { state.attempts.filter { it.wallet == activeWallet && it.identity == activeIdentity } }
         _receipts.update { state.receipts.filter { it.wallet == activeWallet && it.identity == activeIdentity } }
+        unsubmittedAttempts.update { known -> known.filter { it in _attempts.value } }
     }
 
     suspend fun protectedRequestIdsForSubscriptionCancellation(
@@ -313,8 +319,9 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     }
 
     fun hasBinding(requestId: PaykitPaymentRequestId): Boolean =
-        _attempts.value.any { it.requestId == requestId } ||
-            runCatching { load().attempts.any { it.requestId == requestId } }.getOrDefault(true)
+        runCatching {
+            load().attempts.any { it.requestId == requestId && it !in unsubmittedAttempts.value }
+        }.getOrDefault(true)
 
     suspend fun prepare(
         context: ContactPaymentContext,
@@ -427,6 +434,8 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     suspend fun reconcile() = withContext(ioDispatcher) {
         runSuspendCatching {
             mutex.withLock {
+                unsubmittedAttempts.update { emptyList() }
+                _resumableRequests.update { emptySet() }
                 val identity = currentIdentity() ?: return@withLock
                 val owner = usdt.paymentEndpoint().getOrThrow().value.lowercase()
                 activeWallet = owner
@@ -442,14 +451,24 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     private suspend fun reconcileAttempts(owner: String, identity: String, state: State) {
         val localAttempts = state.attempts.filter { it.wallet == owner && it.identity == identity }
         val resumable = mutableSetOf<PaykitPaymentRequestId>()
+        val unsubmitted = mutableListOf<PaykitUsdtAttempt>()
         for (attempt in localAttempts) {
             val requestId = attempt.requestId ?: continue
-            val transfer = storedTransfer(attempt.quoteId).getOrThrow()
-            if (!transfer.isUnresolved(attempt.paymentStarted)) resumable += requestId
-            if (!attempt.proofQueued && (attempt.proof != null || transfer?.status == UsdtTransferStatus.CONFIRMED)) {
-                submitAttemptProof(attempt, requestId)
-            }
+            runSuspendCatching {
+                val transfer = storedTransfer(attempt.quoteId).getOrThrow()
+                if (!transfer.isUnresolved(attempt.paymentStarted)) resumable += requestId
+                val hasPaymentEvidence = attempt.paymentStarted || attempt.proof != null || attempt.proofQueued
+                if (transfer == null && !hasPaymentEvidence) {
+                    unsubmitted += attempt
+                }
+                if (!attempt.proofQueued &&
+                    (attempt.proof != null || transfer?.status == UsdtTransferStatus.CONFIRMED)
+                ) {
+                    submitAttemptProof(attempt, requestId)
+                }
+            }.onFailure { Logger.warn("Failed to reconcile a Paykit USDT payment attempt", it, context = TAG) }
         }
+        unsubmittedAttempts.update { unsubmitted.filter { it in _attempts.value } }
         _resumableRequests.update { resumable }
     }
 

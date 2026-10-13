@@ -4,6 +4,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
+import com.synonym.bitkitcore.UsdtPaymentProof
 import com.synonym.bitkitcore.UsdtPaymentRequest
 import com.synonym.bitkitcore.UsdtQuote
 import com.synonym.bitkitcore.UsdtTransfer
@@ -18,6 +19,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -36,6 +39,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PaykitUsdt
+import to.bitkit.models.PaykitUsdtStateBackup
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.UsdtService
@@ -43,6 +47,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.ContactPaymentContext
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -131,6 +136,139 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
             incomingPaymentRequest = request,
             endpoints = listOf(PaykitUsdt.endpoint(address))
         )
+
+    @Test
+    fun `unsubmitted binding requires current journal evidence after restart`() = test {
+        val repo = repo()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        stubSend(Result.failure(UsdtException.QuoteExpired()))
+        assertTrue(repo.send(quote).isFailure)
+        assertTrue(repo.hasBinding(request.id))
+        repo.reconcile().getOrThrow()
+        assertFalse(repo.hasBinding(request.id))
+        val restarted = repo()
+        assertTrue(restarted.hasBinding(request.id))
+        restarted.reconcile().getOrThrow()
+        assertFalse(restarted.hasBinding(request.id))
+
+        for (history in listOf(
+            Result.failure<UsdtTransfer?>(UsdtException.Storage("unreadable history")),
+            Result.success(mock<UsdtTransfer> { on { status }.thenReturn(UsdtTransferStatus.PENDING) }),
+            Result.success(mock<UsdtTransfer> { on { status }.thenReturn(UsdtTransferStatus.CONFIRMED) }),
+        )) {
+            stubStoredTransfer(history)
+            whenever(proofs.submit(any())).thenReturn(Result.success(false))
+            restarted.reconcile().getOrThrow()
+            assertTrue(restarted.hasBinding(request.id))
+        }
+    }
+
+    @Test
+    fun `changed or unreadable persistence invalidates unsubmitted binding evidence`() = test {
+        val repo = repo()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        repo.reconcile().getOrThrow()
+        assertFalse(repo.hasBinding(request.id))
+        val unsubmittedState = stored
+        val original = repo.backupSnapshot().attempts.single()
+        val proof = PaykitUsdtProof(UsdtPaymentProof("42161", "transaction", "0", "signature"))
+        for (changed in listOf(
+            original.copy(paymentStarted = true),
+            original.copy(proof = proof),
+            original.copy(proofQueued = true),
+            original.copy(quoteId = "replacement"),
+        )) {
+            stored = unsubmittedState
+            repo.reconcile().getOrThrow()
+            assertFalse(repo.hasBinding(request.id))
+            stored = Json.encodeToString(PaykitUsdtStateBackup(listOf(changed), emptyList()))
+            assertTrue(repo.hasBinding(request.id))
+        }
+        stored = unsubmittedState
+        repo.reconcile().getOrThrow()
+        repo.restoreBackup(PaykitUsdtStateBackup(listOf(original), emptyList()))
+        assertTrue(repo.hasBinding(request.id))
+        assertTrue(repo.resumableRequests.value.isEmpty())
+        stubStoredTransfer(Result.success(mock { on { status }.thenReturn(UsdtTransferStatus.PENDING) }))
+        repo.reconcile().getOrThrow()
+        assertTrue(repo.hasBinding(request.id))
+        stubStoredTransfer(Result.success(null))
+        repo.reconcile().getOrThrow()
+        assertFalse(repo.hasBinding(request.id))
+        repo.restoreBackup(PaykitUsdtStateBackup(listOf(original.copy(paymentStarted = true)), emptyList()))
+        assertTrue(repo.hasBinding(request.id))
+        repo.reconcile().getOrThrow()
+        assertTrue(repo.hasBinding(request.id))
+        stored = unsubmittedState
+        repo.reconcile().getOrThrow()
+        stored = "unreadable"
+        assertTrue(repo.hasBinding(request.id))
+    }
+
+    @Test
+    fun `execution authorization failure releases an unsubmitted attempt`() = test {
+        val repo = repo()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        stubSend(Result.success(mock()))
+        val result = repo.send(quote) { throw PaykitPaymentRequestError.RequestUnavailable }
+        assertTrue(result.isFailure)
+        assertEquals(false, repo.attempts.value.single().paymentStarted)
+    }
+
+    @Test
+    fun `binding survives restart and blocks replacement of a pending payment`() = test {
+        repo().prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        assertNotNull(stored)
+        val pending = mock<UsdtTransfer> { on { status }.thenReturn(UsdtTransferStatus.PENDING) }
+        stubStoredTransfer(Result.success(pending))
+        val restarted = repo()
+        assertTrue(
+            restarted.prepare(
+                context(),
+                quote.copy(id = "replacement"),
+                amount,
+                request.payment(MethodId.UsdtArbitrum, clock.now())
+            ).isFailure
+        )
+        restarted.reconcile().getOrThrow()
+        assertEquals(quote.id, restarted.attempts.value.single().quoteId)
+        assertTrue(restarted.resumableRequests.value.isEmpty())
+        stubStoredTransfer(Result.success(null))
+        restarted.reconcile().getOrThrow()
+        assertEquals(setOf(request.id), restarted.resumableRequests.value)
+        restarted.prepare(
+            context(),
+            quote.copy(id = "replacement"),
+            amount,
+            request.payment(MethodId.UsdtArbitrum, clock.now())
+        ).getOrThrow()
+        assertEquals("replacement", restarted.attempts.value.single().quoteId)
+    }
+
+    @Test
+    fun `failed send allows replacement only when its execution journal confirms no submission`() = test {
+        val pending = mock<UsdtTransfer> { on { status }.thenReturn(UsdtTransferStatus.PENDING) }
+        val histories = listOf(
+            Result.success(null),
+            Result.success(pending),
+            Result.failure<UsdtTransfer?>(UsdtException.Storage("unreadable history")),
+        )
+        for (history in histories) {
+            stored = null
+            val repo = repo()
+            stubStoredTransfer(history)
+            stubSend(Result.failure(UsdtException.QuoteExpired()))
+            repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+            assertTrue(repo.send(quote).isFailure)
+            val replacement = repo.prepare(
+                context(),
+                quote.copy(id = "replacement"),
+                amount,
+                request.payment(MethodId.UsdtArbitrum, clock.now())
+            )
+            assertEquals(history.isSuccess && history.getOrNull() == null, replacement.isSuccess)
+        }
+    }
 
     @Test
     fun `started payment remains bound after restart before reconciliation`() = test {

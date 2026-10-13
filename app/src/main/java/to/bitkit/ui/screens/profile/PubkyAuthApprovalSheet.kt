@@ -38,6 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -68,7 +69,6 @@ import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
@@ -249,7 +249,7 @@ private fun Content(
     Column(
         modifier = Modifier
             .sheetHeight(SheetSize.LARGE)
-            .gradientBackground()
+            .background(Colors.Gray7)
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
@@ -445,7 +445,6 @@ private fun ColumnScope.ApprovalDetails(
 ) {
     BoxWithConstraints(modifier = Modifier.weight(1f)) {
         Column(
-            verticalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
                 .verticalScroll(rememberScrollState())
                 .heightIn(min = maxHeight)
@@ -472,7 +471,6 @@ private fun ColumnScope.ApprovalDetails(
                     VerticalSpacer(32.dp)
                     PaykitAccessSection()
                 }
-                VerticalSpacer(32.dp)
             }
 
             Column {
@@ -504,7 +502,7 @@ private fun PaykitAccessSection() {
         title = stringResource(R.string.profile__auth_approval_details),
         modifier = Modifier.testTag("PubkyAuthPaykitAccess")
     ) {
-        BodyS(text = stringResource(R.string.profile__auth_approval_paykit_access_description))
+        BodyS(text = stringResource(R.string.profile__auth_approval_paykit_access_description), letterSpacing = 0.sp)
     }
 }
 
@@ -646,7 +644,7 @@ private fun DescriptionText(clientId: String, serviceName: String) {
     } else {
         stringResource(R.string.profile__auth_approval_service, service)
     }
-    BodyM(text = text.withAccentBoldBright(), color = Colors.White64)
+    BodyM(text = text.withAccentBoldBright(), color = Colors.White64, letterSpacing = 0.sp)
 }
 
 @Composable
@@ -663,7 +661,7 @@ private fun SuccessDescriptionText(
     } else {
         stringResource(R.string.profile__auth_approval_success_detail, truncatedKey, service)
     }
-    BodyM(text = text.withAccentBoldBright(), color = Colors.White64, modifier = modifier)
+    BodyM(text = text.withAccentBoldBright(), color = Colors.White64, letterSpacing = 0.sp, modifier = modifier)
 }
 
 @Composable
@@ -718,6 +716,7 @@ private fun TrustWarning() {
         BodyS(
             text = stringResource(R.string.profile__auth_approval_trust_warning),
             color = Colors.White64,
+            letterSpacing = 0.sp,
         )
     }
 }
@@ -760,6 +759,7 @@ private fun ProfileCard(profile: PubkyProfile) {
             )
             BodyMSB(
                 text = profile.name,
+                letterSpacing = 0.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

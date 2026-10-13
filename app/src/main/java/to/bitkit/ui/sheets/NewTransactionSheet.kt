@@ -1,6 +1,7 @@
 package to.bitkit.ui.sheets
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,13 +12,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -68,6 +73,8 @@ fun NewTransactionSheet(
     CompositionLocalProvider(LocalBottomSheetOverlayState provides bottomSheetOverlayState) {
         BottomSheet(
             onDismissRequest = { appViewModel.hideNewTransactionSheet() },
+            containerColor = if (details.usdtAmount != null) Colors.Gray7 else null,
+            dragHandleTopPadding = if (details.usdtAmount != null) 8.dp else 12.dp,
         ) {
             NewTransactionSheetView(
                 details = details,
@@ -78,7 +85,13 @@ fun NewTransactionSheet(
                 },
                 modifier = modifier
                     .sheetHeight(isModal = true)
-                    .gradientBackground()
+                    .then(
+                        if (details.usdtAmount != null) {
+                            Modifier.background(Colors.Gray7)
+                        } else {
+                            Modifier.gradientBackground()
+                        }
+                    )
                     .navigationBarsPadding()
                     .testTag("new_transaction_sheet")
             )
@@ -95,44 +108,33 @@ fun NewTransactionSheetView(
     hideBalance: Boolean = false,
 ) {
     Box(modifier = modifier) {
-        val composition by rememberLottieComposition(
-            if (details.type == NewTransactionSheetType.ONCHAIN) {
-                LottieCompositionSpec.RawRes(R.raw.confetti_orange)
-            } else {
-                LottieCompositionSpec.RawRes(R.raw.confetti_purple)
-            }
-        )
-        LottieAnimation(
-            composition = composition,
-            dynamicProperties = if (details.usdtAmount != null) {
-                rememberLottieDynamicProperties(
-                    rememberLottieDynamicProperty(
-                        property = LottieProperty.COLOR,
-                        value = Colors.Usdt.toArgb(),
-                        keyPath = arrayOf("**"),
-                    )
-                )
-            } else {
-                null
-            },
-            contentScale = ContentScale.Crop,
-            iterations = 100,
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("confetti_animation")
-        )
+        TransactionConfetti(details)
 
         if (details.direction == NewTransactionSheetDirection.RECEIVED) {
-            Image(
-                painter = painterResource(R.drawable.coin_stack_5),
-                contentDescription = null,
-                contentScale = ContentScale.FillWidth,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("transaction_received_image")
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 32.dp)
-            )
+            if (details.usdtAmount != null) {
+                // The exported composition includes artwork outside its centered 256dp design slot.
+                Image(
+                    painter = painterResource(R.drawable.usdt_coins_received),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .offset(x = 13.5.dp)
+                        .padding(bottom = 12.dp)
+                        .size(width = 349.dp, height = 520.dp)
+                        .testTag("transaction_received_image")
+                )
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.coin_stack_5),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("transaction_received_image")
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 32.dp)
+                )
+            }
         } else {
             Image(
                 painter = painterResource(R.drawable.check),
@@ -169,7 +171,7 @@ fun NewTransactionSheetView(
 
             SheetTopBar(titleText)
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(if (details.usdtAmount != null) 8.dp else 24.dp))
 
             if (details.usdtAmount != null) {
                 UsdtAmountHeader(
@@ -195,6 +197,47 @@ fun NewTransactionSheetView(
             TransactionButtons(details, onCloseClick, onDetailClick)
             Spacer(modifier = Modifier.height(8.dp))
         }
+    }
+}
+
+private val ConfettiShade = Color(0xFF8E8E93)
+
+@Composable
+private fun TransactionConfetti(details: NewTransactionSheetDetails) {
+    val composition by rememberLottieComposition(
+        if (details.type == NewTransactionSheetType.ONCHAIN) {
+            LottieCompositionSpec.RawRes(R.raw.confetti_orange)
+        } else {
+            LottieCompositionSpec.RawRes(R.raw.confetti_purple)
+        }
+    )
+    LottieAnimation(
+        composition = composition,
+        dynamicProperties = if (details.usdtAmount != null) {
+            rememberLottieDynamicProperties(
+                rememberLottieDynamicProperty(
+                    property = LottieProperty.COLOR,
+                    value = Colors.Usdt.toArgb(),
+                    keyPath = arrayOf("**"),
+                )
+            )
+        } else {
+            null
+        },
+        contentScale = ContentScale.Crop,
+        iterations = 100,
+        modifier = Modifier
+            .fillMaxSize()
+            .then(if (details.usdtAmount != null) Modifier.background(Colors.Black) else Modifier)
+            .testTag("confetti_animation")
+    )
+
+    if (details.usdtAmount != null) {
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(ConfettiShade.copy(alpha = 0.16f), Color.Transparent))
+            )
+        )
     }
 }
 

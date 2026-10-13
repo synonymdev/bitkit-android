@@ -507,10 +507,11 @@ fun ContentView(
         var receiveBlocking by remember(currentSheet) { mutableStateOf(false) }
         var receiveUsdt by remember(currentSheet) { mutableStateOf(false) }
         val sendState by appViewModel.sendUiState.collectAsStateWithLifecycle()
-        val isUsdtSheet = when (val sheet = currentSheet) {
+        val usesFlatSheetStyle = when (val sheet = currentSheet) {
             is Sheet.TimedSheet -> sheet.type == TimedSheetType.USDT
             is Sheet.Receive -> receiveUsdt
             is Sheet.Send -> sendState.paykitUsesUsdt
+            is Sheet.PubkyAuth -> true
             else -> false
         }
         val canDismissSheet = !receiveBlocking && (
@@ -549,13 +550,13 @@ fun ContentView(
                     !isAcceptingSubscription &&
                     !isRetryingInitialSubscriptionPayment &&
                     canDismissSheet,
-                sheetDragHandle = { SheetDragHandle(topPadding = if (isUsdtSheet) 8.dp else 12.dp) },
+                sheetDragHandle = { SheetDragHandle(topPadding = if (usesFlatSheetStyle) 8.dp else 12.dp) },
                 sheetHandlePlacement = when (currentSheet) {
                     is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
                     else -> SheetHandlePlacement.ScaffoldSlot
                 },
                 sheetContainerColor = when {
-                    isUsdtSheet || currentSheet is Sheet.Widgets -> Colors.Gray7
+                    usesFlatSheetStyle || currentSheet is Sheet.Widgets -> Colors.Gray7
                     // Meet the top of the subscription sheets' own gradient, so the grabber strip
                     // does not sit a shade darker than the content right below it.
                     currentSheet is Sheet.Subscription -> Colors.Gray6

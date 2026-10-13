@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,7 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,7 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -41,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.UsdtBridgeProvider
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtQuote
@@ -92,6 +97,7 @@ import to.bitkit.ui.sheets.NewTransactionSheetView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
+import to.bitkit.ui.utils.withAccent
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("CyclomaticComplexMethod")
@@ -181,7 +187,7 @@ internal fun UsdtPaymentContent(
         SheetTopBar(stringResource(title), onBack = onBack.takeUnless { showSubmitted || state.busy }, action = {
             if (contact != null && !showSubmitted) { PubkyContactAvatar(profile = contact, size = 32.dp) }
         })
-        VerticalSpacer(16.dp)
+        VerticalSpacer(if (quote != null || page == UsdtPage.AMOUNT) 8.dp else 16.dp)
         when {
             showSubmitted -> UsdtSubmittedContent(
                 quote,
@@ -298,14 +304,14 @@ private fun UsdtNetworkButton(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.height(28.dp).background(Colors.White06, CircleShape)
-            .border(1.dp, Colors.White10, CircleShape)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.height(28.dp).background(Colors.White.copy(alpha = 0.01f), RoundedCornerShape(12.dp))
+            .border(1.dp, Colors.White16, RoundedCornerShape(12.dp))
             .clickable(enabled = onChange != null && destinations.size > 1) { onChange?.invoke() }
-            .padding(horizontal = 8.dp).testTag("UsdtNetwork")
+            .padding(horizontal = 12.dp, vertical = 6.dp).testTag("UsdtNetwork")
     ) {
         Icon(painterResource(R.drawable.usdt_network), null, tint = Colors.Usdt, modifier = Modifier.size(16.dp))
-        CaptionB(destination.label, color = Colors.White64, maxLines = 1)
+        CaptionB(destination.label, color = Colors.White64, maxLines = 1, letterSpacing = 0.sp, lineHeight = 13.sp)
     }
 }
 
@@ -421,39 +427,49 @@ private fun UsdtAmountContent(
             BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
             VerticalSpacer(16.dp)
         }
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Column(modifier = Modifier.weight(1f)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically)) {
                 Caption13Up(stringResource(R.string.wallet__send_available), color = Colors.White64)
-                VerticalSpacer(8.dp)
+                VerticalSpacer(4.dp)
                 BodySSB(
                     (
                         if (hideBalance) {
                             UiConstants.HIDE_BALANCE_SHORT
                         } else {
                             wallet.balance?.let {
-                                "$ " + usdtOverviewAmount(it)
+                                "<accent>$</accent> " + usdtOverviewAmount(it)
                             } ?: "—"
                         }
-                        )
+                        ).withAccent(accentColor = Colors.White64)
                 )
             }
-            NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
-            if (onMaximum != null && amountEditable) {
-                NumberPadActionButton(
-                    text = stringResource(R.string.common__max),
-                    color = Colors.Usdt,
-                    onClick = onMaximum,
-                    enabled = !state.busy,
-                    isLoading = state.preparingMaximum,
-                    modifier = Modifier.testTag("UsdtMax")
-                )
-            }
-            if (onNetworkClick != null) {
-                UsdtNetworkButton(
-                    destination,
-                    onNetworkClick.takeUnless { state.busy },
-                    destinations,
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            ) {
+                NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
+                if (onMaximum != null && amountEditable) {
+                    NumberPadActionButton(
+                        text = stringResource(R.string.common__max),
+                        color = Colors.Usdt,
+                        onClick = onMaximum,
+                        enabled = !state.busy,
+                        isLoading = state.preparingMaximum,
+                        modifier = Modifier.testTag("UsdtMax")
+                    )
+                }
+                if (onNetworkClick != null) {
+                    UsdtNetworkButton(
+                        destination,
+                        onNetworkClick.takeUnless { state.busy },
+                        destinations,
+                    )
+                }
             }
         }
         VerticalSpacer(16.dp)
@@ -494,25 +510,40 @@ private fun UsdtConfirmation(
     var showDetails by rememberSaveable(quote.id) { mutableStateOf(false) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val note = paymentRequestNote?.trim()?.takeIf { it.isNotEmpty() }
+    var headerHeight by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
     val scrollState = rememberScrollState()
     LaunchedEffect(showDetails) { scrollState.scrollTo(0) }
     Column(modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val availableHeight = maxHeight
             Column(
                 verticalArrangement = if (showDetails) Arrangement.Top else Arrangement.SpaceBetween,
                 modifier = Modifier.verticalScroll(scrollState).heightIn(min = maxHeight)
             ) {
-                UsdtReviewHeader(quote, contact, note, isPaymentRequest, showDetails) {
+                UsdtReviewHeader(
+                    quote,
+                    contact,
+                    note,
+                    isPaymentRequest,
+                    showDetails,
+                    modifier = Modifier.onSizeChanged { headerHeight = it.height },
+                ) {
                     if (!state.busy && !completed) onEditAmount()
                 }
                 Column {
                     if (!showDetails) {
                         PaymentReviewIllustration(
                             swipeProgress = { swipeProgress.floatValue },
-                            modifier = Modifier.height(256.dp)
+                            modifier = Modifier.height(
+                                if (quote.destination == UsdtDestination.ARBITRUM) {
+                                    256.dp
+                                } else {
+                                    (availableHeight - with(density) { headerHeight.toDp() }).coerceIn(0.dp, 256.dp)
+                                }
+                            )
                         )
-                    }
-                    if (showDetails) {
+                    } else {
                         UsdtBridgeCost(quote)
                         VerticalSpacer(16.dp)
                         UsdtFeeNote(quote)
@@ -520,31 +551,14 @@ private fun UsdtConfirmation(
                     state.error?.let {
                         BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
                     }
-                    PrimaryButton(
-                        text = stringResource(
-                            if (showDetails) R.string.common__hide_details else R.string.common__show_details
-                        ),
-                        size = ButtonSize.Small,
-                        onClick = { showDetails = !showDetails },
-                        fullWidth = false,
-                        color = Colors.White06,
-                        enableGradient = false,
-                        icon = {
-                            Icon(
-                                painterResource(
-                                    if (showDetails) R.drawable.ic_eye_slash else R.drawable.ic_speed_normal
-                                ),
-                                null,
-                                tint = Colors.Usdt,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        modifier = Modifier.align(
-                            Alignment.CenterHorizontally
-                        ).padding(vertical = 24.dp).testTag("UsdtReviewDetails")
-                    )
+                    if (quote.destination == UsdtDestination.ARBITRUM) {
+                        UsdtReviewDetailsButton(showDetails) { showDetails = !showDetails }
+                    }
                 }
             }
+        }
+        if (quote.destination != UsdtDestination.ARBITRUM) {
+            UsdtReviewDetailsButton(showDetails) { showDetails = !showDetails }
         }
         UsdtMaximumTotal(quote)
         SwipeToConfirm(
@@ -558,6 +572,33 @@ private fun UsdtConfirmation(
             modifier = Modifier.fillMaxWidth().testTag("UsdtConfirm")
         )
     }
+}
+
+@Composable
+private fun ColumnScope.UsdtReviewDetailsButton(showDetails: Boolean, onClick: () -> Unit) {
+    PrimaryButton(
+        text = stringResource(
+            if (showDetails) R.string.common__hide_details else R.string.common__show_details
+        ),
+        size = ButtonSize.Small,
+        onClick = onClick,
+        fullWidth = false,
+        color = Colors.White06,
+        enableGradient = false,
+        icon = {
+            Icon(
+                painterResource(
+                    if (showDetails) R.drawable.ic_eye_slash else R.drawable.ic_speed_normal
+                ),
+                null,
+                tint = Colors.Usdt,
+                modifier = Modifier.size(16.dp)
+            )
+        },
+        modifier = Modifier.align(
+            Alignment.CenterHorizontally
+        ).padding(vertical = 24.dp).testTag("UsdtReviewDetails")
+    )
 }
 
 @Composable
@@ -594,9 +635,10 @@ private fun UsdtReviewHeader(
     note: String?,
     isPaymentRequest: Boolean,
     showDetails: Boolean,
+    modifier: Modifier = Modifier,
     onEditAmount: () -> Unit,
 ) {
-    Column {
+    Column(modifier = modifier) {
         if (quote.destination != UsdtDestination.ARBITRUM) {
             Caption13Up(stringResource(R.string.usdt__you_send), color = Colors.White64)
             VerticalSpacer(8.dp)

@@ -456,6 +456,8 @@ fun CaptionB(
     textAlign: TextAlign = TextAlign.Start,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    lineHeight: TextUnit = TextUnit.Unspecified,
 ) {
     CaptionB(
         text = AnnotatedString(text),
@@ -464,6 +466,8 @@ fun CaptionB(
         textAlign = textAlign,
         maxLines = maxLines,
         overflow = overflow,
+        letterSpacing = letterSpacing,
+        lineHeight = lineHeight,
     )
 }
 
@@ -475,10 +479,14 @@ fun CaptionB(
     textAlign: TextAlign = TextAlign.Start,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    lineHeight: TextUnit = TextUnit.Unspecified,
 ) {
     Text(
         text = text,
         style = AppTextStyles.CaptionB.merge(
+            letterSpacing = letterSpacing,
+            lineHeight = lineHeight,
             color = color,
             textAlign = textAlign,
         ),
