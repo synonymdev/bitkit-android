@@ -18,7 +18,7 @@ that Locks released its content. Follow `local-paykit-fallback.xml` after this s
   on that homeserver. Preserve existing identities. Use the grant signup journey for a fresh
   `pubkyauth://signup_grant` URL naming that homeserver; invites and authorization URLs are secrets.
 - Record the app commit, APK hash and installed package. Android uses `devDebug`, `to.bitkit.dev`,
-  Paykit `0.1.0-rc72` and native LDK `0.7.0-rc.71`. Use a normal build (`E2E=false`) or explicitly
+  Paykit `0.1.0-rc72` and native LDK `0.7.0-rc.74`. Use a normal build (`E2E=false`) or explicitly
   network-backed E2E build; the local E2E default selects a different chain endpoint.
 - Both wallets and the server must use `ssl://electrs.bitkit.stag0.blocktank.to:9999`, the regtest
   endpoint in `app/src/main/java/to/bitkit/env/Env.kt`. Verify this before funding or creating a request.

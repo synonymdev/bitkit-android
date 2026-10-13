@@ -114,7 +114,7 @@ class SendAmountContentTest {
         composeTestRule.setContent {
             SendAmountContent(
                 nodeLifecycleState = nodeLifecycleState,
-                uiState = uiState,
+                uiState = uiState.copy(isAmountInputValid = true),
                 amountInputViewModel = previewAmountInputViewModel(),
                 onContinue = { eventTriggered = true }
             )

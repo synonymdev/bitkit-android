@@ -332,6 +332,40 @@ class CoreServiceTest {
         assertEquals(created, created.withPendingMessage(pendingMessage = " ", description = descriptionHash))
     }
 
+    @Test
+    fun `confirmation with block time before first seen lowers timestamp to block time`() {
+        val pending = activity(id = "tx").v1.copy(timestamp = 2_000uL)
+
+        val result = pending.withConfirmation(isConfirmed = true, confirmTimestamp = 1_500uL)
+
+        assertTrue(result.confirmed)
+        assertEquals(1_500uL, result.timestamp)
+        assertEquals(1_500uL, result.confirmTimestamp)
+        assertTrue(checkNotNull(result.confirmTimestamp) >= result.timestamp)
+    }
+
+    @Test
+    fun `confirmation with block time after first seen keeps timestamp`() {
+        val pending = activity(id = "tx").v1.copy(timestamp = 2_000uL)
+
+        val result = pending.withConfirmation(isConfirmed = true, confirmTimestamp = 2_500uL)
+
+        assertTrue(result.confirmed)
+        assertEquals(2_000uL, result.timestamp)
+        assertEquals(2_500uL, result.confirmTimestamp)
+    }
+
+    @Test
+    fun `unconfirmed update keeps timestamp`() {
+        val pending = activity(id = "tx").v1.copy(timestamp = 2_000uL)
+
+        val result = pending.withConfirmation(isConfirmed = false, confirmTimestamp = null)
+
+        assertFalse(result.confirmed)
+        assertEquals(2_000uL, result.timestamp)
+        assertNull(result.confirmTimestamp)
+    }
+
     private fun mergePlan(
         existing: List<Activity.Onchain>,
         incoming: List<Activity>,

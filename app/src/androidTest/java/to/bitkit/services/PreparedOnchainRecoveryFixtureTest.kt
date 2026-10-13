@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -71,6 +72,7 @@ class PreparedOnchainRecoveryFixtureTest {
 
     @Test
     fun verifyPersistedOriginalWinnerAfterUi() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("expectedWinnerTxid") != null)
         val context = ApplicationProvider.getApplicationContext<Context>()
         Env.initAppStoragePath(context.filesDir.absolutePath)
         hiltRule.inject()
