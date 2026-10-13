@@ -8,6 +8,7 @@ import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.OutboundPrivateSendReport
+import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
@@ -108,13 +109,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers(any())).doSuspendableAnswer {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers()
         }
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
-        whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
-        whenever(paykitSdkService.identityStatus(any())).doSuspendableAnswer { paykitSdkService.identityStatus() }
-        whenever(paykitSdkService.linkedPeers(any())).doSuspendableAnswer { paykitSdkService.linkedPeers() }
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull(), any())).doSuspendableAnswer {
-            paykitSdkService.allPaymentRequests(it.getArgument(0))
-        }
+        stubRequestReads()
         whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {
             paykitSdkService.processOutboundPrivateMessages(it.getArgument(0))
         }
@@ -142,6 +137,28 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             subscriptionClock,
         )
         sut.activate(LOCAL_IDENTITY)
+    }
+
+    private fun stubRequestReads() {
+        whenever { paykitSdkService.allPaymentRequests(anyOrNull()) }.thenReturn(emptyList())
+        whenever { paykitSdkService.linkedPeers() }.thenReturn(emptyList())
+        whenever { paykitSdkService.identityStatus(any()) }.doSuspendableAnswer { paykitSdkService.identityStatus() }
+        whenever { paykitSdkService.linkedPeers(any()) }.doSuspendableAnswer { paykitSdkService.linkedPeers() }
+        whenever { paykitSdkService.allPaymentRequests(anyOrNull(), any()) }.doSuspendableAnswer {
+            paykitSdkService.allPaymentRequests(it.getArgument(0))
+        }
+        whenever { paykitSdkService.observeState(any(), any()) }.doSuspendableAnswer {
+            val records = paykitSdkService.allPaymentRequests(it.getArgument(0))
+            PaykitStateObservation(
+                publicKey = it.getArgument(0),
+                keyGeneration = 0uL,
+                observedAt = clock.now().toString(),
+                contacts = emptyList(),
+                linkedPeers = paykitSdkService.linkedPeers(),
+                paymentRequests = records,
+                receipts = emptyList(),
+            )
+        }
     }
 
     @After

@@ -58,6 +58,28 @@ explicit refreshes, and maintenance rounds after 30 seconds, then every 60 secon
 Maintenance uses elapsed time, including slow requests; polling remains serialized and does not
 start catch-up rounds. Incoming messages wait for the next poll plus synchronization time.
 
+## Durable proof handoff (manual)
+
+This check needs a disposable regtest fixture with independently controlled payment acceptance,
+local storage failures, and delayed Paykit proof submission. These fault controls are not journey
+capabilities. Report it as blocked when the fixture or payment authorization is unavailable.
+
+1. Hold remote proof submission after a successful payment and verify the accepted activity and
+   exact proof are durably stored. Local completion must finish without waiting for the hold,
+   without claiming the merchant has unlocked anything. No additional payment may be dispatched.
+2. Restart before releasing the hold. Release it and verify the same proof is delivered once the
+   original identity is active, without another payment or duplicate activity.
+3. Repeat with an unknown payment outcome. It must remain unresolved, retaining the original
+   payment guard and not claiming success or allowing a fresh payment.
+4. Fail local proof storage and hold delivery. Local completion must wait for successful delivery
+   or durable retry storage; failing both must preserve the unresolved follow-up.
+5. Switch identities or sign out before delivery, then reset the wallet in a separate run. Proofs
+   must not be submitted under a different identity, and reset state must not be repopulated by a
+   delayed in-memory handoff. Use only disposable fixture data for reset.
+
+The automated repository tests exercise these boundaries without broadcasting funds. Controlled
+submission delays establish local completion isolation, not real-network linking performance.
+
 ## Accepting install
 
 Acceptance intent is saved before the remote operation and included in wallet backups.

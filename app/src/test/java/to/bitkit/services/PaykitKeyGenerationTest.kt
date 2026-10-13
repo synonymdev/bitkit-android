@@ -6,6 +6,7 @@ import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
 import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkySessionAccess
@@ -31,6 +32,21 @@ class PaykitKeyGenerationTest {
     companion object {
         /** Fixture identity for generation-scoped storage keys. */
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
+    private suspend fun assertObservationGeneration(sdk: PaykitSdk, service: PaykitSdkService, generation: ULong) {
+        val observation = PaykitStateObservation(
+            publicKey = RING_PUBKY,
+            keyGeneration = generation,
+            observedAt = "2026-10-11T00:00:00Z",
+            contacts = emptyList(),
+            linkedPeers = emptyList(),
+            paymentRequests = emptyList(),
+            receipts = emptyList(),
+        )
+        whenever { sdk.observeState() }.thenReturn(observation.copy(keyGeneration = 1uL), observation)
+        assertFailsWith<IllegalStateException> { service.observeState(RING_PUBKY) }
+        assertEquals(observation, service.observeState(RING_PUBKY))
     }
 
     @Test
@@ -98,8 +114,10 @@ class PaykitKeyGenerationTest {
                 val provider = providers.constructed().single()
                 repeat(2) { assertEquals(RING_PUBKY, service.currentPublicKey()) }
                 verify(sdk).paykitAppRegistry(RING_PUBKY)
+                assertObservationGeneration(sdk, service, 2uL)
                 assertSame(staleKey, assertFailsWith<PaykitException.Identity> { service.currentPublicKey() })
                 assertEquals(RING_PUBKY, service.currentPublicKey())
+                assertObservationGeneration(sdk, service, 3uL)
                 assertSame(staleKey, assertFailsWith<PaykitException.Identity> { service.currentPublicKey() })
                 repeat(2) {
                     val error = assertFailsWith<IllegalStateException> { service.currentPublicKey() }

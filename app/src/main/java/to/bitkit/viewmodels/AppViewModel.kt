@@ -968,6 +968,7 @@ class AppViewModel @Inject constructor(
         forceFresh: Boolean = false,
         messagePriority: Priority = Priority.Ordered,
         onlyWhileActive: Boolean = false,
+        reconcileProofs: Boolean = mode == PaykitPaymentRequestRefreshMode.FULL,
     ): Result<Unit> {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
@@ -975,7 +976,7 @@ class AppViewModel @Inject constructor(
         if (onlyWhileActive && isPaymentRequestPollingStopped.value) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
-        if (mode == PaykitPaymentRequestRefreshMode.FULL) paykitPaymentProofRepo.reconcile()
+        if (reconcileProofs) paykitPaymentProofRepo.reconcile()
         if (onlyWhileActive && isPaymentRequestPollingStopped.value) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
@@ -1137,22 +1138,7 @@ class AppViewModel @Inject constructor(
                 }
             }.filterNotNull().collect(::clearPaymentRequestPreparation)
         }
-        viewModelScope.launch {
-            var changeVersion = 0L
-            paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey)
-                .map { ++changeVersion }
-                .combine(paykitPaymentRequestRepo.isPaymentSubmissionActive) { version, active ->
-                    version.takeUnless { active }
-                }
-                .combine(isPaymentRequestPollingStopped) { version, stopped ->
-                    version.takeUnless { stopped }
-                }
-                .filterNotNull()
-                .distinctUntilChanged()
-                .collect {
-                    refreshIncomingPaykitPaymentRequests(PaykitPaymentRequestRefreshMode.STORED, forceFresh = true)
-                }
-        }
+        observePaymentProofChanges()
         viewModelScope.launch {
             var previousSheet: Sheet? = null
             currentSheet.collect { sheet ->
@@ -1184,6 +1170,30 @@ class AppViewModel @Inject constructor(
                     presentNextIncomingPaykitPaymentRequest()
                 }
             }
+        }
+    }
+
+    private fun observePaymentProofChanges() {
+        viewModelScope.launch {
+            var changeVersion = 0L
+            paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey)
+                .map { ++changeVersion }
+                .combine(paykitPaymentRequestRepo.isPaymentSubmissionActive) { version, active ->
+                    version.takeUnless { active }
+                }
+                .combine(isPaymentRequestPollingStopped) { version, stopped ->
+                    version.takeUnless { stopped }
+                }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .collect {
+                    refreshIncomingPaykitPaymentRequests(
+                        PaykitPaymentRequestRefreshMode.STORED,
+                        forceFresh = true,
+                        onlyWhileActive = true,
+                        reconcileProofs = true,
+                    )
+                }
         }
     }
 

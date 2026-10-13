@@ -205,6 +205,10 @@ class PubkyService @Inject constructor(
         paykitSdkService.contactRecords()
     }
 
+    suspend fun observedContactRecords(expectedIdentity: String): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.observeState(expectedIdentity).contacts
+    }
+
     @Suppress("LongParameterList")
     suspend fun saveContact(
         publicKey: String,

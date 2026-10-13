@@ -1141,9 +1141,10 @@ class PubkyRepo @Inject constructor(
      * was resolved less than [CONTACT_PROFILE_FRESHNESS] ago.
      */
     suspend fun loadContacts() {
-        val pk = _publicKey.value ?: return
+        val signIn = currentSignIn() ?: return
+        val pk = signIn.publicKey
         loadContactsMutex.lock()
-        if (_publicKey.value != pk) {
+        if (!isCurrent(signIn)) {
             loadContactsMutex.unlock()
             return
         }
@@ -1158,12 +1159,12 @@ class PubkyRepo @Inject constructor(
                 reload = false
                 runSuspendCatching {
                     withContext(ioDispatcher) {
-                        val records = pubkyService.contactRecords()
+                        val records = pubkyService.observedContactRecords(pk)
                         val overrides = pubkyStore.data.first().contactProfileOverrides
                         records.map { savedContact(it, overrides) }
                     }
                 }.onSuccess { savedContacts ->
-                    if (_publicKey.value != pk) {
+                    if (!isCurrent(signIn)) {
                         Logger.debug("Skipped stale contacts load for '${redacted(pk)}'", context = TAG)
                         return@onSuccess
                     }
@@ -1180,16 +1181,16 @@ class PubkyRepo @Inject constructor(
                     markContactsLoaded()
                     shouldMarkLoadCompleted = true
                 }.onFailure {
-                    shouldMarkLoadCompleted = _publicKey.value == pk
+                    shouldMarkLoadCompleted = isCurrent(signIn)
                     Logger.error("Failed to load contacts", it, context = TAG)
                 }
-            } while (reload && _publicKey.value == pk)
+            } while (reload && isCurrent(signIn))
         } finally {
             _isLoadingContacts.update { false }
             loadContactsMutex.unlock()
-            if (shouldMarkLoadCompleted && _publicKey.value == pk) markContactsLoadCompleted()
+            if (shouldMarkLoadCompleted && isCurrent(signIn)) markContactsLoadCompleted()
         }
-        refreshContactProfiles(pk, contactsToRefresh)
+        if (isCurrent(signIn)) refreshContactProfiles(pk, contactsToRefresh)
     }
 
     /**

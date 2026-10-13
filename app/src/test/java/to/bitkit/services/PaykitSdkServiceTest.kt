@@ -15,6 +15,7 @@ import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
 import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
@@ -102,6 +103,84 @@ class PaykitSdkServiceTest {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val FILE_URI = "pubky://$RING_PUBKY/pub/pubky.app/files/avatar"
         private val READ_TIMEOUT = 10.seconds
+    }
+
+    @Test
+    fun `state observation validates identity and propagates unavailable session failures`() = runTest {
+        val observation = PaykitStateObservation(
+            publicKey = "pubky$RING_PUBKY",
+            keyGeneration = 0uL,
+            observedAt = "2026-10-11T00:00:00Z",
+            contacts = emptyList(),
+            linkedPeers = emptyList(),
+            paymentRequests = emptyList(),
+            receipts = emptyList(),
+        )
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.observeState()).thenReturn(observation)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        assertEquals(observation, service.observeState(RING_PUBKY))
+        assertFailsWith<IllegalStateException> { service.observeState("another-identity") }
+        val failure = PaykitException.Identity("identity_error", "No active session")
+        whenever(sdk.observeState()).thenThrow(failure)
+        assertSame(failure, assertFailsWith<PaykitException.Identity> { service.observeState(RING_PUBKY) })
+        verify(sdk, never()).identityStatus()
+        verify(sdk, never()).contactRecords()
+        verify(sdk, never()).listPaymentRequests(any())
+    }
+
+    @Test
+    fun `queued state observation is rejected after runtime replacement`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer {
+            release.await()
+            emptyList()
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val active = async { service.contactRecords() }
+        runCurrent()
+        val reset = async { service.clearState() }
+        val observation = async { runSuspendCatching { service.observeState(RING_PUBKY) } }
+        runCurrent()
+        release.complete(Unit)
+        active.await()
+        reset.await()
+
+        assertIs<IllegalStateException>(observation.await().exceptionOrNull())
+        verify(sdk, never()).observeState()
+    }
+
+    @Test
+    fun `cancelled state observation retains native ownership until completion`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        whenever(sdk.observeState()).doSuspendableAnswer {
+            release.await()
+            PaykitStateObservation(
+                publicKey = "pubky$RING_PUBKY",
+                keyGeneration = 0uL,
+                observedAt = "2026-10-11T00:00:00Z",
+                contacts = emptyList(),
+                linkedPeers = emptyList(),
+                paymentRequests = emptyList(),
+                receipts = emptyList(),
+            )
+        }
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val observation = async { service.observeState(RING_PUBKY) }
+        runCurrent()
+        observation.cancel()
+        val contacts = async { service.contactRecords() }
+        runCurrent()
+        assertFalse(contacts.isCompleted)
+        verify(sdk, never()).contactRecords()
+        release.complete(Unit)
+
+        assertFailsWith<CancellationException> { observation.await() }
+        assertEquals(emptyList(), contacts.await())
     }
 
     @Test
