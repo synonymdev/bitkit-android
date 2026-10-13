@@ -4,7 +4,8 @@
     NOT already in the widget set. A new wallet's default set already has it, and re-saving a widget
     that is already there keeps its original position instead of appending, so the final assertion
     fails for the wrong reason. Delete it from the home widget list first if present (tap the edit
-    icon, testTag "WidgetsEdit", and delete it there): while the intro is unseen, the home "Add Widget"
+    icon, testTag "WidgetsEdit", delete it there and confirm "Yes, Delete" in the "Delete Widget?"
+    dialog): while the intro is unseen, the home "Add Widget"
     button opens the intro, and tapping "Add Widget" on it marks the intro as seen.
   </description>
   <actions>
