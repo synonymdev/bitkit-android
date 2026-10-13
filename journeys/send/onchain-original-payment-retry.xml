@@ -8,7 +8,8 @@
     as state injection, never as proof of a native fault. Manual Tests must verify the exact backend
     winning transaction retains the complete original input set and recipient amount, and any original
     Shop request or Blocktank order completes once without a new request or order. Local activity alone
-    cannot prove these checks. The funded native fault journey remains unrun.
+    cannot prove these checks. See prepared-fee-recovery.md in this directory for the four shared
+    manual fee-recovery cases and platform adaptations. Record native fault coverage separately.
   </description>
   <actions>
     <action>Open the retained original payment's Pending screen and record its displayed transaction ID</action>

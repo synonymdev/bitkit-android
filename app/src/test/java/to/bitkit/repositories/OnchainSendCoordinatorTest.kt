@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.serialization.json.Json
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
@@ -160,6 +161,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             assertEquals(!expired, nextTxid in retained.candidateTxids)
             if (expired) {
                 assertEquals(original.candidateTxids, retained.candidateTxids)
+                assertEquals(original.candidateMiningFees, retained.candidateMiningFees)
                 assertEquals(original.txid, retained.txid)
                 assertEquals(original.evidence, retained.evidence)
             }
@@ -175,6 +177,10 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             override suspend fun prepareInitial(attempt: OnchainSendAttempt) = PreparedOnchainSend(f.receipt()) {
                 it()
                 assertTrue(requireNotNull(f.saved).contains(firstTxid))
+                val durable = Json.decodeFromString<OnchainSendAttempt>(
+                    requireNotNull(f.saved),
+                )
+                assertEquals(mapOf(firstTxid to 50uL), durable.candidateMiningFees)
                 sends++
                 OnchainSendOutcome.Unknown(firstTxid)
             }
@@ -188,6 +194,8 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         val reopened = OnchainSendAttemptStore(testDispatcher, f.keychain, f.service, kotlin.time.Clock.System)
         assertEquals(listOf(firstTxid), reopened.current()?.candidateTxids)
         assertEquals(listOf(input), reopened.current()?.originalInputs)
+        assertEquals(mapOf(firstTxid to 50uL), reopened.current()?.candidateMiningFees)
+        assertTrue(reopened.current()?.isUnresolved == true)
         assertEquals(1, sends)
     }
 
@@ -212,6 +220,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         assertTrue(OnchainSendCoordinator(f.store, sender, testDispatcher).sendInitial(attempt).isFailure)
         assertEquals(0, sends)
         assertTrue(f.store.current()?.blocksNextSend == true)
+        assertTrue(f.store.current()?.candidateMiningFees.isNullOrEmpty())
     }
 
     @Test
@@ -615,12 +624,13 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
         val sender = object : OnchainPreparedSender {
             override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend = error("unused")
             override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?) =
-                PreparedOnchainSend(f.receipt(nextTxid)) {
+                PreparedOnchainSend(f.receipt(nextTxid).copy(miningFeeSats = 150uL)) {
                 it()
                     val saved = kotlinx.serialization.json.Json.decodeFromString<OnchainSendAttempt>(
                         requireNotNull(f.saved)
                     )
                     assertEquals(3uL, saved.candidateFeeRates[nextTxid])
+                    assertEquals(mapOf(firstTxid to 50uL, nextTxid to 150uL), saved.candidateMiningFees)
                     OnchainSendOutcome.Unknown(nextTxid)
                 }
         }

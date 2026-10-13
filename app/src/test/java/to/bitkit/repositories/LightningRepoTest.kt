@@ -65,6 +65,7 @@ import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
+import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NodeLifecycleState
@@ -1983,6 +1984,72 @@ class LightningRepoTest : BaseUnitTest() {
         verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
     }
 
+    @Test
+    fun `positive winner uses only its prepared fee while transaction history is unavailable`() = test {
+        val first = "ab".repeat(32)
+        val replacement = "cd".repeat(32)
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(lightningService.observedOriginalSendFee(any())).thenReturn(null)
+        for ((txid, fee) in listOf(first to 0uL, replacement to 281uL)) {
+            val attempt = pendingSendAttempt().copy(
+                evidence = OnchainSendEvidence.Accepted,
+                txid = txid,
+                candidateTxids = listOf(first, replacement),
+                candidateFeeRates = mapOf(first to 1uL, replacement to 3uL),
+                candidateMiningFees = mapOf(first to 0uL, replacement to 281uL),
+                backupFollowup = ActiveOnchainAttemptBackup.Followup(
+                    "0",
+                    emptyList(),
+                    createdAtMillis = "123",
+                ),
+            )
+            whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+            whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+            sut.completeAcceptedOrdinaryFollowup(txid.uppercase())
+            inOrder(onchainSendAttemptStore, activityService) {
+                verify(onchainSendAttemptStore).retainWinningFee(attempt.attemptId, attempt.walletIndex, txid, fee)
+                verify(activityService).createSentOnchainActivityFromSendResult(
+                    txid,
+                    attempt.address,
+                    attempt.amountSats,
+                    fee,
+                    attempt.winningFeeRateSatsPerVByte,
+                    false,
+                    null,
+                    attempt.walletId,
+                )
+                verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+            }
+            clearInvocations(onchainSendAttemptStore, activityService)
+        }
+        verify(lightningService, never()).observedOriginalSendFee(any())
+    }
+
+    @Test
+    fun `prepared fee does not complete unknown or mismatched shop payments`() = test {
+        val txid = "ab".repeat(32)
+        val request = PaykitPaymentRequestId("request", "payer")
+        val attempt = pendingSendAttempt().copy(
+            requestId = request,
+            evidence = OnchainSendEvidence.Unknown,
+            txid = txid,
+            candidateTxids = listOf(txid),
+            candidateMiningFees = mapOf(txid to 141uL),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        sut.completeAcceptedShopFollowup(request, txid)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted))
+        sut.completeAcceptedShopFollowup(request.copy(paymentRequestId = "other"), txid)
+        sut.completeAcceptedShopFollowup(request, "cd".repeat(32))
+        verify(onchainSendAttemptStore, never()).retainWinningFee(any(), any(), any(), any())
+        verify(preActivityMetadataRepo, never()).addPreActivityMetadata(any())
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+    }
+
 
     @Test
     fun `successor activity fee never reuses original nonzero fee and missing exact fee stays guarded`() = test {
@@ -1993,6 +2060,7 @@ class LightningRepoTest : BaseUnitTest() {
             candidateTxids = listOf("ab".repeat(32), txid),
             candidateFeeRates = mapOf("ab".repeat(32) to 1uL, txid to 3uL),
             backupFollowup = to.bitkit.models.ActiveOnchainAttemptBackup.Followup("143", emptyList(), createdAtMillis = "123"),
+            candidateMiningFees = mapOf("ab".repeat(32) to 143uL),
         )
         val activityService = mock<ActivityService>()
         whenever(coreService.activity).thenReturn(activityService)
