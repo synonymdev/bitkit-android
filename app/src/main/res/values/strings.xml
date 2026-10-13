@@ -1151,6 +1151,7 @@
     <string name="subscriptions__overview">Overview</string>
     <string name="subscriptions__payment_due_description">Open Bitkit to review a subscription payment.</string>
     <string name="subscriptions__payment_due_title">Subscription Payment Due</string>
+    <string name="subscriptions__payment_methods">Payment methods</string>
     <string name="subscriptions__payments">Payments</string>
     <string name="subscriptions__per_day">Per Day</string>
     <string name="subscriptions__per_month">Per Month</string>

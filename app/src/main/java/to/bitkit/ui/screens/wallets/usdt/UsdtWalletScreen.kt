@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -352,7 +353,8 @@ private fun UsdtWalletContent(
                     if (!wallet.historyComplete) {
                         BodyS(
                             stringResource(R.string.usdt__history_sync),
-                            color = Colors.White64
+                            color = Colors.White64,
+                            modifier = Modifier.fillMaxWidth().background(Colors.Black).testTag("UsdtHistorySync")
                         )
                     }
                     VerticalSpacer(120.dp)

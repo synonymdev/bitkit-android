@@ -70,6 +70,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
@@ -772,7 +773,7 @@ fun SubscriptionFirstPaymentProgress(
 }
 
 @Composable
-private fun SubscriptionReview(
+internal fun SubscriptionReview(
     subscription: PaykitSubscription,
     contact: PubkyProfile,
     now: Instant,
@@ -796,6 +797,11 @@ private fun SubscriptionReview(
             }
         }
         PaykitAmountDisplay(subscription.amount)
+        VerticalSpacer(24.dp)
+        SubscriptionPaymentMethods(
+            title = stringResource(R.string.subscriptions__payment_methods),
+            endpoints = subscription.acceptedPaymentEndpointIdentifiers.toImmutableList(),
+        )
         VerticalSpacer(24.dp)
         SubscriptionProviderCard(subscription, contact, onClick = onDetails, showAsCard = true)
         if (!subscription.recurrence.unit.isSupported) {
@@ -826,7 +832,11 @@ private fun SubscriptionReview(
         if (loading || subscription.isProposalActionable(now)) {
             SwipeToConfirm(
                 text = stringResource(R.string.subscriptions__swipe_to_subscribe),
-                color = Colors.Brand,
+                color = if (subscription.acceptedPaymentEndpointIdentifiers == listOf(MethodId.UsdtArbitrum.rawValue)) {
+                    Colors.Usdt
+                } else {
+                    Colors.Brand
+                },
                 loading = loading,
                 confirmed = isPaying,
                 onConfirm = {

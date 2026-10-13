@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.usdt
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,7 @@ internal fun ColumnScope.UsdtReceiveContent(
     onNetwork: () -> Unit,
 ) {
     var showDetails by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = showDetails) { showDetails = false }
     val networkTitle = stringResource(R.string.usdt__receive_network, network)
     val shareContent = "$networkTitle\n$uri"
     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {

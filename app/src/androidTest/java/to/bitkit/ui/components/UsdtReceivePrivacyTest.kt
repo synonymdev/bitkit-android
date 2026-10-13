@@ -1,11 +1,12 @@
 package to.bitkit.ui.components
 
 import android.content.Context
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -35,7 +36,7 @@ class UsdtReceivePrivacyTest {
     val hiltRule = HiltAndroidRule(this)
 
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     @Before
     fun setup() {
@@ -66,6 +67,8 @@ class UsdtReceivePrivacyTest {
         composeTestRule.onNodeWithTag("UsdtReceiveDetails").performClick()
         composeTestRule.onNodeWithText("Copy").performClick()
         composeTestRule.runOnIdle { assertEquals(address, context.getClipboardText()) }
+        composeTestRule.runOnIdle { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeTestRule.onNodeWithTag("ReceiveCopyQR").assertIsDisplayed()
     }
 
     @Test

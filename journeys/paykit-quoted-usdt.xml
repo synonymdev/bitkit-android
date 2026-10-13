@@ -6,7 +6,7 @@
     <action>On the payer, open the request. Verify Amount shows exactly $1 with USDT selected as the payment method, the amount cannot be edited, and no Bitcoin funding source is offered. Close without continuing to review.</action>
     <action>Reopen the unpaid USDT request and wait for its Amount screen. Tap Back and verify the send sheet closes without showing a Bitcoin confirmation or a Swipe To Pay control. Reopen the same request and verify its amount and USDT payment method are preserved. Close without paying.</action>
     <action>Create a BTC request accepting Bitcoin and USDT. On the payer's Amount screen, switch between available Savings, Spending and USDT sources. Verify the displayed amount preserves the request's quoted value and cannot be edited. Close without continuing.</action>
-    <action>Create a USD subscription. Verify only USDT is accepted at fixed 1:1 parity. Propose it to the linked contact. On the payer, review its dollar amount, recurrence and USDT payment method; close before subscribing.</action>
+    <action>Create a USD subscription. Verify only USDT is accepted at fixed 1:1 parity. Propose it to the linked contact. On the payer, review its dollar amount, recurrence and USDT payment method. Verify the subscription swipe uses USDT teal, then close before subscribing.</action>
     <action>Create a BTC subscription and verify that only enabled Savings and Spending methods are accepted, with no USDT choice. Close without proposing.</action>
     <action>Open a linked USDT-only contact that has published a private payment list. Verify the amount screen offers only USDT, enter 0.01, then close without continuing to review.</action>
   </actions>

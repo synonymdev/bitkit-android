@@ -104,6 +104,7 @@ fun ReceiveQrScreen(
     onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
+    onClose: () -> Unit = {},
     onBlockingChange: (Boolean) -> Unit = {},
     hardwareWalletId: String? = null,
     /** Vendor name shown on the hardware tab, e.g. "Trezor" or "Jade". */
@@ -299,7 +300,7 @@ fun ReceiveQrScreen(
                 viewModel = hiltViewModel(),
                 tabs = visibleTabs,
                 onSelectTab = ::selectReceiveTab,
-                onBack = { selectReceiveTab(ReceiveTab.SAVINGS) },
+                onBack = onClose,
                 onBlockingChange = onBlockingChange,
                 onContacts = onClickPaymentRequestContacts.takeIf { showPaymentRequestContacts },
             )

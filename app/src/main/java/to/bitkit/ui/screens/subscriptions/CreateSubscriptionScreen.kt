@@ -278,30 +278,10 @@ internal fun CreateSubscriptionDetails(
                     )
                 }
                 VerticalSpacer(24.dp)
-                Column(modifier = Modifier.testTag("SubscriptionAcceptedMethods")) {
-                    Caption13Up(
-                        text = stringResource(R.string.wallet__payment_request_accepted_methods),
-                        color = Colors.White64,
-                    )
-                    VerticalSpacer(8.dp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        if (MethodId.UsdtArbitrum.rawValue in acceptedMethods) {
-                            BodyMSB(text = "USDT", color = Colors.Usdt)
-                        }
-                        if (acceptedMethods.any { MethodId.fromRawValue(it)?.isOnchain == true }) {
-                            BodyMSB(text = stringResource(R.string.lightning__savings), color = Colors.Brand)
-                        }
-                        if (MethodId.Bolt11.rawValue in acceptedMethods) {
-                            BodyMSB(text = stringResource(R.string.lightning__spending), color = Colors.Purple)
-                        }
-                        if (acceptedMethods.isEmpty()) {
-                            BodyM(
-                                text = stringResource(R.string.wallet__payment_request_status_unavailable),
-                                color = Colors.White64,
-                            )
-                        }
-                    }
-                }
+                SubscriptionPaymentMethods(
+                    title = stringResource(R.string.wallet__payment_request_accepted_methods),
+                    endpoints = acceptedMethods,
+                )
                 VerticalSpacer(24.dp)
                 Caption13Up(text = stringResource(R.string.subscriptions__frequency), color = Colors.White64)
                 VerticalSpacer(8.dp)
@@ -567,6 +547,34 @@ private enum class SubscriptionFrequencyOption(val unit: PaykitRecurrenceUnit) :
 }
 
 private val creationFrequencies = SubscriptionFrequencyOption.entries.toImmutableList()
+
+@Composable
+internal fun SubscriptionPaymentMethods(title: String, endpoints: ImmutableList<String>) {
+    Column(modifier = Modifier.testTag("SubscriptionAcceptedMethods")) {
+        Caption13Up(
+            text = title,
+            color = Colors.White64,
+        )
+        VerticalSpacer(8.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (MethodId.UsdtArbitrum.rawValue in endpoints) {
+                BodyMSB(text = "USDT", color = Colors.Usdt)
+            }
+            if (endpoints.any { MethodId.fromRawValue(it)?.isOnchain == true }) {
+                BodyMSB(text = stringResource(R.string.lightning__savings), color = Colors.Brand)
+            }
+            if (MethodId.Bolt11.rawValue in endpoints || MethodId.Lnurl.rawValue in endpoints) {
+                BodyMSB(text = stringResource(R.string.lightning__spending), color = Colors.Purple)
+            }
+            if (endpoints.isEmpty()) {
+                BodyM(
+                    text = stringResource(R.string.wallet__payment_request_status_unavailable),
+                    color = Colors.White64,
+                )
+            }
+        }
+    }
+}
 
 @Preview(showSystemUi = true)
 @Composable

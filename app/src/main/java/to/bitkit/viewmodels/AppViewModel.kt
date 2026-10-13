@@ -2645,19 +2645,11 @@ class AppViewModel @Inject constructor(
         }
 
         if (input.startsWith("ethereum:", ignoreCase = true)) {
-            if (activeHardwareWalletId != null) {
-                showHardwareOnchainOnlyValidationError()
-            } else if (Env.isUsdtEnabled && parseUsdtPaymentRequest(input).isSuccess) {
-                _sendUiState.update { it.copy(isAddressInputValid = true) }
-            } else {
-                showAddressValidationError(
-                    titleRes = R.string.other__scan_err_decoding,
-                    descriptionRes = R.string.other__scan__error__generic,
-                    testTag = "InvalidAddressToast",
-                )
-            }
+            validateUsdtAddressWithFeedback(input)
             return@withContext
         }
+
+        if (activeHardwareWalletId == null && rejectUsdtSelfSend(input)) return@withContext
 
         val scanResult = runCatching { coreService.decode(input.removeLightningSchemes()) }
 
@@ -2793,6 +2785,30 @@ class AppViewModel @Inject constructor(
         }
 
         _sendUiState.update { it.copy(isAddressInputValid = true) }
+    }
+
+    private fun validateUsdtAddressWithFeedback(input: String) {
+        val request = if (Env.isUsdtEnabled) parseUsdtPaymentRequest(input).getOrNull() else null
+        when {
+            activeHardwareWalletId != null -> showHardwareOnchainOnlyValidationError()
+            request == null -> showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__generic,
+                testTag = "InvalidAddressToast",
+            )
+            !rejectUsdtSelfSend(request.recipient) -> _sendUiState.update { it.copy(isAddressInputValid = true) }
+        }
+    }
+
+    private fun rejectUsdtSelfSend(address: String): Boolean {
+        val ownAddress = usdtRepo.state.value.address
+        if (!Env.isUsdtEnabled || ownAddress.isBlank() || !address.equals(ownAddress, ignoreCase = true)) return false
+        showAddressValidationError(
+            titleRes = R.string.common__error,
+            descriptionRes = R.string.usdt__error_self_send,
+            testTag = "SelfPaymentToast",
+        )
+        return true
     }
 
     private fun showHardwareOnchainOnlyValidationError() {

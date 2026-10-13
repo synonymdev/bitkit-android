@@ -4025,6 +4025,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `manual own USDT address explains why sending is blocked`() = test {
+        if (!Env.isUsdtEnabled) return@test
+        val address = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
+        usdtState.value = usdtState.value.copy(address = address)
+        sut.showSheet(Sheet.Send())
+        sut.setSendEvent(SendEvent.AddressChange(address.lowercase()))
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isAddressInputValid)
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        assertEquals(context.getString(R.string.usdt__error_self_send), toastCaptor.lastValue.description)
+        verify(coreService, never()).decode(any())
+        verify(usdtRepo, never()).quote(any(), any(), any(), any())
+    }
+
+    @Test
     fun `invalid USDT links and active USDT sends cannot open another payment`() = test {
         val uri = "ethereum:invalid"
         Mockito.mockStatic(Class.forName("to.bitkit.repositories.UsdtRepoKt")).use { parser ->

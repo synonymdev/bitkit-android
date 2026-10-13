@@ -178,6 +178,7 @@ fun ReceiveSheet(
                         },
                         initialTab = invoiceEditState.initialTab(hardwareWalletId) ?: initialTab,
                         onBlockingChange = onBlockingChange,
+                        onClose = appViewModel::hideSheet,
                         hardwareWalletId = selectedHardwareWalletId,
                         hardwareTabLabel = hardwareWallets.firstOrNull { it.id == selectedHardwareWalletId }
                             ?.let { stringResource(it.vendor.modelNameRes()) },
