@@ -65,7 +65,6 @@ class SubscriptionsScreenTest {
                 SubscriptionReview(
                     subscription = subscription.value,
                     contact = PubkyProfile.forDisplay(subscription.value.counterparty, "Anna", null),
-                    payOnAcceptance = true,
                     now = now,
                     onDetails = {},
                     onSubscribe = { true },
@@ -74,7 +73,7 @@ class SubscriptionsScreenTest {
         }
         composeTestRule.onNodeWithTag("SubscriptionAcceptedMethods").assertIsDisplayed()
         composeTestRule.onNodeWithText("USDT").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Swipe To Subscribe & Pay").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Swipe To Subscribe").assertIsDisplayed()
         val pixels = composeTestRule.onNodeWithTag("GRAB").captureToImage().toPixelMap()
         assertTrue((0 until pixels.height).any { y ->
             (0 until pixels.width).any { x -> pixels[x, y].toArgb() == Colors.Usdt.toArgb() }

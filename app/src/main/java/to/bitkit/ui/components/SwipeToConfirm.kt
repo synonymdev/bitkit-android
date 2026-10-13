@@ -76,7 +76,7 @@ fun SwipeToConfirm(
     val trailColor = remember(color) { color.copy(alpha = 0.24f) }
 
     var swiperWidth by remember { mutableFloatStateOf(0f) }
-    val maxPanX = if (swiperWidth == 0f) 1f else swiperWidth - with(LocalDensity.current) { CircleSize.toPx() }
+    val maxPanX = (swiperWidth - with(LocalDensity.current) { CircleSize.toPx() }).coerceAtLeast(1f)
 
     val panX = remember { Animatable(0f) }
     val startedConfirmed = remember { confirmed }

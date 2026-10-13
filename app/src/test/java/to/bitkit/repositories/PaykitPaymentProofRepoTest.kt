@@ -4,10 +4,10 @@ import android.content.Context
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.ConversionRate
-import com.synonym.paykit.PaymentConversion
-import com.synonym.paykit.PaymentConversionQuoteRecord
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaymentConversion
+import com.synonym.paykit.PaymentConversionQuoteRecord
 import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
@@ -62,8 +62,8 @@ import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
-import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PaykitPaymentStateBackup
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkService
@@ -80,8 +80,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -173,7 +173,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
             .doSuspendableAnswer {
                 assertEquals(txid, PaykitPaymentProofStore(diskKeychain).load().single().proofData)
                 delay(5.seconds)
@@ -181,7 +181,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             }
         val repo = paymentProofRepo(diskStore)
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
         val started = testScheduler.currentTime
         assertTrue(
             repo.completeOnchainPayment(
@@ -207,9 +207,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
         whenever(store.save(any())).doSuspendableAnswer { throw AppError("disk unavailable") }
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
             .doSuspendableAnswer {
                 delay(5.seconds)
                 throw AppError("delivery unavailable")
@@ -244,7 +244,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
         assertTrue(
             repo.completeOnchainPayment(
                 request,
@@ -259,14 +259,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             whenever(paykitSdkService.identityStatus()).thenReturn(status)
             paymentProofRepo().reconcile()
             assertEquals(txid, storedProofs.single().proofData)
-            verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+            verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
         }
         storedProofs = emptyList()
         whenever(paykitSdkService.identityStatus())
             .thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         repo.reconcile()
         assertTrue(storedProofs.isEmpty())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -2295,20 +2295,21 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.single().onchainAcceptanceVerified)
         assertEquals(walletId, storedProofs.single().onchainWalletId)
         assertEquals(request.id, repo.onchainPaymentResolutions.value.single().requestId)
-        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats))
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic))
             .thenReturn(Result.success(false))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
             .thenReturn(paymentRequestRecord())
         repo.reconcile()
         assertTrue(storedProofs.isEmpty())
-        verify(hwWalletRepo).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats)
+        verify(hwWalletRepo).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic)
         verify(paykitSdkService).submitPaymentProof(
             any(),
             any(),
             any(),
             eq(MethodId.P2wpkh.rawValue),
             eq("""{"data":"$txid","type":"bitcoin-onchain-txid"}"""),
+            isNull(),
             isNull(),
         )
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
@@ -2321,22 +2322,22 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val walletId = "original-hardware-wallet"
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
-        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, walletId).getOrThrow()
-        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats))
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic, walletId).getOrThrow()
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic))
             .thenReturn(Result.success(true))
         assertTrue(repo.completeHardwareOnchainPayment(request.id, walletId, txid, LOCAL_IDENTITY))
         val completed = storedProofs.single()
         repo.restoreBackup(repo.backupSnapshot())
         assertEquals(completed, storedProofs.single())
-        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats))
+        whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic))
             .thenReturn(Result.success(false))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
 
         repo.reconcile()
 
         assertEquals(completed, storedProofs.single())
-        verify(hwWalletRepo, times(2)).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amountSats)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+        verify(hwWalletRepo, times(2)).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 

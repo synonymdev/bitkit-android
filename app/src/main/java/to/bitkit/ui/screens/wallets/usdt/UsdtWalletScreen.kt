@@ -3,16 +3,13 @@ package to.bitkit.ui.screens.wallets.usdt
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -24,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -66,7 +62,6 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.UsdtAmountHeader
@@ -90,39 +85,31 @@ import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
-fun UsdtWalletCard(onClick: () -> Unit, viewModel: UsdtViewModel = hiltViewModel()) {
+fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = hiltViewModel()) {
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     UsdtRefreshEffect(viewModel, pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING })
-    VerticalSpacer(24.dp)
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
-    ) {
-        WalletBalanceContent(
-            title = "USDT",
-            icon = {
-                Image(
-                    painterResource(R.drawable.tether_circle),
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-            },
-            modifier = Modifier.clickableAlpha(onClick = onClick).padding(vertical = 4.dp)
-                .testTag("UsdtWallet"),
-        ) {
-            BodyMSB(
-                if (settings.hideBalance) {
-                    UiConstants.HIDE_BALANCE_SHORT
-                } else {
-                    wallet.balance?.let {
-                        usdtOverviewAmount(it)
-                    } ?: "—"
-                }
+    WalletBalanceContent(
+        title = "USDT",
+        icon = {
+            Image(
+                painterResource(R.drawable.tether_circle),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
             )
-        }
-        VerticalDivider(color = Colors.Gray4)
-        FillWidth()
+        },
+        modifier = Modifier.clickableAlpha(onClick = onClick).padding(vertical = 4.dp)
+            .testTag("UsdtWallet")
+    ) {
+        BodyMSB(
+            if (settings.hideBalance) {
+                UiConstants.HIDE_BALANCE_SHORT
+            } else {
+                wallet.balance?.let {
+                    usdtOverviewAmount(it)
+                } ?: "—"
+            }
+        )
     }
 }
 

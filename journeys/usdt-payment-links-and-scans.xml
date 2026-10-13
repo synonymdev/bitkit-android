@@ -2,6 +2,7 @@
   <description>Use an onboarded wallet with USDT configured and another owned wallet's Arbitrum receive URI. No payment is submitted. Hardware-wallet send remains Bitcoin-only.</description>
   <actions>
     <action>Open an ethereum: USDT receive link with chain 42161, the pinned Arbitrum token, an owned recipient and uint256=10001. Verify the USDT amount screen preserves the recipient and exact input 0.010001 USDT; the review rounds its displayed value to $0.01. Verify no payment occurs without approval.</action>
+    <action>On iOS, copy the USDT receive URI, return to Home and accept the clipboard prompt. Verify the USDT amount screen opens with the copied recipient and amount. Cancel without paying. Repeat with a wrong-chain URI and verify no payment prompt appears.</action>
     <action>Cancel the send, then reopen the identical URI. Verify the amount or review screen opens again. Cancel and open a different owned recipient and amount, verifying only the new values appear.</action>
     <action>While a USDT contact amount screen or direct-send review is open, open another USDT link. Verify the active recipient, amount and contact are preserved. Where PIN is enabled, repeat while its approval screen is visible, then cancel without paying.</action>
     <action>Open USDT from Home, open a USDT link, then open a second link with another owned recipient and amount. Verify the first amount and recipient remain. Cancel without paying.</action>

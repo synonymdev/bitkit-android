@@ -37,6 +37,7 @@ import org.junit.Test
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitRecurrenceUnit
@@ -169,8 +170,9 @@ class SendConfirmScreenTest {
         val subscription = PaykitSubscription(
             paymentRequestId = "subscription-id",
             counterparty = "payee",
-            amountValue = "0.00003",
-            amountSats = 3_000uL,
+            amount = PaykitAmount(PaykitAsset.BTC, 3_000uL),
+            paymentReference = "subscription",
+            pricing = PaykitRequestPricing(),
             note = "Journey Sub",
             createdAt = startsAt,
             proposalExpiresAt = null,

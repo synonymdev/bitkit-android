@@ -170,7 +170,7 @@ import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
-import to.bitkit.ui.screens.wallets.usdt.UsdtWalletCard
+import to.bitkit.ui.screens.wallets.usdt.UsdtWalletBalance
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.blocks.BlockCardSmall
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
@@ -780,35 +780,39 @@ private fun BalancesSection(
             )
         }
 
-        HwDevices(wallets = hardwareWallets, onClick = onClickHardwareWallet)
-        if (!LocalInspectionMode.current && Env.isUsdtEnabled) UsdtWalletCard(onClick = onClickUsdt)
+        AdditionalWallets(
+            wallets = hardwareWallets,
+            showUsdt = !LocalInspectionMode.current && Env.isUsdtEnabled,
+            onClickHardwareWallet = onClickHardwareWallet,
+            onClickUsdt = onClickUsdt,
+        )
     }
 }
 
-/**
- * Hardware wallets flow into a 2-column grid below the Savings/Spending tiles:
- * a second device fills the bottom-right column, additional devices wrap onto new rows.
- */
 @Composable
-private fun HwDevices(
+private fun AdditionalWallets(
     wallets: ImmutableList<HwWallet>,
-    onClick: (String) -> Unit,
+    showUsdt: Boolean,
+    onClickHardwareWallet: (String) -> Unit,
+    onClickUsdt: () -> Unit,
 ) {
-    wallets.chunked(2).forEach { rowWallets ->
-        VerticalSpacer(16.dp)
+    val count = wallets.size + if (showUsdt) 1 else 0
+    for (rowStart in 0 until count step 2) {
+        VerticalSpacer(if (wallets.isEmpty()) 24.dp else 16.dp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
         ) {
-            HwDeviceCell(wallet = rowWallets[0], onClick = onClick)
-            VerticalDivider(color = Colors.Gray4)
-            val second = rowWallets.getOrNull(1)
-            if (second != null) {
-                HwDeviceCell(wallet = second, onClick = onClick)
-            } else {
-                FillWidth()
+            for (index in rowStart..rowStart + 1) {
+                if (index > rowStart) VerticalDivider(color = Colors.Gray4)
+                val wallet = wallets.getOrNull(index)
+                when {
+                    wallet != null -> HwDeviceCell(wallet = wallet, onClick = onClickHardwareWallet)
+                    showUsdt && index == wallets.size -> UsdtWalletBalance(onClick = onClickUsdt)
+                    else -> FillWidth()
+                }
             }
         }
     }

@@ -9999,7 +9999,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertTrue(awaitItem() is Sheet.Subscription)
             assertTrue(sut.acceptSubscriptionAndStartPayment(subscription).getOrThrow())
             advanceUntilIdle()
-            assertTrue((awaitItem() as Sheet.Send).route is SendRoute.Error)
+            assertEquals(Sheet.Send(SendRoute.Amount), awaitItem())
             expectNoEvents()
         }
         verify(privatePaykitRepo).beginPaymentRequestWaitingForUpdatedList(dueRequest)
