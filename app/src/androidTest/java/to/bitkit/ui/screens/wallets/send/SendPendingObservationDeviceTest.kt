@@ -18,6 +18,7 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -82,6 +83,7 @@ class SendPendingObservationDeviceTest {
 
     @Test
     fun restoredOriginalObservationNavigatesWithoutRetryOrNativeSend() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("expectedBackendTxid") != null)
         val context = ApplicationProvider.getApplicationContext<Context>()
         Env.initAppStoragePath(context.filesDir.absolutePath)
         hiltRule.inject()
