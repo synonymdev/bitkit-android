@@ -16,11 +16,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +36,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -65,21 +68,16 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
-
-private const val ADDRESS_PREFIX_LENGTH = 8
-private const val ADDRESS_SUFFIX_LENGTH = 6
 
 @Composable
 fun PubkyAuthApprovalSheet(
@@ -248,16 +246,15 @@ private fun Content(
         when (approvalState) {
             ApprovalState.Loading -> LoadingContent()
             ApprovalState.WatchOnlyConsent -> WatchOnlyConsentContent(
-                claim = uiState.bitkitClaim,
-                sharesUsdt = uiState.showsUsdtDetails,
+                uiState = uiState,
+                onRetryUsdt = onRetryUsdt,
+                onShareUsdt = onShareUsdt,
                 onApprove = onApproveWatchOnly,
                 onCancel = onCancel,
             )
             ApprovalState.Authorize -> AuthorizeContent(
                 uiState = uiState,
                 onAuthorize = onAuthorize,
-                onRetryUsdt = onRetryUsdt,
-                onShareUsdt = onShareUsdt,
                 onCancel = onCancel,
             )
             ApprovalState.Authenticating, ApprovalState.Authorizing -> AuthorizingContent(
@@ -293,79 +290,128 @@ private fun approvalBackAction(
 
 @Composable
 private fun ColumnScope.WatchOnlyConsentContent(
-    claim: PubkyAuthClaim?,
-    sharesUsdt: Boolean,
+    uiState: PubkyAuthApprovalUiState,
     onApprove: () -> Unit,
     onCancel: () -> Unit,
+    onRetryUsdt: () -> Unit,
+    onShareUsdt: (Boolean) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .testTag("PubkyAuthWatchOnlyConsent")
-    ) {
-        FillHeight(min = 32.dp)
-
-        Image(
-            painter = painterResource(R.drawable.coin_stack_4),
-            contentDescription = null,
+    BoxWithConstraints(modifier = Modifier.weight(1f)) {
+        Column(
+            verticalArrangement = Arrangement.Bottom,
             modifier = Modifier
-                .size(256.dp)
-                .align(Alignment.CenterHorizontally)
-                .graphicsLayer {
-                    scaleX = COIN_SCALE
-                    scaleY = COIN_SCALE
-                    translationY = COIN_OFFSET_Y.toPx()
-                },
-        )
-
-        VerticalSpacer(32.dp)
-
-        Display(
-            text = stringResource(
-                when {
-                    sharesUsdt && claim?.sharesBitcoin != true ->
-                        R.string.profile__auth_approval_usdt_intro_title
-                    sharesUsdt && claim?.sharesBitcoin == true ->
-                        R.string.profile__auth_approval_payment_details_intro_title
-                    else -> R.string.profile__auth_approval_watch_only_intro_title
-                }
-            ).withAccent(
-                accentColor = if (sharesUsdt && claim?.sharesBitcoin != true) Colors.Usdt else Colors.Blue
-            ),
-        )
-        VerticalSpacer(8.dp)
-        BodyM(
-            text = stringResource(
-                when {
-                    sharesUsdt && claim?.sharesBitcoin != true ->
-                        R.string.profile__auth_approval_usdt_intro_description
-                    sharesUsdt && claim?.sharesBitcoin == true ->
-                        R.string.profile__auth_approval_payment_details_intro_description
-                    else -> R.string.profile__auth_approval_watch_only_intro_description
-                }
-            ),
-            color = Colors.White64,
-        )
-
-        VerticalSpacer(32.dp)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            SecondaryButton(
-                text = stringResource(R.string.common__cancel),
-                onClick = onCancel,
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .testTag("PubkyAuthWatchOnlyConsent")
+        ) {
+            Image(
+                painter = painterResource(R.drawable.coin_stack_4),
+                contentDescription = null,
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("PubkyAuthWatchOnlyCancel"),
+                    .size(256.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .graphicsLayer {
+                        scaleX = COIN_SCALE
+                        scaleY = COIN_SCALE
+                        translationY = COIN_OFFSET_Y.toPx()
+                    },
             )
-            PrimaryButton(
-                text = stringResource(R.string.profile__auth_approval_watch_only_intro_approve),
-                onClick = onApprove,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("PubkyAuthWatchOnlyApprove"),
+            VerticalSpacer(32.dp)
+            Display(
+                text = stringResource(R.string.profile__auth_approval_watch_only_intro_title)
+                    .withAccent(accentColor = Colors.Blue),
+            )
+            VerticalSpacer(8.dp)
+            BodyM(
+                text = stringResource(
+                    if (uiState.bitkitClaim?.sharesBitcoin == true) {
+                        R.string.profile__auth_approval_watch_only_intro_description
+                    } else {
+                        R.string.profile__auth_approval_usdt_intro_description
+                    }
+                ),
+                color = Colors.White64,
             )
         }
-        VerticalSpacer(16.dp)
+    }
+    if (uiState.showsUsdtDetails) {
+        VerticalSpacer(32.dp)
+        UsdtSharingChoice(uiState, onShareUsdt, onRetryUsdt)
+    }
+    VerticalSpacer(32.dp)
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        SecondaryButton(
+            text = stringResource(R.string.common__cancel),
+            onClick = onCancel,
+            modifier = Modifier.weight(1f).testTag("PubkyAuthWatchOnlyCancel")
+        )
+        PrimaryButton(
+            text = stringResource(R.string.profile__auth_approval_watch_only_intro_approve),
+            onClick = onApprove,
+            enabled = uiState.canAuthorize,
+            modifier = Modifier.weight(1f).testTag("PubkyAuthWatchOnlyApprove")
+        )
+    }
+    VerticalSpacer(16.dp)
+}
+
+@Composable
+private fun UsdtSharingChoice(
+    uiState: PubkyAuthApprovalUiState,
+    onShareUsdt: (Boolean) -> Unit,
+    onRetryUsdt: () -> Unit,
+) {
+    Column(modifier = Modifier.testTag("PubkyAuthUsdtDetails")) {
+        if (!uiState.usdtRequired) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .toggleable(value = uiState.shareUsdt, role = Role.Switch, onValueChange = onShareUsdt)
+                    .testTag("PubkyAuthShareUsdt")
+            ) {
+                BodyM(
+                    text = stringResource(R.string.profile__auth_approval_share_usdt_optional),
+                    color = Colors.White64,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = uiState.shareUsdt,
+                    onCheckedChange = null,
+                    colors = AppSwitchDefaults.colors.copy(
+                        checkedTrackColor = Colors.Blue,
+                        checkedBorderColor = Colors.Blue,
+                        checkedIconColor = Colors.Blue,
+                    ),
+                    modifier = Modifier.clearAndSetSemantics {}
+                )
+            }
+        }
+        if (uiState.shareUsdt || uiState.usdtRequired) {
+            if (!uiState.usdtRequired) VerticalSpacer(8.dp)
+            BodyS(text = stringResource(R.string.profile__auth_approval_usdt_privacy), color = Colors.White64)
+        }
+        if (uiState.usdtAddress == null) {
+            VerticalSpacer(8.dp)
+            BodyS(
+                text = stringResource(
+                    when {
+                        uiState.usdtUnavailable && uiState.usdtRequired -> R.string.usdt__error_configuration
+                        uiState.usdtUnavailable -> R.string.profile__auth_approval_usdt_unavailable
+                        else -> R.string.profile__auth_approval_usdt_loading
+                    }
+                ),
+                color = Colors.White64,
+            )
+            if (uiState.usdtUnavailable) {
+                VerticalSpacer(8.dp)
+                BodySSB(
+                    text = stringResource(R.string.common__retry),
+                    color = Colors.Blue,
+                    modifier = Modifier.clickable(onClick = onRetryUsdt).testTag("PubkyAuthRetryUsdt")
+                )
+            }
+        }
     }
 }
 
@@ -384,12 +430,10 @@ private fun ColumnScope.LoadingContent() {
 @Composable
 private fun ColumnScope.AuthorizeContent(
     uiState: PubkyAuthApprovalUiState,
-    onRetryUsdt: () -> Unit,
-    onShareUsdt: (Boolean) -> Unit,
     onAuthorize: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    ApprovalDetails(uiState = uiState, onRetryUsdt = onRetryUsdt, onShareUsdt = onShareUsdt)
+    ApprovalDetails(uiState = uiState)
 
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         SecondaryButton(
@@ -432,11 +476,10 @@ private fun ColumnScope.AuthorizingContent(
 @Composable
 private fun ColumnScope.ApprovalDetails(
     uiState: PubkyAuthApprovalUiState,
-    onRetryUsdt: (() -> Unit)? = null,
-    onShareUsdt: ((Boolean) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.weight(1f)) {
         Column(
+            verticalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
                 .verticalScroll(rememberScrollState())
                 .heightIn(min = maxHeight)
@@ -451,10 +494,6 @@ private fun ColumnScope.ApprovalDetails(
                 if (uiState.permissions.isNotEmpty()) {
                     DescriptionText(clientId = uiState.clientId, serviceName = uiState.serviceName)
                     VerticalSpacer(32.dp)
-                }
-                if (uiState.showsReceivingDetails) {
-                    PaymentDetailsSection(uiState, onRetryUsdt, onShareUsdt)
-                    VerticalSpacer(24.dp)
                 }
                 if (uiState.usdtRequired && !uiState.isUsdtEnabled) {
                     BodyM(text = stringResource(R.string.profile__auth_approval_usdt_disabled), color = Colors.White64)
@@ -515,25 +554,25 @@ private fun ColumnScope.SuccessContent(
                 .verticalScroll(rememberScrollState())
                 .heightIn(min = maxHeight)
         ) {
+            val sharedDetails = uiState.bitkitClaim?.takeIf {
+                it.sharesBitcoin || (it.sharesUsdt && uiState.shareUsdt)
+            }?.let { claim ->
+                stringResource(
+                    when {
+                        !claim.sharesBitcoin -> R.string.profile__auth_approval_shared_usdt
+                        claim.sharesUsdt && uiState.shareUsdt -> R.string.profile__auth_approval_shared_both
+                        else -> R.string.profile__auth_approval_shared_bitcoin
+                    }
+                )
+            }
             SuccessDescriptionText(
                 clientId = uiState.clientId,
                 serviceName = uiState.serviceName,
                 truncatedKey = uiState.profile?.authDisplayPublicKey.orEmpty(),
+                sharedDetails = sharedDetails,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+                    .then(if (sharedDetails != null) Modifier.testTag("PubkyAuthSharedDetails") else Modifier)
             )
-
-            uiState.bitkitClaim?.takeIf { it.sharesBitcoin || (it.sharesUsdt && uiState.shareUsdt) }?.let { claim ->
-                BodyM(
-                    text = stringResource(
-                        when {
-                            !claim.sharesBitcoin -> R.string.profile__auth_approval_shared_usdt
-                            claim.sharesUsdt && uiState.shareUsdt -> R.string.profile__auth_approval_shared_both
-                            else -> R.string.profile__auth_approval_shared_bitcoin
-                        }
-                    ),
-                    modifier = Modifier.testTag("PubkyAuthSharedDetails")
-                )
-            }
             Image(
                 painter = painterResource(R.drawable.check),
                 contentDescription = null,
@@ -558,83 +597,6 @@ private fun ColumnScope.SuccessContent(
 }
 
 @Composable
-private fun PaymentDetailsSection(
-    uiState: PubkyAuthApprovalUiState,
-    onRetryUsdt: (() -> Unit)?,
-    onShareUsdt: ((Boolean) -> Unit)?,
-) {
-    Text13Up(text = stringResource(R.string.profile__auth_approval_payment_details), color = Colors.White64)
-    VerticalSpacer(12.dp)
-    if (uiState.bitkitClaim?.sharesBitcoin == true) {
-        Column(modifier = Modifier.testTag("PubkyAuthBitcoinDetails")) {
-            BodySSB(text = "Bitcoin", color = Colors.Brand)
-            VerticalSpacer(4.dp)
-            BodyS(text = stringResource(R.string.profile__auth_approval_bitcoin_account), color = Colors.White64)
-        }
-        VerticalSpacer(12.dp)
-    }
-    if (uiState.showsUsdtDetails) {
-        Column(modifier = Modifier.testTag("PubkyAuthUsdtDetails")) {
-            if (uiState.usdtRequired) {
-                BodySSB(text = "USDT", color = Colors.Usdt)
-            } else {
-                SettingsSwitchRow(
-                    title = stringResource(R.string.profile__auth_approval_share_usdt_optional),
-                    isChecked = uiState.shareUsdt,
-                    onClick = { onShareUsdt?.invoke(!uiState.shareUsdt) },
-                    enabled = onShareUsdt != null,
-                    colors = AppSwitchDefaults.colorsUsdt,
-                    switchTestTag = "PubkyAuthShareUsdt",
-                )
-            }
-            VerticalSpacer(8.dp)
-            uiState.usdtAddress?.let { address ->
-                var expanded by remember(address) { mutableStateOf(false) }
-                BodyS(
-                    text = if (expanded) {
-                        address
-                    } else {
-                        address.take(ADDRESS_PREFIX_LENGTH) + "…" + address.takeLast(ADDRESS_SUFFIX_LENGTH)
-                    },
-                    modifier = Modifier.clickable { expanded = !expanded }.testTag("PubkyAuthUsdtAddress")
-                )
-                if (expanded) {
-                    VerticalSpacer(8.dp)
-                    BodySSB(
-                        text = stringResource(R.string.common__copy),
-                        color = Colors.Usdt,
-                        modifier = Modifier
-                            .clickable(onClick = copyToClipboard(address))
-                            .testTag("PubkyAuthCopyUsdtAddress")
-                    )
-                }
-            } ?: BodyS(
-                text = stringResource(
-                    when {
-                        uiState.usdtUnavailable && uiState.usdtRequired -> R.string.usdt__error_configuration
-                        uiState.usdtUnavailable -> R.string.profile__auth_approval_usdt_unavailable
-                        else -> R.string.profile__auth_approval_usdt_loading
-                    }
-                ),
-                color = Colors.White64,
-            )
-            if (uiState.usdtUnavailable && onRetryUsdt != null) {
-                VerticalSpacer(8.dp)
-                BodySSB(
-                    text = stringResource(R.string.common__retry),
-                    color = Colors.Usdt,
-                    modifier = Modifier.clickable(onClick = onRetryUsdt)
-                )
-            }
-            VerticalSpacer(8.dp)
-            BodyS(text = stringResource(R.string.profile__auth_approval_usdt_privacy), color = Colors.White64)
-        }
-        VerticalSpacer(12.dp)
-    }
-    HorizontalDivider(color = Colors.White10)
-}
-
-@Composable
 private fun DescriptionText(clientId: String, serviceName: String) {
     val requester = clientId.asLiteralRequestText()
     val service = serviceName.asLiteralRequestText()
@@ -652,6 +614,7 @@ private fun SuccessDescriptionText(
     serviceName: String,
     truncatedKey: String,
     modifier: Modifier = Modifier,
+    sharedDetails: String? = null,
 ) {
     val requester = clientId.asLiteralRequestText()
     val service = serviceName.asLiteralRequestText()
@@ -660,7 +623,12 @@ private fun SuccessDescriptionText(
     } else {
         stringResource(R.string.profile__auth_approval_success_detail, truncatedKey, service)
     }
-    BodyM(text = text.withAccentBoldBright(), color = Colors.White64, letterSpacing = 0.sp, modifier = modifier)
+    BodyM(
+        text = (text + sharedDetails?.let { "\n\n$it" }.orEmpty()).withAccentBoldBright(),
+        color = Colors.White64,
+        letterSpacing = 0.sp,
+        modifier = modifier.fillMaxWidth()
+    )
 }
 
 @Composable

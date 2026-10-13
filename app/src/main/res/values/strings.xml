@@ -658,19 +658,15 @@
     <string name="profile__auth_approval_details">Details</string>
     <string name="profile__auth_approval_ok">OK</string>
     <string name="profile__auth_approval_paykit_access_description">This service will manage your private Paykit data and send Paykit messages for you. Your pubky secret and wallet keys stay private.</string>
-    <string name="profile__auth_approval_bitcoin_account">Separate watch-only account · xpub</string>
-    <string name="profile__auth_approval_payment_details">PAYMENT DETAILS TO SHARE</string>
-    <string name="profile__auth_approval_payment_details_intro_description">Share a separate Bitcoin account to receive earnings. You can also share your existing USDT address. Sharing these details does not let the service spend your funds.</string>
-    <string name="profile__auth_approval_payment_details_intro_title">&lt;accent&gt;EARN BITCOIN\nAND USDT&lt;/accent&gt;\nFROM YOUR CONTENT</string>
     <string name="profile__auth_approval_permissions">Requested permissions</string>
     <string name="profile__auth_approval_service">A service is requesting permission to access and edit your &lt;accent&gt;%1$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_named">&lt;accent&gt;%1$s&lt;/accent&gt; is requesting permission to access and edit your &lt;accent&gt;%2$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_unknown">Unknown service</string>
     <string name="profile__auth_approval_services_separator">" and "</string>
-    <string name="profile__auth_approval_share_usdt_optional">Share USDT address (optional)</string>
-    <string name="profile__auth_approval_shared_bitcoin">Your Bitcoin watch-only account was shared.</string>
-    <string name="profile__auth_approval_shared_both">Your Bitcoin watch-only account and USDT receiving address were shared.</string>
-    <string name="profile__auth_approval_shared_usdt">Your USDT receiving address was shared.</string>
+    <string name="profile__auth_approval_share_usdt_optional">Also share my USDT address</string>
+    <string name="profile__auth_approval_shared_bitcoin">Also, you shared a watch-only Bitcoin account with Paykit.</string>
+    <string name="profile__auth_approval_shared_both">Also, you shared a watch-only Bitcoin account and USDT address with Paykit.</string>
+    <string name="profile__auth_approval_shared_usdt">Also, you shared a USDT address with Paykit.</string>
     <string name="profile__auth_approval_success">Authorization Successful</string>
     <string name="profile__auth_approval_success_detail">You authorized with pubky &lt;accent&gt;%1$s&lt;/accent&gt; and gave the service permission to access and edit your &lt;accent&gt;%2$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_success_detail_named">You authorized with pubky &lt;accent&gt;%1$s&lt;/accent&gt; and gave &lt;accent&gt;%2$s&lt;/accent&gt; permission to access and edit your &lt;accent&gt;%3$s&lt;/accent&gt; data.</string>
@@ -678,7 +674,6 @@
     <string name="profile__auth_approval_trust_warning">Make sure you trust the service, browser, and device before authorizing with your pubky.</string>
     <string name="profile__auth_approval_usdt_disabled">USDT is turned off.</string>
     <string name="profile__auth_approval_usdt_intro_description">Share your existing USDT address on Arbitrum One to receive earnings directly in Bitkit. The service cannot spend your funds.</string>
-    <string name="profile__auth_approval_usdt_intro_title">&lt;accent&gt;EARN USDT&lt;/accent&gt;\nFROM YOUR\nCONTENT</string>
     <string name="profile__auth_approval_usdt_loading">Loading USDT address…</string>
     <string name="profile__auth_approval_usdt_privacy">This is your existing USDT account. The service can see its balance and transaction history, but cannot spend your funds.</string>
     <string name="profile__auth_approval_usdt_unavailable">Your USDT address is unavailable. You can retry or continue without sharing it.</string>
@@ -686,7 +681,7 @@
     <string name="profile__auth_approval_watch_only_intro_approve">Approve</string>
     <string name="profile__auth_approval_watch_only_intro_description">To earn, you need to share a watch-only Bitcoin account with Paykit. It can view sales activity, but cannot spend funds.</string>
     <string name="profile__auth_approval_watch_only_intro_nav_title">Earn</string>
-    <string name="profile__auth_approval_watch_only_intro_title">&lt;accent&gt;EARN BITCOIN&lt;/accent&gt;\nFROM YOUR\nCONTENT</string>
+    <string name="profile__auth_approval_watch_only_intro_title">&lt;accent&gt;EARN MONEY&lt;/accent&gt;\nFROM YOUR CONTENT</string>
     <string name="profile__auth_error_duplicate_claim">This authorization contains more than one Bitkit claim.</string>
     <string name="profile__auth_error_invalid_capabilities">The requested access does not match this Bitkit claim.</string>
     <string name="profile__auth_error_invalid_url">This Pubky authorization link is invalid.</string>
@@ -1111,6 +1106,7 @@
     <string name="slashtags__onboarding_profile1_text">Set up your public profile and links, so your Bitkit contacts can reach you or pay you anytime, anywhere.</string>
     <string name="slashtags__profile">Profile</string>
     <string name="slashtags__profile_create">Create Profile</string>
+    <string name="subscriptions__accepted_payments">Accepted payments</string>
     <string name="subscriptions__active">Active</string>
     <string name="subscriptions__cancel">Cancel</string>
     <string name="subscriptions__cancel_subscription">Cancel Subscription</string>
@@ -1472,7 +1468,7 @@
     <string name="wallet__payment_invoice_request_rejected">The recipient rejected this Lightning invoice request.</string>
     <string name="wallet__payment_recipient_rejected">The recipient rejected this Lightning payment. Please check the invoice and try again.</string>
     <string name="wallet__payment_request">Payment Request</string>
-    <string name="wallet__payment_request_accepted_methods">Accept payment with</string>
+    <string name="wallet__payment_request_accepted_methods">Accept payment in</string>
     <string name="wallet__payment_request_after_expiry">Received · After expiry</string>
     <string name="wallet__payment_request_amount">Amount</string>
     <string name="wallet__payment_request_choose_recipient">Choose Recipient</string>

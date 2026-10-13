@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,12 +18,14 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,6 +73,7 @@ import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadAmountText
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.NumberPadType
+import to.bitkit.ui.components.PaykitAcceptedAssets
 import to.bitkit.ui.components.PaykitAmountCell
 import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
@@ -349,7 +353,7 @@ internal fun PaymentRequestDetailsContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .gradientBackground()
+            .background(Colors.Gray7)
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
             .testTag("PaymentRequestDetails")
@@ -358,118 +362,101 @@ internal fun PaymentRequestDetailsContent(
             titleText = stringResource(R.string.wallet__payment_request),
             onBack = onBack,
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            PaykitAmountDisplay(initialDraft.amount, modifier = Modifier.weight(1f))
-            IconButton(
-                onClick = { onEditAmount(updatedDraft()) },
-                modifier = Modifier
-                    .size(48.dp)
-                    .testTag("PaymentRequestEditAmount"),
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            VerticalSpacer(8.dp)
+            Caption13Up(text = stringResource(R.string.wallet__payment_request_amount), color = Colors.White64)
+            VerticalSpacer(16.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.clickableAlpha { onEditAmount(updatedDraft()) }.testTag("PaymentRequestEditAmount")
             ) {
+                PaykitAmountDisplay(
+                    amount = initialDraft.amount,
+                    modifier = Modifier.weight(1f, fill = false).width(IntrinsicSize.Max)
+                )
                 Icon(
                     painter = painterResource(R.drawable.ic_pencil_simple),
                     contentDescription = stringResource(R.string.common__edit),
                     tint = Colors.White,
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(24.dp)
                 )
             }
-        }
-        VerticalSpacer(20.dp)
-        Caption13Up(text = stringResource(R.string.wallet__payment_request_note), color = Colors.White64)
-        VerticalSpacer(8.dp)
-        TextInput(
-            value = note,
-            onValueChange = { note = it.take(256) },
-            placeholder = stringResource(R.string.wallet__payment_request_note_placeholder),
-            maxLines = 2,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("PaymentRequestNote"),
-        )
-        VerticalSpacer(20.dp)
-        Caption13Up(text = stringResource(R.string.wallet__payment_request_accepted_methods), color = Colors.White64)
-        VerticalSpacer(8.dp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val groups = listOf(
-                MethodId.entries.filter { it.isOnchain },
-                listOf(MethodId.Bolt11, MethodId.Lnurl),
-                listOf(MethodId.UsdtArbitrum),
-            ).map { methods -> methods.filter { it.rawValue in availableMethods } }.filter { it.isNotEmpty() }
-            groups.forEach { methods ->
-                val endpoints = methods.map { it.rawValue }
-                val selected = endpoints.all { it in selectedMethods }
-                val (label, color, id) = when (methods.first()) {
-                    MethodId.UsdtArbitrum -> Triple("USDT", Colors.Usdt, "usdt")
-                    MethodId.Bolt11, MethodId.Lnurl -> Triple(
-                        stringResource(R.string.lightning__spending),
-                        Colors.Purple,
-                        "spending"
-                    )
-                    else -> Triple(stringResource(R.string.lightning__savings), Colors.Brand, "savings")
-                }
-                NumberPadActionButton(
-                    text = label,
-                    color = color,
-                    outlined = !selected,
-                    onClick = {
-                        acceptedMethods = if (selected) {
-                            selectedMethods - endpoints.toSet()
-                        } else {
-                            selectedMethods + endpoints.filter { it !in selectedMethods }
-                        }
-                    },
-                    modifier = Modifier.testTag("PaymentRequestAccept-$id")
-                )
-            }
-        }
-        VerticalSpacer(20.dp)
-        Caption13Up(text = stringResource(R.string.wallet__payment_request_recipient), color = Colors.White64)
-        VerticalSpacer(8.dp)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Colors.Gray6, RoundedCornerShape(16.dp))
-                .padding(16.dp),
-        ) {
-            PubkyContactAvatar(profile = contact, size = 40.dp)
-            Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-                BodyMSB(text = contact.name, maxLines = 1)
-                BodyS(
-                    text = note.ifBlank { stringResource(R.string.wallet__payment_request) },
-                    color = Colors.White64,
-                    maxLines = 1,
-                )
-            }
-            PaykitAmountCell(initialDraft.amount)
-        }
-        VerticalSpacer(20.dp)
-        Caption13Up(text = stringResource(R.string.wallet__payment_request_expires), color = Colors.White64)
-        VerticalSpacer(8.dp)
-        Row(modifier = Modifier.fillMaxWidth()) {
-            PaymentRequestExpiration.entries.forEach { option ->
-                val isSelected = option == expiration
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickableAlpha { expiration = option }
-                        .testTag("PaymentRequestExpiry${option.name}"),
-                ) {
-                    BodyS(text = option.title(), color = if (isSelected) Colors.White else Colors.White64)
-                    VerticalSpacer(8.dp)
-                    HorizontalDivider(
-                        thickness = 2.dp,
-                        color = if (isSelected) Colors.White else Colors.White16,
+            VerticalSpacer(32.dp)
+            Caption13Up(text = stringResource(R.string.wallet__payment_request_note), color = Colors.White64)
+            VerticalSpacer(8.dp)
+            TextInput(
+                value = note,
+                onValueChange = { note = it.take(256) },
+                placeholder = stringResource(R.string.wallet__payment_request_note_placeholder),
+                maxLines = 2,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("PaymentRequestNote"),
+            )
+            VerticalSpacer(32.dp)
+            Caption13Up(text = stringResource(R.string.wallet__payment_request_recipient), color = Colors.White64)
+            VerticalSpacer(8.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Colors.Gray6, RoundedCornerShape(16.dp))
+                    .padding(16.dp),
+            ) {
+                PubkyContactAvatar(profile = contact, size = 40.dp)
+                Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+                    BodyMSB(text = contact.name, maxLines = 1)
+                    BodyS(
+                        text = note.ifBlank { stringResource(R.string.wallet__payment_request) },
+                        color = Colors.White64,
+                        maxLines = 1,
                     )
                 }
+                PaykitAmountCell(initialDraft.amount)
             }
+            VerticalSpacer(32.dp)
+            Caption13Up(text = stringResource(R.string.wallet__payment_request_expires), color = Colors.White64)
+            VerticalSpacer(8.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                PaymentRequestExpiration.entries.forEach { option ->
+                    val isSelected = option == expiration
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickableAlpha { expiration = option }
+                            .testTag("PaymentRequestExpiry${option.name}"),
+                    ) {
+                        VerticalSpacer(8.dp)
+                        CaptionB(text = option.title(), color = if (isSelected) Colors.White else Colors.White50)
+                        VerticalSpacer(8.dp)
+                        HorizontalDivider(
+                            thickness = 2.dp,
+                            color = if (isSelected) Colors.White else Colors.White50,
+                        )
+                    }
+                }
+            }
+            VerticalSpacer(32.dp)
+            PaykitAcceptedAssets(
+                title = stringResource(R.string.wallet__payment_request_accepted_methods),
+                availableMethods = availableMethods,
+                selectedMethods = selectedMethods.toImmutableList(),
+                testTagPrefix = "PaymentRequest",
+                onClickAsset = { asset ->
+                    val endpoints = availableMethods.filter {
+                        (it == MethodId.UsdtArbitrum.rawValue) == (asset == PaykitAsset.USD)
+                    }
+                    acceptedMethods = if (endpoints.any { it in selectedMethods }) {
+                        selectedMethods - endpoints.toSet()
+                    } else {
+                        selectedMethods + endpoints.filter { it !in selectedMethods }
+                    }
+                },
+            )
+            VerticalSpacer(32.dp)
         }
-        FillHeight()
         PrimaryButton(
             text = stringResource(R.string.wallet__payment_request_send_request),
             enabled = !isCreating && selectedMethods.isNotEmpty(),
@@ -477,7 +464,7 @@ internal fun PaymentRequestDetailsContent(
             onClick = { onSend(updatedDraft(trimNote = true)) },
             icon = {
                 Icon(
-                    painter = painterResource(R.drawable.ic_sent),
+                    painter = painterResource(R.drawable.ic_paper_plane_tilt),
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                 )

@@ -942,6 +942,30 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Earn sharing choice survives approval and back navigation`() = test {
+        val url = stubCombinedAuthorization()
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(
+            Result.success(Endpoint(MethodId.UsdtArbitrum, "reviewed-address", null, null, "{}"))
+        )
+        val sut = createSut()
+        sut.load(url)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
+        assertTrue(sut.uiState.value.shareUsdt)
+        sut.setShareUsdt(false)
+        sut.approveWatchOnlyConsent(url)
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertFalse(sut.uiState.value.shareUsdt)
+        assertTrue(sut.uiState.value.canAuthorize)
+        sut.returnToWatchOnlyConsent(url)
+        assertFalse(sut.uiState.value.shareUsdt)
+        sut.setShareUsdt(true)
+        assertTrue(sut.uiState.value.shareUsdt)
+        sut.approveWatchOnlyConsent(url)
+        assertTrue(sut.uiState.value.shareUsdt)
+    }
+
+    @Test
     fun `unavailable optional address can be skipped or retried`() = test {
         val url = "pubkyauth://signin_grant?x-bitkit-claim=usdt-address-v1"
         whenever(
@@ -955,12 +979,13 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         val sut = createSut()
         sut.load(url)
         advanceUntilIdle()
-        sut.approveWatchOnlyConsent(url)
         assertTrue(sut.uiState.value.canAuthorize)
         assertFalse(sut.uiState.value.shareUsdt)
         assertTrue(sut.uiState.value.usdtUnavailable)
         sut.setShareUsdt(true)
         assertFalse(sut.uiState.value.canAuthorize)
+        sut.approveWatchOnlyConsent(url)
+        assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
         val endpoint = Endpoint(
             methodId = MethodId.UsdtArbitrum,
             value = "reviewed-address",

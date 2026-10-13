@@ -64,6 +64,7 @@ class CreateSubscriptionScreenTest {
             AppThemeSurface {
                 CreateSubscriptionDetails(
                     amount = PaykitAmount(PaykitAsset.BTC, amount),
+                    availableMethods = persistentListOf(MethodId.P2wpkh.rawValue, MethodId.UsdtArbitrum.rawValue),
                     acceptedMethods = acceptedMethods,
                     name = name,
                     description = "Monthly support",
@@ -71,6 +72,7 @@ class CreateSubscriptionScreenTest {
                     selectedIconUri = null,
                     isLoadingIcon = isLoadingIcon,
                     onAmountClick = {},
+                    onClickAsset = {},
                     onNameChange = { name = it },
                     onDescriptionChange = {},
                     onFrequencyChange = { frequency = it },

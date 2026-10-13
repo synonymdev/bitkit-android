@@ -132,7 +132,11 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     }
 
     fun setShareUsdt(enabled: Boolean) {
-        if (_uiState.value.state != ApprovalState.Authorize || !_uiState.value.isUsdtEnabled) return
+        if (_uiState.value.state !in listOf(ApprovalState.WatchOnlyConsent, ApprovalState.Authorize) ||
+            !_uiState.value.isUsdtEnabled || _uiState.value.usdtRequired
+        ) {
+            return
+        }
         _uiState.update { it.copy(shareUsdt = enabled) }
     }
 
@@ -170,7 +174,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 
     fun approveWatchOnlyConsent(authUrl: String) {
         _uiState.update { state ->
-            if (state.authUrl == authUrl && state.state == ApprovalState.WatchOnlyConsent) {
+            if (state.authUrl == authUrl && state.state == ApprovalState.WatchOnlyConsent && state.canAuthorize) {
                 state.copy(state = ApprovalState.Authorize)
             } else {
                 state

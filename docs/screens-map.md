@@ -70,7 +70,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| CreatePaymentRequestScreen.kt | Payment Request (from Receive > Contacts OR Contact profile OR Payment Requests) › Request payment enter amount |
+| CreatePaymentRequestScreen.kt | Payment Request (from Receive > Contacts OR Contact profile OR Payment Requests) › Request payment enter amount / Payment Request (from Edit invoice) › [Request payment details](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49115-131077) |
 | IncomingPaymentRequestDetailsScreen.kt | Subscriptions › Payment Request Details |
 | PaymentRequestsScreen.kt | Payment Requests › Payment Requests |
 
@@ -121,7 +121,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| CreateSubscriptionScreen.kt | Subscriptions › Create Subscription / Choose Subscription Recipient / Sent Subscription Proposal |
+| CreateSubscriptionScreen.kt | Subscriptions › [Create Subscription](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49027-623659) / Choose Subscription Recipient / Sent Subscription Proposal |
 | SubscriptionsScreen.kt | Subscriptions › Subscriptions Intro / Subscriptions overview |
 
 ## ui/screens/transfer

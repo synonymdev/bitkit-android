@@ -9,11 +9,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
@@ -27,6 +32,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.USD_SYMBOL
 import to.bitkit.repositories.AmountInputHandler
 import to.bitkit.repositories.CurrencyState
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
@@ -65,6 +71,41 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestExpiryWeek").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestNumberPad").assertDoesNotExist()
+    }
+
+    @Test
+    fun acceptedAssetsGroupsBitcoinRailsAndRequiresASelection() {
+        var submitted: PaykitPaymentRequestDraft? = null
+        composeTestRule.setContent {
+            AppThemeSurface {
+                PaymentRequestDetailsContent(
+                    initialDraft = draft,
+                    availableMethods = persistentListOf(
+                        MethodId.P2wpkh.rawValue,
+                        MethodId.Bolt11.rawValue,
+                        MethodId.UsdtArbitrum.rawValue
+                    ),
+                    contact = PubkyProfile.placeholder(target.publicKey),
+                    isCreating = false,
+                    onBack = {},
+                    onEditAmount = {},
+                    onSend = { submitted = it },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-bitcoin")
+            .performScrollTo().assertIsSelected().performClick()
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-usdt").assertIsSelected()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").performClick()
+        assertEquals(listOf(MethodId.UsdtArbitrum.rawValue), submitted?.acceptedPaymentEndpointIdentifiers)
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-usdt").performClick().assertIsNotSelected()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-bitcoin").performClick().assertIsSelected()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsEnabled().performClick()
+        assertEquals(
+            setOf(MethodId.P2wpkh.rawValue, MethodId.Bolt11.rawValue),
+            submitted?.acceptedPaymentEndpointIdentifiers?.toSet()
+        )
     }
 
     @Test
