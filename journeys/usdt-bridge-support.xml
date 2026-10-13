@@ -5,7 +5,7 @@
     <action>Tap Details (id "UsdtActivityDetails"), then verify the source transaction is displayed. For an Orchestra transfer, verify the bridge reference is also displayed.</action>
     <action>Tap Copy Details (id "UsdtCopyDetails"). Verify the clipboard contains the bridge, networks, status and available transaction references.</action>
     <action>Tap Contact Support (id "UsdtContactSupport"). Verify the report form opens with those details prefilled and remains unsent. Return without submitting.</action>
-    <action>Open USDT Receive, then Network and Deposit Activity. Verify rows show Details rather than a transfer status, then open a deposit.</action>
+    <action>Open USDT Receive, then Network, scroll to Cross-network Deposits (id "UsdtDepositHistory") and open it. Verify rows show Details rather than a transfer status, then open a deposit.</action>
     <action>For a deposit whose conversion order is funded, confirming, swapping, bridging or delivering without an error, verify Pending is shown. Refresh after completion and verify Confirmed. An active order with an explicit error, or an unknown status, must show Needs attention.</action>
     <action>For a refunded deposit, verify the detail shows Refunded, even when an earlier error code is retained. Verify the transaction is labeled Refund transaction in the detail. Verify no pending-refund notice remains after refreshing the completed refund.</action>
     <action>For a refund in progress, verify Refunding is shown for the provider's pending acknowledgment. A refund requiring operator intervention must still show Needs attention.</action>

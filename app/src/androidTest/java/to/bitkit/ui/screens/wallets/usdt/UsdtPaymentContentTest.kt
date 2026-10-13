@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.UsdtBridgeProvider
 import com.synonym.bitkitcore.UsdtDestination
@@ -63,10 +64,25 @@ class UsdtPaymentContentTest {
         composeTestRule.setContent { Content(UsdtSendState(quote = quote), UsdtPage.AMOUNT) }
         val total = composeTestRule.onNodeWithTag("UsdtMaximumTotal")
         val swipe = composeTestRule.onNodeWithTag("UsdtConfirm")
+        composeTestRule.onNodeWithText("YOU SEND").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertIsDisplayed()
+        composeTestRule.onNodeWithText("≈ 2.99 USDT").assertIsDisplayed()
         total.assertIsDisplayed()
         composeTestRule.onNodeWithText("4.47 USDT").assertIsDisplayed()
         swipe.assertIsDisplayed()
         assertTrue(total.fetchSemanticsNode().boundsInRoot.bottom <= swipe.fetchSemanticsNode().boundsInRoot.top)
+        composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertIsDisplayed()
+        total.assertIsDisplayed()
+        swipe.assertIsDisplayed()
+        val cost = composeTestRule.onNodeWithText("0.01 USDT")
+        cost.performScrollTo().assertIsDisplayed()
+        assertTrue(cost.fetchSemanticsNode().boundsInRoot.bottom <= total.fetchSemanticsNode().boundsInRoot.top)
+        composeTestRule.onNodeWithText(
+            "Delivery is estimated. Bridge costs are deducted from the amount; the network fee is additional."
+        ).performScrollTo().assertIsDisplayed()
+        total.assertIsDisplayed()
+        swipe.assertIsDisplayed()
     }
 
     @Test

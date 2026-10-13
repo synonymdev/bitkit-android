@@ -490,11 +490,13 @@ private fun UsdtConfirmation(
     var showDetails by rememberSaveable(quote.id) { mutableStateOf(false) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val note = paymentRequestNote?.trim()?.takeIf { it.isNotEmpty() }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(showDetails) { scrollState.scrollTo(0) }
     Column(modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(modifier = Modifier.weight(1f)) {
             Column(
                 verticalArrangement = if (showDetails) Arrangement.Top else Arrangement.SpaceBetween,
-                modifier = Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight)
+                modifier = Modifier.verticalScroll(scrollState).heightIn(min = maxHeight)
             ) {
                 UsdtReviewHeader(quote, contact, note, isPaymentRequest, showDetails) {
                     if (!state.busy && !completed) onEditAmount()
@@ -506,9 +508,10 @@ private fun UsdtConfirmation(
                             modifier = Modifier.height(256.dp)
                         )
                     }
-                    if (quote.destination != UsdtDestination.ARBITRUM) {
+                    if (showDetails) {
+                        UsdtBridgeCost(quote)
                         VerticalSpacer(16.dp)
-                        UsdtBridgeCosts(quote)
+                        UsdtFeeNote(quote)
                     }
                     state.error?.let {
                         BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
@@ -539,9 +542,6 @@ private fun UsdtConfirmation(
                 }
             }
         }
-        if (showDetails) {
-            UsdtFeeNote(quote)
-        }
         UsdtMaximumTotal(quote)
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
@@ -559,6 +559,7 @@ private fun UsdtConfirmation(
 @Composable
 private fun UsdtMaximumTotal(quote: UsdtQuote) {
     if (quote.destination == UsdtDestination.ARBITRUM) return
+    VerticalSpacer(16.dp)
     SendCell(
         caption = stringResource(R.string.usdt__maximum_total),
         modifier = Modifier.testTag("UsdtMaximumTotal")
@@ -592,11 +593,25 @@ private fun UsdtReviewHeader(
     onEditAmount: () -> Unit,
 ) {
     Column {
+        if (quote.destination != UsdtDestination.ARBITRUM) {
+            Caption13Up(stringResource(R.string.usdt__you_send), color = Colors.White64)
+            VerticalSpacer(8.dp)
+        }
         UsdtAmountHeader(
             usdtFormatAmount(quote.amount),
             displayAmount = usdtOverviewAmount(quote.amount),
             onClick = onEditAmount
         )
+        if (quote.destination != UsdtDestination.ARBITRUM) {
+            VerticalSpacer(16.dp)
+            SendCell(
+                caption = stringResource(R.string.usdt__recipient_gets),
+                modifier = Modifier.testTag("UsdtRecipientAmount")
+            ) {
+                val estimate = if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) "≈ " else ""
+                BodySSB(estimate + usdtOverviewAmount(quote.receivedAmount) + " USDT")
+            }
+        }
         VerticalSpacer(32.dp)
         if (showDetails) {
             UsdtQuoteDetails(quote, contact)
@@ -612,16 +627,7 @@ private fun UsdtReviewHeader(
 }
 
 @Composable
-private fun UsdtBridgeCosts(quote: UsdtQuote) {
-    SendCell(
-        caption = stringResource(
-            if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
-                R.string.usdt__expected_amount
-            } else {
-                R.string.usdt__recipient_gets
-            }
-        )
-    ) { BodySSB(usdtOverviewAmount(quote.receivedAmount) + " USDT") }
+private fun UsdtBridgeCost(quote: UsdtQuote) {
     if (quote.bridgeProvider == UsdtBridgeProvider.ORCHESTRA) {
         VerticalSpacer(16.dp)
         SendCell(caption = stringResource(R.string.usdt__bridge_deducted_fee)) {
@@ -646,7 +652,13 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
     VerticalSpacer(16.dp)
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         UsdtDetailCell(
-            stringResource(R.string.wallet__activity_payment),
+            stringResource(
+                if (quote.destination == UsdtDestination.ARBITRUM) {
+                    R.string.wallet__activity_payment
+                } else {
+                    R.string.usdt__you_send
+                }
+            ),
             usdtOverviewAmount(quote.amount),
             R.drawable.ic_user,
             modifier = Modifier.weight(1f)

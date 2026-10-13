@@ -1324,6 +1324,7 @@
     <string name="usdt__to_address">To address</string>
     <string name="usdt__to_network">To network {network}</string>
     <string name="usdt__track_bridge">Track cross-network delivery</string>
+    <string name="usdt__you_send">You send</string>
     <string name="wallet__activity">Activity</string>
     <string name="wallet__activity_address">Address</string>
     <string name="wallet__activity_all">All Activity</string>
