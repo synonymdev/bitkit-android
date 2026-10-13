@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- Updated LDK Node to 0.7.0-rc.72 for the upstream Lightning security fixes.
+- Updated LDK Node to 0.7.0-rc.72 for the upstream Lightning security fixes. #1475
 
 ## [2.5.0] - 2026-09-10
 
