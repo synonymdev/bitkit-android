@@ -296,26 +296,21 @@ private fun ColumnScope.WatchOnlyConsentContent(
     onRetryUsdt: () -> Unit,
     onShareUsdt: (Boolean) -> Unit,
 ) {
-    BoxWithConstraints(modifier = Modifier.weight(1f)) {
-        Column(
-            verticalArrangement = Arrangement.Bottom,
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .heightIn(min = maxHeight)
-                .testTag("PubkyAuthWatchOnlyConsent")
-        ) {
+    Column(modifier = Modifier.weight(1f).testTag("PubkyAuthWatchOnlyConsent")) {
+        Box(contentAlignment = Alignment.BottomCenter, modifier = Modifier.weight(1f).fillMaxWidth()) {
             Image(
                 painter = painterResource(R.drawable.coin_stack_4),
                 contentDescription = null,
                 modifier = Modifier
                     .size(256.dp)
-                    .align(Alignment.CenterHorizontally)
                     .graphicsLayer {
                         scaleX = COIN_SCALE
                         scaleY = COIN_SCALE
                         translationY = COIN_OFFSET_Y.toPx()
                     },
             )
+        }
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             VerticalSpacer(32.dp)
             Display(
                 text = stringResource(R.string.profile__auth_approval_watch_only_intro_title)
