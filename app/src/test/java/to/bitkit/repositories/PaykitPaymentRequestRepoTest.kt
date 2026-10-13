@@ -289,6 +289,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             clock,
             lightningRepo,
             currencyRepoWithRate(),
+            mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
         )
         sut.activate(LOCAL_IDENTITY)
     }
@@ -340,6 +341,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             clock,
             lightningRepo,
             currencyRepoWithRate(),
+            mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
         )
         sut.activate(LOCAL_IDENTITY)
     }
@@ -1672,6 +1674,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             clock,
             lightningRepo,
             mock(),
+            mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
         )
         other.activate(LOCAL_IDENTITY)
         var record = paymentRequestRecord()
@@ -1882,7 +1885,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 assertTrue(accepted.contains(onchain))
                 assertEquals(canReceiveLightning, accepted.contains(MethodId.Bolt11.rawValue))
                 assertEquals(
-                    PublicPaykitRepo.isUsdtPaymentOptionEnabled(SettingsData()),
+                    PublicPaykitRepo.isUsdtPaymentOptionEnabled(SettingsData(), UsdtWalletState()),
                     accepted.contains(MethodId.UsdtArbitrum.rawValue),
                 )
             }

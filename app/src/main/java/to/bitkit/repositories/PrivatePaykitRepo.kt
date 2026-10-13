@@ -1643,7 +1643,7 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             val settings = settingsStore.data.first()
             val endpoints = mutableListOf<Endpoint>()
-            if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings)) {
+            if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings, usdtRepo.state.value)) {
                 endpoints += usdtRepo.paymentEndpoint().getOrThrow()
             }
             if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {

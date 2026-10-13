@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
+import com.synonym.bitkitcore.UsdtDeposit
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
 import com.synonym.bitkitcore.UsdtPaymentRequest
@@ -11,8 +12,11 @@ import com.synonym.bitkitcore.usdtParseAmount
 import com.synonym.bitkitcore.usdtParsePaymentRequest
 import com.synonym.bitkitcore.usdtValidateRecipient
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -143,9 +147,21 @@ class UsdtRepo @Inject constructor(
                         address = wallet.receiveAddress(),
                         transfers = wallet.history().toImmutableList(),
                         historyComplete = false,
+                        pendingDepositIds = persistentSetOf(),
                     )
                 }
             }
+        }
+    }
+
+    internal fun updateDeposits(deposits: List<UsdtDeposit>) {
+        _state.update { wallet ->
+            wallet.copy(
+                pendingDepositIds = (
+                    wallet.pendingDepositIds - deposits.map { it.id }.toSet() +
+                        deposits.filter { it.needsSettlement }.map { it.id }
+                    ).toImmutableSet(),
+            )
         }
     }
 
@@ -232,6 +248,7 @@ data class UsdtWalletState(
     val balance: ULong? = null,
     val transfers: ImmutableList<UsdtTransfer> = persistentListOf(),
     val historyComplete: Boolean = false,
+    val pendingDepositIds: ImmutableSet<String> = persistentSetOf(),
 )
 
 class UsdtSelfSendError : AppError("Cannot send USDT to own address")

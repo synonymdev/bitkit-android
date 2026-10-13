@@ -379,6 +379,123 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `disabled USDT clipboard is ignored while explicit scans can enable and resume`() = test {
+        val recipient = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
+        val uri = "ethereum:0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9@42161/transfer?address=$recipient"
+        usdtEnabled.value = false
+        runCurrent()
+        Mockito.mockStatic(Class.forName("to.bitkit.repositories.UsdtRepoKt")).use { parser ->
+            for (input in listOf(recipient, uri)) {
+                parser.`when`<Result<UsdtPaymentRequest>> { parseUsdtPaymentRequest(input, UsdtDestination.ARBITRUM) }
+                    .thenReturn(Result.success(UsdtPaymentRequest(recipient, 50_000u, 42161u)))
+                assertFalse(sut.canDecodeClipboard(input))
+                sut.mainScreenEffect.test {
+                    sut.onClipboardAutoRead(input)
+                    runCurrent()
+                    expectNoEvents()
+                    sut.onScanResult(input)
+                    advanceUntilIdle()
+                    assertTrue(sut.showUsdtEnablePrompt)
+                    expectNoEvents()
+                    sut.dismissUsdtEnablePrompt()
+                    runCurrent()
+                    expectNoEvents()
+                }
+            }
+            whenever(usdtPreferences.setEnabled(true)).doSuspendableAnswer {
+                usdtEnabled.value = true
+                Result.success(Unit)
+            }
+            sut.mainScreenEffect.test {
+                sut.onScanResult(uri)
+                advanceUntilIdle()
+                sut.confirmUsdtEnable()
+                advanceUntilIdle()
+                assertEquals(MainScreenEffect.Navigate(Routes.UsdtPayment(recipient, "0.05")), awaitItem())
+                assertTrue(sut.canDecodeClipboard(uri))
+            }
+        }
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `declining a USDT-only contact releases the payment without a failure or retry`() = test {
+        usdtEnabled.value = false
+        runCurrent()
+        val endpoint = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", null, null, "")
+        sut.openContactPayment(endpoint.value, testPublicKey, endpoints = listOf(endpoint))
+        advanceUntilIdle()
+        assertTrue(sut.showUsdtEnablePrompt)
+        sut.dismissUsdtEnablePrompt()
+        runCurrent()
+        assertNull(activeContactPaymentContext())
+        assertNull(sut.currentSheet.value)
+        assertFalse(sut.showUsdtEnablePrompt)
+    }
+
+    @Test
+    fun `subscription first payment waits for enable and declining leaves it unpaid without an error`() = test {
+        usdtEnabled.value = false
+        runCurrent()
+        val endpoint = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", null, null, "")
+        val subscription = subscriptionStartingAt(Clock.System.now() + 60.seconds)
+        val request = paymentRequest().copy(
+            paymentRequestId = subscription.paymentRequestId,
+            amount = PaykitAmount(PaykitAsset.USDT, 50_000u),
+            acceptedPaymentEndpointIdentifiers = listOf(endpoint.methodId.rawValue),
+            lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+            billingPeriod = PaykitBillingPeriod(Clock.System.now(), Clock.System.now() + 60.seconds),
+        )
+        paykitSubscriptions.value = listOf(subscription)
+        whenever(paykitPaymentRequestRepo.accept(subscription)).thenReturn(Result.success(request))
+        whenever(privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(request)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.Opened(endpoint.value, endpoints = listOf(endpoint)))
+        )
+        sut.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
+        advanceUntilIdle()
+        assertTrue(sut.acceptSubscriptionAndStartPayment(subscription).getOrThrow())
+        advanceUntilIdle()
+        assertTrue(sut.showUsdtEnablePrompt)
+        assertFalse(sut.currentSheet.value is Sheet.Send)
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
+        sut.dismissUsdtEnablePrompt()
+        runCurrent()
+        assertNull(activeContactPaymentContext())
+        assertNull(sut.currentSheet.value)
+        assertFalse(sut.showUsdtEnablePrompt)
+    }
+
+    @Test
+    fun `receiving methods update when a restored wallet gains funds and becomes empty`() = test {
+        usdtState.value = UsdtWalletState(balance = 0u)
+        whenever(paykitPaymentRequestRepo.acceptedPaymentEndpointIdentifiers(any())).thenAnswer {
+            if (usdtState.value.balance == 0uL) emptyList() else listOf(MethodId.UsdtArbitrum.rawValue)
+        }
+        sut.paykitReceivingMethods.test {
+            assertEquals(emptyList(), awaitItem())
+            runCurrent()
+            usdtState.value = UsdtWalletState(balance = 50_000u)
+            assertEquals(listOf(MethodId.UsdtArbitrum.rawValue), awaitItem())
+            usdtState.value = UsdtWalletState(balance = 0u)
+            assertEquals(emptyList(), awaitItem())
+        }
+    }
+
+    @Test
+    fun `USDT opt-out preserves Bitcoin and Lightning clipboard detection`() = test {
+        usdtEnabled.value = false
+        runCurrent()
+        for (input in listOf("bitcoin:bcrt1qtest", "lnbcrt1test")) {
+            whenever(coreService.decode(input)).thenReturn(mock())
+            assertTrue(sut.canDecodeClipboard(input))
+            sut.mainScreenEffect.test {
+                sut.onClipboardAutoRead(input)
+                assertEquals(MainScreenEffect.ProcessClipboardAutoRead(input), awaitItem())
+            }
+        }
+    }
+
+    @Test
     fun `foreground polling reconciles configured USDT payment proofs`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey

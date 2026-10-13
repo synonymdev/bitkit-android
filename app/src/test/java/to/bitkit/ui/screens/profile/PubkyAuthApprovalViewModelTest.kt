@@ -9,7 +9,6 @@ import com.synonym.paykit.PubkyAuthCompanionClaimApprovalException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.Json
@@ -32,8 +31,6 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.R
-import to.bitkit.data.SettingsData
-import to.bitkit.data.UsdtPreference
 import to.bitkit.models.PaykitUsdt
 import to.bitkit.models.PreparedWatchOnlyAccountClaim
 import to.bitkit.models.PubkyAuthClaim
@@ -71,6 +68,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         on { displayName } doReturn displayNameFlow
         on { displayImageUri } doReturn displayImageUriFlow
     }
+    private val usdtEnabled = MutableStateFlow(true)
     private val usdtRepo: UsdtRepo = mock()
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo = mock()
 
@@ -950,7 +948,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             pubkyRepo.parseAuthUrl(url)
         ).thenReturn(
             Result.success(
-                authRequest(url, PubkyAuthClaim.REQUIRED_CAPABILITIES, PubkyAuthClaim.USDT_ADDRESS_V1)
+                authRequest(url, PubkyAuthClaim.REQUIRED_CAPABILITIES, PubkyAuthClaim.BITCOIN_AND_USDT)
             )
         )
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("Unavailable")))
@@ -975,18 +973,136 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.usdtUnavailable)
     }
 
+    @Test
+    fun `disabled combined authorization shares Bitcoin only`() = test {
+        usdtEnabled.value = false
+        val url = stubCombinedAuthorization()
+        var shared: ByteArray? = null
+        whenever(pubkyRepo.approveAuthWithCompanionClaim(eq(url), eq(clientId), any())).thenAnswer {
+            shared = it.getArgument(2)
+            Result.success(Unit)
+        }
+        val sut = createSut()
+        sut.load(url)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showsReceivingDetails)
+        assertFalse(sut.uiState.value.showsUsdtDetails)
+        sut.approveWatchOnlyConsent(url)
+        sut.setShareUsdt(true)
+        assertFalse(sut.uiState.value.shareUsdt)
+        assertTrue(sut.uiState.value.canAuthorize)
+        sut.confirmAuthorize(url)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        assertEquals(
+            setOf("bitcoin_account"),
+            Json.parseToJsonElement(checkNotNull(shared).decodeToString()).jsonObject.keys
+        )
+        verifyNoInteractions(usdtRepo)
+    }
+
+    @Test
+    fun `USDT-only authorization is unavailable when disabled or its address cannot be loaded`() = test {
+        val url = "pubkyauth://signin_grant?x-bitkit-claim=usdt-address-v1"
+        whenever(pubkyRepo.parseAuthUrl(url)).thenReturn(
+            Result.success(authRequest(url, PubkyAuthClaim.REQUIRED_CAPABILITIES, PubkyAuthClaim.USDT_ADDRESS_V1))
+        )
+        usdtEnabled.value = false
+        val sut = createSut()
+        sut.load(url)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertFalse(sut.uiState.value.showsReceivingDetails)
+        assertFalse(sut.uiState.value.canAuthorize)
+        sut.confirmAuthorize(url)
+        advanceUntilIdle()
+        verifyNoInteractions(usdtRepo)
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
+
+        usdtEnabled.value = true
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("Unavailable")))
+        sut.load(url)
+        advanceUntilIdle()
+        sut.approveWatchOnlyConsent(url)
+        assertTrue(sut.uiState.value.usdtUnavailable)
+        assertFalse(sut.uiState.value.canAuthorize)
+        sut.confirmAuthorize(url)
+        advanceUntilIdle()
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
+    }
+
+    @Test
+    fun `combined authorization rechecks USDT preference after Bitcoin account preparation`() = test {
+        val url = stubCombinedAuthorization()
+        val endpoint = Endpoint(MethodId.UsdtArbitrum, "reviewed-address", null, null, "{}")
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(endpoint))
+        val prepared = PreparedWatchOnlyAccountClaim(watchOnlyAccount(), byteArrayOf(1))
+        whenever(watchOnlyAccountRepo.prepareUnsignedClaim(url, "paykit server")).thenAnswer {
+            usdtEnabled.value = false
+            prepared
+        }
+        var shared: ByteArray? = null
+        whenever(pubkyRepo.approveAuthWithCompanionClaim(eq(url), eq(clientId), any())).thenAnswer {
+            shared = it.getArgument(2)
+            Result.success(Unit)
+        }
+        val sut = createSut()
+        sut.load(url)
+        advanceUntilIdle()
+        sut.approveWatchOnlyConsent(url)
+        assertTrue(sut.uiState.value.canAuthorize)
+        sut.confirmAuthorize(url)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        assertFalse(sut.uiState.value.shareUsdt)
+        assertEquals(
+            setOf("bitcoin_account"),
+            Json.parseToJsonElement(checkNotNull(shared).decodeToString()).jsonObject.keys
+        )
+    }
+
+    @Test
+    fun `disabled optional USDT does not block a Paykit access grant`() = test {
+        usdtEnabled.value = false
+        val claim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.USDT_ADDRESS_V1)
+        val url = "pubkyauth://signin_grant?x-bitkit-claim=${claim.wireValue}"
+        whenever(pubkyRepo.parseAuthUrl(url)).thenReturn(
+            Result.success(authRequest(url, PubkyAuthClaim.REQUIRED_CAPABILITIES, claim))
+        )
+        whenever(pubkyRepo.approveAuthWithCompanionClaim(eq(url), eq(clientId), any())).thenReturn(Result.success(Unit))
+        val sut = createSut()
+        sut.load(url)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertTrue(sut.uiState.value.canAuthorize)
+        assertFalse(sut.uiState.value.showsReceivingDetails)
+        sut.confirmAuthorize(url)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo) {
+            approveAuthWithCompanionClaim(eq(url), eq(clientId), argThat { decodeToString() == "{}" })
+        }
+        verifyNoInteractions(usdtRepo, watchOnlyAccountRepo)
+    }
+
+    private suspend fun stubCombinedAuthorization(): String {
+        val claim = PubkyAuthClaim.BITCOIN_AND_USDT
+        val url = "pubkyauth://signin_grant?x-bitkit-claim=${claim.wireValue}"
+        whenever(pubkyRepo.parseAuthUrl(url)).thenReturn(
+            Result.success(authRequest(url, PubkyAuthClaim.REQUIRED_CAPABILITIES, claim))
+        )
+        val prepared = PreparedWatchOnlyAccountClaim(watchOnlyAccount(), byteArrayOf(1))
+        whenever(watchOnlyAccountRepo.prepareUnsignedClaim(url, "paykit server")).thenReturn(prepared)
+        whenever(watchOnlyAccountRepo.beginAuthorization(prepared.account.id)).thenReturn(false)
+        return url
+    }
+
     private fun createSut() = PubkyAuthApprovalViewModel(
         context = context,
         pubkyRepo = pubkyRepo,
         watchOnlyAccountRepo = watchOnlyAccountRepo,
         usdtRepo = usdtRepo,
-        settingsStore = mock {
-            on { data }.thenReturn(
-                flowOf(
-                    SettingsData(usdtPreference = UsdtPreference.ENABLED)
-                )
-            )
-        },
+        usdtPreferences = mock { on { enabled }.thenReturn(usdtEnabled) },
     )
 
     private fun authRequest(

@@ -3,8 +3,9 @@
   <actions>
     <action>Enable USDT in the introductory sheet or Settings, General, Payments before starting this flow.</action>
     <action>Open an ethereum: USDT receive link with chain 42161, the pinned Arbitrum token, an owned recipient and uint256=10001. Verify the USDT amount screen preserves the recipient and exact input 0.010001 USDT; the review rounds its displayed value to $0.01. Verify no payment occurs without approval.</action>
-    <action>On iOS, copy the USDT receive URI, return to Home and accept the clipboard prompt. Verify the USDT amount screen opens with the copied recipient and amount. Cancel without paying. Repeat with a wrong-chain URI and verify no payment prompt appears.</action>
+    <action>Copy the USDT receive URI, return to Home and accept the clipboard prompt. Verify the USDT amount screen opens with the copied recipient and amount. Cancel without paying. Repeat with a wrong-chain URI and verify no payment prompt appears.</action>
     <action>Cancel the send, then reopen the identical URI. Verify the amount or review screen opens again. Cancel and open a different owned recipient and amount, verifying only the new values appear.</action>
+    <action>Close the send sheet, open Settings from the drawer, then go back. Verify the dismissed link does not reopen its Amount screen. Explicitly reopen the same link and verify a new send flow is available, then cancel without paying.</action>
     <action>While a USDT contact amount screen or direct-send review is open, open another USDT link. Verify the active recipient, amount and contact are preserved. Where PIN is enabled, repeat while its approval screen is visible, then cancel without paying.</action>
     <action>Open USDT from Home, open a USDT link, then open a second link with another owned recipient and amount. Verify the first amount and recipient remain. Cancel without paying.</action>
     <action>Cancel the send. Open the same link without uint256. Verify the amount screen opens with no amount and accepts a new amount.</action>
@@ -14,5 +15,7 @@
     <action>On iOS, open a USDT link while Lightning is stopped but the wallet is ready. Verify it routes without starting Lightning. Open two different USDT links while the main scanner sheet is dismissing; verify an older delayed link cannot replace the review that opened first.</action>
     <action>Enter this wallet’s own Arbitrum address in USDT Send, enter an amount and continue. Verify the error explicitly says you cannot send USDT to your own address, and no payment is submitted. Repeat with MAX. On Android, enter this wallet’s own bare Arbitrum address through Home Send → Enter Manually and verify the self-send message appears while Continue stays disabled.</action>
     <action>Enter the entire available USDT balance and continue. Verify the fee-collection error explains that the transaction fee could not be paid in USDT and suggests a smaller amount. Reduce the amount, reach review and close without signing.</action>
+    <action>With an empty wallet and no pending transfers, turn USDT off in Settings. Copy an owned bare USDT address, return to the app, and verify no automatic payment or enable prompt. Repeat with an amount-bearing USDT payment URI. Copy a valid Bitcoin address and a Lightning invoice in turn; verify their normal clipboard prompts still appear and cancel without paying.</action>
+    <action>With USDT off, explicitly open the same USDT URI and verify the designed Enable USDT modal appears. Decline and verify a quiet return with no stuck spinner. Scan its QR, enable USDT, and verify the original recipient and exact amount resume. Cancel without paying.</action>
   </actions>
 </journey>

@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -192,12 +194,14 @@ private fun UsdtTechnicalDetails(transfer: UsdtTransfer, hideBalance: Boolean, w
         SelectionContainer { BodySSB(transfer.recipient) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        UsdtDetailCell(
-            stringResource(R.string.usdt__sender_network),
-            UsdtDestination.ARBITRUM.label,
-            R.drawable.usdt_network,
-            modifier = Modifier.weight(1f)
-        )
+        if (!transfer.isIncoming) {
+            UsdtDetailCell(
+                stringResource(R.string.usdt__sender_network),
+                UsdtDestination.ARBITRUM.label,
+                R.drawable.usdt_network,
+                modifier = Modifier.weight(1f)
+            )
+        }
         UsdtDetailCell(
             stringResource(R.string.usdt__destination),
             transfer.destination.label,
@@ -281,9 +285,14 @@ internal fun UsdtDetailCell(
     icon: Int,
     modifier: Modifier = Modifier,
     valueColor: Color = Colors.White,
+    minValueHeight: Dp = 0.dp,
 ) {
     SendCell(caption = title, modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.heightIn(min = minValueHeight).wrapContentHeight(Alignment.Top),
+        ) {
             Icon(painterResource(icon), null, tint = Colors.Usdt, modifier = Modifier.size(16.dp))
             BodySSB(value, color = valueColor)
         }

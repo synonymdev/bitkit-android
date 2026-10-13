@@ -33,7 +33,9 @@ History catch-up is deferred while the USDT send sheet is open. Balance and pend
 
 USDT starts off. The introductory sheet offers Enable USDT and No Thanks; dismissing it without a choice allows it to return next launch. Settings > General > Payments > USDT (Tether) changes the choice later.
 
-When off, new USDT payment choices, Paykit offers and optional address sharing are hidden. Opening an explicit USDT link or request asks to enable it before continuing. Disabling requires a fresh empty balance and no unresolved transfers or deposits. Existing funds, pending payments and restored history with an unknown balance remain visible; payment tracking, history and encrypted backups continue. Previously shared addresses cannot be revoked.
+When off, USDT is hidden from new payment choices, Paykit offers and authorization details. Combined Bitcoin and USDT authorization continues with Bitcoin and omits the USDT address; a USDT-only authorization is unavailable. Authorization never asks to enable USDT. Automatic clipboard detection ignores USDT addresses and links while retaining Bitcoin and Lightning detection.
+
+Explicitly opening a USDT link or request, or scanning its QR, offers the USDT enable sheet. Enabling resumes the original flow; declining cancels it quietly. Funds or unresolved transfers keep USDT enabled, with the Settings switch on and greyed out. Disabling requires a fresh empty balance and no unresolved transfers or deposits. Tracking, history and encrypted backups continue, including after restore. Previously shared addresses cannot be revoked.
 
 ## Paykit
 

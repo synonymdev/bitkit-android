@@ -2092,7 +2092,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             coreService = coreService,
             paykitSdkService = paykitSdkService,
             settingsStore = settingsStore,
-            usdtRepo = mock(),
+            usdtRepo = mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
             clock = clock,
         )
         for (failureStage in listOf("withdraw", "disable capability")) {
@@ -3575,7 +3575,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         walletRepo = walletRepo,
         publicPaykitRepo = publicPaykitRepo,
         paymentRequestRepo = paymentRequestRepo,
-        usdtRepo = mock(),
+        usdtRepo = mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
         coreService = coreService,
         clock = clock,
     ).also { it.setContactPreparationActive(true) }

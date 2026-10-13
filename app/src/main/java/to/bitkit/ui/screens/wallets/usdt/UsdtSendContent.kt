@@ -154,7 +154,7 @@ internal fun UsdtPaymentContent(
             showSuccess = true
         }
     }
-    val showSubmitted = state.submitted && !state.busy && (!completed || showSuccess)
+    val showSubmitted = state.submitted && !state.busy
     if (showSuccess && completed && quote != null) {
         NewTransactionSheetView(
             details = NewTransactionSheetDetails(
@@ -297,7 +297,7 @@ private fun UsdtNetwork(
 }
 
 @Composable
-private fun UsdtNetworkButton(
+internal fun UsdtNetworkButton(
     destination: UsdtDestination,
     onChange: (() -> Unit)?,
     destinations: ImmutableList<UsdtDestination>
@@ -531,10 +531,11 @@ private fun UsdtConfirmation(
                 ) {
                     if (!state.busy && !completed) onEditAmount()
                 }
-                Column {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     if (!showDetails) {
                         PaymentReviewIllustration(
                             swipeProgress = { swipeProgress.floatValue },
+                            isUsdt = true,
                             modifier = Modifier.height(
                                 if (quote.destination == UsdtDestination.ARBITRUM) {
                                     256.dp
@@ -545,8 +546,10 @@ private fun UsdtConfirmation(
                         )
                     } else {
                         UsdtBridgeCost(quote)
-                        VerticalSpacer(16.dp)
-                        UsdtFeeNote(quote)
+                        if (quote.destination != UsdtDestination.ARBITRUM) {
+                            VerticalSpacer(16.dp)
+                            UsdtFeeNote(quote)
+                        }
                     }
                     state.error?.let {
                         BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
@@ -557,10 +560,7 @@ private fun UsdtConfirmation(
                 }
             }
         }
-        if (quote.destination != UsdtDestination.ARBITRUM) {
-            UsdtReviewDetailsButton(showDetails) { showDetails = !showDetails }
-        }
-        UsdtMaximumTotal(quote)
+        UsdtReviewFooter(quote, showDetails) { showDetails = !showDetails }
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = Colors.Usdt,
@@ -572,6 +572,16 @@ private fun UsdtConfirmation(
             modifier = Modifier.fillMaxWidth().testTag("UsdtConfirm")
         )
     }
+}
+
+@Composable
+private fun ColumnScope.UsdtReviewFooter(quote: UsdtQuote, showDetails: Boolean, onToggleDetails: () -> Unit) {
+    if (quote.destination != UsdtDestination.ARBITRUM) {
+        UsdtReviewDetailsButton(showDetails, onToggleDetails)
+    } else if (showDetails) {
+        UsdtFeeNote(quote)
+    }
+    UsdtMaximumTotal(quote)
 }
 
 @Composable
@@ -692,7 +702,8 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
             stringResource(R.string.usdt__network),
             quote.destination.label,
             R.drawable.usdt_network,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            minValueHeight = 28.dp
         )
     }
     VerticalSpacer(16.dp)
@@ -727,7 +738,9 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
         }
         VerticalSpacer(16.dp)
     }
-    SendCell(caption = stringResource(R.string.usdt__address)) { SelectionContainer { BodySSB(quote.recipient) } }
+    SendCell(
+        caption = stringResource(R.string.wallet__activity_address)
+    ) { SelectionContainer { BodySSB(quote.recipient) } }
     quote.bridgeProvider?.let { provider ->
         VerticalSpacer(16.dp)
         SendCell(caption = stringResource(R.string.usdt__bridge_provider)) {

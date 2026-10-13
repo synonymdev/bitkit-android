@@ -433,18 +433,27 @@ class AppViewModel @Inject constructor(
     var showUsdtEnablePrompt by mutableStateOf(false)
         private set
     private var pendingUsdtAction: (suspend () -> Unit)? = null
+    private var pendingUsdtCancel: (() -> Unit)? = null
     private var isEnablingUsdt = false
 
-    fun requestUsdtEnable(onEnabled: suspend () -> Unit) {
+    fun requestUsdtEnable(onCancel: () -> Unit = {}, onEnabled: suspend () -> Unit) {
         if (isUsdtEnabled.value) {
             viewModelScope.launch { onEnabled() }
             return
         }
         pendingUsdtAction = onEnabled
+        pendingUsdtCancel = onCancel
         showUsdtEnablePrompt = true
     }
 
     fun dismissUsdtEnablePrompt() {
+        val onCancel = pendingUsdtCancel
+        clearUsdtEnablePrompt()
+        onCancel?.invoke()
+    }
+
+    private fun clearUsdtEnablePrompt() {
+        pendingUsdtCancel = null
         showUsdtEnablePrompt = false
         pendingUsdtAction = null
     }
@@ -458,7 +467,7 @@ class AppViewModel @Inject constructor(
                 usdtPreferences.setEnabled(true).onSuccess {
                     isUsdtEnabled.first { it }
                     if (pendingUsdtAction !== action) return@onSuccess
-                    dismissUsdtEnablePrompt()
+                    clearUsdtEnablePrompt()
                     action()
                 }.onFailure { toast(it) }
             } finally {
@@ -472,7 +481,11 @@ class AppViewModel @Inject constructor(
 
     fun updatePaykitUsdtBusy(busy: Boolean) { isPaykitUsdtBusy = busy }
 
-    val paykitReceivingMethods = combine(settingsStore.data, lightningRepo.lightningState) { settings, _ ->
+    val paykitReceivingMethods = combine(
+        settingsStore.data,
+        lightningRepo.lightningState,
+        usdtRepo.state,
+    ) { settings, _, _ ->
         paykitPaymentRequestRepo.acceptedPaymentEndpointIdentifiers(settings)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -590,11 +603,11 @@ class AppViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            settingsStore.data.map { it.usdtPreference }.distinctUntilChanged().collect {
+            usdtPreferences.enabled.distinctUntilChanged().collect {
                 updateCanSwitchWallet()
                 if (isPaykitEnabled.value) {
                     refreshPublicPaykitEndpointsIfEnabled()
-                    refreshPrivatePaykitEndpointsIfEnabled("USDT preference", requeueActive = true)
+                    refreshPrivatePaykitEndpointsIfEnabled("USDT availability", requeueActive = true)
                 }
             }
         }
@@ -2702,12 +2715,12 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        if (input.startsWith("ethereum:", ignoreCase = true)) {
+        if (activeHardwareWalletId == null && rejectUsdtSelfSend(input)) return@withContext
+
+        if (isUsdtPaymentInput(input)) {
             validateUsdtAddressWithFeedback(input)
             return@withContext
         }
-
-        if (activeHardwareWalletId == null && rejectUsdtSelfSend(input)) return@withContext
 
         val scanResult = runCatching { coreService.decode(input.removeLightningSchemes()) }
 
@@ -3301,9 +3314,26 @@ class AppViewModel @Inject constructor(
         hasUsdt && !isUsdtEnabled.value && !resumesPayment && usdtOnly
 
     private fun enableUsdtForContactPayment(payment: ContactPaymentContext, fromMainScanner: Boolean) {
-        requestUsdtEnable {
+        requestUsdtEnable(onCancel = { cancelUsdtContactPayment(payment) }) {
             if (synchronized(contactPaymentContextLock) { activeContactPaymentContext } == payment) {
                 openPaykitEndpoints(payment, fromMainScanner)
+            }
+        }
+    }
+
+    private fun cancelUsdtContactPayment(payment: ContactPaymentContext) {
+        if (synchronized(contactPaymentContextLock) { activeContactPaymentContext } != payment) return
+        clearActiveContactPaymentContext(retryIncomingRequest = false)
+        _sendUiState.update { it.copy(isLoading = false) }
+        _currentSheet.update { sheet ->
+            val review = (sheet as? Sheet.Subscription)?.route as? SubscriptionRoute.Review
+            val request = payment.incomingPaymentRequest
+            if (payment.isInitialSubscriptionPayment && request != null &&
+                review?.id == PaykitSubscriptionId(request.paymentRequestId, request.counterparty)
+            ) {
+                null
+            } else {
+                sheet
             }
         }
     }
@@ -3905,7 +3935,7 @@ class AppViewModel @Inject constructor(
 
         val input = normalizedScanInput(result, routePubkyKeys) ?: return@withContext
 
-        if (contactPaymentContext == null && input.trim().startsWith("ethereum:", ignoreCase = true)) {
+        if (contactPaymentContext == null && isUsdtPaymentInput(input.trim())) {
             handleUsdtPaymentInput(input.trim())
             return@withContext
         }
@@ -6645,11 +6675,19 @@ class AppViewModel @Inject constructor(
     }
     // endregion
 
+    private fun isUsdtPaymentInput(input: String): Boolean =
+        input.startsWith("ethereum:", ignoreCase = true) ||
+            (input.length == USDT_ADDRESS_LENGTH && input.startsWith("0x", ignoreCase = true))
+
     suspend fun canDecodeClipboard(text: String): Boolean = withContext(bgDispatcher) {
-        SamRockSetupRequest.isProtocolUrl(text) || runCatching { coreService.decode(text) }.isSuccess
+        when {
+            isUsdtPaymentInput(text.trim()) -> isUsdtEnabled.value && parseUsdtPaymentRequest(text.trim()).isSuccess
+            else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
+        }
     }
 
     fun onClipboardAutoRead(data: String) {
+        if (isUsdtPaymentInput(data.trim()) && !isUsdtEnabled.value) return
         viewModelScope.launch {
             mainScreenEffect(MainScreenEffect.ProcessClipboardAutoRead(data))
         }
@@ -7050,7 +7088,7 @@ class AppViewModel @Inject constructor(
                 )
                 scanJob?.join()
                 sheetTransitionJob?.join()
-                if (_currentSheet.value !is Sheet.Send) {
+                if (_currentSheet.value !is Sheet.Send && !showUsdtEnablePrompt) {
                     paykitPaymentRequestRepo.markPresented(acceptedDueRequest)
                     val error = PaykitPaymentRequestError.RequestUnavailable
                     val failure = error.toSendFailureDetails(
@@ -7584,6 +7622,8 @@ class AppViewModel @Inject constructor(
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val BITKIT_SCHEME = "bitkit"
         private const val RECOVERY_MODE_DEEPLINK = "recovery-mode"
+
+        private const val USDT_ADDRESS_LENGTH = 42
 
         /** Max characters kept in a scan log id before truncating. */
         private const val SCAN_LOG_ID_MAX_LENGTH = 24

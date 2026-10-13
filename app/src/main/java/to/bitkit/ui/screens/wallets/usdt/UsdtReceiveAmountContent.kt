@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -44,7 +45,7 @@ internal fun ColumnScope.UsdtReceiveAmountContent(
     }
     HorizontalDivider()
     VerticalSpacer(34.dp)
-    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+    BoxWithConstraints(contentAlignment = Alignment.BottomCenter, modifier = Modifier.weight(1f).fillMaxWidth()) {
         NumberPad(
             type = NumberPadType.DECIMAL,
             availableHeight = maxHeight,
@@ -62,7 +63,7 @@ internal fun ColumnScope.UsdtReceiveAmountContent(
             },
         )
     }
-    VerticalSpacer(24.dp)
+    VerticalSpacer(12.dp)
     val validAmount = amount.isEmpty() && allowEmpty || runCatching {
         PaykitAmount.parse(PaykitAsset.USDT, amount)
     }.isSuccess

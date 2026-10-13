@@ -148,6 +148,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             subscriptionClock,
             mock { on { canReceive() }.thenReturn(true) },
             mock { on { currencyState }.thenReturn(MutableStateFlow(CurrencyState())) },
+            mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
         )
         sut.activate(LOCAL_IDENTITY)
     }
@@ -206,7 +207,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
                 target,
                 listOf(COUNTERPARTY),
             )
-            if (!PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings)) {
+            if (!PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings, UsdtWalletState())) {
                 assertEquals(PaykitPaymentRequestError.RequestUnavailable, result.exceptionOrNull())
                 assertTrue(captured.allValues.isEmpty())
                 continue

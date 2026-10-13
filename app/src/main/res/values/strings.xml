@@ -676,6 +676,7 @@
     <string name="profile__auth_approval_success_detail_named">You authorized with pubky &lt;accent&gt;%1$s&lt;/accent&gt; and gave &lt;accent&gt;%2$s&lt;/accent&gt; permission to access and edit your &lt;accent&gt;%3$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_title">Authorize</string>
     <string name="profile__auth_approval_trust_warning">Make sure you trust the service, browser, and device before authorizing with your pubky.</string>
+    <string name="profile__auth_approval_usdt_disabled">USDT is turned off.</string>
     <string name="profile__auth_approval_usdt_intro_description">Share your existing USDT address on Arbitrum One to receive earnings directly in Bitkit. The service cannot spend your funds.</string>
     <string name="profile__auth_approval_usdt_intro_title">&lt;accent&gt;EARN USDT&lt;/accent&gt;\nFROM YOUR\nCONTENT</string>
     <string name="profile__auth_approval_usdt_loading">Loading USDT address…</string>
@@ -1315,7 +1316,7 @@
     <string name="usdt__receive_fee">Fees</string>
     <string name="usdt__receive_fees_title">Estimated Fees</string>
     <string name="usdt__receive_network">Network: %1$s</string>
-    <string name="usdt__receive_network_note">Regardless of the receiving network, your USDT is credited to your Arbitrum One balance.</string>
+    <string name="usdt__receive_network_note">Note: Regardless of the network used to receive, your USDT will be credited as Arbitrum One balance.</string>
     <string name="usdt__receive_network_title">USDT Network</string>
     <string name="usdt__receive_title">Receive Dollars</string>
     <string name="usdt__receive_warning">Receive USDT on Arbitrum One only. Bridge funds from other networks before sending.</string>

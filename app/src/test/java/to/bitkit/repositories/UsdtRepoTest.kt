@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.UsdtDeposit
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
 import com.synonym.bitkitcore.UsdtQuote
@@ -49,6 +50,28 @@ class UsdtRepoTest : BaseUnitTest() {
             whenever(wallet.quoteTransfer(other, 1_000_000u, UsdtDestination.ARBITRUM)).thenReturn(quote)
             assertEquals(quote, repo.quote(other, "1", UsdtDestination.ARBITRUM).getOrThrow())
         }
+    }
+
+    @Test
+    fun `known unsettled deposits protect the wallet until their updated status is settled`() = test {
+        val repo = UsdtRepo(service, testDispatcher)
+        val pending: UsdtDeposit = mock {
+            on { id }.thenReturn("deposit-one")
+            on { status }.thenReturn("confirming")
+        }
+        val second: UsdtDeposit = mock {
+            on { id }.thenReturn("deposit-two")
+            on { status }.thenReturn("refunding")
+        }
+        repo.updateDeposits(listOf(pending, second))
+        assertEquals(setOf("deposit-one", "deposit-two"), repo.state.value.pendingDepositIds)
+        assertTrue(repo.state.value.hasFundsOrPendingTransfers)
+        whenever(pending.status).thenReturn("completed")
+        repo.updateDeposits(listOf(pending))
+        assertEquals(setOf("deposit-two"), repo.state.value.pendingDepositIds)
+        whenever(second.status).thenReturn("refunded")
+        repo.updateDeposits(listOf(second))
+        assertTrue(repo.state.value.pendingDepositIds.isEmpty())
     }
 
     @Test

@@ -12,7 +12,6 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.isUsdtEnabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
@@ -132,8 +131,8 @@ class PublicPaykitRepo @Inject constructor(
         fun isOnchainPaymentOptionEnabled(settings: SettingsData): Boolean =
             settings.publicPaykitOnchainEnabled
 
-        fun isUsdtPaymentOptionEnabled(settings: SettingsData): Boolean =
-            settings.isUsdtEnabled && settings.publicPaykitUsdtEnabled
+        fun isUsdtPaymentOptionEnabled(settings: SettingsData, wallet: UsdtWalletState): Boolean =
+            settings.isUsdtEnabled(wallet) && settings.publicPaykitUsdtEnabled
 
         fun parseEndpoint(
             methodId: String,
@@ -370,7 +369,9 @@ class PublicPaykitRepo @Inject constructor(
             )
         }
 
-        if (isUsdtPaymentOptionEnabled(settings)) endpoints += usdtRepo.paymentEndpoint().getOrThrow()
+        if (isUsdtPaymentOptionEnabled(settings, usdtRepo.state.value)) {
+            endpoints += usdtRepo.paymentEndpoint().getOrThrow()
+        }
 
         if (endpoints.isEmpty() && requireEndpoint) throw PublicPaykitError.NoSupportedEndpoint
 

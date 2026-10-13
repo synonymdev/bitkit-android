@@ -10,8 +10,14 @@ class UsdtDepositRepo @Inject constructor(private val usdt: UsdtRepo) {
     suspend fun depositNetworks() = usdt.operation { depositNetworks().toImmutableList() }
     suspend fun prepareDeposit(network: UsdtDepositNetwork, amount: String) =
         usdt.operation { prepareDeposit(network, amount) }
-    suspend fun depositHistory(offset: UInt) = usdt.operation { depositHistory(offset) }
-    suspend fun depositDetail(id: String, offset: UInt) = usdt.operation { depositDetail(id, offset) }
+    suspend fun depositHistory(offset: UInt) = usdt.operation {
+        depositHistory(offset).also { usdt.updateDeposits(it.deposits) }
+    }
+    suspend fun depositDetail(id: String, offset: UInt) = usdt.operation {
+        depositDetail(id, offset).also { detail ->
+            usdt.updateDeposits(listOf(detail.deposit.copy(status = detail.order?.status ?: detail.deposit.status)))
+        }
+    }
     suspend fun refundDeposit(id: String, offset: UInt, address: String, network: UsdtDepositNetwork) =
         usdt.operation { refundDeposit(id, offset, address, network) }
 }

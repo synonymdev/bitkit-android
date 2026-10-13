@@ -322,6 +322,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     @SubscriptionClock private val subscriptionClock: Clock,
     private val lightningRepo: LightningRepo,
     private val currencyRepo: CurrencyRepo,
+    private val usdtRepo: UsdtRepo,
 ) {
     companion object {
         private const val TAG = "PaykitPaymentRequestRepo"
@@ -1485,7 +1486,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     fun acceptedPaymentEndpointIdentifiers(settings: SettingsData): List<String> = buildList {
-        if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings)) add(MethodId.UsdtArbitrum.rawValue)
+        if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(
+                settings,
+                usdtRepo.state.value
+            )
+        ) {
+            add(MethodId.UsdtArbitrum.rawValue)
+        }
         if (lightningRepo.canReceive() && PublicPaykitRepo.isLightningPaymentOptionEnabled(settings)) {
             add(
                 MethodId.Bolt11.rawValue

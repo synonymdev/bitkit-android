@@ -385,7 +385,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         walletRepo = walletRepo,
         lightningRepo = lightningRepo,
         coreService = coreService,
-        usdtRepo = mock(),
+        usdtRepo = mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
         paykitSdkService = paykitSdkService,
         settingsStore = settingsStore,
         clock = clock,

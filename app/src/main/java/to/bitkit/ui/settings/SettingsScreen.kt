@@ -97,6 +97,8 @@ fun SettingsScreen(
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val contactPaymentsEnabled by settings.contactPaymentsEnabled.collectAsStateWithLifecycle()
     val isUpdatingContactPayments by settings.isUpdatingContactPayments.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { settings.refreshUsdtAvailability() }
+    val canDisableUsdt by settings.canDisableUsdt.collectAsStateWithLifecycle()
     val isUsdtEnabled by settings.isUsdtEnabled.collectAsStateWithLifecycle()
     val isUpdatingUsdt by settings.isUpdatingUsdt.collectAsStateWithLifecycle()
     val hardwareWallets by hwWalletViewModel.wallets.collectAsStateWithLifecycle()
@@ -141,6 +143,7 @@ fun SettingsScreen(
             isUpdatingContactPayments = isUpdatingContactPayments,
             hardwareWalletCount = hardwareWallets.size,
             isUsdtEnabled = isUsdtEnabled,
+            canDisableUsdt = canDisableUsdt,
             isUpdatingUsdt = isUpdatingUsdt,
         ),
         securityState = SecurityTabState(
@@ -405,7 +408,7 @@ private fun GeneralTabContent(
                 isChecked = state.isUsdtEnabled,
                 icon = { SettingsIcon(R.drawable.ic_currency_dollar) },
                 onClick = { onEvent(SettingsEvent.UsdtClick) },
-                enabled = !state.isUpdatingUsdt,
+                enabled = state.canToggleUsdt,
                 switchTestTag = "UsdtSettingsToggle",
                 modifier = Modifier.testTag("UsdtSettings")
             )
@@ -749,8 +752,11 @@ data class GeneralTabState(
     val isUpdatingContactPayments: Boolean = false,
     val hardwareWalletCount: Int = 0,
     val isUsdtEnabled: Boolean = false,
+    val canDisableUsdt: Boolean = false,
     val isUpdatingUsdt: Boolean = false,
-)
+) {
+    val canToggleUsdt: Boolean get() = !isUpdatingUsdt && (!isUsdtEnabled || canDisableUsdt)
+}
 
 @Immutable
 data class SecurityTabState(

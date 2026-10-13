@@ -42,6 +42,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
+import com.synonym.bitkitcore.UsdtDestination
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
@@ -77,6 +79,7 @@ import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceContent
 import to.bitkit.ui.components.usdtOverviewAmount
+import to.bitkit.ui.screens.wallets.usdt.UsdtNetworkButton
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -310,7 +313,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            if (uiState.paykitUsesUsdt) VerticalSpacer(32.dp) else FillHeight(min = 12.dp)
+            FillHeight(min = 12.dp)
             if (uiState.paykitRateUnavailable) {
                 BodyS(
                     stringResource(R.string.wallet__payment_request_rate_unavailable),
@@ -361,6 +364,10 @@ private fun SendAmountNodeRunning(
                 if (!isLnurl || uiState.usdtRecipient != null) {
                     PaymentMethodButton(uiState = uiState, onClick = onClickPayMethod)
                 }
+                if (uiState.paykitUsesUsdt) {
+                    HorizontalSpacer(8.dp)
+                    UsdtNetworkButton(UsdtDestination.ARBITRUM, null, persistentListOf(UsdtDestination.ARBITRUM))
+                }
                 if (!uiState.isPaymentRequest && !uiState.paykitUsesUsdt && uiState.lnurl is LnurlParams.LnurlPay) {
                     val max = minOf(
                         uiState.lnurl.data.maxSendableSat().toLong(),
@@ -390,6 +397,7 @@ private fun SendAmountNodeRunning(
             if (uiState.paykitUsesUsdt) {
                 NumberPad(
                     type = NumberPadType.DECIMAL,
+                    availableHeight = maxHeight,
                     enabled = uiState.isAmountEditable,
                     onPress = {
                         app?.onUsdtAmountChange(
@@ -409,6 +417,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
+            if (uiState.paykitUsesUsdt) VerticalSpacer(24.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
@@ -557,6 +566,15 @@ private fun FundingSourceBalance(option: SendFundingOption) {
             },
             unit = PrimaryDisplay.BITCOIN,
             showSymbol = false,
+        )
+    }
+    if (source == SendFundingSource.Spending) {
+        HorizontalSpacer(4.dp)
+        Icon(
+            painterResource(R.drawable.ic_transfer),
+            contentDescription = null,
+            tint = Colors.White64,
+            modifier = Modifier.size(16.dp)
         )
     }
 }

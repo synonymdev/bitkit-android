@@ -13,7 +13,6 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.R
-import to.bitkit.data.SettingsData
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
@@ -52,7 +51,7 @@ class PubkyAuthApprovalRetryTest : BaseUnitTest() {
                 pubkyRepo,
                 mock(),
                 mock(),
-                mock { on { data } doReturn flowOf(SettingsData()) }
+                mock { on { enabled } doReturn flowOf(false) }
             )
 
         sut.effects.test {
