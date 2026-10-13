@@ -676,12 +676,12 @@
     <string name="profile__auth_approval_usdt_intro_description">Share your existing USDT address on Arbitrum One to receive earnings directly in Bitkit. The service cannot spend your funds.</string>
     <string name="profile__auth_approval_usdt_loading">Loading USDT address…</string>
     <string name="profile__auth_approval_usdt_privacy">This is your existing USDT account. The service can see its balance and transaction history, but cannot spend your funds.</string>
-    <string name="profile__auth_approval_usdt_unavailable">Your USDT address is unavailable. You can retry or continue without sharing it.</string>
+    <string name="profile__auth_approval_usdt_unavailable">Your USDT address is unavailable. Please try again.</string>
     <string name="profile__auth_approval_watch_only_account_default_name">%1$s server</string>
     <string name="profile__auth_approval_watch_only_intro_approve">Approve</string>
     <string name="profile__auth_approval_watch_only_intro_description">To earn, you need to share a watch-only Bitcoin account with Paykit. It can view sales activity, but cannot spend funds.</string>
     <string name="profile__auth_approval_watch_only_intro_nav_title">Earn</string>
-    <string name="profile__auth_approval_watch_only_intro_title">&lt;accent&gt;EARN MONEY&lt;/accent&gt;\nFROM YOUR CONTENT</string>
+    <string name="profile__auth_approval_watch_only_intro_title">&lt;accent&gt;EARN MONEY&lt;/accent&gt;\nFROM YOUR\nCONTENT</string>
     <string name="profile__auth_error_duplicate_claim">This authorization contains more than one Bitkit claim.</string>
     <string name="profile__auth_error_invalid_capabilities">The requested access does not match this Bitkit claim.</string>
     <string name="profile__auth_error_invalid_url">This Pubky authorization link is invalid.</string>
