@@ -8,6 +8,7 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitRecurrenceUnit
@@ -19,6 +20,7 @@ import to.bitkit.repositories.PaykitSubscriptionRole
 import to.bitkit.repositories.runsUntilPaidThrough
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -26,6 +28,19 @@ import kotlin.time.Instant
 class SubscriptionsScreenTest {
     private val now = Instant.parse("2027-01-15T08:00:00Z")
     private val paidThrough = Instant.parse("2027-02-01T08:00:00Z")
+
+    @Test
+    fun `monthly cost combines assets using the wallet rate`() {
+        val amounts = listOf(
+            PaykitAmount(PaykitAsset.BTC, 100_000UL),
+            PaykitAmount(PaykitAsset.USD, 200UL),
+            PaykitAmount(PaykitAsset.USDT, 3_000_000UL),
+        )
+        val rate = PaykitExchangeRate("100000", now.toEpochMilliseconds())
+        assertEquals(105_000L, subscriptionMonthlyCostSats(amounts, rate, now.toEpochMilliseconds()))
+        assertNull(subscriptionMonthlyCostSats(amounts, null, now.toEpochMilliseconds()))
+        assertEquals(100_000L, subscriptionMonthlyCostSats(amounts.take(1), null, now.toEpochMilliseconds()))
+    }
 
     @Test
     fun `next transition includes the next recurring period`() {

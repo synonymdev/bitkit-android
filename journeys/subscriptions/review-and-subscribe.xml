@@ -30,5 +30,6 @@
     <action>Verify the Amount screen keeps $2 locked and USDT as its only payment source; no Bitcoin amount, Savings source or editable amount is offered</action>
     <action>Tap Continue and verify the USDT review shows 2 USDT, the creator's address and the fee; do not swipe to pay</action>
     <action>Close the send sheet, reopen this subscription's unpaid first period from Payments, and verify it still offers the locked 2 USDT payment; cancel without sending</action>
+    <action>Return to the Overview tab with both the Bitcoin and USD subscriptions active. Verify Monthly Cost shows one total in the selected display currency, using Bitkit's exchange rate, aligned with Active and Created rather than separate stacked amounts.</action>
   </actions>
 </journey>

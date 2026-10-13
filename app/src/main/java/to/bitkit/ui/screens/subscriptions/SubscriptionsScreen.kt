@@ -65,9 +65,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.dateTimeFormatterOf
+import to.bitkit.ext.nowMillis
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.MethodId
@@ -77,7 +79,9 @@ import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.canceledPaidThrough
+import to.bitkit.repositories.paykitRate
 import to.bitkit.repositories.runsUntilPaidThrough
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -86,7 +90,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
-import to.bitkit.ui.components.PaykitAmountCell
+import to.bitkit.ui.components.MoneyMSB
 import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -95,6 +99,7 @@ import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
+import to.bitkit.ui.components.usdtDisplaySats
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -410,7 +415,12 @@ private fun SubscriptionMetrics(monthlyCosts: ImmutableList<PaykitAmount>, activ
                     tint = Colors.Purple,
                     modifier = Modifier.size(24.dp)
                 )
-                Column { monthlyCosts.forEach { PaykitAmountCell(it) } }
+                val totalSats = subscriptionMonthlyCostSats(monthlyCosts, LocalCurrencies.current.paykitRate)
+                if (totalSats != null) {
+                    MoneyMSB(sats = totalSats, showSymbol = true)
+                } else {
+                    BodyMSB(text = "—")
+                }
             }
         }
         VerticalDivider(color = Colors.White16, modifier = Modifier.height(50.dp))
@@ -1201,6 +1211,24 @@ private fun Instant.formatShortDate(): String = dateTimeFormatterOf("MMMM d")
 
 internal val PaykitSubscription.displaySats: Long
     get() = amount.atomic.coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
+
+internal fun subscriptionMonthlyCostSats(
+    amounts: List<PaykitAmount>,
+    rate: PaykitExchangeRate?,
+    now: Long = nowMillis(),
+): Long? {
+    var total = 0L
+    for (amount in amounts) {
+        val sats = when {
+            amount.atomic == 0UL -> 0L
+            amount.asset == PaykitAsset.BTC -> amount.atomic.takeIf { it <= Long.MAX_VALUE.toULong() }?.toLong()
+            else -> usdtDisplaySats(amount.value, rate, now)
+        } ?: return null
+        if (sats > Long.MAX_VALUE - total) return null
+        total += sats
+    }
+    return total
+}
 
 internal fun subscriptionMonthlyCosts(
     subscriptions: List<PaykitSubscription>,
