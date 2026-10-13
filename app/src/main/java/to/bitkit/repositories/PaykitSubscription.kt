@@ -187,6 +187,7 @@ data class PaykitSubscription(
     val paidPeriods: List<PaykitBillingPeriod>,
     val paymentProofKinds: Map<PaykitBillingPeriod, PaykitPaymentProofKind> = emptyMap(),
     val hasPaymentDeadline: Boolean = false,
+    val proposalStreamItemId: ULong? = null,
 ) {
     val id: PaykitSubscriptionId
         get() = PaykitSubscriptionId(paymentRequestId, counterparty)
@@ -241,6 +242,7 @@ data class PaykitSubscription(
         return recurrence.periodsThrough(date, acceptedAt).map { period ->
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
+                proposalStreamItemId = proposalStreamItemId,
                 counterparty = counterparty,
                 amountValue = amountValue,
                 amountSats = amountSats,
@@ -268,6 +270,7 @@ data class PaykitSubscription(
         return paidPeriods.map { period ->
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
+                proposalStreamItemId = proposalStreamItemId,
                 counterparty = counterparty,
                 amountValue = amountValue,
                 amountSats = amountSats,
@@ -332,6 +335,7 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
     val payments = paymentProofs.mapNotNull { it.toSubscriptionPayment(recurrence) }
     return PaykitSubscription(
         paymentRequestId = paymentRequestId,
+        proposalStreamItemId = proposalStreamItemId,
         counterparty = counterparty,
         amountValue = requestTerms.amount.value,
         amountSats = amountSats,

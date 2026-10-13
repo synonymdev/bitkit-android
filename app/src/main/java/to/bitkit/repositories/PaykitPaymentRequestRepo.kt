@@ -95,6 +95,7 @@ data class PaykitPaymentRequest(
     val paymentProofKind: PaykitPaymentProofKind? = null,
     val paymentDeadlineAt: Instant? = null,
     val isPaymentInFlight: Boolean = false,
+    val proposalStreamItemId: ULong? = null,
 ) {
     enum class ParseFailure(
         val logValue: String,
@@ -987,7 +988,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                 }
             } else {
+                val proposalStreamItemId = request.proposalStreamItemId
+                    ?: throw PaykitPaymentRequestError.RequestUnavailable
                 updateRequest(request, PaymentRequestLifecycleState.ACCEPTED) {
+                    if (it.proposalStreamItemId != proposalStreamItemId) {
+                        throw PaykitPaymentRequestError.RequestUnavailable
+                    }
                     val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
                     val generation = stateGeneration.get()
                     ensurePaymentAllowed(it, forExecution = false).getOrThrow()
@@ -999,6 +1005,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         paykitSdkService.acceptPaymentRequest(
                             counterparty = it.counterparty,
                             paymentRequestId = it.paymentRequestId,
+                            expectedProposalStreamItemId = proposalStreamItemId,
                         )
                     }.onFailure { error ->
                         // Acceptance may already be committed. Reconcile before discarding its owner.
@@ -1063,10 +1070,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 val current = _subscriptions.value.firstOrNull { it.id == subscription.id }
                     ?.takeIf { it == subscription && it.isPayer && it.isProposalActionable(validationDate) }
                     ?: throw PaykitPaymentRequestError.RequestUnavailable
+                val proposalStreamItemId = subscription.proposalStreamItemId
+                    ?: throw PaykitPaymentRequestError.RequestUnavailable
                 actionVersion++
                 val record = paykitSdkService.acceptPaymentRequest(
                     current.counterparty,
                     current.paymentRequestId,
+                    proposalStreamItemId,
                 )
                 // Stored on real time, so a period the offset made due is not dropped when it turns Off.
                 val acceptanceDate = clock.now()
@@ -1856,6 +1866,7 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     now: Instant,
 ) = PaykitPaymentRequest(
     paymentRequestId = paymentRequestId,
+    proposalStreamItemId = proposalStreamItemId,
     counterparty = counterparty,
     amountValue = parsedTerms.terms.amount.value,
     amountSats = parsedTerms.amountSats,

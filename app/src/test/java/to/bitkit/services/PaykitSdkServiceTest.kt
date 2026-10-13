@@ -585,7 +585,7 @@ class PaykitSdkServiceTest {
     fun `payment mutations overtake background work without crossing signout barriers`() = runTest {
         val payments = listOf<suspend PaykitSdkService.() -> Any?>(
             { claimPaymentRequestForExecution(RING_PUBKY, "request") },
-            { acceptPaymentRequest(RING_PUBKY, "request") },
+            { acceptPaymentRequest(RING_PUBKY, "request", 1uL) },
         )
         for ((index, payment) in payments.withIndex()) {
             for (withBarrier in listOf(false, true)) {
@@ -608,7 +608,7 @@ class PaykitSdkServiceTest {
                     events += "payment"
                     mock<PaymentRequestRecord>()
                 }
-                whenever { sdk.claimAndAcceptPaymentRequest(RING_PUBKY, "request") }.thenAnswer {
+                whenever { sdk.claimAndAcceptPaymentRequest(RING_PUBKY, "request", 1uL) }.thenAnswer {
                     events += "payment"
                     mock<PaymentRequestRecord>()
                 }
@@ -632,8 +632,8 @@ class PaykitSdkServiceTest {
                     events,
                 )
                 verify(sdk, times(if (index == 0) 1 else 0)).claimPaymentRequestForExecution(RING_PUBKY, "request")
-                verify(sdk, times(if (index == 1) 1 else 0)).claimAndAcceptPaymentRequest(RING_PUBKY, "request")
-                verify(sdk, never()).acceptPaymentRequest(any(), any())
+                verify(sdk, times(if (index == 1) 1 else 0)).claimAndAcceptPaymentRequest(RING_PUBKY, "request", 1uL)
+                verify(sdk, never()).acceptPaymentRequest(any(), any(), any())
             }
         }
     }
@@ -837,13 +837,13 @@ class PaykitSdkServiceTest {
         val sdk = mock<PaykitSdk>()
         val releaseAcceptance = CompletableDeferred<Unit>()
         var acceptanceFinished = false
-        whenever { sdk.claimAndAcceptPaymentRequest(RING_PUBKY, "request") }.doSuspendableAnswer {
+        whenever { sdk.claimAndAcceptPaymentRequest(RING_PUBKY, "request", 1uL) }.doSuspendableAnswer {
             releaseAcceptance.await()
             acceptanceFinished = true
             mock()
         }
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-        val acceptance = async { service.acceptPaymentRequest(RING_PUBKY, "request") }
+        val acceptance = async { service.acceptPaymentRequest(RING_PUBKY, "request", 1uL) }
         runCurrent()
         acceptance.cancel()
         runCurrent()
@@ -852,9 +852,9 @@ class PaykitSdkServiceTest {
 
         assertFailsWith<CancellationException> { acceptance.await() }
         assertTrue(acceptanceFinished)
-        verify(sdk).claimAndAcceptPaymentRequest(RING_PUBKY, "request")
+        verify(sdk).claimAndAcceptPaymentRequest(RING_PUBKY, "request", 1uL)
         verify(sdk, never()).claimPaymentRequestForExecution(any(), any())
-        verify(sdk, never()).acceptPaymentRequest(any(), any())
+        verify(sdk, never()).acceptPaymentRequest(any(), any(), any())
         assertEquals(1L, service.backupStateVersion.value)
     }
 

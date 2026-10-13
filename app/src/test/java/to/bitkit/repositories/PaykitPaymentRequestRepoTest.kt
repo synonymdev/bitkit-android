@@ -1172,12 +1172,13 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `accept commits locally without waiting for peer delivery during payment`() = test {
-        val record = paymentRequestRecord()
+        val record = paymentRequestRecord().copy(proposalStreamItemId = 41uL)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
         whenever(
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                41uL,
             ),
         ).thenReturn(record)
         sut.refresh().getOrThrow()
@@ -1204,14 +1205,45 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(listOf(record.copy(state = PaymentRequestLifecycleState.ACCEPTED)))
         sut.refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background).getOrThrow()
         verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
-        verify(paykitSdkService, times(1)).acceptPaymentRequest(any(), any())
+        verify(paykitSdkService, times(1)).acceptPaymentRequest(COUNTERPARTY, PAYMENT_REQUEST_ID, 41uL)
+    }
+
+    @Test
+    fun `accept rejects a replacement proposal even when its terms match`() = test {
+        val original = paymentRequestRecord().copy(proposalStreamItemId = 41uL)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(original))
+        sut.refresh().getOrThrow()
+        val reviewed = sut.pendingRequests.value.single()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(original.copy(proposalStreamItemId = 42uL)))
+        sut.refresh().getOrThrow()
+
+        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> { sut.accept(reviewed).getOrThrow() }
+
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
+        verify(presentationStore, never()).addAcceptedOneTimeId(any(), any())
+        assertEquals(42uL, sut.pendingRequests.value.single().proposalStreamItemId)
+    }
+
+    @Test
+    fun `accept refuses a request without its proposal stream item`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(paymentRequestRecord().copy(proposalStreamItemId = null)))
+        sut.refresh().getOrThrow()
+
+        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> {
+            sut.accept(sut.pendingRequests.value.single()).getOrThrow()
+        }
+
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
+        verify(presentationStore, never()).addAcceptedOneTimeId(any(), any())
     }
 
     @Test
     fun `deferred acceptance delivery is discarded when identity changes`() = test {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
-        whenever(paykitSdkService.acceptPaymentRequest(any(), any())).thenReturn(record)
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any())).thenReturn(record)
         sut.refresh().getOrThrow()
         sut.setPaymentSubmissionActive(true)
         sut.accept(sut.pendingRequests.value.single()).getOrThrow()
@@ -1229,7 +1261,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val proposed = paymentRequestRecord()
         val accepted = proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
-        whenever(paykitSdkService.acceptPaymentRequest(any(), any())).thenReturn(accepted)
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any())).thenReturn(accepted)
         sut.refresh().getOrThrow()
         val request = sut.pendingRequests.value.single()
         sut.accept(request).getOrThrow()
@@ -1242,7 +1274,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.activate(LOCAL_IDENTITY)
         sut.refresh().getOrThrow()
         sut.accept(sut.pendingRequests.value.single()).getOrThrow()
-        verify(paykitSdkService, times(1)).acceptPaymentRequest(any(), any())
+        verify(paykitSdkService, times(1)).acceptPaymentRequest(any(), any(), any())
         sut.ensurePaymentAllowed(request).getOrThrow()
 
         sut.activate(SECOND_IDENTITY)
@@ -1492,7 +1524,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
         sut.refresh().getOrThrow()
         assertTrue(sut.accept(sut.pendingRequests.value.single()).isFailure)
-        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any())
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
 
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(accepted))
         sut.refresh().getOrThrow()
@@ -1513,7 +1545,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             sut.activate(LOCAL_IDENTITY)
             val proposed = paymentRequestRecord()
             whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
-            doSuspendableAnswer { throw error }.whenever(paykitSdkService).acceptPaymentRequest(any(), any())
+            doSuspendableAnswer { throw error }.whenever(paykitSdkService).acceptPaymentRequest(any(), any(), any())
             sut.refresh().getOrThrow()
             val request = sut.pendingRequests.value.single()
             assertTrue(sut.accept(request).isFailure)
@@ -1536,7 +1568,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun `final authorization requires durable ownership regardless of snapshot lifecycle`() = test {
         val proposed = paymentRequestRecord()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
-        whenever(paykitSdkService.acceptPaymentRequest(any(), any()))
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any()))
             .thenReturn(proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED))
         val saving = CompletableDeferred<Unit>()
         val saved = CompletableDeferred<Unit>()
@@ -1580,7 +1612,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         other.activate(LOCAL_IDENTITY)
         var record = paymentRequestRecord()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenAnswer { listOf(record) }
-        whenever(paykitSdkService.acceptPaymentRequest(any(), any())).thenAnswer {
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any())).thenAnswer {
             check(record.state == PaymentRequestLifecycleState.PROPOSED)
             record = record.copy(state = PaymentRequestLifecycleState.ACCEPTED)
             record
@@ -1612,7 +1644,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val accepting = CompletableDeferred<Unit>()
         val accepted = CompletableDeferred<Unit>()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
-        whenever(paykitSdkService.acceptPaymentRequest(any(), any())).doSuspendableAnswer {
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any())).doSuspendableAnswer {
             accepting.complete(Unit)
             accepted.await()
             proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
@@ -2548,7 +2580,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             sut.accept(request).getOrThrow()
         }
         verifyBlocking(paykitSdkService, never()) {
-            acceptPaymentRequest(COUNTERPARTY, PAYMENT_REQUEST_ID)
+            acceptPaymentRequest(COUNTERPARTY, PAYMENT_REQUEST_ID, 1uL)
         }
     }
 
@@ -2631,7 +2663,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         verify(paykitSdkService, never()).cancelPaymentRequest(any(), any(), anyOrNull())
         verify(paykitSdkService, never()).rejectPaymentRequest(any(), any(), anyOrNull())
-        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any())
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
         val guarded = listOf(
             proof.copy(hardwareRefusedForNavigation = false),
             proof.copy(hardwareDispatchDenied = true),
