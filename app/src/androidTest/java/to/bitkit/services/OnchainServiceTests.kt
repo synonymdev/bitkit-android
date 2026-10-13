@@ -181,7 +181,7 @@ class OnchainServiceTests {
                 descriptorCase = descriptorCase,
                 network = Network.REGTEST,
                 coinType = "1",
-                publicKeyPrefix = "tpub",
+                publicKeyPrefix = "xpub",
             )
         }
     }
