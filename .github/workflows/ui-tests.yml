@@ -62,8 +62,8 @@ jobs:
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
         run: |
           ./gradlew assembleDevDebug assembleDevDebugAndroidTest
-          ls -la app/build/outputs/apk/debug/
-          ls -la app/build/outputs/apk/androidTest/debug/
+          ls -la app/build/outputs/apk/dev/debug/
+          ls -la app/build/outputs/apk/androidTest/dev/debug/
 
       - name: Enable KVM
         run: |
