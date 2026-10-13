@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +23,9 @@ import to.bitkit.models.HwReceiveAddress
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
 import to.bitkit.test.annotations.ComposeUi
+import to.bitkit.ui.LocalBottomSheetOverlayState
+import to.bitkit.ui.components.BottomSheetOverlayHost
+import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.test.assertEquals
 
@@ -80,14 +84,18 @@ class ReceiveHardwareFlowTest {
     @Test
     fun receivePassphrasePromptUsesAddressVerificationCopy() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val overlayState = BottomSheetOverlayState()
 
         composeTestRule.setContent {
             AppThemeSurface {
-                ReceivePassphrasePrompt(
-                    state = HwReceiveUiState(isPassphraseRequired = true),
-                    onSubmit = {},
-                    onDismiss = {},
-                )
+                CompositionLocalProvider(LocalBottomSheetOverlayState provides overlayState) {
+                    ReceivePassphrasePrompt(
+                        state = HwReceiveUiState(isPassphraseRequired = true),
+                        onSubmit = {},
+                        onDismiss = {},
+                    )
+                    BottomSheetOverlayHost(state = overlayState)
+                }
             }
         }
 
