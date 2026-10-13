@@ -192,6 +192,7 @@ import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
 import to.bitkit.repositories.TransferRepo
+import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.repositories.WalletRepo
@@ -321,6 +322,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val legacyDirectSignupAuthUrl = "pubkyauth://signup?hs=homeserver&st=invite"
     private val grantSignupAuthUrl = "pubkyauth://signup_grant?hs=homeserver&st=invite&cid=shop.pubky.app"
 
+    private val usdtEnabled = MutableStateFlow(true)
+    private val usdtPreferences: UsdtPreferencesRepo = mock {
+        on { enabled }.thenReturn(usdtEnabled)
+        on { visible }.thenReturn(flowOf(true))
+    }
     private val timedSheetManager = mock<TimedSheetManager>()
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
 
@@ -343,6 +349,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun tearDown() {
         sut.stopPaykitPaymentRequestPolling()
         App.currentActivity = null
+    }
+
+    @Test
+    fun `new USDT action waits for explicit enable and resumes exactly once`() = test {
+        usdtEnabled.value = false
+        runCurrent()
+        var continuations = 0
+        sut.requestUsdtEnable { continuations++ }
+        assertTrue(sut.showUsdtEnablePrompt)
+        assertEquals(0, continuations)
+        sut.dismissUsdtEnablePrompt()
+        sut.confirmUsdtEnable()
+        runCurrent()
+        assertEquals(0, continuations)
+
+        whenever(usdtPreferences.setEnabled(true)).doSuspendableAnswer {
+            usdtEnabled.value = true
+            Result.success(Unit)
+        }
+        sut.requestUsdtEnable { continuations++ }
+        sut.confirmUsdtEnable()
+        runCurrent()
+        assertEquals(1, continuations)
+        assertFalse(sut.showUsdtEnablePrompt)
+        sut.confirmUsdtEnable()
+        runCurrent()
+        assertEquals(1, continuations)
     }
 
     @Test
@@ -565,7 +598,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any()) }
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.reconcileReservedReceiveIndexes() }
             .thenReturn(Result.success(Unit))
@@ -663,6 +696,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         backupSheet = mock(),
         notificationsSheet = mock(),
         quickPaySheet = mock(),
+        usdtSheet = mock(),
+        usdtPreferences = usdtPreferences,
         highBalanceSheet = mock(),
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
@@ -1157,18 +1192,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceTimeBy(1.seconds.inWholeMilliseconds)
             runCurrent()
             verify(paykitPaymentRequestRepo).refresh(any())
-            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints(any(), any())
+            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints(any(), any(), any())
             verify(paykitPaymentProofRepo, never()).reconcile()
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), eq(true))
 
             repeat(5) { verifyPaymentRequestPollingInterval() }
-            verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(any(), any())
+            verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(any(), any(), any())
             verify(paykitPaymentProofRepo).reconcile()
             verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
 
             advanceTimeBy(120.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(privatePaykitRepo, times(3)).refreshKnownSavedContactEndpoints(any(), any())
+            verify(privatePaykitRepo, times(3)).refreshKnownSavedContactEndpoints(any(), any(), any())
             verify(paykitPaymentProofRepo, times(3)).reconcile()
         } finally {
             sut.stopPaykitPaymentRequestPolling()
@@ -11887,7 +11922,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactWork.await()
             Result.success(Unit)
         }
-        whenever(privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any())).doSuspendableAnswer {
+        whenever(privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any())).doSuspendableAnswer {
             contactWork.await()
             Result.success(Unit)
         }

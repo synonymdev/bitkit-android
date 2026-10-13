@@ -4,6 +4,8 @@ The journey environment does not provide funded Arbitrum or cross-network accoun
 
 The drivable wallet navigation and request/subscription UI paths are in `journeys/usdt-wallet-navigation.xml` and `journeys/paykit-quoted-usdt.xml`. The manual checks below are specifications, not evidence of execution.
 
+Enable USDT through its introduction or Settings before starting payment checks. The opt-in, disable safeguards and disabled-link paths are covered by `journeys/usdt-opt-in.xml`.
+
 ## usdt bridge quotes
 
 A funded Arbitrum wallet uses the real gateway with USDT0 and Orchestra enabled. This journey obtains quotes only; do not swipe to pay or create any funded order.

@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
@@ -175,6 +176,7 @@ data class SettingsData(
     val publicPaykitLightningEnabled: Boolean = true,
     val publicPaykitOnchainEnabled: Boolean = true,
     val publicPaykitUsdtEnabled: Boolean = true,
+    val usdtPreference: UsdtPreference = UsdtPreference.UNDECIDED,
     val publicPaykitBolt11: String = "",
     val publicPaykitBolt11PaymentHash: String = "",
     val publicPaykitBolt11ExpiresAtMillis: Long = 0,
@@ -282,3 +284,18 @@ fun SettingsData.paykitDisabled(markPublicCleanupPending: Boolean = false) = cop
     publicPaykitBolt11PaymentHash = "",
     publicPaykitBolt11ExpiresAtMillis = 0,
 )
+
+@Serializable
+enum class UsdtPreference {
+    @SerialName("undecided")
+    UNDECIDED,
+
+    @SerialName("disabled")
+    DISABLED,
+
+    @SerialName("enabled")
+    ENABLED,
+}
+
+val SettingsData.isUsdtEnabled: Boolean
+    get() = Env.isUsdtEnabled && usdtPreference == UsdtPreference.ENABLED

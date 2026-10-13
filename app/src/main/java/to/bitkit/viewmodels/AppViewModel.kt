@@ -206,6 +206,7 @@ import to.bitkit.repositories.QuickPayPaymentFailedError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.TransferRepo
+import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -242,6 +243,7 @@ import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
+import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -301,6 +303,8 @@ class AppViewModel @Inject constructor(
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
     private val quickPaySheet: QuickPayTimedSheet,
+    private val usdtSheet: UsdtTimedSheet,
+    private val usdtPreferences: UsdtPreferencesRepo,
     private val highBalanceSheet: HighBalanceTimedSheet,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
@@ -424,6 +428,45 @@ class AppViewModel @Inject constructor(
     private val contactPaymentContextLock = Any()
     private var activeContactPaymentContext: ContactPaymentContext? = null
     val usdtWallet = usdtRepo.state
+    val isUsdtEnabled = usdtPreferences.enabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val isUsdtVisible = usdtPreferences.visible.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    var showUsdtEnablePrompt by mutableStateOf(false)
+        private set
+    private var pendingUsdtAction: (suspend () -> Unit)? = null
+    private var isEnablingUsdt = false
+
+    fun requestUsdtEnable(onEnabled: suspend () -> Unit) {
+        if (isUsdtEnabled.value) {
+            viewModelScope.launch { onEnabled() }
+            return
+        }
+        pendingUsdtAction = onEnabled
+        showUsdtEnablePrompt = true
+    }
+
+    fun dismissUsdtEnablePrompt() {
+        showUsdtEnablePrompt = false
+        pendingUsdtAction = null
+    }
+
+    fun confirmUsdtEnable() {
+        val action = pendingUsdtAction ?: return
+        if (isEnablingUsdt) return
+        isEnablingUsdt = true
+        viewModelScope.launch {
+            try {
+                usdtPreferences.setEnabled(true).onSuccess {
+                    isUsdtEnabled.first { it }
+                    if (pendingUsdtAction !== action) return@onSuccess
+                    dismissUsdtEnablePrompt()
+                    action()
+                }.onFailure { toast(it) }
+            } finally {
+                isEnablingUsdt = false
+            }
+        }
+    }
+
     var isPaykitUsdtBusy by mutableStateOf(false)
         private set
 
@@ -467,6 +510,7 @@ class AppViewModel @Inject constructor(
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
         registerSheet(appUpdateSheet)
+        registerSheet(usdtSheet)
         registerSheet(backupSheet)
         registerSheet(notificationsSheet)
         registerSheet(quickPaySheet)
@@ -545,6 +589,15 @@ class AppViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
+        viewModelScope.launch {
+            settingsStore.data.map { it.usdtPreference }.distinctUntilChanged().collect {
+                updateCanSwitchWallet()
+                if (isPaykitEnabled.value) {
+                    refreshPublicPaykitEndpointsIfEnabled()
+                    refreshPrivatePaykitEndpointsIfEnabled("USDT preference", requeueActive = true)
+                }
+            }
+        }
         viewModelScope.launch {
             ToastEventBus.events.collect {
                 toast(it)
@@ -879,6 +932,7 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshPrivatePaykitEndpointsIfEnabled(
         reason: String,
         forceRefreshLightning: Boolean = false,
+        requeueActive: Boolean = false,
     ) {
         val contactKeys = pubkyRepo.contacts.value.map { it.publicKey }
         retryPendingPaykitEndpointRemoval(contactKeys, reason)
@@ -890,7 +944,11 @@ class AppViewModel @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
             }
-        privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
+        privatePaykitRepo.refreshKnownSavedContactEndpoints(
+            reason,
+            forceRefreshLightning = forceRefreshLightning,
+            requeueActive = requeueActive,
+        )
         if (isPaymentRequestPollingStopped.value) return
         refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
         if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
@@ -3239,13 +3297,30 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun needsUsdtEnable(hasUsdt: Boolean, resumesPayment: Boolean, usdtOnly: Boolean) =
+        hasUsdt && !isUsdtEnabled.value && !resumesPayment && usdtOnly
+
+    private fun enableUsdtForContactPayment(payment: ContactPaymentContext, fromMainScanner: Boolean) {
+        requestUsdtEnable {
+            if (synchronized(contactPaymentContextLock) { activeContactPaymentContext } == payment) {
+                openPaykitEndpoints(payment, fromMainScanner)
+            }
+        }
+    }
+
     private suspend fun openPaykitEndpoints(payment: ContactPaymentContext, fromMainScanner: Boolean) {
         val decoded = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
             .map { coreService.decode(it.paymentRequest) }
         val address = decoded.filterIsInstance<Scanner.OnChain>().lastOrNull()?.invoice?.address.orEmpty()
         val invoice = decoded.filterIsInstance<Scanner.Lightning>().lastOrNull()?.invoice
         val lnurl = decoded.filterIsInstance<Scanner.LnurlPay>().lastOrNull()?.let { LnurlParams.LnurlPay(it.data) }
-        val recipient = payment.endpoints.firstOrNull { it.methodId == MethodId.UsdtArbitrum }?.value
+        val usdtEndpoint = payment.endpoints.firstOrNull { it.methodId == MethodId.UsdtArbitrum }
+        val resumesUsdtPayment = payment.incomingPaymentRequest?.let { paykitUsdtPayments.hasBinding(it.id) } == true
+        if (needsUsdtEnable(usdtEndpoint != null, resumesUsdtPayment, decoded.isEmpty())) {
+            enableUsdtForContactPayment(payment, fromMainScanner)
+            return
+        }
+        val recipient = usdtEndpoint?.value?.takeIf { isUsdtEnabled.value || resumesUsdtPayment }
         val hasBitcoinEndpoint = address.isNotEmpty() || invoice != null || lnurl != null
         val useUsdt = recipient != null && prefersUsdt(payment, hasBitcoinEndpoint)
         _sendUiState.update {
@@ -3965,6 +4040,10 @@ class AppViewModel @Inject constructor(
             )
             return
         }
+        if (!isUsdtEnabled.value) {
+            requestUsdtEnable { handleUsdtPaymentInput(input) }
+            return
+        }
         val amount = request.amount?.let { PaykitAmount(PaykitAsset.USDT, it).value }.orEmpty()
         hideSheet()
         mainScreenEffect(MainScreenEffect.Navigate(Routes.UsdtPayment(request.recipient, amount)))
@@ -4497,7 +4576,9 @@ class AppViewModel @Inject constructor(
                     )
                 )
             }
-            add(SendFundingOption(SendFundingSource.Usdt, enabled = SendFundingSource.Usdt in enabled))
+            if (isUsdtEnabled.value || state.paykitUsesUsdt) {
+                add(SendFundingOption(SendFundingSource.Usdt, enabled = SendFundingSource.Usdt in enabled))
+            }
         }.toImmutableList()
     }
 

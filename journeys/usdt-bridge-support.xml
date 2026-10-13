@@ -1,6 +1,7 @@
 <journey name="usdt bridge support">
   <description>Use an onboarded wallet with an outbound cross-network transfer and an Orchestra deposit in its history. Existing history or a provider fixture is sufficient; do not submit a payment or support request.</description>
   <actions>
+    <action>Enable USDT in the introductory sheet or Settings, General, Payments before starting this flow.</action>
     <action>Open USDT from Home, then open a cross-network transfer in Activity.</action>
     <action>Tap Details (id "UsdtActivityDetails"), then verify the source transaction is displayed. For an Orchestra transfer, verify the bridge reference is also displayed.</action>
     <action>Tap Copy Details (id "UsdtCopyDetails"). Verify the clipboard contains the bridge, networks, status and available transaction references.</action>

@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -210,7 +211,7 @@ fun SendAmountContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .gradientBackground()
+            .then(if (uiState.paykitUsesUsdt) Modifier.background(Colors.Gray7) else Modifier.gradientBackground())
             .navigationBarsPadding()
             .testTag("send_amount_screen")
     ) {

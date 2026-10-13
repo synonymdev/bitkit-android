@@ -48,12 +48,14 @@ fun Display(
     modifier: Modifier = Modifier,
     fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
+    letterSpacing: TextUnit = (-1).sp,
 ) {
     Text(
         text = text.toUpperCase(),
         style = AppTextStyles.Display.merge(
             fontSize = fontSize,
             lineHeight = fontSize,
+            letterSpacing = letterSpacing,
             color = color,
         ),
         modifier = modifier
@@ -182,9 +184,11 @@ fun BodyM(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     BodyM(
         text = AnnotatedString(text),
+        letterSpacing = letterSpacing,
         color = color,
         modifier = modifier,
         textAlign = textAlign,
@@ -203,10 +207,12 @@ fun BodyM(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     Text(
         text = text,
         style = AppTextStyles.BodyM.merge(
+            letterSpacing = letterSpacing,
             color = color,
             textAlign = textAlign,
         ),
@@ -225,9 +231,11 @@ fun BodyMSB(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
     textAlign: TextAlign = TextAlign.Start,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     BodyMSB(
         text = AnnotatedString(text),
+        letterSpacing = letterSpacing,
         color = color,
         maxLines = maxLines,
         overflow = overflow,
@@ -244,10 +252,12 @@ fun BodyMSB(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
     textAlign: TextAlign = TextAlign.Start,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     Text(
         text = text,
         style = AppTextStyles.BodyMSB.merge(
+            letterSpacing = letterSpacing,
             color = color,
             textAlign = textAlign,
         ),
@@ -286,9 +296,11 @@ fun BodyS(
     textAlign: TextAlign = TextAlign.Start,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     BodyS(
         text = AnnotatedString(text),
+        letterSpacing = letterSpacing,
         color = color,
         textAlign = textAlign,
         maxLines = maxLines,
@@ -305,10 +317,12 @@ fun BodyS(
     textAlign: TextAlign = TextAlign.Start,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     Text(
         text = text,
         style = AppTextStyles.BodyS.merge(
+            letterSpacing = letterSpacing,
             color = color,
             textAlign = textAlign,
         ),

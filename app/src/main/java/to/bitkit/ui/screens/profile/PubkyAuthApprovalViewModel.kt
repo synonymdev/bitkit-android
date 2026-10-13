@@ -14,9 +14,12 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.SettingsStore
+import to.bitkit.data.isUsdtEnabled
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthPermission
@@ -43,6 +46,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo,
     private val usdtRepo: UsdtRepo,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
     companion object {
         private const val TAG = "PubkyAuthApprovalVM"
@@ -98,7 +102,9 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                     profile = approvalProfile(),
                 )
             }
-            loadUsdtAddress(authUrl)
+            val usdtEnabled = settingsStore.data.first().isUsdtEnabled
+            _uiState.update { it.copy(shareUsdt = usdtEnabled) }
+            if (usdtEnabled) loadUsdtAddress(authUrl)
         }
     }
 
@@ -111,6 +117,10 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         if (_uiState.value.authUrl != authUrl || _uiState.value.bitkitClaim?.sharesUsdt != true) return
         _uiState.update { it.copy(usdtAddress = null, usdtUnavailable = false) }
         viewModelScope.launch {
+            if (!settingsStore.data.first().isUsdtEnabled) {
+                _uiState.update { it.copy(shareUsdt = false) }
+                return@launch
+            }
             val address = usdtRepo.paymentEndpoint().getOrNull()?.value
             _uiState.update {
                 if (it.authUrl == authUrl) {
@@ -291,7 +301,11 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     }
 
     private suspend fun validatedUsdtEndpoint(request: PubkyAuthRequest): Endpoint? {
-        if (request.bitkitClaim?.sharesUsdt != true || !_uiState.value.shareUsdt) return null
+        if (request.bitkitClaim?.sharesUsdt != true || !_uiState.value.shareUsdt ||
+            !settingsStore.data.first().isUsdtEnabled
+        ) {
+            return null
+        }
         return usdtRepo.paymentEndpoint().getOrThrow().also {
             if (it.value != _uiState.value.usdtAddress) throw PubkyAuthRequestError.InvalidPaymentDetails
         }

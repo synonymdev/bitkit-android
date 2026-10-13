@@ -9,6 +9,7 @@ import com.synonym.paykit.PubkyAuthCompanionClaimApprovalException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.Json
@@ -31,6 +32,8 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.data.SettingsData
+import to.bitkit.data.UsdtPreference
 import to.bitkit.models.PaykitUsdt
 import to.bitkit.models.PreparedWatchOnlyAccountClaim
 import to.bitkit.models.PubkyAuthClaim
@@ -977,6 +980,13 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         pubkyRepo = pubkyRepo,
         watchOnlyAccountRepo = watchOnlyAccountRepo,
         usdtRepo = usdtRepo,
+        settingsStore = mock {
+            on { data }.thenReturn(
+                flowOf(
+                    SettingsData(usdtPreference = UsdtPreference.ENABLED)
+                )
+            )
+        },
     )
 
     private fun authRequest(

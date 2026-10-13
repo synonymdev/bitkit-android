@@ -1,6 +1,7 @@
 <journey name="usdt receive amount and units">
   <description>Use an onboarded wallet with USDT configured and a fresh BTC/USD rate. No payment is submitted. Cross-network estimates require a live enabled provider and are covered by the manual USDT checks.</description>
   <actions>
+    <action>Enable USDT in the introductory sheet or Settings, General, Payments before starting this flow.</action>
     <action>Open USDT from Home. Verify the USDT balance, teal Tether icon and existing activity rows.</action>
     <action>Open Receive. Verify Receive Dollars, the USDT tab and Network: Arbitrum One on the QR screen.</action>
     <action>Tap Edit, enter 5 and tap Back. Verify the QR has no uint256 amount.</action>

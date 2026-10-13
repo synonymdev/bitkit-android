@@ -1,10 +1,10 @@
 package to.bitkit.ui.screens.wallets.usdt
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -19,8 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -90,7 +88,6 @@ import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.HourglassAnimation
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.sheets.NewTransactionSheetView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -126,6 +123,21 @@ internal fun UsdtPaymentContent(
 ) {
     if (page == UsdtPage.WALLET) return
 
+    var showNetworks by rememberSaveable { mutableStateOf(false) }
+    if (showNetworks) {
+        BackHandler { showNetworks = false }
+        UsdtNetworkPicker(
+            destination,
+            destinations,
+            onSelect = { network ->
+                showNetworks = false
+                onDestinationChange?.invoke(network)
+            },
+            onBack = { showNetworks = false },
+        )
+        return
+    }
+    val onNetworkClick: (() -> Unit)? = onDestinationChange?.let { { showNetworks = true } }
     val quote = state.quote
     val status = wallet.transfers.firstOrNull { it.id == quote?.id }?.status
     val completed = state.submitted && !state.busy && status == UsdtTransferStatus.CONFIRMED
@@ -199,7 +211,7 @@ internal fun UsdtPaymentContent(
                 onMaximum,
                 hideBalance,
                 amountEditable,
-                onDestinationChange,
+                onNetworkClick,
                 destinations
             )
             page == UsdtPage.MANUAL -> UsdtManualContent(
@@ -208,7 +220,7 @@ internal fun UsdtPaymentContent(
                 onRecipientChange,
                 onRecipientContinue,
                 state.error,
-                onDestinationChange,
+                onNetworkClick,
                 destinations
             )
             else -> UsdtRecipientContent(
@@ -216,7 +228,7 @@ internal fun UsdtPaymentContent(
                 onRecipientContinue,
                 onPageChange,
                 state.error,
-                onDestinationChange,
+                onNetworkClick,
                 destinations
             )
         }
@@ -270,7 +282,7 @@ private fun ColumnScope.UsdtSubmittedContent(
 @Composable
 private fun UsdtNetwork(
     destination: UsdtDestination,
-    onChange: ((UsdtDestination) -> Unit)?,
+    onChange: (() -> Unit)?,
     destinations: ImmutableList<UsdtDestination>
 ) {
     SendCell(caption = stringResource(R.string.usdt__network)) {
@@ -281,30 +293,19 @@ private fun UsdtNetwork(
 @Composable
 private fun UsdtNetworkButton(
     destination: UsdtDestination,
-    onChange: ((UsdtDestination) -> Unit)?,
+    onChange: (() -> Unit)?,
     destinations: ImmutableList<UsdtDestination>
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.height(28.dp).background(Colors.White06, CircleShape)
-                .border(1.dp, Colors.White10, CircleShape)
-                .clickable(enabled = onChange != null && destinations.size > 1) { expanded = true }
-                .padding(horizontal = 8.dp).testTag("UsdtNetwork")
-        ) {
-            Icon(painterResource(R.drawable.usdt_network), null, tint = Colors.Usdt, modifier = Modifier.size(16.dp))
-            CaptionB(destination.label, color = Colors.White64, maxLines = 1)
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Colors.Gray6) {
-            destinations.forEach { network ->
-                DropdownMenuItem(text = { BodySSB(network.label) }, onClick = {
-                    expanded = false
-                    onChange?.invoke(network)
-                })
-            }
-        }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.height(28.dp).background(Colors.White06, CircleShape)
+            .border(1.dp, Colors.White10, CircleShape)
+            .clickable(enabled = onChange != null && destinations.size > 1) { onChange?.invoke() }
+            .padding(horizontal = 8.dp).testTag("UsdtNetwork")
+    ) {
+        Icon(painterResource(R.drawable.usdt_network), null, tint = Colors.Usdt, modifier = Modifier.size(16.dp))
+        CaptionB(destination.label, color = Colors.White64, maxLines = 1)
     }
 }
 
@@ -314,15 +315,18 @@ private fun UsdtRecipientContent(
     onRecipientContinue: (String) -> Unit,
     onPageChange: (UsdtPage) -> Unit,
     error: Int?,
-    onDestinationChange: ((UsdtDestination) -> Unit)?,
+    onNetworkClick: (() -> Unit)?,
     destinations: ImmutableList<UsdtDestination>,
 ) {
     val context = LocalContext.current
     var emptyClipboard by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
-        UsdtNetwork(destination, onDestinationChange, destinations)
+        UsdtNetwork(destination, onNetworkClick, destinations)
         if (!LocalInspectionMode.current) {
             QrScanningScreen(
+                showsGradientBackground = false,
+                permissionDescription = stringResource(R.string.usdt__camera_permission_description),
+                permissionAccentColor = Colors.Usdt,
                 onScanSuccess = { it.text?.trim()?.let(onRecipientContinue) },
                 modifier = Modifier.weight(1f)
             )
@@ -366,13 +370,13 @@ private fun UsdtManualContent(
     onRecipientChange: (String) -> Unit,
     onRecipientContinue: (String) -> Unit,
     error: Int?,
-    onDestinationChange: ((UsdtDestination) -> Unit)?,
+    onNetworkClick: (() -> Unit)?,
     destinations: ImmutableList<UsdtDestination>,
 ) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     Column(modifier = Modifier.fillMaxSize()) {
-        UsdtNetwork(destination, onDestinationChange, destinations)
+        UsdtNetwork(destination, onNetworkClick, destinations)
         VerticalSpacer(16.dp)
         Caption13Up(stringResource(R.string.wallet__send_to), color = Colors.White64)
         VerticalSpacer(8.dp)
@@ -407,7 +411,7 @@ private fun UsdtAmountContent(
     onMaximum: (() -> Unit)?,
     hideBalance: Boolean,
     amountEditable: Boolean,
-    onDestinationChange: ((UsdtDestination) -> Unit)?,
+    onNetworkClick: (() -> Unit)?,
     destinations: ImmutableList<UsdtDestination>,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -444,10 +448,10 @@ private fun UsdtAmountContent(
                     modifier = Modifier.testTag("UsdtMax")
                 )
             }
-            if (onDestinationChange != null) {
+            if (onNetworkClick != null) {
                 UsdtNetworkButton(
                     destination,
-                    onDestinationChange.takeUnless { state.busy },
+                    onNetworkClick.takeUnless { state.busy },
                     destinations,
                 )
             }
@@ -695,7 +699,7 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
 private fun Preview2() {
     AppThemeSurface {
         BottomSheetPreview {
-            Column(modifier = Modifier.sheetHeight().gradientBackground()) {
+            Column(modifier = Modifier.sheetHeight().background(Colors.Gray7)) {
                 UsdtPaymentContent(
                     UsdtWalletState(), UsdtSendState(), UsdtPage.AMOUNT, "", "125", UsdtDestination.ARBITRUM,
                     {}, {}, {}, {}, {}, {}, {}, {}

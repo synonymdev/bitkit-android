@@ -36,14 +36,14 @@ internal fun ColumnScope.UsdtReceiveAmountContent(
     onAmount: (String) -> Unit,
     onContinue: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.SpaceBetween, modifier = Modifier.heightIn(min = 156.dp)) {
+    Column(verticalArrangement = Arrangement.SpaceBetween, modifier = Modifier.heightIn(min = 146.dp)) {
         UsdtAmountHeader(amount.ifEmpty { "0" })
         depositAmountMessage(amount, limits, error)?.let { message ->
             BodyS(message, color = Colors.Brand, modifier = Modifier.padding(vertical = 16.dp))
         }
     }
     HorizontalDivider()
-    VerticalSpacer(24.dp)
+    VerticalSpacer(34.dp)
     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
         NumberPad(
             type = NumberPadType.DECIMAL,

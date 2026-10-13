@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -25,7 +26,7 @@ import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendUiState
 import kotlin.time.Duration.Companion.seconds
@@ -86,7 +87,7 @@ fun PaykitUsdtReview(
         UsdtActivityDetail(transfer, settings.hideBalance, wallet.address) { details = false }
     } else {
         Column(
-            Modifier.sheetHeight().gradientBackground()
+            Modifier.sheetHeight().background(Colors.Gray7)
         ) {
             if (state.authenticationRequired) {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {

@@ -28,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -74,6 +76,7 @@ import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.SheetDragHandle
 import to.bitkit.ui.components.SheetHandlePlacement
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.TabBar
@@ -81,6 +84,7 @@ import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.common.ComingSoonScreen
 import to.bitkit.ui.screens.contacts.AddContactScreen
 import to.bitkit.ui.screens.contacts.AddContactViewModel
@@ -221,6 +225,7 @@ import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
+import to.bitkit.ui.sheets.UsdtIntroSheet
 import to.bitkit.ui.sheets.WidgetsSheet
 import to.bitkit.ui.sheets.hardware.HardwareSheet
 import to.bitkit.ui.theme.Colors
@@ -473,6 +478,18 @@ fun ContentView(
         LocalCurrencies provides currencies,
     ) {
         AutoReadClipboardHandler()
+        if (appViewModel.showUsdtEnablePrompt) {
+            AppAlertDialog(
+                title = stringResource(R.string.usdt__enable_title),
+                text = stringResource(R.string.usdt__enable_description),
+                confirmText = stringResource(R.string.usdt__enable),
+                confirmTestTag = "UsdtEnablePromptContinue",
+                dismissTestTag = "UsdtEnablePromptCancel",
+                onConfirm = appViewModel::confirmUsdtEnable,
+                onDismiss = appViewModel::dismissUsdtEnablePrompt,
+                modifier = Modifier.testTag("UsdtEnablePrompt")
+            )
+        }
 
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
@@ -488,6 +505,14 @@ fun ContentView(
         val hwSendViewModel = hiltViewModel<HwSendViewModel>()
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
         var receiveBlocking by remember(currentSheet) { mutableStateOf(false) }
+        var receiveUsdt by remember(currentSheet) { mutableStateOf(false) }
+        val sendState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+        val isUsdtSheet = when (val sheet = currentSheet) {
+            is Sheet.TimedSheet -> sheet.type == TimedSheetType.USDT
+            is Sheet.Receive -> receiveUsdt
+            is Sheet.Send -> sendState.paykitUsesUsdt
+            else -> false
+        }
         val canDismissSheet = !receiveBlocking && (
             currentSheet !is Sheet.Send ||
                 (hwSendUiState.canLeave && !appViewModel.isPaykitUsdtBusy)
@@ -524,15 +549,16 @@ fun ContentView(
                     !isAcceptingSubscription &&
                     !isRetryingInitialSubscriptionPayment &&
                     canDismissSheet,
+                sheetDragHandle = { SheetDragHandle(topPadding = if (isUsdtSheet) 8.dp else 12.dp) },
                 sheetHandlePlacement = when (currentSheet) {
                     is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
                     else -> SheetHandlePlacement.ScaffoldSlot
                 },
-                sheetContainerColor = when (currentSheet) {
-                    is Sheet.Widgets -> Colors.Gray7
+                sheetContainerColor = when {
+                    isUsdtSheet || currentSheet is Sheet.Widgets -> Colors.Gray7
                     // Meet the top of the subscription sheets' own gradient, so the grabber strip
                     // does not sit a shade darker than the content right below it.
-                    is Sheet.Subscription -> Colors.Gray6
+                    currentSheet is Sheet.Subscription -> Colors.Gray6
                     else -> DefaultSheetContainerColor
                 },
                 sheets = {
@@ -559,6 +585,7 @@ fun ContentView(
                                     startRoute = sheet.route,
                                     initialTab = sheet.initialTab,
                                     onBlockingChange = { receiveBlocking = it },
+                                    onUsdtSelected = { receiveUsdt = it },
                                     hardwareWalletId = sheet.hardwareWalletId,
                                     walletState = walletState,
                                     isOffline = connectivityState != ConnectivityState.CONNECTED,
@@ -626,6 +653,18 @@ fun ContentView(
                         )
                         is Sheet.TimedSheet -> {
                             when (sheet.type) {
+                                TimedSheetType.USDT -> UsdtIntroSheet(
+                                    onDecline = {
+                                        settingsViewModel.setUsdtEnabled(
+                                            false
+                                        ) { appViewModel.dismissTimedSheet() }
+                                    },
+                                    onEnable = {
+                                        settingsViewModel.setUsdtEnabled(
+                                            true
+                                        ) { appViewModel.dismissTimedSheet() }
+                                    },
+                                )
                                 TimedSheetType.APP_UPDATE -> {
                                     UpdateSheet(onCancel = { appViewModel.dismissTimedSheet() })
                                 }

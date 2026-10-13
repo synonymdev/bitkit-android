@@ -1,6 +1,6 @@
 # USDT configuration
 
-Normal builds use published bitkit-core `0.8.0-rc4`, including its matching native libraries and generated bindings.
+Normal builds use published bitkit-core `0.8.0-rc5`, including its matching native libraries and generated bindings.
 
 USDT uses Arbitrum One regardless of the Bitcoin network setting. Builds use the credential-free Bitkit gateway by default:
 
@@ -28,6 +28,12 @@ USDT amounts can be entered with up to six decimal places. Overview and review a
 MAX reserves the quoted USDT fee and reuses that funded quote for payment review. It requires the gateway to support Core's pinned USDT balance override during gas estimation. That override is not used for final authorization or transaction submission.
 
 History catch-up is deferred while the USDT send sheet is open. Balance and pending-payment recovery continue; a history scan already in progress is allowed to finish. Unknown deposit-provider statuses require attention instead of appearing as ordinary pending deposits. Cross-network payment details label the recipient amount as expected until delivery is confirmed.
+
+## Enabling USDT
+
+USDT starts off. The introductory sheet offers Enable USDT and No Thanks; dismissing it without a choice allows it to return next launch. Settings > General > Payments > USDT (Tether) changes the choice later.
+
+When off, new USDT payment choices, Paykit offers and optional address sharing are hidden. Opening an explicit USDT link or request asks to enable it before continuing. Disabling requires a fresh empty balance and no unresolved transfers or deposits. Existing funds, pending payments and restored history with an unknown balance remain visible; payment tracking, history and encrypted backups continue. Previously shared addresses cannot be revoked.
 
 ## Paykit
 

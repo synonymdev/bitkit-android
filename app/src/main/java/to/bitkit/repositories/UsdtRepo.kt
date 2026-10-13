@@ -58,7 +58,9 @@ class UsdtRepo @Inject constructor(
     suspend fun refresh(history: Boolean, force: Boolean = false) = withContext(ioDispatcher) {
         mutex.withLock {
             val refreshAfter = if (force) rateLimitedUntil else maxOf(nextRefresh, rateLimitedUntil)
-            if (nowMillis() < refreshAfter) return@withLock Result.success(Unit)
+            if (nowMillis() < refreshAfter) {
+                return@withLock if (force) Result.failure(UsdtException.RateLimited()) else Result.success(Unit)
+            }
             runSuspendCatching {
                 val wallet = service.wallet()
                 val address = wallet.receiveAddress()

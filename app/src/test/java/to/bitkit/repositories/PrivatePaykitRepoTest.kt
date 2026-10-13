@@ -2620,6 +2620,33 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `payment option changes requeue an active contact publication`() = test {
+        settingsData.value = SettingsData(
+            publicPaykitUsdtEnabled = false,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+        )
+        val publicationStarted = CompletableDeferred<Unit>()
+        val resumePublication = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), eq(false))) doSuspendableAnswer {
+            if (!publicationStarted.isCompleted) {
+                publicationStarted.complete(Unit)
+                resumePublication.await()
+            }
+            privateListDeliveryReport()
+        }
+        sut.enableSharingAndPrepareSavedContacts({ listOf(CONTACT_KEY) }).getOrThrow()
+        runCurrent()
+        assertTrue(publicationStarted.isCompleted)
+        sut.refreshKnownSavedContactEndpoints("payment options", requeueActive = true).getOrThrow()
+        resumePublication.complete(Unit)
+        runCurrent()
+        sut.awaitContactPreparation()
+        verify(paykitSdkService, times(2)).syncPrivatePaymentListsWithReservations(any(), eq(false))
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `profile deletion stops preparation and avoids repeated withdrawal`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,

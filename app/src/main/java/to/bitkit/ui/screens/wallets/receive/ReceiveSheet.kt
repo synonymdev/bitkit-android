@@ -70,6 +70,7 @@ fun ReceiveSheet(
     startRoute: ReceiveRoute = ReceiveRoute.QR,
     initialTab: ReceiveTab? = null,
     onBlockingChange: (Boolean) -> Unit = {},
+    onUsdtSelected: (Boolean) -> Unit = {},
     hardwareWalletId: String? = null,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     paymentRequestAmountViewModel: AmountInputViewModel = hiltViewModel(key = "PaymentRequestAmount"),
@@ -153,6 +154,7 @@ fun ReceiveSheet(
             ) {
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
                     ReceiveQrScreen(
+                        onUsdtSelected = onUsdtSelected,
                         cjitInvoice = cjitSessionState.cjitInvoice,
                         walletState = walletState,
                         lightningState = lightningState,

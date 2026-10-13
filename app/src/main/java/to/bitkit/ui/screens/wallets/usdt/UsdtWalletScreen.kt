@@ -78,7 +78,6 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -88,7 +87,6 @@ import kotlin.time.Duration.Companion.seconds
 fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = hiltViewModel()) {
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    UsdtRefreshEffect(viewModel, pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING })
     WalletBalanceContent(
         title = "USDT",
         icon = {
@@ -186,14 +184,18 @@ fun UsdtWalletScreen(
             error = state.refreshError,
             hideBalance = settings.hideBalance,
             onReceive = {
-                viewModel.edit()
-                app?.showSheet(Sheet.Receive(initialTab = ReceiveTab.USDT))
+                app?.requestUsdtEnable {
+                    viewModel.edit()
+                    app.showSheet(Sheet.Receive(initialTab = ReceiveTab.USDT))
+                }
             },
             onSend = {
-                recipient = ""
-                amount = ""
-                viewModel.edit()
-                page = UsdtPage.RECIPIENT
+                app?.requestUsdtEnable {
+                    recipient = ""
+                    amount = ""
+                    viewModel.edit()
+                    page = UsdtPage.RECIPIENT
+                }
             },
             onBack = onBack,
             onActivityClick = { selectedTransferId = it.id },
@@ -217,10 +219,15 @@ fun UsdtWalletScreen(
             skipPartiallyExpanded = true,
             confirmValueChange = { it != SheetValue.Hidden || !blocked },
         )
-        BottomSheet(onDismissRequest = dismiss, sheetState = sheetState) {
+        BottomSheet(
+            onDismissRequest = dismiss,
+            sheetState = sheetState,
+            containerColor = Colors.Gray7,
+            dragHandleTopPadding = 8.dp,
+        ) {
             BackHandler(onBack = back)
             Column(
-                modifier = Modifier.sheetHeight(isModal = true).gradientBackground()
+                modifier = Modifier.sheetHeight(isModal = true).background(Colors.Gray7)
                     .navigationBarsPadding().imePadding()
                     .padding(bottom = 16.dp)
             ) {

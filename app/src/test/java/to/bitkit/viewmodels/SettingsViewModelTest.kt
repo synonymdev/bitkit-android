@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -273,6 +274,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         widgetsStore = widgetsStore,
         widgetsRepo = widgetsRepo,
+        usdtPreferences = mock { on { enabled }.thenReturn(flowOf(false)) },
     )
 
     private class SettingsViewModelTestError(message: String) : AppError(message)

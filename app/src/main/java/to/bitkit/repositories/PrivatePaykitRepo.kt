@@ -293,9 +293,15 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private fun scheduleContactPreparation(publicKeys: Collection<String>, forceRefreshLightning: Boolean = false) {
+    private fun scheduleContactPreparation(
+        publicKeys: Collection<String>,
+        forceRefreshLightning: Boolean = false,
+        requeueActive: Boolean = false,
+    ) {
         if (isDeletingProfile) return
-        pendingPreparationKeys.addAll(publicKeys.filter { forceRefreshLightning || it !in activePreparationKeys })
+        pendingPreparationKeys.addAll(
+            publicKeys.filter { requeueActive || forceRefreshLightning || it !in activePreparationKeys }
+        )
         pendingForceRefreshLightning = pendingForceRefreshLightning || forceRefreshLightning
         if (preparationJob?.isActive == true || pendingPreparationKeys.isEmpty()) return
         preparationJob = retryScope.launch {
@@ -377,9 +383,10 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun refreshKnownSavedContactEndpoints(
         reason: String,
         forceRefreshLightning: Boolean = false,
+        requeueActive: Boolean = false,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
-            scheduleContactPreparation(knownSavedContactKeys.toList(), forceRefreshLightning)
+            scheduleContactPreparation(knownSavedContactKeys.toList(), forceRefreshLightning, requeueActive)
         }.onFailure {
             Logger.warn("Failed to refresh private Paykit endpoints for '$reason'", it, context = TAG)
         }

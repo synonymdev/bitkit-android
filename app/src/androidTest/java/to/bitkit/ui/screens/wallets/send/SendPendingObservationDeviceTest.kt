@@ -36,6 +36,7 @@ import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.LocalSettingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -77,6 +78,8 @@ class SendPendingObservationDeviceTest {
     @Inject lateinit var widgetsStore: WidgetsStore
 
     @Inject lateinit var widgetsRepo: WidgetsRepo
+
+    @Inject lateinit var usdtPreferences: UsdtPreferencesRepo
 
     @Inject lateinit var vssStoreIdProvider: VssStoreIdProvider
 
@@ -122,6 +125,7 @@ class SendPendingObservationDeviceTest {
                 contactPaymentSettingsRepo,
                 widgetsStore,
                 widgetsRepo,
+                usdtPreferences,
             )
             var recovered by mutableStateOf<Pair<String, Long>?>(null)
             composeTestRule.setContent {

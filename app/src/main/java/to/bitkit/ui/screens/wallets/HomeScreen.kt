@@ -98,6 +98,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
@@ -170,6 +171,8 @@ import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.screens.wallets.usdt.UsdtRefreshEffect
+import to.bitkit.ui.screens.wallets.usdt.UsdtViewModel
 import to.bitkit.ui.screens.wallets.usdt.UsdtWalletBalance
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.blocks.BlockCardSmall
@@ -501,6 +504,7 @@ private fun Content(
         }
     }
 
+    UsdtHomeRefreshEffect()
     val density = LocalDensity.current
     val screenHeightDp = with(density) { LocalWindowInfo.current.containerSize.height.toDp().value.toInt() }
     val isSmallScreen = screenHeightDp < SMALL_SCREEN_HEIGHT_DP
@@ -607,6 +611,14 @@ private fun countNonItemSlots(homeUiState: HomeUiState): Int {
     return bannerSlot + widgetsHintSlot
 }
 
+@Composable
+private fun UsdtHomeRefreshEffect() {
+    if (LocalInspectionMode.current || !Env.isUsdtEnabled) return
+    val viewModel = hiltViewModel<UsdtViewModel>()
+    val wallet by viewModel.wallet.collectAsStateWithLifecycle()
+    UsdtRefreshEffect(viewModel, pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING })
+}
+
 @Suppress("MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -629,17 +641,19 @@ private fun WalletPage(
     val usdt by appViewModel?.usdtWallet?.collectAsStateWithLifecycle()
         ?: remember { mutableStateOf(UsdtWalletState()) }
     val slotCapacity = if (isSmallScreen) SMALL_SCREEN_SLOT_CAPACITY else LARGE_SCREEN_SLOT_CAPACITY
+    val showUsdt = appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true
     val rate = LocalCurrencies.current.paykitRate
     val usdtSats = remember(
         usdt.balance,
+        showUsdt,
         rate
-    ) { usdt.balance?.let { usdtDisplaySats(usdtFormatAmount(it), rate) } ?: 0L }
+    ) { usdt.balance?.takeIf { showUsdt }?.let { usdtDisplaySats(usdtFormatAmount(it), rate) } ?: 0L }
     val headlineSats = BigInteger(
         balances.totalWithHardwareSats.toString()
     ).add(BigInteger.valueOf(usdtSats)).min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
-    val hasActivity = !latestActivities.isNullOrEmpty() || usdt.transfers.isNotEmpty()
+    val hasActivity = !latestActivities.isNullOrEmpty() || (showUsdt && usdt.transfers.isNotEmpty())
 
     PullToRefreshBox(
         state = pullToRefreshState,
@@ -782,7 +796,8 @@ private fun BalancesSection(
 
         AdditionalWallets(
             wallets = hardwareWallets,
-            showUsdt = !LocalInspectionMode.current && Env.isUsdtEnabled,
+            showUsdt = !LocalInspectionMode.current &&
+                (appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true),
             onClickHardwareWallet = onClickHardwareWallet,
             onClickUsdt = onClickUsdt,
         )

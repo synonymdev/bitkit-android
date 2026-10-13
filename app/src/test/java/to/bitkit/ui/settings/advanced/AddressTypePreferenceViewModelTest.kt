@@ -76,7 +76,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
                 )
             )
         )
-        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any()) }
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any()) }
             .thenReturn(Result.success(Unit))
     }
 

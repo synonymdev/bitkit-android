@@ -359,3 +359,9 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 [Figma](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49861-374947):
 Receive Dollars, network selection, amount entry, estimated fees, QR and address details share the existing Receive sheet.
 Amount entry stays in dollars with a BTC equivalent; QR and shared payment amounts preserve USDT precision. See `journeys/usdt-receive-amount-and-units.xml`.
+
+### USDT opt-in and network selection
+
+`UsdtIntroSheet.kt` implements [New: USDT](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=50228-146387). `SettingsScreen.kt` includes the [USDT (Tether) switch](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=48063-277709). Both are covered by `journeys/usdt-opt-in.xml`.
+
+`UsdtNetworkPicker.kt` shares the receive network rows with the [send network sheet](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=50231-146880); all available routes remain scrollable.

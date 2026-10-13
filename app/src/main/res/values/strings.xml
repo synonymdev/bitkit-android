@@ -1232,6 +1232,7 @@
     <string name="usdt__bridge_refunded_description">USDT was returned to your wallet. See details for the refunded amount.</string>
     <string name="usdt__bridge_submitted_description">Your payment is pending. You can track confirmation and cross-network delivery in Activity.</string>
     <string name="usdt__bridging">Delivering to destination</string>
+    <string name="usdt__camera_permission_description">Allow camera access to scan USDT payment QR codes.</string>
     <string name="usdt__confirmed">Confirmed</string>
     <string name="usdt__copy_details">Copy Details</string>
     <string name="usdt__deposit_amount">Deposit amount</string>
@@ -1267,6 +1268,11 @@
     <string name="usdt__deposit_wrong_asset">Unsupported deposit asset — contact support</string>
     <string name="usdt__destination">Recipient network</string>
     <string name="usdt__destination_tx">Destination transaction</string>
+    <string name="usdt__disable_pending">Send your remaining USDT and wait for pending transfers to finish before turning it off.</string>
+    <string name="usdt__disable_unavailable">Unable to check your USDT balance and transfers. Try again when connected.</string>
+    <string name="usdt__enable">Enable USDT</string>
+    <string name="usdt__enable_description">Enable USDT to continue with this payment or request.</string>
+    <string name="usdt__enable_title">Enable USDT?</string>
     <string name="usdt__error_address">Enter a valid address for the selected network.</string>
     <string name="usdt__error_amount">Enter a valid amount with up to 6 decimal places.</string>
     <string name="usdt__error_backup">Unable to back up this payment. It will be retried when backup is available.</string>
@@ -1291,6 +1297,10 @@
     <string name="usdt__fee_note">All fees are paid in USDT. Final fee may be lower.</string>
     <string name="usdt__from_address">From address</string>
     <string name="usdt__history_sync">Older activity is still syncing. Your balance is up to date when the connection is available.</string>
+    <string name="usdt__intro_decline">No Thanks</string>
+    <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to send and receive digital dollars with Bitkit.</string>
+    <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nYOUR CALL</string>
+    <string name="usdt__intro_title">New: USDT</string>
     <string name="usdt__maximum_fee">Maximum fee</string>
     <string name="usdt__maximum_total">Maximum total debit</string>
     <string name="usdt__network">Network</string>
@@ -1315,10 +1325,13 @@
     <string name="usdt__replaced">Replaced by another payment</string>
     <string name="usdt__send">Send</string>
     <string name="usdt__send_failed_description">Your payment was not completed. Check Activity for details.</string>
+    <string name="usdt__send_network_note">Choose the network your recipient uses.</string>
     <string name="usdt__send_title">Send USDT</string>
     <string name="usdt__sender_network">Sender network</string>
     <string name="usdt__sent">Sent</string>
     <string name="usdt__sent_title">Sent USDT</string>
+    <string name="usdt__settings_title">USDT (Tether)</string>
+    <string name="usdt__share_disabled">Enable USDT to share your receiving address.</string>
     <string name="usdt__submitted">Payment submitted</string>
     <string name="usdt__submitted_description">Your payment is being processed. You can track its status in Activity.</string>
     <string name="usdt__to_address">To address</string>

@@ -4,6 +4,7 @@ import android.content.Context
 import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.doReturn
@@ -12,6 +13,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.data.SettingsData
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
@@ -44,7 +46,14 @@ class PubkyAuthApprovalRetryTest : BaseUnitTest() {
             Result.failure(AppError(PubkyRingAuthTimeoutError())),
             Result.success(Unit),
         )
-        val sut = PubkyAuthApprovalViewModel(context, pubkyRepo, mock(), mock())
+        val sut =
+            PubkyAuthApprovalViewModel(
+                context,
+                pubkyRepo,
+                mock(),
+                mock(),
+                mock { on { data } doReturn flowOf(SettingsData()) }
+            )
 
         sut.effects.test {
             sut.load(authUrl)

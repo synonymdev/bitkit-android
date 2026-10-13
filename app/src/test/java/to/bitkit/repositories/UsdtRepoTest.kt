@@ -121,6 +121,21 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forced refresh reports cooldown instead of accepting cached balance`() = test {
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("address")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.history()).thenReturn(emptyList())
+        whenever(wallet.balance()).thenReturn(0uL)
+        whenever(wallet.refreshTransfers()).thenThrow(UsdtException.RateLimited())
+        val repo = UsdtRepo(service, testDispatcher)
+        assertTrue(repo.refresh(history = false, force = true).isFailure)
+        assertTrue(repo.refresh(history = false, force = true).exceptionOrNull() is UsdtException.RateLimited)
+        verify(wallet).balance()
+        assertTrue(repo.refresh(history = false).isSuccess)
+    }
+
+    @Test
     fun `send presentation defers history without stopping settlement and resumes after dismissal`() = test {
         whenever(service.wallet()).thenReturn(wallet)
         whenever(wallet.receiveAddress()).thenReturn("address")
@@ -296,7 +311,7 @@ class UsdtRepoTest : BaseUnitTest() {
         assertTrue(repo.waitForTransfer("limited").exceptionOrNull() is UsdtException.RateLimited)
         repo.waitForTransfer("backoff").getOrThrow()
         verify(wallet, never()).checkRecentExecution("backoff")
-        repo.refresh(true, force = true).getOrThrow()
+        assertTrue(repo.refresh(true, force = true).exceptionOrNull() is UsdtException.RateLimited)
         verify(wallet, never()).syncHistory()
     }
 

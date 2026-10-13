@@ -12,6 +12,7 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.isUsdtEnabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
@@ -132,7 +133,7 @@ class PublicPaykitRepo @Inject constructor(
             settings.publicPaykitOnchainEnabled
 
         fun isUsdtPaymentOptionEnabled(settings: SettingsData): Boolean =
-            Env.isUsdtEnabled && settings.publicPaykitUsdtEnabled
+            settings.isUsdtEnabled && settings.publicPaykitUsdtEnabled
 
         fun parseEndpoint(
             methodId: String,

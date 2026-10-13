@@ -1,17 +1,12 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -33,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -54,7 +50,6 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SendCell
@@ -67,7 +62,6 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.ActivityRowSurface
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.receive.ReceiveTab
-import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
 import java.text.NumberFormat
 import java.util.Locale
@@ -172,7 +166,9 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                 null
             },
         )
-        VerticalSpacer(16.dp)
+        VerticalSpacer(
+            if (!state.history && (page == ReceivePage.NETWORKS || page == ReceivePage.AMOUNT)) 8.dp else 16.dp
+        )
         if (page == ReceivePage.ADDRESS && !state.history) {
             CustomTabRowWithSpacing(
                 tabs = tabs,
@@ -439,13 +435,14 @@ private fun ColumnScope.NetworkSelector(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
     ) {
-        NetworkRow("Arbitrum One", state.network == null, onClick = { onNetwork(null) }, isDefault = true)
+        UsdtNetworkRow("Arbitrum One", state.network == null, onClick = { onNetwork(null) })
         state.networks.forEach { item ->
-            NetworkRow(item.label, state.network == item, onClick = { onNetwork(item) })
+            UsdtNetworkRow(item.label, state.network == item, onClick = { onNetwork(item) })
         }
         BodyS(
             stringResource(R.string.usdt__receive_network_note),
             color = Colors.White64,
+            letterSpacing = 0.sp,
             modifier = Modifier.padding(vertical = 16.dp)
         )
         UsdtCoinIllustration(modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -457,31 +454,6 @@ private fun ColumnScope.NetworkSelector(
             )
         }
         state.error?.let { BodyS(stringResource(it), color = Colors.White64) }
-    }
-}
-
-@Composable
-private fun NetworkRow(title: String, selected: Boolean, onClick: () -> Unit, isDefault: Boolean = false) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.fillMaxWidth().background(
-            Colors.Gray6,
-            RoundedCornerShape(16.dp)
-        ).clickableAlpha(onClick = onClick).padding(16.dp).testTag("UsdtNetwork-$title")
-    ) {
-        Image(painterResource(R.drawable.tether_circle), null, modifier = Modifier.size(40.dp))
-        BodyMSB(title)
-        if (isDefault) BodyS(stringResource(R.string.common__default), color = Colors.White64)
-        FillWidth()
-        if (selected) {
-            Icon(
-                painterResource(R.drawable.ic_check),
-                null,
-                tint = Colors.Usdt,
-                modifier = Modifier.size(24.dp)
-            )
-        }
     }
 }
 

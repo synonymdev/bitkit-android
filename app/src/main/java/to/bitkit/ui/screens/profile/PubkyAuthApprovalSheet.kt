@@ -87,6 +87,7 @@ fun PubkyAuthApprovalSheet(
     onDismiss: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val app = appViewModel
 
     DisposableEffect(viewModel, authUrl) {
         onDispose { viewModel.cancelLocalAuth(authUrl) }
@@ -108,7 +109,16 @@ fun PubkyAuthApprovalSheet(
                 if (uiState.authUrl == authUrl) viewModel.returnToWatchOnlyConsent(authUrl)
             },
             onRetryUsdt = { viewModel.loadUsdtAddress(authUrl) },
-            onShareUsdt = viewModel::setShareUsdt,
+            onShareUsdt = { enabled ->
+                if (enabled && app?.isUsdtEnabled?.value == false) {
+                    app.requestUsdtEnable {
+                        viewModel.setShareUsdt(true)
+                        viewModel.loadUsdtAddress(authUrl)
+                    }
+                } else {
+                    viewModel.setShareUsdt(enabled)
+                }
+            },
             onCancel = { viewModel.dismiss() },
             onDismiss = { viewModel.dismiss() },
         )
@@ -601,7 +611,9 @@ private fun PaymentDetailsSection(
                 }
             } ?: BodyS(
                 text = stringResource(
-                    if (uiState.usdtUnavailable) {
+                    if (!uiState.shareUsdt) {
+                        R.string.usdt__share_disabled
+                    } else if (uiState.usdtUnavailable) {
                         R.string.profile__auth_approval_usdt_unavailable
                     } else {
                         R.string.profile__auth_approval_usdt_loading

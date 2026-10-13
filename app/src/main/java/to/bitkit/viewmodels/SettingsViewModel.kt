@@ -28,6 +28,8 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitError
+import to.bitkit.repositories.UsdtDisableError
+import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -43,6 +45,7 @@ class SettingsViewModel @Inject constructor(
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
     private val widgetsStore: WidgetsStore,
     private val widgetsRepo: WidgetsRepo,
+    private val usdtPreferences: UsdtPreferencesRepo,
 ) : ViewModel() {
     private companion object {
         const val TAG = "SettingsViewModel"
@@ -59,6 +62,35 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun reset() = viewModelScope.launch { settingsStore.reset() }
+
+    val isUsdtEnabled = usdtPreferences.enabled.asStateFlow(initialValue = false)
+    private val _isUpdatingUsdt = MutableStateFlow(false)
+    val isUpdatingUsdt = _isUpdatingUsdt.asStateFlow()
+
+    fun setUsdtEnabled(enabled: Boolean, onSuccess: () -> Unit = {}) {
+        if (_isUpdatingUsdt.value) return
+        _isUpdatingUsdt.update { true }
+        viewModelScope.launch {
+            try {
+                usdtPreferences.setEnabled(enabled).onSuccess { onSuccess() }.onFailure {
+                    Logger.error("Failed to update USDT preference", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.usdt__settings_title),
+                        description = context.getString(
+                            if (it is UsdtDisableError) {
+                                R.string.usdt__disable_pending
+                            } else {
+                                R.string.usdt__disable_unavailable
+                            }
+                        ),
+                    )
+                }
+            } finally {
+                _isUpdatingUsdt.update { false }
+            }
+        }
+    }
 
     val hasSeenSpendingIntro = settingsStore.data.map { it.hasSeenSpendingIntro }
         .asStateFlow(initialValue = false)
