@@ -60,6 +60,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             usdtPreferences.enabled.collect { enabled ->
+                val newlyEnabled = enabled && !_uiState.value.isUsdtEnabled
                 _uiState.update { state ->
                     state.copy(
                         isUsdtEnabled = enabled,
@@ -69,11 +70,16 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                             state.bitkitClaim?.sharesBitcoin != true
                         ) {
                             ApprovalState.Authorize
+                        } else if (newlyEnabled && state.usdtRequired &&
+                            state.state == ApprovalState.Authorize
+                        ) {
+                            ApprovalState.WatchOnlyConsent
                         } else {
                             state.state
                         },
                     )
                 }
+                if (newlyEnabled) loadUsdtAddress(_uiState.value.authUrl)
             }
         }
     }

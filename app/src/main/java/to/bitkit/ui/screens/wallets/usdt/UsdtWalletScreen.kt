@@ -25,10 +25,12 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -125,11 +127,7 @@ fun UsdtWalletScreen(
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    var page by rememberSaveable {
-        mutableStateOf(
-            if (initialRecipient.isEmpty()) UsdtPage.WALLET else UsdtPage.AMOUNT
-        )
-    }
+    var page by rememberUsdtPage(initialRecipient, state.submitted)
     val sending = page in listOf(UsdtPage.RECIPIENT, UsdtPage.MANUAL, UsdtPage.AMOUNT)
     DisposableEffect(viewModel, sending) {
         if (sending) viewModel.isSendPresented = true
@@ -290,6 +288,17 @@ fun UsdtWalletScreen(
         }
     }
 }
+
+@Composable
+internal fun rememberUsdtPage(initialRecipient: String, submitted: Boolean): MutableState<UsdtPage> =
+    rememberSaveable(
+        stateSaver = Saver(
+            save = { if (submitted) UsdtPage.WALLET.name else it.name },
+            restore = { UsdtPage.valueOf(it) },
+        ),
+    ) {
+        mutableStateOf(if (initialRecipient.isEmpty()) UsdtPage.WALLET else UsdtPage.AMOUNT)
+    }
 
 @Composable
 private fun UsdtWalletContent(

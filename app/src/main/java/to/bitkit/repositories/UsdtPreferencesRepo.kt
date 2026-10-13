@@ -27,7 +27,9 @@ class UsdtPreferencesRepo @Inject constructor(
     val enabled = combine(settingsStore.data, usdtRepo.state) { settings, wallet ->
         settings.isUsdtEnabled(wallet)
     }
-    val visible = enabled
+    val visible = combine(settingsStore.data, usdtRepo.state) { settings, wallet ->
+        Env.isUsdtEnabled && (settings.isUsdtEnabled || wallet.hasFundsOrPendingTransfers)
+    }
     val canDisable = usdtRepo.state.map { it.canDisable }
 
     suspend fun setEnabled(enabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
@@ -64,13 +66,15 @@ class UsdtPreferencesRepo @Inject constructor(
 }
 
 internal val UsdtWalletState.hasFundsOrPendingTransfers: Boolean
-    get() = pendingDepositIds.isNotEmpty() || (balance == null && transfers.isNotEmpty()) ||
-        (balance ?: 0uL) > 0uL || transfers.any {
-            it.status in setOf(
-                UsdtTransferStatus.PENDING, UsdtTransferStatus.BRIDGING,
-                UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION, UsdtTransferStatus.BRIDGE_FAILED,
-            )
-        }
+    get() = hasKnownFundsOrPendingTransfers || (balance == null && transfers.isNotEmpty())
+
+internal val UsdtWalletState.hasKnownFundsOrPendingTransfers: Boolean
+    get() = pendingDepositIds.isNotEmpty() || (balance ?: 0uL) > 0uL || transfers.any {
+        it.status in setOf(
+            UsdtTransferStatus.PENDING, UsdtTransferStatus.BRIDGING,
+            UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION, UsdtTransferStatus.BRIDGE_FAILED,
+        )
+    }
 
 internal val UsdtWalletState.canDisable: Boolean
     get() = balance == 0uL && !hasFundsOrPendingTransfers
@@ -81,4 +85,4 @@ internal val UsdtDeposit.needsSettlement: Boolean
     get() = status !in setOf("completed", "refunded", "waiting", "awaiting_deposit", "expired")
 
 internal fun SettingsData.isUsdtEnabled(wallet: UsdtWalletState): Boolean =
-    Env.isUsdtEnabled && (isUsdtEnabled || wallet.hasFundsOrPendingTransfers)
+    Env.isUsdtEnabled && (isUsdtEnabled || wallet.hasKnownFundsOrPendingTransfers)

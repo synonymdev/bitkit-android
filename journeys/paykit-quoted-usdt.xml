@@ -3,6 +3,7 @@
   <actions>
     <action>Enable USDT in the introductory sheet or Settings, General, Payments before starting this flow.</action>
     <action>Open a linked contact and create a USD payment request. Verify BTC and USD are the denomination choices and enabled receiving methods start selected. Verify Accept Payment In appears below expiry, with compact outlined Bitcoin and USDT chips. Bitcoin groups all available Savings and Spending methods; no separate rail chips appear here.</action>
+    <action>On a comma-decimal device locale, enter 3,25 USD while creating a payment request. Verify the keypad and amount use the comma and the request review preserves exactly 3,25 USD.</action>
     <action>Deselect all receiving choices and verify sending the request is disabled. Select only USDT, enter 1 USD, select an expiry and send the request.</action>
     <action>On the payer, open the request. Verify Amount shows exactly $1 with USDT selected as the payment method, the amount cannot be edited, and no Bitcoin funding source is offered. Close without continuing to review.</action>
     <action>Reopen the unpaid USDT request and wait for its Amount screen. Tap Back and verify the send sheet closes without showing a Bitcoin confirmation or a Swipe To Pay control. Reopen the same request and verify its amount and USDT payment method are preserved. Close without paying.</action>

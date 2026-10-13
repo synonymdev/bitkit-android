@@ -375,6 +375,8 @@ fun ContentView(
             when (it) {
                 is MainScreenEffect.Navigate -> if (it.clearStack) {
                     navController.navigateTo(it.route) { popUpTo(0) { inclusive = true } }
+                } else if (it.route is Routes.UsdtPayment) {
+                    navController.navigateToUsdtPayment(it.route)
                 } else {
                     navController.navigateTo(it.route)
                 }
@@ -2122,6 +2124,10 @@ inline fun <reified T : Any> NavController.navigateTo(
         builder()
         launchSingleTop = true
     }
+}
+
+fun NavController.navigateToUsdtPayment(payment: Routes.UsdtPayment) {
+    navigateTo(payment) { popUpTo<Routes.UsdtPayment> { inclusive = true } }
 }
 
 fun profileDestination(identityExists: Boolean?, hasSeenIntro: Boolean): Routes.DeepLinkable? = when (identityExists) {

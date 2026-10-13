@@ -18,5 +18,7 @@
     <action>With USDT still off, open x-bitkit-claim=paykit-access-v1.usdt-address-v1. Verify Paykit permissions appear without a receiving-details introduction or USDT content. Go back and verify the request closes without showing a Bitcoin introduction.</action>
     <action>With USDT still off, open x-bitkit-claim=usdt-address-v1. Verify the request is unavailable and authorization cannot be submitted; no enable prompt or successful setup is shown. Cancel and verify Settings still shows USDT off.</action>
     <action>Enable USDT in Settings and reopen the combined request. Verify the optional USDT switch and selected-address privacy disclosure return on the introduction. Turn sharing off and verify Bitcoin approval remains available, then cancel.</action>
+    <action>With an owned wallet restored before its funded USDT balance has loaded, open a combined Bitcoin and USDT authorization. Let the balance refresh finish while the sheet remains open. Verify the optional USDT sharing choice appears off, its address finishes loading and Bitcoin approval remains available. Turn sharing on, then off, and verify it stays off. Cancel before Authorize.</action>
+    <action>Repeat the delayed funded-balance refresh with a USDT-only authorization. Verify receiving-details consent becomes available once the address loads; continue to the permission review and cancel before Authorize.</action>
   </actions>
 </journey>

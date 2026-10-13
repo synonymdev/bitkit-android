@@ -1110,6 +1110,55 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         verifyNoInteractions(usdtRepo, watchOnlyAccountRepo)
     }
 
+    @Test
+    fun `enabling USDT in an open combined authorization loads its address without opting in`() = test {
+        usdtEnabled.value = false
+        val url = stubCombinedAuthorization()
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(
+            Result.success(Endpoint(MethodId.UsdtArbitrum, "reviewed-address", null, null, "{}"))
+        )
+        val sut = createSut()
+        sut.load(url)
+        advanceUntilIdle()
+        usdtEnabled.value = true
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showsUsdtDetails)
+        assertEquals("reviewed-address", sut.uiState.value.usdtAddress)
+        assertFalse(sut.uiState.value.shareUsdt)
+        assertTrue(sut.uiState.value.canAuthorize)
+        sut.setShareUsdt(true)
+        assertTrue(sut.uiState.value.shareUsdt)
+        sut.setShareUsdt(false)
+        usdtEnabled.value = false
+        advanceUntilIdle()
+        usdtEnabled.value = true
+        advanceUntilIdle()
+        assertEquals("reviewed-address", sut.uiState.value.usdtAddress)
+        assertFalse(sut.uiState.value.shareUsdt)
+    }
+
+    @Test
+    fun `enabling USDT in an open required authorization loads its receiving details`() = test {
+        usdtEnabled.value = false
+        val url = "pubkyauth://signin_grant?x-bitkit-claim=usdt-address-v1"
+        whenever(pubkyRepo.parseAuthUrl(url)).thenReturn(
+            Result.success(authRequest(url, PubkyAuthClaim.REQUIRED_CAPABILITIES, PubkyAuthClaim.USDT_ADDRESS_V1))
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(
+            Result.success(Endpoint(MethodId.UsdtArbitrum, "reviewed-address", null, null, "{}"))
+        )
+        val sut = createSut()
+        sut.load(url)
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.canAuthorize)
+        usdtEnabled.value = true
+        advanceUntilIdle()
+        assertEquals("reviewed-address", sut.uiState.value.usdtAddress)
+        assertFalse(sut.uiState.value.usdtUnavailable)
+        assertTrue(sut.uiState.value.canAuthorize)
+        assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
+    }
+
     private suspend fun stubCombinedAuthorization(): String {
         val claim = PubkyAuthClaim.BITCOIN_AND_USDT
         val url = "pubkyauth://signin_grant?x-bitkit-claim=${claim.wireValue}"

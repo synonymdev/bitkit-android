@@ -101,7 +101,7 @@ class UsdtPreferencesRepoTest : BaseUnitTest() {
         val transfer: UsdtTransfer = mock { on { status } doReturn UsdtTransferStatus.CONFIRMED }
         wallet.value = UsdtWalletState(transfers = persistentListOf(transfer))
         assertTrue(repo.visible.first())
-        assertTrue(repo.enabled.first())
+        assertFalse(repo.enabled.first())
         assertFalse(repo.canDisable.first())
         wallet.value = wallet.value.copy(balance = 0u)
         assertFalse(repo.visible.first())
@@ -136,6 +136,28 @@ class UsdtPreferencesRepoTest : BaseUnitTest() {
         wallet.value = UsdtWalletState(balance = 0u)
         assertFalse(repo.enabled.first())
         assertTrue(repo.canDisable.first())
+    }
+
+    @Test
+    fun `settled history with an unavailable balance does not enable a declined wallet`() = test {
+        settings.value = SettingsData(usdtPreference = UsdtPreference.DISABLED)
+        val settled: UsdtTransfer = mock { on { status } doReturn UsdtTransferStatus.CONFIRMED }
+        val service: UsdtService = mock()
+        val coreWallet: UsdtWallet = mock()
+        whenever(service.wallet()).thenReturn(coreWallet)
+        whenever(coreWallet.receiveAddress()).thenReturn("wallet-address")
+        whenever(coreWallet.receiveUri()).thenReturn("wallet-uri")
+        whenever(coreWallet.history()).thenReturn(listOf(settled))
+        whenever(coreWallet.balance()).thenAnswer { throw AppError("offline") }
+        val usdt = UsdtRepo(service, testDispatcher)
+        assertTrue(usdt.refresh(history = false).isFailure)
+        val preferences = UsdtPreferencesRepo(settingsStore, usdt, testDispatcher)
+        assertEquals(null, usdt.state.value.balance)
+        assertEquals(1, usdt.state.value.transfers.size)
+        assertTrue(preferences.visible.first())
+        assertFalse(preferences.enabled.first())
+        assertFalse(preferences.canDisable.first())
+        assertFalse(PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings.value, usdt.state.value))
     }
 
     @Test
