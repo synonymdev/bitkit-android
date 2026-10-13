@@ -364,6 +364,21 @@ internal fun LightningActivity.withPendingMessage(
     return copy(message = pendingMessage)
 }
 
+/**
+ * Applies an on-chain confirmation state to the stored activity.
+ *
+ * A block time earlier than the first-seen [OnchainActivity.timestamp] moves the timestamp down to it,
+ * so `confirmTimestamp >= timestamp` holds as bitkit-core requires.
+ */
+internal fun OnchainActivity.withConfirmation(
+    isConfirmed: Boolean,
+    confirmTimestamp: ULong?,
+): OnchainActivity = copy(
+    confirmed = isConfirmed,
+    confirmTimestamp = confirmTimestamp,
+    timestamp = if (confirmTimestamp != null && confirmTimestamp < timestamp) confirmTimestamp else timestamp,
+)
+
 @Suppress("LargeClass", "TooManyFunctions")
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
@@ -1248,9 +1263,10 @@ class ActivityService(
         val ldkFeeSats = msatFloorOf(ldkFeeMsat)
         val updatedFee = if (existingActivity.v1.fee == 0uL && ldkFeeSats > 0uL) ldkFeeSats else existingActivity.v1.fee
 
-        val updatedOnChain = existingActivity.v1.copy(
-            confirmed = confirmationData.isConfirmed,
+        val updatedOnChain = existingActivity.v1.withConfirmation(
+            isConfirmed = confirmationData.isConfirmed,
             confirmTimestamp = confirmationData.confirmedTimestamp,
+        ).copy(
             doesExist = finalDoesExist,
             updatedAt = confirmationData.timestamp,
             isTransfer = preservedIsTransfer,
