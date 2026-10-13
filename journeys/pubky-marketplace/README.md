@@ -1,9 +1,9 @@
 # Pubky marketplace wallet leg
 
 This suite covers the two-wallet Bitkit leg of a Pubky marketplace purchase: a seller grants
-Paykit access and a watch-only account, a linked buyer receives the Payment Request, and the buyer pays
-the request on regtest through confirmation. It does not cover marketplace browsing, Locks content
-delivery, fiat payment, or Hypercolor.
+Paykit access, a watch-only account and a marketplace write grant, a linked buyer receives the
+Payment Request, and the buyer pays the request on regtest through confirmation. It does not cover
+marketplace browsing, Locks content delivery, fiat payment, or Hypercolor.
 
 ## Local-only fallback
 
@@ -40,6 +40,9 @@ The journey needs a controlled integration fixture runtime. It must provide:
 - A regtest bitcoind and Electrum/Fulcrum endpoint on the same chain. Configure the endpoint in both
   wallets before their first launch so neither wallet retains a taller foreign regtest tip.
 - A clean seller wallet, a separate clean funded buyer wallet, and the seller Pubky public key.
+- A marketplace grant request for the seller wallet: a Pubky grant auth URL from requester `locks.app` for
+  `/pub/app.locks/` with READ, WRITE access, and a report of the approved grant and the setup completion time
+  for the identity that approved both requests.
 - A marketplace driver that can create one purchase for the buyer, expose its Payment Request id,
   report Paykit delivery, return the derived on-chain address and expected amount, mine one block,
   and report the transaction and purchase status.
@@ -63,8 +66,19 @@ The request and endpoint must satisfy the
 [issuer contract](../../docs/paykit-issuer-interoperability.md): lowercase `btc`, a
 network-correct `btc-regtest-*` endpoint identifier, and a JSON endpoint payload with a non-empty
 string `value`. The fixture must keep watch-only account material and spending authority separate.
-Evidence must show the claimed account xpub and account index while omitting wallet seed material
-and tokens.
+Paykit Server keeps the claimed account xpub to itself, so the fixture cannot report it; evidence shows the
+setup completion and the marketplace grant instead, and omits wallet seed material and tokens.
+
+The [bitkit-docker](https://github.com/synonymdev/bitkit-docker) `marketplace` profile provides this runtime
+([`docs/pubky-marketplace.md`](https://github.com/synonymdev/bitkit-docker/blob/main/docs/pubky-marketplace.md)):
+
+- `./pubky-marketplace setup-url` prints the `/setup` auth URL; `setup-wait <flow>` waits for the setup to complete.
+- `./pubky-marketplace seller-auth` prints the marketplace grant request as its first JSON line and waits for the
+  approval. Run its printed `android` command, `adb shell "am start -a android.intent.action.VIEW -d '<auth_url>'"`,
+  with the double quotes kept, or the device shell cuts the URL at the first `&`. The request goes through the
+  testnet relay on port 15412 (mapped below) and expires after about five minutes, so start it at that step.
+- `./pubky-marketplace info` reports `bitkit_seller.marketplace_grant` and `bitkit_seller.setup_completed_at`,
+  which stays null until `setup-wait` has seen the setup complete.
 
 The seller wallet authorizes the server; the buyer wallet receives and pays the request.
 The buyer must save the seller before Bitkit's private-message poll can receive the request.
@@ -89,7 +103,8 @@ Keep these artifacts at each boundary:
 
 | Boundary | Bitkit evidence | Fixture evidence |
 | --- | --- | --- |
-| Combined claim | `PubkyAuthWatchOnlyConsent`, `PubkyAuthPaykitAccess`, `PubkyAuthAuthorize`, and `PubkyAuthOK` snapshots | Setup completion and the claimed xpub/account index, with no spending key |
+| Combined claim | `PubkyAuthWatchOnlyConsent`, `PubkyAuthPaykitAccess`, `PubkyAuthAuthorize`, and `PubkyAuthOK` snapshots | Setup completion for the seller identity, with no spending key |
+| Marketplace grant | Authorization screen with the single `/pub/app.locks` row from `locks.app`, `PubkyAuthAuthorize`, and `PubkyAuthOK` snapshots | `bitkit_seller.marketplace_grant` and a non-null `bitkit_seller.setup_completed_at` |
 | Contact payments | `ContactPaymentsToggle` snapshots from both wallets | Public App Registry entries for both wallet identities |
 | Linked buyer | `Contact_<seller-public-key>` snapshot | Seller and buyer peer-link state |
 | Incoming request | `PaymentRequestsSheet` and `PaymentRequestRow-<payment-request-id>` snapshots showing seller, amount, and note when present | Delivery record and exact Payment Request id |
