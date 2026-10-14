@@ -6,9 +6,13 @@ import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.GetAddressesResponse
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
@@ -18,7 +22,9 @@ import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -353,6 +359,70 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `older receive refresh cannot overwrite a newer invoice update`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val releaseOlder = CompletableDeferred<Unit>()
+        var invoiceCalls = 0
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            if (invoiceCalls++ == 0) {
+                releaseOlder.await()
+                Result.success(INVOICE)
+            } else {
+                Result.success(INVOICE_REPLACEMENT)
+            }
+        }
+
+        val older = launch { sut.refreshBip21() }
+        val newer = launch { sut.updateBip21Invoice(description = "newer") }
+        releaseOlder.complete(Unit)
+        older.join()
+        newer.join()
+
+        val state = sut.walletState.value
+        assertEquals(INVOICE_REPLACEMENT, state.bolt11)
+        assertTrue(state.bip21.contains("lightning=$INVOICE_REPLACEMENT"))
+        assertEquals("newer", state.bip21Description)
+    }
+
+    @Test
+    fun `cancelled receive refresh releases the next invoice update`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val neverReleased = CompletableDeferred<Unit>()
+        var invoiceCalls = 0
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            if (invoiceCalls++ == 0) neverReleased.await()
+            Result.success(INVOICE_REPLACEMENT)
+        }
+        val older = launch { sut.refreshBip21() }
+        val newer = launch { sut.updateBip21Invoice() }
+
+        older.cancel()
+        older.join()
+        newer.join()
+
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains("lightning=$INVOICE_REPLACEMENT"))
+    }
+
+    @Test
+    fun `invoice publication never exposes new bolt11 with onchain only bip21`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        val states = mutableListOf<WalletState>()
+        sut.walletState.onEach { states.add(it) }.launchIn(backgroundScope)
+
+        sut.updateBip21Invoice()
+
+        assertTrue(states.any { it.bolt11 == INVOICE })
+        assertTrue(states.filter { it.bolt11 == INVOICE }.all { it.bip21.contains("lightning=$INVOICE") })
+    }
+
+    @Test
     fun `updateBip21Invoice should create bolt11 when node can receive`() = test {
         whenever(lightningRepo.canReceive()).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
@@ -473,7 +543,12 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBolt11(INVOICE)
 
         assertEquals(INVOICE, sut.walletState.value.bolt11)
-        verify(cacheStore).saveBolt11(INVOICE, "")
+        val update = argumentCaptor<(AppCacheData) -> AppCacheData>()
+        verify(cacheStore).update(update.capture())
+        val cached = update.firstValue(AppCacheData())
+        assertEquals(INVOICE, cached.bolt11)
+        assertEquals(sut.walletState.value.bip21, cached.bip21)
+        assertTrue(cached.bip21.contains("lightning=$INVOICE"))
     }
 
     @Test

@@ -33,8 +33,11 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.AUTO -> {
-            bip21.takeIf { isNodeRunning && canCreateLightningInvoice && containsLightningParameter(bip21) }
-                ?: removeLightningFromBip21(bip21, onchainAddress)
+            if (isNodeRunning && canCreateLightningInvoice) {
+                bip21.takeIf { containsLightningParameter(it) }.orEmpty()
+            } else {
+                removeLightningFromBip21(bip21, onchainAddress)
+            }
         }
 
         ReceiveTab.SPENDING -> {

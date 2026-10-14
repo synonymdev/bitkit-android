@@ -168,7 +168,7 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab AUTO returns onchain BIP21 when BIP21 has no lightning even if node running`() {
+    fun `getInvoiceForTab AUTO stays loading until the unified invoice is ready`() {
         val bip21WithoutLightning = "bitcoin:$testAddress?amount=0.001&message=Test"
 
         val result = getInvoiceForTab(
@@ -180,7 +180,7 @@ class ReceiveInvoiceUtilsTest {
             onchainAddress = testAddress
         )
 
-        assertEquals(bip21WithoutLightning, result)
+        assertEquals("", result)
     }
 
     @Test
