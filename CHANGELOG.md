@@ -7,6 +7,121 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-14
+
+### Added
+- Added support for creating a Pubky identity from app-authorized and direct Pubky signup requests. #1224
+- Added support for pairing Blockstream Jade and Jade Plus hardware wallets over USB and Bluetooth, including watch-only balances, address verification and on-device transaction signing. #1231
+- Bitkit can now propose recurring subscriptions to Paykit contacts. #1239
+- Wallet recovery now supports scanning 12-word Standard and Compact SeedQR backups. #1319
+- Open Pubky contact links directly in Bitkit to add a contact or view an existing one. #1320
+- Bitkit can now use a pubky you already keep in Pubky Ring, and shares its own pubky with Pubky Ring. #1329
+- Bitkit can move subscription renewals forward from Dev Settings for testing. #1341
+- Bitkit can now hide all toasts from Dev Settings. #1371
+- Support Pubky grant signup links through the existing authorization and profile setup flows. #1446
+
+### Changed
+- Standardized intro sheets with consistent artwork, spacing, actions, and localized messaging. #1314
+- Incoming payment requests are checked every ten seconds while the app is open and online. #1321
+- Incoming Payment Requests now show who the request is from and what it is for under the amount. #1336
+- Paykit contacts, payment requests and subscriptions are now on by default. #1345
+- Incoming Payment Requests without a note now show "Not specified" under For. #1358
+- Share Paykit contacts and payment state with authorized apps while keeping wallet keys private, restore contacts when re-importing an identity, prepare incoming payments in the payment sheet, support one-time requests with absolute payment deadlines, prioritize payment submission over background synchronization, distinguish temporary restoration failures from expired sessions, preserve subscription reminders through retries, and label received payments with their Paykit contact. #1401
+- Pubky authorization dialogs now name the requesting service, group permissions and details under clear headings, and show a compact profile card. #1421
+- Accepting a subscription now sends the first payment in the same swipe when it is paid on-chain, as it already did over Lightning. #1422
+- Jade hardware wallets now display device artwork that matches the app's hardware wallet design. #1427
+- Pulling to refresh on Home now also refreshes exchange rates. #622
+- Bitkit now asks for your PIN again whenever you return to the app from the background, and a payment link opened while it was locked now takes you to the send confirmation once you unlock, instead of paying automatically. #724
+
+### Fixed
+- Retried Lightning payments now show the amount and fee of the attempt that succeeded. #1042
+- An expired Paykit session is now reported on startup when the profile service fails to start. #1093
+- Retrying a failed wallet restore no longer leaves the Lightning node in an error state after a temporary startup failure. #1125
+- Contact activity no longer hides hardware wallet payments that share a transaction ID with a boosted payment in another wallet. #1139
+- Restoring a wallet now keeps its activity tags and closed connections: a single tag that cannot be applied no longer discards the rest of the backup, and ordinary backups are held until the restore has finished so they cannot overwrite it first. #1171
+- Connecting to a custom Electrum server now explains when it is on the wrong Bitcoin network, when the TCP/TLS protocol does not match the port, or when its TLS certificate is untrusted or issued for another host. #1177
+- Incoming Payment Requests now report safe failure reasons and show an error when an opened request cannot be resolved. #1217
+- The transfer to spending flow now creates the Blocktank order only when you confirm, instead of on every Continue tap. #1247
+- Incoming payment requests appear sooner while the app is open, without unnecessary wallet backup uploads. #1255
+- Refreshed the Subscriptions screens to match their designs, including blurred top and bottom bars the list now scrolls behind. #1269
+- Polished wallet, transfer, receive, onboarding, and settings screens with corrected spacing, typography, icons, and amount displays. #1270
+- Improved Pubky identity discovery by periodically refreshing existing identity records while Bitkit is open. #1271
+- Bitkit now shows helpful guidance the first time you switch the displayed balance unit or swipe to hide your wallet balance. #1272
+- Fixed toasts being obscured or dimmed by modal sheets. #1273
+- The mandatory update screen now also appears before a wallet is created or restored. #1295
+- Transfers to spending no longer stay in progress after their Lightning channel was closed. #1303
+- Fixed the Receive sheet sliding to the Auto tab on open and overriding a tab you had already picked. #1308
+- The Report Issue message field now stays above the keyboard while typing multiple lines. #1322
+- Spending confirm now shows the amount of bitcoin that leaves the wallet when a savings transfer uses send-all. #1326
+- The backup reveal overlay no longer exposes the recovery phrase through accessibility text. #1327
+- Sensitive screens keep screenshots and recent-app previews blocked until the last one closes. #1328
+- The Create Profile, Edit Profile and Profile screens now match the design, with the edit form scrolling under the Cancel and Save buttons and tags managed from Edit Profile. #1332
+- Preserve Paykit subscription and pending payment state in wallet backups, and retain saved data when it cannot be read or restored. #1334
+- Payout authorization no longer fails when the initial wallet sync times out. #1338
+- Fixed Paykit recovery after connection failures and device clock changes to preserve profile data and contacts, restore saved sessions, and improve billing reminder timing. #1339
+- A historical on-chain payment no longer shows a Received sheet after restoring a wallet from its recovery phrase. #1342
+- Paying a contact now always offers Request or Pay when the contact accepts requests, and opens the amount screen in about a second with a loading indicator. #1349
+- Backing out of Pubky Choice while picking a Ring pubky, or a failed sign-in, no longer leaves a hidden signed-in session behind. #1363
+- Keep Paykit requests with unsupported payment deadlines in history and explain why their subscriptions cannot be accepted. #1365
+- Fixed private payment requests remaining unavailable after safe send failures, blocking actions during link recovery, and displaying unpaid requests as completed payments. #1370
+- Deleting a contact now stops private payment requests until you add that contact again, and background refreshes no longer restore deleted contacts. #1372
+- Fixed wallet setup getting stuck at 100% after retrying a failed startup. #1373
+- On-chain sends keep uncertain payments protected across restart and wallet restore, with an authenticated retry of the original amount and inputs. #1384
+- Send no longer stays on Connecting to network when a Lightning channel becomes usable again after its peer reconnects. #1390
+- A canceled subscription now stays active until its paid period ends, then expires. #1391
+- An interrupted wallet sync, such as one cut off when the app closes, no longer turns the app status red. #1392
+- Fixed profile recovery and disconnection after connection loss and added visible progress while updating or deleting a profile. #1394
+- Fixed slow contact imports by saving prepared contacts without repeating remote lookups, excluding your own profile and keeping failed imports available for retry. #1395
+- Restoring a React Native wallet waits for its Lightning channel backup, and activity tags that are not ready yet are kept for a later sync. #1396
+- Pubky profiles and contacts load faster: Pubky Ring identities and saved contacts appear at once, avatars are cached between launches, the Profile screen shows your cached name and avatar while it loads, a contact import no longer stops when you leave its screen, and an authorization link that opens Bitkit waits for your Pubky profile to reconnect instead of asking you to create one. #1399
+- Fixed Paykit signup and authorization failures after wiping a wallet. #1400
+- New incoming Payment Requests open automatically while Bitkit is unlocked. The payment amount and confirmation slider stay visible while details scroll. #1405
+- Pubky profile, contact and payment features no longer fail after a cold start until the app is restarted. #1416
+- Contact tag changes and edits still waiting to save when you sign out of Pubky are now dropped, instead of saving to the profile signed in next. #1417
+- Keep contact linking retries independent and prioritize contacts added or refreshed while Bitkit is active. #1419
+- Fixed a contact that was removed and added again showing its outdated profile. #1434
+- Pause scheduled contact preparation while Bitkit is backgrounded and preserve background priority for contact retries. #1436
+- Pay fixed-price Paykit requests in Bitcoin using the issuer's quoted amount and stop preparation with feedback when the destination is not payable. #1437
+- Keep the saved public profile readable while its Paykit session is restoring. #1443
+- Contact payment setup now reports temporary access failures instead of silently disabling private payments. #1444
+- Fixed manual coin selection being skipped before confirming a Savings payment. #1450
+- Fixed contact readiness retries stopping after an unavailable contact reconnects. #1455
+- Payment requests below the minimum Bitcoin amount now show the minimum and close payment preparation. #1457
+- Completed Paykit payments no longer wait for proof delivery after their payment details have been safely saved. #1458
+- Fixed on-chain payment completion waiting for transaction history when its exact prepared fee is already available. #1459
+- Keep a single Bitcoin send in activity history as it confirms, preserving its contact and fee. #1460
+- Fixed missing fee estimates when reviewing Lightning invoices with a set amount. #1461
+- Unresolved metadata from React Native wallets stays saved for later recovery while retries slow down across app restarts. #1462
+- Kept the subscription review sheet open when starting the first payment. #1469
+- Received on-chain payments now show as confirmed once their block is mined, even when the block's time is earlier than when Bitkit first saw the payment. #1477
+- Fixed force-closed channels failing to claim pending payments on-chain. #1480
+- Comments added when paying an LNURL-pay request are now saved as the payment note in the activity. #417
+- Fixed the sats amount keypad blocking extra digits and ignoring delete presses after using a preset amount or switching units. #558
+- Coin selection now retries while the Lightning node is starting and shows an inline error with a retry button when your coins cannot be loaded. #616
+- Tags are now limited to 20 characters on a single line, long tags keep their remove button visible, and submitting a blank tag field no longer saves an empty tag. #630
+- Fixed the activity date range calendar breaking when switching months quickly. #631
+- Long recovery phrase words now shrink to fit on one line instead of wrapping. #633
+- A wrong word in the recovery phrase confirmation can now be cleared by tapping the red word or its button, including the last word. #634
+- Fixed the PIN setup result screen toggle overlapping long translated labels. #638
+- Shop gift card category names can now be translated. #715
+- Show the received transaction sheet or notification for on-chain deposits first seen already confirmed. #797
+- Tapping OK after moving funds from spending to savings now returns to the home screen instead of the spending wallet. #809
+- Lightning payments no longer stay unavailable after the node startup is interrupted, such as by leaving the app while it starts. #845
+- Fixed the sync status flashing after wiping a wallet migrated from the previous Bitkit app. #869
+- Removed the redundant Auto toggle from the manual coin selection screen. #894
+- Pasting part of a recovery phrase on the restore screen now fills the following word fields instead of being ignored. #896
+- Paying a Lightning invoice created by your own wallet now shows an error, and unified QR codes containing one fall back to an on-chain send. #901
+- Receiving over Lightning now refreshes liquidity requests correctly and avoids showing stale or invalid CJIT quotes.
+
+### Security
+- Paykit payment approvals remain tied to the reviewed proposal when private state changes. #1470
+- Updated the Lightning node with upstream security fixes. #1475
+
+## [2.5.1] - 2026-10-13
+
+### Fixed
+- Updated LDK Node to 0.7.0-rc.66.1 for the upstream Lightning security fixes. #1472
+
 ## [2.5.0] - 2026-09-10
 
 ### Added
@@ -214,7 +329,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.5.0...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.6.0...HEAD
+[2.6.0]: https://github.com/synonymdev/bitkit-android/compare/v2.5.1...v2.6.0
+[2.5.1]: https://github.com/synonymdev/bitkit-android/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/synonymdev/bitkit-android/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/synonymdev/bitkit-android/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/synonymdev/bitkit-android/compare/v2.3.2...v2.4.0
