@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="btcpay__missing_mnemonic">تعذر على Bitkit قراءة عبارة الاسترداد.</string>
     <string name="cards__backupSeedPhrase__description">احفظ عملات Bitcoin الخاصة بك</string>
     <string name="cards__backupSeedPhrase__title">نسخ احتياطي</string>
     <string name="cards__buyBitcoin__description">اشترِ بعض Bitcoin</string>
@@ -60,6 +61,7 @@
     <string name="common__save">حفظ</string>
     <string name="common__search">بحث</string>
     <string name="common__share">مشاركة</string>
+    <string name="common__show_details">عرض التفاصيل</string>
     <string name="common__skip">تخطي</string>
     <string name="common__success">نجاح</string>
     <string name="common__try_again">حاول مرة أخرى</string>
@@ -67,6 +69,9 @@
     <string name="common__usable">قابل للاستخدام</string>
     <string name="common__yes">نعم</string>
     <string name="common__yes_proceed">نعم، تابع</string>
+    <string name="contacts__add_button">إضافة</string>
+    <string name="contacts__add_scan_qr">مسح QR</string>
+    <string name="contacts__detail_title">جهة الاتصال</string>
     <string name="fee__custom__description">يعتمد على الرسوم</string>
     <string name="fee__custom__duration">يعتمد على الرسوم</string>
     <string name="fee__custom__shortDescription">يعتمد على الرسوم</string>
@@ -76,6 +81,7 @@
     <string name="fee__fast__shortDescription">±10د</string>
     <string name="fee__fast__title">سريع</string>
     <string name="fee__instant__duration">±2 ثانية</string>
+    <string name="fee__instant__shortDescription">فوري</string>
     <string name="fee__instant__title">فوري</string>
     <string name="fee__minimum__description">+2 ساعة</string>
     <string name="fee__minimum__duration">+2 ساعة</string>
@@ -89,6 +95,8 @@
     <string name="fee__slow__duration">±1 ساعة</string>
     <string name="fee__slow__shortDescription">±1س</string>
     <string name="fee__slow__title">بطيء</string>
+    <string name="hardware__passphrase_button">عبارة المرور</string>
+    <string name="hardware__passphrase_title">عبارة المرور</string>
     <string name="lightning__availability__text">عادةً ما يكون تحويل الأموال إلى المدخرات فوريًا، لكن قد تستغرق التسوية حتى &lt;accent&gt;14 يومًا&lt;/accent&gt; في ظروف شبكة معينة.</string>
     <string name="lightning__availability__title">توفر\n&lt;accent&gt;الأموال&lt;/accent&gt;</string>
     <string name="lightning__balance">الرصيد</string>
@@ -408,6 +416,7 @@
     <string name="other__scan_err_decoding">خطأ في فك التشفير</string>
     <string name="other__scan_err_interpret_title">تعذر تفسير البيانات المقدمة</string>
     <string name="other__share_qr">مشاركة رمز QR عبر</string>
+    <string name="other__shop__categories__travel">السفر</string>
     <string name="other__shop__discover__esims__description">بلا حدود</string>
     <string name="other__shop__discover__esims__title">شرائح eSIM</string>
     <string name="other__shop__discover__gift_cards__description">تسوّق بـ Bitcoin</string>
@@ -431,6 +440,13 @@
     <string name="other__update_nav_title">تحديث متاح</string>
     <string name="other__update_text">يرجى تحديث Bitkit إلى أحدث إصدار للحصول على ميزات جديدة وإصلاحات!</string>
     <string name="other__update_title">تحديث\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
+    <string name="profile__add_tag">إضافة علامة</string>
+    <string name="profile__auth_approval_details">التفاصيل</string>
+    <string name="profile__auth_approval_ok">حسنًا</string>
+    <string name="profile__create_nav_title">إنشاء ملف شخصي</string>
+    <string name="profile__nav_title">الملف الشخصي</string>
+    <string name="profile__retry_load">حاول مرة أخرى</string>
+    <string name="profile__suggestions">اقتراحات</string>
     <string name="security__backup_button">نسخ احتياطي</string>
     <string name="security__backup_funds">الآن بعد أن لديك بعض الأموال في محفظتك، حان وقت عمل نسخة احتياطية!</string>
     <string name="security__backup_funds_no">لا توجد أموال في محفظتك بعد، لكن يمكنك إنشاء نسخة احتياطية إذا أردت.</string>
@@ -513,6 +529,7 @@
     <string name="security__reset_confirm">نعم، أعد التعيين</string>
     <string name="security__reset_dialog_desc">هل أنت متأكد من رغبتك في إعادة تعيين محفظة Bitkit؟ هل لديك نسخة احتياطية من عبارة الاسترداد وبيانات المحفظة؟</string>
     <string name="security__reset_dialog_title">إعادة تعيين Bitkit؟</string>
+    <string name="security__reset_graph_confirm">نعم، أعد التعيين</string>
     <string name="security__reset_text">انسخ محفظتك احتياطيًا أولاً لتجنب فقدان أموالك وبيانات محفظتك. ستؤدي إعادة التعيين إلى الكتابة فوق إعداد Bitkit الحالي.</string>
     <string name="security__reset_title">إعادة التعيين والاستعادة</string>
     <string name="security__success_bio">لقد أعددت رمز PIN و {biometricsName} بنجاح لتحسين أمان المحفظة.</string>
@@ -746,6 +763,10 @@
     <string name="slashtags__onboarding_profile1_text">أعد ملفك الشخصي العام وروابطك، حتى تتمكن جهات اتصال Bitkit من الوصول إليك أو الدفع لك في أي وقت وأي مكان.</string>
     <string name="slashtags__profile">الملف الشخصي</string>
     <string name="slashtags__profile_create">إنشاء ملف شخصي</string>
+    <string name="subscriptions__cancel">إلغاء</string>
+    <string name="subscriptions__payments">المدفوعات</string>
+    <string name="subscriptions__pending">معلق</string>
+    <string name="subscriptions__status">الحالة</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">يرجى الانتظار بينما يبحث Bitkit عن أموال في عناوين غير مدعومة (Legacy و Nested SegWit و Taproot).</string>
     <string name="sweep__checking_loading">جارٍ البحث عن أموال...</string>
@@ -794,6 +815,7 @@
     <string name="wallet__activity_confirmed">مؤكد</string>
     <string name="wallet__activity_confirming">جارٍ التأكيد</string>
     <string name="wallet__activity_confirms_in">يتأكد خلال {feeRateDescription}</string>
+    <string name="wallet__activity_contact">جهة الاتصال</string>
     <string name="wallet__activity_date">التاريخ</string>
     <string name="wallet__activity_error_load_failed">فشل تحميل النشاط</string>
     <string name="wallet__activity_error_not_found">لم يتم العثور على النشاط</string>
@@ -974,6 +996,11 @@
     <string name="wallet__payment_invoice_request_expired">انتهت صلاحية طلب فاتورة Lightning هذا. اطلب فاتورة جديدة.</string>
     <string name="wallet__payment_invoice_request_rejected">رفض المستلم طلب فاتورة Lightning هذا.</string>
     <string name="wallet__payment_recipient_rejected">رفض المستلم دفعة Lightning هذه. تحقق من الفاتورة وحاول مرة أخرى.</string>
+    <string name="wallet__payment_request_contact">جهة الاتصال</string>
+    <string name="wallet__payment_request_date">التاريخ</string>
+    <string name="wallet__payment_request_note">ملاحظة</string>
+    <string name="wallet__payment_request_sent_title">مُرسل</string>
+    <string name="wallet__payment_request_time">الوقت</string>
     <string name="wallet__payment_retries_exhausted">جرّب Bitkit عدة مسارات Lightning، لكن تعذر إكمال الدفعة.</string>
     <string name="wallet__payment_route_not_found">لم يتمكن Bitkit من العثور على مسار Lightning لهذه الدفعة.</string>
     <string name="wallet__payment_timeout">انتهت مهلة الدفع. حاول مرة أخرى.</string>
@@ -995,6 +1022,7 @@
     <string name="widgets__blocks__description">افحص إحصائيات متنوعة عن كتل Bitcoin المُعدّنة حديثًا.</string>
     <string name="widgets__blocks__field__block">الكتلة</string>
     <string name="widgets__blocks__field__date">التاريخ</string>
+    <string name="widgets__blocks__field__fees">الرسوم</string>
     <string name="widgets__blocks__field__size">الحجم</string>
     <string name="widgets__blocks__field__time">الوقت</string>
     <string name="widgets__blocks__field__transactions">المعاملات</string>

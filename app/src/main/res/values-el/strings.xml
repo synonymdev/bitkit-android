@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="btcpay__missing_mnemonic">Το Bitkit δεν μπόρεσε να διαβάσει τη φράση ανάκτησής σου.</string>
     <string name="cards__backupSeedPhrase__description">Αποθήκευσε τα bitcoin σου</string>
     <string name="cards__backupSeedPhrase__title">Αντίγραφο ασφαλείας</string>
     <string name="cards__buyBitcoin__description">Αγόρασε bitcoin</string>
@@ -60,6 +61,7 @@
     <string name="common__save">Καταχώρηση</string>
     <string name="common__search">Αναζήτηση</string>
     <string name="common__share">Διαμοιρασμός</string>
+    <string name="common__show_details">Εμφάνιση λεπτομερειών</string>
     <string name="common__skip">Παράλειψη</string>
     <string name="common__success">Επιτυχία</string>
     <string name="common__try_again">Προσπαθείστε Ξανά</string>
@@ -67,6 +69,9 @@
     <string name="common__usable">Διαθέσιμο</string>
     <string name="common__yes">Ναι</string>
     <string name="common__yes_proceed">Ναι, Προχώρα</string>
+    <string name="contacts__add_button">Προσθήκη</string>
+    <string name="contacts__add_scan_qr">Σάρωση QR</string>
+    <string name="contacts__detail_title">Επαφή</string>
     <string name="fee__custom__description">Εξαρτάται από το τέλος</string>
     <string name="fee__custom__duration">Εξαρτάται από το τέλος</string>
     <string name="fee__custom__shortDescription">Εξαρτάται από το τέλος</string>
@@ -76,6 +81,7 @@
     <string name="fee__fast__shortDescription">±10 λεπτά</string>
     <string name="fee__fast__title">Γρήγορα</string>
     <string name="fee__instant__duration">±2 δευτερόλεπτα</string>
+    <string name="fee__instant__shortDescription">Άμεσα</string>
     <string name="fee__instant__title">Άμεσα</string>
     <string name="fee__minimum__description">+2 ώρες</string>
     <string name="fee__minimum__duration">+2 ώρες</string>
@@ -89,6 +95,8 @@
     <string name="fee__slow__duration">±1 ώρα</string>
     <string name="fee__slow__shortDescription">±1 ώρα</string>
     <string name="fee__slow__title">Αργά</string>
+    <string name="hardware__passphrase_button">Κωδική φράση</string>
+    <string name="hardware__passphrase_title">Κωδική φράση</string>
     <string name="lightning__availability__text">Η μεταφορά κεφαλαίων στις αποταμιεύσεις είναι συνήθως άμεση, αλλά η εκκαθάριση μπορεί να διαρκέσει έως &lt;accent&gt;14 ημέρες&lt;/accent&gt; υπό ορισμένες συνθήκες δικτύου.</string>
     <string name="lightning__availability__title">Διαθεσιμότητα\n&lt;accent&gt;κεφαλαίων&lt;/accent&gt;</string>
     <string name="lightning__balance">Υπόλοιπο</string>
@@ -225,6 +233,7 @@
     <string name="lightning__spending">Δαπάνες</string>
     <string name="lightning__spending_advanced__fee">Τέλος ρευστότητας</string>
     <string name="lightning__spending_advanced__title">Χωρητικότητα\n&lt;accent&gt;λήψης&lt;/accent&gt;</string>
+    <string name="lightning__spending_amount__error_balance__title">Ανεπαρκείς αποταμιεύσεις</string>
     <string name="lightning__spending_amount__error_max__description">Το ποσό που μπορείς να μεταφέρεις στο υπόλοιπο δαπανών περιορίζεται προς το παρόν σε ₿ {amount}.</string>
     <string name="lightning__spending_amount__error_max__description_zero">Η μεταφορά σου στο υπόλοιπο δαπανών περιορίζεται λόγω πολιτικής ρευστότητας. Για λεπτομέρειες, επισκέψου το Κέντρο Βοήθειας.</string>
     <string name="lightning__spending_amount__error_max__title">Μέγιστο υπόλοιπο δαπανών</string>
@@ -408,6 +417,7 @@
     <string name="other__scan_err_decoding">Σφάλμα αποκωδικοποίησης</string>
     <string name="other__scan_err_interpret_title">Αδυναμία ερμηνείας παρεχόμενων δεδομένων</string>
     <string name="other__share_qr">Κοινοποίηση κωδικού QR μέσω</string>
+    <string name="other__shop__categories__travel">Ταξίδια</string>
     <string name="other__shop__discover__esims__description">Χωρίς σύνορα</string>
     <string name="other__shop__discover__esims__title">ESims</string>
     <string name="other__shop__discover__gift_cards__description">Αγορές με Bitcoin</string>
@@ -431,6 +441,13 @@
     <string name="other__update_nav_title">Διαθέσιμη ενημέρωση</string>
     <string name="other__update_text">Ενημέρωσε το Bitkit στην τελευταία έκδοση για νέες λειτουργίες και διορθώσεις σφαλμάτων!</string>
     <string name="other__update_title">Ενημέρωσε\n&lt;accent&gt;το Bitkit&lt;/accent&gt;</string>
+    <string name="profile__add_tag">Προσθήκη ετικέτας</string>
+    <string name="profile__auth_approval_details">Λεπτομέρειες</string>
+    <string name="profile__auth_approval_ok">ΟΚ</string>
+    <string name="profile__create_nav_title">Δημιουργία προφίλ</string>
+    <string name="profile__nav_title">Προφίλ</string>
+    <string name="profile__retry_load">Προσπαθείστε Ξανά</string>
+    <string name="profile__suggestions">Προτάσεις</string>
     <string name="security__backup_button">Αντίγραφο ασφαλείας</string>
     <string name="security__backup_funds">Τώρα που έχεις κεφάλαια στο πορτοφόλι σου, ήρθε η ώρα να δημιουργήσεις αντίγραφο ασφαλείας των χρημάτων σου!</string>
     <string name="security__backup_funds_no">Δεν υπάρχουν ακόμα κεφάλαια στο πορτοφόλι σου, αλλά μπορείς να δημιουργήσεις αντίγραφο ασφαλείας αν το επιθυμείς.</string>
@@ -513,6 +530,7 @@
     <string name="security__reset_confirm">Ναι, Επαναφορά</string>
     <string name="security__reset_dialog_desc">Είσαι σίγουρος ότι θέλεις να επαναφέρεις το πορτοφόλι Bitkit; Έχεις αντίγραφο ασφαλείας της φράσης ανάκτησης και των δεδομένων του πορτοφολιού;</string>
     <string name="security__reset_dialog_title">Επαναφορά Bitkit;</string>
+    <string name="security__reset_graph_confirm">Ναι, Επαναφορά</string>
     <string name="security__reset_text">Δημιούργησε πρώτα αντίγραφο ασφαλείας του πορτοφολιού για να αποφύγεις την απώλεια κεφαλαίων και δεδομένων πορτοφολιού. Η επαναφορά θα αντικαταστήσει την τρέχουσα ρύθμιση του Bitkit.</string>
     <string name="security__reset_title">Επαναφορά και ανάκτηση</string>
     <string name="security__success_bio">Ρύθμισες επιτυχώς κωδικό PIN και {biometricsName} για να βελτιώσεις την ασφάλεια του πορτοφολιού.</string>
@@ -746,6 +764,11 @@
     <string name="slashtags__onboarding_profile1_text">Ρύθμισε το δημόσιο προφίλ και τους συνδέσμους σου, ώστε οι επαφές σου στο Bitkit να μπορούν να επικοινωνήσουν ή να σε πληρώσουν οποτεδήποτε, οπουδήποτε.</string>
     <string name="slashtags__profile">Προφίλ</string>
     <string name="slashtags__profile_create">Δημιουργία προφίλ</string>
+    <string name="subscriptions__cancel">Ακύρωση</string>
+    <string name="subscriptions__payments">Πληρωμές</string>
+    <string name="subscriptions__pending">Εκκρεμεί</string>
+    <string name="subscriptions__proposal_queued_title">Σε αναμονή</string>
+    <string name="subscriptions__status">Κατάσταση</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Περίμενε όσο το Bitkit αναζητά κεφάλαια σε μη υποστηριζόμενες διευθύνσεις (Legacy, Nested SegWit και Taproot).</string>
     <string name="sweep__checking_loading">ΑΝΑΖΗΤΗΣΗ ΚΕΦΑΛΑΙΩΝ...</string>
@@ -794,6 +817,7 @@
     <string name="wallet__activity_confirmed">Επιβεβαιώθηκε</string>
     <string name="wallet__activity_confirming">Επιβεβαίωση</string>
     <string name="wallet__activity_confirms_in">Επιβεβαιώνεται σε {feeRateDescription}</string>
+    <string name="wallet__activity_contact">Επαφή</string>
     <string name="wallet__activity_date">Ημερομηνία</string>
     <string name="wallet__activity_error_load_failed">Αποτυχία φόρτωσης δραστηριότητας</string>
     <string name="wallet__activity_error_not_found">Η δραστηριότητα δεν βρέθηκε</string>
@@ -979,6 +1003,11 @@
     <string name="wallet__payment_invoice_request_expired">Αυτό το αίτημα τιμολογίου Lightning έληξε. Ζητήστε νέο τιμολόγιο.</string>
     <string name="wallet__payment_invoice_request_rejected">Ο παραλήπτης απέρριψε αυτό το αίτημα τιμολογίου Lightning.</string>
     <string name="wallet__payment_recipient_rejected">Ο παραλήπτης απέρριψε αυτήν την πληρωμή Lightning. Ελέγξτε το τιμολόγιο και δοκιμάστε ξανά.</string>
+    <string name="wallet__payment_request_contact">Επαφή</string>
+    <string name="wallet__payment_request_date">Ημερομηνία</string>
+    <string name="wallet__payment_request_note">Σημείωση</string>
+    <string name="wallet__payment_request_sent_title">Στάλθηκε</string>
+    <string name="wallet__payment_request_time">Ώρα</string>
     <string name="wallet__payment_retries_exhausted">Το Bitkit δοκίμασε αρκετές διαδρομές Lightning, αλλά η πληρωμή δεν μπόρεσε να ολοκληρωθεί.</string>
     <string name="wallet__payment_route_not_found">Το Bitkit δεν μπόρεσε να βρει διαδρομή Lightning για αυτήν την πληρωμή.</string>
     <string name="wallet__payment_timeout">Το χρονικό όριο πληρωμής έληξε. Δοκιμάστε ξανά.</string>
@@ -1000,6 +1029,7 @@
     <string name="widgets__blocks__description">Εξέτασε διάφορα στατιστικά για τα νεοεξορυχθέντα Bitcoin Blocks.</string>
     <string name="widgets__blocks__field__block">Block</string>
     <string name="widgets__blocks__field__date">Ημερομηνία</string>
+    <string name="widgets__blocks__field__fees">Τέλη</string>
     <string name="widgets__blocks__field__size">Μέγεθος</string>
     <string name="widgets__blocks__field__time">Ώρα</string>
     <string name="widgets__blocks__field__transactions">Συναλλαγές</string>

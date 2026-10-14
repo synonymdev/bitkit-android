@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="btcpay__missing_mnemonic">Bitkit не смог прочитать вашу фразу восстановления.</string>
     <string name="cards__backupSeedPhrase__description">Храните ваш биткоин</string>
     <string name="cards__backupSeedPhrase__title">Резервная копия</string>
     <string name="cards__buyBitcoin__description">Купите биткоин</string>
@@ -68,6 +69,7 @@
     <string name="common__save">Сохранить</string>
     <string name="common__search">Поиск</string>
     <string name="common__share">Поделиться</string>
+    <string name="common__show_details">Показать детали</string>
     <string name="common__skip">Пропустить</string>
     <string name="common__success">Успешно</string>
     <string name="common__try_again">Попробовать снова</string>
@@ -75,6 +77,15 @@
     <string name="common__usable">Доступно</string>
     <string name="common__yes">Да</string>
     <string name="common__yes_proceed">Да,\nПродолжить</string>
+    <string name="contacts__add_button">Добавить</string>
+    <string name="contacts__add_contact_title">Добавить Контакт</string>
+    <string name="contacts__add_scan_qr">Сканировать QR</string>
+    <string name="contacts__add_sheet_title">Добавить Контакт</string>
+    <string name="contacts__detail_title">Контакт</string>
+    <string name="contacts__edit_contact_title">Изменить Контакт</string>
+    <string name="contacts__intro_add_contact">Добавить Контакт</string>
+    <string name="contacts__intro_title">Динамические\n&lt;accent&gt;контакты&lt;/accent&gt;</string>
+    <string name="contacts__nav_title">Контакты</string>
     <string name="fee__custom__description">Зависит от комиссии</string>
     <string name="fee__custom__duration">Зависит от комиссии</string>
     <string name="fee__custom__shortDescription">Зависит от комиссии</string>
@@ -84,6 +95,7 @@
     <string name="fee__fast__shortDescription">±10м</string>
     <string name="fee__fast__title">Быстро</string>
     <string name="fee__instant__duration">±2 секунды</string>
+    <string name="fee__instant__shortDescription">Мгновенно</string>
     <string name="fee__instant__title">Мгновенно</string>
     <string name="fee__minimum__description">+2 часа</string>
     <string name="fee__minimum__duration">+2 часа</string>
@@ -97,6 +109,8 @@
     <string name="fee__slow__duration">±1 час</string>
     <string name="fee__slow__shortDescription">±1ч</string>
     <string name="fee__slow__title">Медленно</string>
+    <string name="hardware__passphrase_button">Кодовая Фраза</string>
+    <string name="hardware__passphrase_title">Кодовая Фраза</string>
     <string name="lightning__availability__text">Перевод средств в сбережения обычно мгновенный, но расчёт может занять до &lt;accent&gt;14 дней&lt;/accent&gt; в определённых сетевых условиях.</string>
     <string name="lightning__availability__title">Доступность\n&lt;accent&gt;Средств&lt;/accent&gt;</string>
     <string name="lightning__balance">Баланс</string>
@@ -125,6 +139,8 @@
     <string name="lightning__conn_open">Открытые Соединения</string>
     <string name="lightning__conn_pending">Ожидающие Соединения</string>
     <string name="lightning__connection">Соединение</string>
+    <string name="lightning__connection_closed__description">Средства на вашем балансе расходов были переведены в ваши сбережения.</string>
+    <string name="lightning__connection_closed__title">Соединение Закрыто</string>
     <string name="lightning__connections">Lightning Соединения</string>
     <string name="lightning__created_on">Создано</string>
     <string name="lightning__error_add">Bitkit не удалось добавить узел Lightning.</string>
@@ -237,6 +253,7 @@
     <string name="lightning__spending">Расходы</string>
     <string name="lightning__spending_advanced__fee">Комиссия за Ликвидность</string>
     <string name="lightning__spending_advanced__title">Входящая\n&lt;accent&gt;Ёмкость&lt;/accent&gt;</string>
+    <string name="lightning__spending_amount__error_balance__title">Недостаточно Сбережений</string>
     <string name="lightning__spending_amount__error_max__description">Сумма, которую вы можете перевести на баланс расходов, в настоящее время ограничена ₿ {amount}.</string>
     <string name="lightning__spending_amount__error_max__description_zero">Ваш перевод на баланс расходов ограничен из-за политики ликвидности. Подробности см. в Центре помощи.</string>
     <string name="lightning__spending_amount__error_max__title">Максимум Баланса Расходов</string>
@@ -422,6 +439,7 @@
     <string name="other__scan_err_decoding">Ошибка Декодирования</string>
     <string name="other__scan_err_interpret_title">Не Удалось Интерпретировать Предоставленные Данные</string>
     <string name="other__share_qr">Поделиться QR-кодом через</string>
+    <string name="other__shop__categories__travel">Путешествия</string>
     <string name="other__shop__discover__esims__description">Без границ</string>
     <string name="other__shop__discover__esims__title">eSIM</string>
     <string name="other__shop__discover__gift_cards__description">Покупайте за Bitcoin</string>
@@ -445,6 +463,21 @@
     <string name="other__update_nav_title">Доступно Обновление</string>
     <string name="other__update_text">Пожалуйста, обновите Bitkit до последней версии для новых функций и исправления ошибок!</string>
     <string name="other__update_title">Обновите\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
+    <string name="profile__add_link">Добавить Ссылку</string>
+    <string name="profile__add_link_label_placeholder">Например, \'Сайт\'</string>
+    <string name="profile__add_link_note">Примечание: Любая ссылка, которую вы добавите, будет видна всем.</string>
+    <string name="profile__add_tag">Добавить Тег</string>
+    <string name="profile__auth_approval_authorize">Авторизовать</string>
+    <string name="profile__auth_approval_details">Подробности</string>
+    <string name="profile__auth_approval_ok">Ок</string>
+    <string name="profile__auth_approval_title">Авторизовать</string>
+    <string name="profile__create_nav_title">Создать Профиль</string>
+    <string name="profile__edit_nav_title">Редактировать Профиль</string>
+    <string name="profile__nav_title">Профиль</string>
+    <string name="profile__retry_load">Попробовать снова</string>
+    <string name="profile__suggestions">Рекомендации</string>
+    <string name="profile__suggestions_to_add">Рекомендации для добавления</string>
+    <string name="profile__your_name">Ваше Имя</string>
     <string name="security__backup_button">Создать</string>
     <string name="security__backup_funds">Теперь, когда у вас есть средства в кошельке, пришло время создать их резервную копию!</string>
     <string name="security__backup_funds_no">В вашем кошельке пока нет средств, но при желании вы можете создать резервную копию.</string>
@@ -527,6 +560,7 @@
     <string name="security__reset_confirm">Да,\nСбросить</string>
     <string name="security__reset_dialog_desc">Вы уверены, что хотите сбросить настройки своего кошелька Bitkit? У вас есть резервная копия фразы восстановления и данных кошелька?</string>
     <string name="security__reset_dialog_title">Сбросить Bitkit?</string>
+    <string name="security__reset_graph_confirm">Да,\nСбросить</string>
     <string name="security__reset_text">Сначала сделайте резервную копию своего кошелька, чтобы избежать потери ваших средств и данных кошелька. Сброс перезапишет ваши текущие настройки Bitkit.</string>
     <string name="security__reset_title">Сбросить И Восстановить</string>
     <string name="security__success_bio">Вы успешно установили PIN-код и {biometricsName} для повышения безопасности кошелька.</string>
@@ -752,6 +786,7 @@
     <string name="settings__support_title">Поддержка</string>
     <string name="settings__widgets__nav_title">Виджеты</string>
     <string name="settings__widgets__showWidgets">Виджеты</string>
+    <string name="slashtags__error_pay_title">Невозможно Заплатить Контакту</string>
     <string name="settings__widgets__reset_suggestions">Сбросить карточки предложений</string>
     <string name="settings__widgets__reset_widgets">Сбросить виджеты</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Вы уверены, что хотите сбросить виджеты? Будет отображён набор виджетов по умолчанию с настройками по умолчанию.</string>
@@ -762,6 +797,11 @@
     <string name="slashtags__onboarding_profile1_text">Настройте свой публичный профиль и ссылки, чтобы ваши контакты Bitkit могли связаться с вами или заплатить вам в любое время и в любом месте.</string>
     <string name="slashtags__profile">Профиль</string>
     <string name="slashtags__profile_create">Создать Профиль</string>
+    <string name="subscriptions__cancel">Отмена</string>
+    <string name="subscriptions__payments">Платежи</string>
+    <string name="subscriptions__pending">В ожидании</string>
+    <string name="subscriptions__proposal_queued_title">В очереди</string>
+    <string name="subscriptions__status">Статус</string>
     <string name="sweep__balance_format">%1\$s sats</string>
     <string name="sweep__checking_description">Пожалуйста, подождите, пока Bitkit ищет средства на неподдерживаемых адресах (Legacy, Nested SegWit и Taproot).</string>
     <string name="sweep__checking_loading">ПОИСК СРЕДСТВ...</string>
@@ -799,6 +839,7 @@
     <string name="wallet__activity_address">Адрес</string>
     <string name="wallet__activity_all">Все транзакции</string>
     <string name="wallet__activity_assign">Привязать</string>
+    <string name="wallet__activity_assign_contact_title">Привязать Контакт</string>
     <string name="wallet__activity_bitcoin_received">Получен Биткоин</string>
     <string name="wallet__activity_bitcoin_sent">Отправлен Биткоин</string>
     <string name="wallet__activity_boost">Ускорить</string>
@@ -811,7 +852,9 @@
     <string name="wallet__activity_confirmed">Подтверждена</string>
     <string name="wallet__activity_confirming">Подтверждение</string>
     <string name="wallet__activity_confirms_in">Подтверждение через {feeRateDescription}</string>
+    <string name="wallet__activity_contact">Контакт</string>
     <string name="wallet__activity_date">Дата</string>
+    <string name="wallet__activity_detach">Отвязать</string>
     <string name="wallet__activity_error_load_failed">Не удалось загрузить активность</string>
     <string name="wallet__activity_error_not_found">Активность не найдена</string>
     <string name="wallet__activity_explore">Эксплорер</string>
@@ -829,6 +872,7 @@
     <string name="wallet__activity_payment">Платеж</string>
     <string name="wallet__activity_payment_hash">Хеш платежа</string>
     <string name="wallet__activity_pending">В ожидании</string>
+    <string name="wallet__activity_pending_nav_title">Платеж в ожидании</string>
     <string name="wallet__activity_preimage">Preimage</string>
     <string name="wallet__activity_previous_month">Предыдущий месяц</string>
     <string name="wallet__activity_received">Получено</string>
@@ -960,6 +1004,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__send_clipboard_empty_text">Пожалуйста, скопируйте адрес или инвойс.</string>
     <string name="wallet__send_clipboard_empty_title">Буфер обмена пуст</string>
     <string name="wallet__send_confirming_in">Подтверждение через</string>
+    <string name="wallet__send_contact_title">Выбрать Контакт</string>
     <string name="wallet__send_details">Подробности</string>
     <string name="wallet__send_dialog1">Похоже, вы отправляете более 100$. Вы хотите продолжать?</string>
     <string name="wallet__send_dialog2">Похоже, вы отправляете более 50% от общего баланса. Вы хотите продолжать?</string>
@@ -982,6 +1027,8 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__send_max">МАКС</string>
     <string name="wallet__send_max_spending__description">Максимальная сумма для траты немного меньше из-за необходимого резервного баланса.</string>
     <string name="wallet__send_max_spending__title">Резервный баланс</string>
+    <string name="wallet__send_pending__description">Этот платеж занимает больше времени, чем ожидалось. Вы можете продолжать использовать Bitkit.</string>
+    <string name="wallet__send_pending__nav_title">Платеж в ожидании</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Оплата
 &lt;accent&gt;счёта...&lt;/accent&gt;</string>
@@ -1007,12 +1054,19 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__payment_invoice_request_expired">Срок действия этого запроса счета Lightning истек. Запросите новый счет.</string>
     <string name="wallet__payment_invoice_request_rejected">Получатель отклонил этот запрос счета Lightning.</string>
     <string name="wallet__payment_recipient_rejected">Получатель отклонил этот платеж Lightning. Проверьте счет и попробуйте снова.</string>
+    <string name="wallet__payment_request_contact">Контакт</string>
+    <string name="wallet__payment_request_date">Дата</string>
+    <string name="wallet__payment_request_note">Заметка</string>
+    <string name="wallet__payment_request_sent_title">Исходящие</string>
+    <string name="wallet__payment_request_time">Время</string>
     <string name="wallet__payment_retries_exhausted">Bitkit попробовал несколько маршрутов Lightning, но платеж не удалось завершить.</string>
     <string name="wallet__payment_route_not_found">Bitkit не смог найти маршрут Lightning для этого платежа.</string>
     <string name="wallet__payment_timeout">Время ожидания платежа истекло. Попробуйте еще раз.</string>
     <string name="wallet__payment_unknown_required_features">Этот счет Lightning использует функции, которые Bitkit пока не поддерживает.</string>
     <string name="wallet__toast_payment_failed_description">Ваш мгновенный платеж не удался. Пожалуйста, попробуйте снова.</string>
     <string name="wallet__toast_payment_failed_title">Платеж не выполнен</string>
+    <string name="wallet__toast_payment_sent_description">Ваш мгновенный платеж был успешно отправлен.</string>
+    <string name="wallet__toast_payment_sent_title">Платеж отправлен</string>
     <string name="wallet__toast_received_transaction_replaced_description">Ваша полученная транзакция была заменена повышением комиссии</string>
     <string name="wallet__toast_received_transaction_replaced_title">Полученная транзакция заменена</string>
     <string name="wallet__toast_transaction_removed_description">Транзакция была удалена из мемпула</string>
@@ -1028,6 +1082,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="widgets__blocks__description">Изучайте различную статистику по недавно добытым блокам Bitcoin.</string>
     <string name="widgets__blocks__field__block">Блок</string>
     <string name="widgets__blocks__field__date">Дата</string>
+    <string name="widgets__blocks__field__fees">Комиссии</string>
     <string name="widgets__blocks__field__size">Размер</string>
     <string name="widgets__blocks__field__time">Время</string>
     <string name="widgets__blocks__field__transactions">Транзакции</string>
@@ -1059,5 +1114,6 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="widgets__widget__edit_default">По умолчанию</string>
     <string name="widgets__widget__edit_description">Пожалуйста, выберите, какие поля вы хотите отображать в виджете {name}.</string>
     <string name="widgets__widget__nav_title">Виджет</string>
+    <string name="widgets__widget__save">Сохранить Виджет</string>
     <string name="widgets__widgets">Виджеты</string>
 </resources>

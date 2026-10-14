@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="btcpay__missing_mnemonic">Bitkit nemohl přečíst vaši frázi pro obnovení.</string>
     <string name="cards__backupSeedPhrase__description">Uložte si svůj bitcoin</string>
     <string name="cards__backupSeedPhrase__title">Zálohování</string>
     <string name="cards__buyBitcoin__description">Koupit bitcoin</string>
@@ -60,6 +61,7 @@
     <string name="common__save">Uložit</string>
     <string name="common__search">Vyhledat</string>
     <string name="common__share">Sdílet</string>
+    <string name="common__show_details">Zobrazit podrobnosti</string>
     <string name="common__skip">Přeskočit</string>
     <string name="common__success">Úspěch</string>
     <string name="common__try_again">Zkusit znovu</string>
@@ -67,6 +69,14 @@
     <string name="common__usable">Použitelné</string>
     <string name="common__yes">Ano</string>
     <string name="common__yes_proceed">Ano, pokračovat</string>
+    <string name="contacts__add_button">Vložit</string>
+    <string name="contacts__add_contact_title">Přidat kontakt</string>
+    <string name="contacts__add_scan_qr">Skenovat QR</string>
+    <string name="contacts__add_sheet_title">Přidat kontakt</string>
+    <string name="contacts__detail_title">Kontakt</string>
+    <string name="contacts__edit_contact_title">Upravit kontakt</string>
+    <string name="contacts__intro_add_contact">Přidat kontakt</string>
+    <string name="contacts__intro_title">Dynamické\n&lt;accent&gt;kontakty&lt;/accent&gt;</string>
     <string name="fee__custom__description">Odvíjí se od poplatku</string>
     <string name="fee__custom__duration">Odvíjí se od poplatku</string>
     <string name="fee__custom__shortDescription">Odvíjí se od poplatku</string>
@@ -76,6 +86,7 @@
     <string name="fee__fast__shortDescription">+/- 10m</string>
     <string name="fee__fast__title">Rychle</string>
     <string name="fee__instant__duration">+/- 2 sekundy</string>
+    <string name="fee__instant__shortDescription">Okamžitě</string>
     <string name="fee__instant__title">Okamžitě</string>
     <string name="fee__minimum__description">+2 hodiny</string>
     <string name="fee__minimum__duration">+2 hodiny</string>
@@ -89,6 +100,8 @@
     <string name="fee__slow__duration">+/- 1 hodina</string>
     <string name="fee__slow__shortDescription">+/- 1h</string>
     <string name="fee__slow__title">Pomalu</string>
+    <string name="hardware__passphrase_button">Passphrase - přístupová fráze</string>
+    <string name="hardware__passphrase_title">Passphrase - přístupová fráze</string>
     <string name="lightning__availability__text">Převod peněz na spořicí účet je obvykle okamžitý, ale za určitých síťových podmínek může vypořádání trvat až &lt;accent&gt;14 dní&lt;/accent&gt;.</string>
     <string name="lightning__availability__title">Finanční prostředky\n&lt;accent&gt;dostupnost&lt;/accent&gt;</string>
     <string name="lightning__balance">Zůstatek</string>
@@ -117,6 +130,8 @@
     <string name="lightning__conn_open">Otevřená spojení</string>
     <string name="lightning__conn_pending">Nevyřízená spojení</string>
     <string name="lightning__connection">Spojení</string>
+    <string name="lightning__connection_closed__description">Prostředky z vašeho disponibilního zůstatku byly převedeny do úspor.</string>
+    <string name="lightning__connection_closed__title">Připojení uzavřeno</string>
     <string name="lightning__connections">Lightning spojení</string>
     <string name="lightning__created_on">Vytvořeno</string>
     <string name="lightning__error_add">Bitkit se nepodařilo přidat Lightning peer.</string>
@@ -408,6 +423,7 @@
     <string name="other__scan_err_decoding">Chyba dekódování</string>
     <string name="other__scan_err_interpret_title">Nelze interpretovat poskytnutá data</string>
     <string name="other__share_qr">Sdílet QR kód pomocí</string>
+    <string name="other__shop__categories__travel">Cestování</string>
     <string name="other__shop__discover__esims__description">Žij bez hranic</string>
     <string name="other__shop__discover__esims__title">eSims</string>
     <string name="other__shop__discover__gift_cards__description">Nakoupit s Bitcoinem</string>
@@ -431,6 +447,19 @@
     <string name="other__update_nav_title">Aktualizace k dispozici</string>
     <string name="other__update_text">Aktualizujte prosím Bitkit na nejnovější verzi pro nové funkce a opravy chyb!</string>
     <string name="other__update_title">Aktualizovat\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
+    <string name="profile__add_link">Vložit odkaz</string>
+    <string name="profile__add_link_label_placeholder">Například „webová stránka“</string>
+    <string name="profile__add_link_note">Poznámka: Jakýkoli odkaz, který přidáte, bude veřejně viditelný.</string>
+    <string name="profile__add_tag">Vložit tag</string>
+    <string name="profile__auth_approval_authorize">Autorizovat</string>
+    <string name="profile__auth_approval_details">Podrobnosti</string>
+    <string name="profile__auth_approval_title">Autorizovat</string>
+    <string name="profile__create_nav_title">Vytvořit profil</string>
+    <string name="profile__edit_nav_title">Upravit profil</string>
+    <string name="profile__nav_title">Profil</string>
+    <string name="profile__retry_load">Zkusit znovu</string>
+    <string name="profile__suggestions">Návrhy</string>
+    <string name="profile__your_name">Vaše jméno</string>
     <string name="security__backup_button">Zálohování</string>
     <string name="security__backup_funds">Nyní, když máte v peněžence nějaké prostředky, je čas je zálohovat!</string>
     <string name="security__backup_funds_no">Ve vaší peněžence zatím nejsou žádné prostředky, ale pokud chcete, můžete si vytvořit zálohu.</string>
@@ -513,6 +542,7 @@
     <string name="security__reset_confirm">Ano, resetovat</string>
     <string name="security__reset_dialog_desc">Opravdu chcete resetovat svou peněženku Bitkit? Máte zálohu své fráze pro obnovení a dat peněženky?</string>
     <string name="security__reset_dialog_title">Resetovat Bitkit?</string>
+    <string name="security__reset_graph_confirm">Ano, resetovat</string>
     <string name="security__reset_text">Nejprve si zálohujte peněženku, abyste se vyhnuli ztrátě finančních prostředků a dat peněženky. Resetováním se přepíše vaše aktuální nastavení Bitkitu.</string>
     <string name="security__reset_title">Resetovat a obnovit</string>
     <string name="security__success_bio">Úspěšně jste nastavili kód PIN a {biometricsName} abyste zvýšili bezpečnost peněženky.</string>
@@ -736,6 +766,7 @@
     <string name="settings__support_title">Podpora</string>
     <string name="settings__widgets__nav_title">Widgety</string>
     <string name="settings__widgets__showWidgets">Widgety</string>
+    <string name="slashtags__error_pay_title">Není možné zaplatit kontaktu</string>
     <string name="settings__widgets__reset_suggestions">Resetovat karty návrhů</string>
     <string name="settings__widgets__reset_widgets">Resetovat widgety</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Opravdu chcete resetovat widgety? Zobrazí se výchozí sada widgetů s výchozím nastavením.</string>
@@ -746,6 +777,10 @@
     <string name="slashtags__onboarding_profile1_text">Nastavte si veřejný profil a odkazy, aby vás kontakty ze služby Bitkit mohly kdykoli a kdekoli kontaktovat nebo vám zaplatit.</string>
     <string name="slashtags__profile">Profil</string>
     <string name="slashtags__profile_create">Vytvořit profil</string>
+    <string name="subscriptions__cancel">Zrušit</string>
+    <string name="subscriptions__payments">Platby</string>
+    <string name="subscriptions__pending">Čekající</string>
+    <string name="subscriptions__proposal_queued_title">Ve frontě</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Počkejte prosím, Bitkit hledá prostředky na nepodporovaných adresách (Legacy, Nested SegWit a Taproot).</string>
     <string name="sweep__checking_loading">HLEDÁNÍ PROSTŘEDKŮ...</string>
@@ -782,6 +817,7 @@
     <string name="wallet__activity_address">Adresa</string>
     <string name="wallet__activity_all">Veškerá aktivita</string>
     <string name="wallet__activity_assign">Přiřadit</string>
+    <string name="wallet__activity_assign_contact_title">Přiřadit kontakt</string>
     <string name="wallet__activity_bitcoin_received">bitcoin přijatý</string>
     <string name="wallet__activity_bitcoin_sent">bitcoin odeslaný</string>
     <string name="wallet__activity_boost">Posílit</string>
@@ -794,7 +830,9 @@
     <string name="wallet__activity_confirmed">Potvrzeno</string>
     <string name="wallet__activity_confirming">Potvrzování</string>
     <string name="wallet__activity_confirms_in">Potvrzení během {feeRateDescription}</string>
+    <string name="wallet__activity_contact">Kontakt</string>
     <string name="wallet__activity_date">Datum</string>
+    <string name="wallet__activity_detach">Oddělit</string>
     <string name="wallet__activity_error_load_failed">Nepodařilo se načíst aktivitu</string>
     <string name="wallet__activity_error_not_found">Aktivita nenalezena</string>
     <string name="wallet__activity_explore">Prozkoumat</string>
@@ -812,6 +850,7 @@
     <string name="wallet__activity_payment">Platba</string>
     <string name="wallet__activity_payment_hash">Hash platby</string>
     <string name="wallet__activity_pending">Zpracovávání</string>
+    <string name="wallet__activity_pending_nav_title">Platba čeká na vyřízení</string>
     <string name="wallet__activity_preimage">Preimage</string>
     <string name="wallet__activity_previous_month">Předchozí měsíc</string>
     <string name="wallet__activity_received">Přijmuto</string>
@@ -933,6 +972,7 @@
     <string name="wallet__send_clipboard_empty_text">Zkopírujte prosím adresu nebo fakturu.</string>
     <string name="wallet__send_clipboard_empty_title">Schránka je prázdná</string>
     <string name="wallet__send_confirming_in">Potvrzení během</string>
+    <string name="wallet__send_contact_title">Vybrat kontakt</string>
     <string name="wallet__send_details">Podrobnosti</string>
     <string name="wallet__send_dialog1">Zdá se, že posíláte více než $100. Přejete si pokračovat?</string>
     <string name="wallet__send_dialog2">Zdá se, že posíláte více než 50 % svého celkového zůstatku. Přejete si pokračovat?</string>
@@ -955,6 +995,8 @@
     <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_max_spending__description">Maximální částka, kterou lze utratit, je o něco nižší kvůli požadovanému zůstatku rezervy.</string>
     <string name="wallet__send_max_spending__title">Zůstatek rezervy</string>
+    <string name="wallet__send_pending__description">Tato platba trvá o něco déle, než se očekávalo. Bitkit můžete používat i nadále.</string>
+    <string name="wallet__send_pending__nav_title">Platba čeká na vyřízení</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Placení\n&lt;accent&gt;faktury...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Potvrdit</string>
@@ -979,12 +1021,19 @@
     <string name="wallet__payment_invoice_request_expired">Platnost této žádosti o Lightning fakturu vypršela. Vyžádejte si novou fakturu.</string>
     <string name="wallet__payment_invoice_request_rejected">Příjemce tuto žádost o Lightning fakturu odmítl.</string>
     <string name="wallet__payment_recipient_rejected">Příjemce tuto Lightning platbu odmítl. Zkontrolujte fakturu a zkuste to znovu.</string>
+    <string name="wallet__payment_request_contact">Kontakt</string>
+    <string name="wallet__payment_request_date">Datum</string>
+    <string name="wallet__payment_request_note">Poznámka</string>
+    <string name="wallet__payment_request_sent_title">Posláno</string>
+    <string name="wallet__payment_request_time">Čas</string>
     <string name="wallet__payment_retries_exhausted">Bitkit vyzkoušel několik Lightning tras, ale platbu se nepodařilo dokončit.</string>
     <string name="wallet__payment_route_not_found">Bitkit nenašel pro tuto platbu žádnou Lightning trasu.</string>
     <string name="wallet__payment_timeout">Časový limit platby vypršel. Zkuste to znovu.</string>
     <string name="wallet__payment_unknown_required_features">Tato Lightning faktura používá funkce, které Bitkit zatím nepodporuje.</string>
     <string name="wallet__toast_payment_failed_description">Vaše okamžitá platba se nezdařila. Zkuste to prosím znovu.</string>
     <string name="wallet__toast_payment_failed_title">Platba se nezdařila</string>
+    <string name="wallet__toast_payment_sent_description">Vaše okamžitá platba byla úspěšně odeslána.</string>
+    <string name="wallet__toast_payment_sent_title">Platba odeslána</string>
     <string name="wallet__toast_received_transaction_replaced_description">Vaše přijatá transakce byla nahrazena navýšením poplatku</string>
     <string name="wallet__toast_received_transaction_replaced_title">Přijatá transakce nahrazena</string>
     <string name="wallet__toast_transaction_removed_description">Transakce byla odstraněna z mempoolu</string>
@@ -1000,6 +1049,7 @@
     <string name="widgets__blocks__description">Prozkoumejte různé statistiky nově vytěžených bloků bitcoinu.</string>
     <string name="widgets__blocks__field__block">Blok</string>
     <string name="widgets__blocks__field__date">Datum</string>
+    <string name="widgets__blocks__field__fees">Poplatky</string>
     <string name="widgets__blocks__field__size">Velikost</string>
     <string name="widgets__blocks__field__time">Čas</string>
     <string name="widgets__blocks__field__transactions">Transakce</string>
@@ -1031,5 +1081,6 @@
     <string name="widgets__widget__edit_default">Výchozí</string>
     <string name="widgets__widget__edit_description">Vyberte, která pole chcete zobrazit ve widgetu {name}.</string>
     <string name="widgets__widget__nav_title">Widget</string>
+    <string name="widgets__widget__save">Uložit Widget</string>
     <string name="widgets__widgets">Widgety</string>
 </resources>

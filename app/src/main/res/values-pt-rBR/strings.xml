@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="btcpay__missing_mnemonic">Bitkit não conseguiu ler sua frase de recuperação.</string>
     <string name="cards__backupSeedPhrase__description">Guarde seu bitcoin</string>
     <string name="cards__backupSeedPhrase__title">Back up</string>
     <string name="cards__buyBitcoin__description">Compre bitcoin</string>
@@ -60,6 +61,7 @@
     <string name="common__save">Salvar</string>
     <string name="common__search">Buscar</string>
     <string name="common__share">Compartilhar</string>
+    <string name="common__show_details">Mostrar Detalhes</string>
     <string name="common__skip">Pular</string>
     <string name="common__success">Sucesso</string>
     <string name="common__try_again">Tente novamente</string>
@@ -67,6 +69,15 @@
     <string name="common__usable">Utilizável</string>
     <string name="common__yes">Sim</string>
     <string name="common__yes_proceed">Sim, continuar</string>
+    <string name="contacts__add_button">Adicionar</string>
+    <string name="contacts__add_contact_title">Adicionar Contato</string>
+    <string name="contacts__add_scan_qr">Escanear QR</string>
+    <string name="contacts__add_sheet_title">Adicionar Contato</string>
+    <string name="contacts__detail_title">Contato</string>
+    <string name="contacts__edit_contact_title">Editar Contato</string>
+    <string name="contacts__intro_add_contact">Adicionar Contato</string>
+    <string name="contacts__intro_title">Contatos\n&lt;accent&gt;dinâmicos&lt;/accent&gt;</string>
+    <string name="contacts__nav_title">Contatos</string>
     <string name="fee__custom__description">Depende da taxa</string>
     <string name="fee__custom__duration">Depende da taxa</string>
     <string name="fee__custom__shortDescription">Depende da taxa</string>
@@ -76,6 +87,7 @@
     <string name="fee__fast__shortDescription">±10m</string>
     <string name="fee__fast__title">Rápido</string>
     <string name="fee__instant__duration">±2 segundos</string>
+    <string name="fee__instant__shortDescription">Instantâneo</string>
     <string name="fee__instant__title">Instantâneo</string>
     <string name="fee__minimum__description">+2 horas</string>
     <string name="fee__minimum__duration">+2 horas</string>
@@ -89,6 +101,8 @@
     <string name="fee__slow__duration">±1 hora</string>
     <string name="fee__slow__shortDescription">±1h</string>
     <string name="fee__slow__title">Devagar</string>
+    <string name="hardware__passphrase_button">Frase de Acesso</string>
+    <string name="hardware__passphrase_title">Frase de Acesso</string>
     <string name="lightning__availability__text">A transferência de fundos para a poupança geralmente é instantânea, mas pode levar até &lt;accent&gt;14 dias&lt;/accent&gt; em determinadas condições da rede.</string>
     <string name="lightning__availability__title">Disponibilidade\n&lt;accent&gt;de fundos&lt;/accent&gt;</string>
     <string name="lightning__balance">Saldo</string>
@@ -117,6 +131,8 @@
     <string name="lightning__conn_open">Conexões abertas</string>
     <string name="lightning__conn_pending">Conexões pendentes</string>
     <string name="lightning__connection">Conexão</string>
+    <string name="lightning__connection_closed__description">Os fundos de seu saldo de gastos foram transferidos para sua poupança.</string>
+    <string name="lightning__connection_closed__title">Conexão Desativada</string>
     <string name="lightning__connections">Conexões Lightning</string>
     <string name="lightning__created_on">Criado em</string>
     <string name="lightning__error_add">Bitkit não foi capaz de adicionar o par Lightning.</string>
@@ -225,6 +241,7 @@
     <string name="lightning__spending">Gastos</string>
     <string name="lightning__spending_advanced__fee">Taxa de liquidez</string>
     <string name="lightning__spending_advanced__title">Capacidade de recebimento\n&lt;accent&gt;capacidade&lt;/accent&gt;</string>
+    <string name="lightning__spending_amount__error_balance__title">Saldo de Poupança Insuficiente</string>
     <string name="lightning__spending_amount__error_max__description">O valor que você pode transferir para seu saldo de gastos está atualmente limitado a ₿ {amount}.</string>
     <string name="lightning__spending_amount__error_max__description_zero">Sua transferência para o saldo de gastos é limitada devido à política de liquidez. Para obter detalhes, visite a Central de Ajuda.</string>
     <string name="lightning__spending_amount__error_max__title">Saldo de gastos Máximo</string>
@@ -408,6 +425,7 @@
     <string name="other__scan_err_decoding">Erro de Decodificação</string>
     <string name="other__scan_err_interpret_title">Incapaz de Interpretar os Dados Fornecidos</string>
     <string name="other__share_qr">Compartilhar QR Code Via</string>
+    <string name="other__shop__categories__travel">Viagem</string>
     <string name="other__shop__discover__esims__description">Sem fronteiras</string>
     <string name="other__shop__discover__esims__title">ESims</string>
     <string name="other__shop__discover__gift_cards__description">Compre com ₿</string>
@@ -431,6 +449,20 @@
     <string name="other__update_nav_title">Atualização disponível</string>
     <string name="other__update_text">Atualize a Bitkit para obter novos recursos e correções de bugs!</string>
     <string name="other__update_title">Atualizar\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
+    <string name="profile__add_link">Adicionar link</string>
+    <string name="profile__add_link_label_placeholder">Por exemplo, \"Website\".</string>
+    <string name="profile__add_link_note">Observação: Qualquer link que você adicionar ficará visível publicamente.</string>
+    <string name="profile__add_tag">Adicionar Tag</string>
+    <string name="profile__auth_approval_authorize">Autorizar</string>
+    <string name="profile__auth_approval_details">Detalhes</string>
+    <string name="profile__auth_approval_title">Autorizar</string>
+    <string name="profile__create_nav_title">Criar Perfil</string>
+    <string name="profile__edit_nav_title">Editar perfil</string>
+    <string name="profile__nav_title">Perfil</string>
+    <string name="profile__retry_load">Tente novamente</string>
+    <string name="profile__suggestions">Sugestões</string>
+    <string name="profile__suggestions_to_add">Sugestões Para Adicionar</string>
+    <string name="profile__your_name">Seu Nome</string>
     <string name="security__backup_button">Cópia de Segurança</string>
     <string name="security__backup_funds">Agora que o você tem fundos na sua carteira, é hora de fazer o backup do seu dinheiro!</string>
     <string name="security__backup_funds_no">Ainda não há fundos em sua carteira, mas você pode criar um backup, se desejar.</string>
@@ -513,6 +545,7 @@
     <string name="security__reset_confirm">Sim, Redefinir</string>
     <string name="security__reset_dialog_desc">Você tem certeza de que deseja redefinir sua Bitkit? Você tem um backup de sua frase de recuperação e dos dados da carteira?</string>
     <string name="security__reset_dialog_title">Redefinir Bitkit?</string>
+    <string name="security__reset_graph_confirm">Sim, Redefinir</string>
     <string name="security__reset_text">Faça o backup da sua carteira primeiro para evitar a perda de fundos e dados da carteira. A redefinição substituirá a configuração atual da Bitkit.</string>
     <string name="security__reset_title">Redefinir e Restaurar</string>
     <string name="security__success_bio">Você configurou com sucesso um código PIN e {biometricsName} para melhorar a segurança da sua carteira.</string>
@@ -736,6 +769,7 @@
     <string name="settings__support_title">Suporte</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
+    <string name="slashtags__error_pay_title">Não foi Possível Pagar Contato</string>
     <string name="settings__widgets__reset_suggestions">Redefinir cartões de sugestões</string>
     <string name="settings__widgets__reset_widgets">Redefinir widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Tem certeza de que deseja redefinir os widgets? O conjunto padrão de widgets com configurações padrão será exibido.</string>
@@ -746,6 +780,10 @@
     <string name="slashtags__onboarding_profile1_text">Configure seu perfil público e seus links, para que seus contatos possam pagá-lo a qualquer hora e em qualquer lugar.</string>
     <string name="slashtags__profile">Perfil</string>
     <string name="slashtags__profile_create">Criar Perfil</string>
+    <string name="subscriptions__cancel">Cancelar</string>
+    <string name="subscriptions__payments">Pagamentos</string>
+    <string name="subscriptions__pending">Pendente</string>
+    <string name="subscriptions__proposal_queued_title">Na Fila</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Aguarde enquanto a Bitkit procura fundos em endereços não suportados (Legacy, Nested SegWit e Taproot).</string>
     <string name="sweep__checking_loading">PROCURANDO FUNDOS...</string>
@@ -782,6 +820,7 @@
     <string name="wallet__activity_address">Endereço</string>
     <string name="wallet__activity_all">Todas as atividades</string>
     <string name="wallet__activity_assign">Atribuir</string>
+    <string name="wallet__activity_assign_contact_title">Atribuir Contato</string>
     <string name="wallet__activity_bitcoin_received">Bitcoin Recebido</string>
     <string name="wallet__activity_bitcoin_sent">Bitcoin Enviado</string>
     <string name="wallet__activity_boost">Impulsionar</string>
@@ -794,7 +833,9 @@
     <string name="wallet__activity_confirmed">Confirmado</string>
     <string name="wallet__activity_confirming">Confirmando</string>
     <string name="wallet__activity_confirms_in">Confirma em {feeRateDescription}</string>
+    <string name="wallet__activity_contact">Contato</string>
     <string name="wallet__activity_date">Data</string>
+    <string name="wallet__activity_detach">Separar</string>
     <string name="wallet__activity_error_load_failed">Falha ao carregar atividade</string>
     <string name="wallet__activity_error_not_found">Atividade não encontrada</string>
     <string name="wallet__activity_explore">Explorar</string>
@@ -812,6 +853,7 @@
     <string name="wallet__activity_payment">Pagamento</string>
     <string name="wallet__activity_payment_hash">Hash de pagamento</string>
     <string name="wallet__activity_pending">Pendente</string>
+    <string name="wallet__activity_pending_nav_title">Pagamento Pendente</string>
     <string name="wallet__activity_preimage">Pré imagem</string>
     <string name="wallet__activity_previous_month">Mês anterior</string>
     <string name="wallet__activity_received">Recebido</string>
@@ -933,6 +975,7 @@
     <string name="wallet__send_clipboard_empty_text">Por favor, copie um endereço ou um invoice.</string>
     <string name="wallet__send_clipboard_empty_title">Área de transferência vazia</string>
     <string name="wallet__send_confirming_in">Confirmando em</string>
+    <string name="wallet__send_contact_title">Selecione o Contato</string>
     <string name="wallet__send_details">Detalhes</string>
     <string name="wallet__send_dialog1">Parece que você está enviando mais de US$ 100. Deseja continuar?</string>
     <string name="wallet__send_dialog2">Parece que você está enviando mais de 50% do seu saldo total. Deseja continuar?</string>
@@ -955,6 +998,8 @@
     <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_max_spending__description">O valor máximo utilizável é um pouco menor devido a um saldo de reserva obrigatório.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
+    <string name="wallet__send_pending__description">Esse pagamento está demorando mais do que o esperado. Enquanto isso, você pode continuar usando a Bitkit.</string>
+    <string name="wallet__send_pending__nav_title">Pagamento Pendente</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagando \n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Confirmar</string>
@@ -979,12 +1024,19 @@
     <string name="wallet__payment_invoice_request_expired">Esta solicitação de fatura Lightning expirou. Solicite uma nova fatura.</string>
     <string name="wallet__payment_invoice_request_rejected">O destinatário rejeitou esta solicitação de fatura Lightning.</string>
     <string name="wallet__payment_recipient_rejected">O destinatário rejeitou este pagamento Lightning. Verifique a fatura e tente novamente.</string>
+    <string name="wallet__payment_request_contact">Contato</string>
+    <string name="wallet__payment_request_date">Data</string>
+    <string name="wallet__payment_request_note">Nota</string>
+    <string name="wallet__payment_request_sent_title">Enviado</string>
+    <string name="wallet__payment_request_time">Hora</string>
     <string name="wallet__payment_retries_exhausted">O Bitkit tentou várias rotas Lightning, mas o pagamento não pôde ser concluído.</string>
     <string name="wallet__payment_route_not_found">O Bitkit não conseguiu encontrar uma rota Lightning para este pagamento.</string>
     <string name="wallet__payment_timeout">O pagamento expirou. Tente novamente.</string>
     <string name="wallet__payment_unknown_required_features">Esta fatura Lightning usa recursos que o Bitkit ainda não oferece suporte.</string>
     <string name="wallet__toast_payment_failed_description">Seu pagamento instantâneo falhou. Por favor, tente novamente.</string>
     <string name="wallet__toast_payment_failed_title">Pagamento Falhou</string>
+    <string name="wallet__toast_payment_sent_description">Seu pagamento instantâneo foi enviado com sucesso.</string>
+    <string name="wallet__toast_payment_sent_title">Pagamento Enviado</string>
     <string name="wallet__toast_received_transaction_replaced_description">Sua transação recebida foi substituída por um aumento de taxa</string>
     <string name="wallet__toast_received_transaction_replaced_title">Transação Recebida Substituída</string>
     <string name="wallet__toast_transaction_removed_description">Transação foi removida da mempool</string>
@@ -1000,6 +1052,7 @@
     <string name="widgets__blocks__description">Examinar várias estatísticas sobre blocos de Bitcoin recém-minerados.</string>
     <string name="widgets__blocks__field__block">Bloco</string>
     <string name="widgets__blocks__field__date">Data</string>
+    <string name="widgets__blocks__field__fees">Taxas</string>
     <string name="widgets__blocks__field__size">Tamanho</string>
     <string name="widgets__blocks__field__time">Hora</string>
     <string name="widgets__blocks__field__transactions">Transações</string>
@@ -1031,5 +1084,6 @@
     <string name="widgets__widget__edit_default">Padrão</string>
     <string name="widgets__widget__edit_description">Por favor, selecione quais campos você deseja exibir no widget {name}.</string>
     <string name="widgets__widget__nav_title">Widget</string>
+    <string name="widgets__widget__save">Salvar Widget</string>
     <string name="widgets__widgets">Widgets</string>
 </resources>

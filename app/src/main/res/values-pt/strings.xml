@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="cards__backupSeedPhrase__title">Back up</string>
+    <string name="btcpay__missing_mnemonic">Bitkit não conseguiu ler sua frase de recuperação.</string>
     <string name="cards__backupSeedPhrase__description">Guarde seu bitcoin</string>
     <string name="cards__quickpay__title">QuickPay</string>
     <string name="cards__quickpay__description">Escanear e pagar</string>
@@ -33,12 +34,17 @@
     <string name="common__close">Fechar</string>
     <string name="common__are_you_sure">Você tem certeza?</string>
     <string name="common__yes_proceed">Sim, continuar</string>
+    <string name="contacts__add_button">Adicionar</string>
+    <string name="contacts__add_scan_qr">Escanear QR</string>
+    <string name="contacts__detail_title">Contato</string>
+    <string name="contacts__nav_title">Contatos</string>
     <string name="common__try_again">Tente novamente</string>
     <string name="common__dialog_cancel">Não, cancelar</string>
     <string name="common__sat_vbyte">₿ / vbyte</string>
     <string name="common__edit">Editar</string>
     <string name="common__copy">Copiar</string>
     <string name="common__share">Compartilhar</string>
+    <string name="common__show_details">Mostrar Detalhes</string>
     <string name="common__search">Buscar</string>
     <string name="common__save">Salvar</string>
     <string name="common__delete">Deletar</string>
@@ -68,6 +74,7 @@
     <string name="common__success">Sucesso</string>
     <string name="common__usable">Utilizável</string>
     <string name="fee__instant__duration">±2 segundos</string>
+    <string name="fee__instant__shortDescription">Instantâneo</string>
     <string name="fee__instant__title">Instantâneo</string>
     <string name="fee__fast__title">Rápido</string>
     <string name="fee__fast__description">±10-20 minutos</string>
@@ -78,6 +85,8 @@
     <string name="fee__normal__duration">±20 minutos</string>
     <string name="fee__normal__shortDescription">±20m</string>
     <string name="fee__slow__title">Devagar</string>
+    <string name="hardware__passphrase_button">Frase de Acesso</string>
+    <string name="hardware__passphrase_title">Frase de Acesso</string>
     <string name="fee__slow__description">±1-2 horas</string>
     <string name="fee__slow__duration">±1 hora</string>
     <string name="fee__slow__shortDescription">±1h</string>
@@ -125,6 +134,7 @@
     <string name="lightning__spending_confirm__total">Total</string>
     <string name="lightning__spending_confirm__default">Usar padrões</string>
     <string name="lightning__spending_advanced__title">Capacidade de recebimento\n&lt;accent&gt;capacidade&lt;/accent&gt;</string>
+    <string name="lightning__spending_amount__error_balance__title">Saldo de Poupança Insuficiente</string>
     <string name="lightning__spending_advanced__fee">Taxa de liquidez</string>
     <string name="lightning__liquidity__title">Liquidez\n&lt;accent&gt;e routing&lt;/accent&gt;</string>
     <string name="lightning__liquidity__text">Seu Saldo de Gastos usa a Lightning Network para tornar seus pagamentos mais baratos, mais rápidos e mais privados.\n\nIsso funciona como o acesso à Internet, mas você paga por liquidez e roteamento em vez de largura de banda.\n\nEssa configuração inclui alguns custos únicos.</string>
@@ -393,6 +403,12 @@
     <string name="other__camera_scan_qr">Escanear QR</string>
     <string name="other__update_nav_title">Atualização disponível</string>
     <string name="other__update_title">Atualizar\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
+    <string name="profile__add_tag">Adicionar Tag</string>
+    <string name="profile__auth_approval_details">Detalhes</string>
+    <string name="profile__create_nav_title">Criar Perfil</string>
+    <string name="profile__nav_title">Perfil</string>
+    <string name="profile__retry_load">Tente novamente</string>
+    <string name="profile__suggestions">Sugestões</string>
     <string name="other__update_text">Atualize a Bitkit para obter novos recursos e correções de bugs!</string>
     <string name="other__update_button">Atualizar</string>
     <string name="other__scan__error__generic">Bitkit não consegue ler os dados fornecidos.</string>
@@ -416,6 +432,7 @@
     <string name="other__node_stopped">Parado</string>
     <string name="other__node_stopping">Parando</string>
     <string name="other__share_qr">Compartilhar Código QR Via</string>
+    <string name="other__shop__categories__travel">Viagem</string>
     <string name="other__shop__intro__title">Comprar</string>
     <string name="other__shop__intro__description">Coloque sua vida no padrão Bitcoin. Gaste seu Bitcoin em cartões-presente digitais, eSIMs, recargas de telefone e muito mais.</string>
     <string name="other__shop__discover__nav_title">Comprar</string>
@@ -503,6 +520,7 @@
     <string name="security__reset_button_backup">Fazer Backup Primeiro</string>
     <string name="security__reset_button_reset">Redefinir a Carteira</string>
     <string name="security__reset_dialog_title">Redefinir Bitkit?</string>
+    <string name="security__reset_graph_confirm">Sim, Resetar</string>
     <string name="security__reset_dialog_desc">Você tem certeza de que deseja redefinir sua Bitkit? Você tem um backup de sua frase de recuperação e dos dados da carteira?</string>
     <string name="security__reset_confirm">Sim, Redefinir</string>
     <string name="security__recovery">Recuperação</string>
@@ -565,6 +583,9 @@
     <string name="settings__general__section_payments">Pagamentos</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
+    <string name="subscriptions__cancel">Cancelar</string>
+    <string name="subscriptions__payments">Pagamentos</string>
+    <string name="subscriptions__pending">Pendente</string>
     <string name="settings__widgets__reset_suggestions">Repor cartões de sugestões</string>
     <string name="settings__widgets__reset_widgets">Repor widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Tem certeza de que deseja repor os widgets? O conjunto padrão de widgets com configurações padrão será exibido.</string>
@@ -816,6 +837,11 @@
     <string name="wallet__payment_invoice_request_expired">Este pedido de fatura Lightning expirou. Peça uma nova fatura.</string>
     <string name="wallet__payment_invoice_request_rejected">O destinatário rejeitou este pedido de fatura Lightning.</string>
     <string name="wallet__payment_recipient_rejected">O destinatário rejeitou este pagamento Lightning. Verifique a fatura e tente novamente.</string>
+    <string name="wallet__payment_request_contact">Contato</string>
+    <string name="wallet__payment_request_date">Data</string>
+    <string name="wallet__payment_request_note">Nota</string>
+    <string name="wallet__payment_request_sent_title">Enviado</string>
+    <string name="wallet__payment_request_time">Hora</string>
     <string name="wallet__payment_retries_exhausted">O Bitkit tentou várias rotas Lightning, mas o pagamento não pôde ser concluído.</string>
     <string name="wallet__payment_route_not_found">O Bitkit não conseguiu encontrar uma rota Lightning para este pagamento.</string>
     <string name="wallet__payment_timeout">O pagamento expirou. Tente novamente.</string>
@@ -857,6 +883,7 @@
     <string name="wallet__activity_transfer_to_spending">Para o Saldo de Gastos</string>
     <string name="wallet__activity_transfer_pending">Transferência (±{duration})</string>
     <string name="wallet__activity_confirms_in">Confirma em {feeRateDescription}</string>
+    <string name="wallet__activity_contact">Contato</string>
     <string name="wallet__activity_bitcoin_sent">Bitcoin Enviado</string>
     <string name="wallet__activity_bitcoin_received">Bitcoin Recebido</string>
     <string name="wallet__activity_confirming">Confirmando</string>
@@ -989,6 +1016,7 @@
     <string name="sweep__utxos_format">%1$s, %2$d UTXOs</string>
     <string name="widgets__blocks__field__block">Bloco</string>
     <string name="widgets__blocks__field__date">Data</string>
+    <string name="widgets__blocks__field__fees">Taxas</string>
     <string name="widgets__blocks__field__size">Tamanho</string>
     <string name="widgets__blocks__field__time">Hora</string>
     <string name="widgets__blocks__field__transactions">Transações</string>

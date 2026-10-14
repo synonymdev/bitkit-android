@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="btcpay__missing_mnemonic">Bitkit no ha pogut llegir la teva frase de recuperació.</string>
     <string name="cards__backupSeedPhrase__description">Emmagatzema els teus bitcoin</string>
     <string name="cards__backupSeedPhrase__title">Còpia de seguretat</string>
     <string name="cards__buyBitcoin__description">Comprar bitcoin</string>
@@ -60,6 +61,7 @@
     <string name="common__save">Guardar</string>
     <string name="common__search">Busca</string>
     <string name="common__share">Compartir</string>
+    <string name="common__show_details">Mostrar detalls</string>
     <string name="common__skip">Salta</string>
     <string name="common__success">Èxit</string>
     <string name="common__try_again">Torna a intentar</string>
@@ -67,6 +69,13 @@
     <string name="common__usable">Utilitzable</string>
     <string name="common__yes">Sí</string>
     <string name="common__yes_proceed">Sí, continua</string>
+    <string name="contacts__add_button">Afegir</string>
+    <string name="contacts__add_contact_title">Afegir contacte</string>
+    <string name="contacts__add_scan_qr">Escanejar QR</string>
+    <string name="contacts__add_sheet_title">Afegir contacte</string>
+    <string name="contacts__detail_title">Contacte</string>
+    <string name="contacts__edit_contact_title">Editar contacte</string>
+    <string name="contacts__intro_add_contact">Afegir contacte</string>
     <string name="fee__custom__description">Depèn de la tarifa</string>
     <string name="fee__custom__duration">Depèn de la tarifa</string>
     <string name="fee__custom__shortDescription">Depèn de la tarifa</string>
@@ -89,6 +98,8 @@
     <string name="fee__slow__duration">±1 hora</string>
     <string name="fee__slow__shortDescription">±1h</string>
     <string name="fee__slow__title">Lent</string>
+    <string name="hardware__passphrase_button">Frase de pas</string>
+    <string name="hardware__passphrase_title">Frase de pas</string>
     <string name="lightning__availability__text">La transferència de fons a estalvis sol ser instantània, però la liquidació pot trigar fins a &lt;accent&gt;14 dies&lt;/accent&gt; en certes condicions de xarxa.</string>
     <string name="lightning__availability__title">Disponibilitat\n&lt;accent&gt;de fons&lt;/accent&gt;</string>
     <string name="lightning__balance">Saldo</string>
@@ -117,6 +128,7 @@
     <string name="lightning__conn_open">Connexions obertes</string>
     <string name="lightning__conn_pending">Connexions pendents</string>
     <string name="lightning__connection">Connexió</string>
+    <string name="lightning__connection_closed__title">Connexió tancada</string>
     <string name="lightning__connections">Connexions Lightning</string>
     <string name="lightning__created_on">Creat en</string>
     <string name="lightning__error_add">Bitkit no ha pogut afegir el node Lightning.</string>
@@ -408,6 +420,7 @@
     <string name="other__scan_err_decoding">Error de descodificació</string>
     <string name="other__scan_err_interpret_title">No es poden interpretar les dades proporcionades</string>
     <string name="other__share_qr">Compartir codi QR via</string>
+    <string name="other__shop__categories__travel">Viatges</string>
     <string name="other__shop__discover__esims__description">Sense fronteres</string>
     <string name="other__shop__discover__esims__title">eSIMs</string>
     <string name="other__shop__discover__gift_cards__description">Compra amb Bitcoin</string>
@@ -431,6 +444,17 @@
     <string name="other__update_nav_title">Actualització disponible</string>
     <string name="other__update_text">Si us plau, actualitzeu Bitkit a la darrera versió per a noves funcionalitats i correccions d\'errors!</string>
     <string name="other__update_title">Actualitza\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
+    <string name="profile__add_link">Afegir enllaç</string>
+    <string name="profile__add_link_label_placeholder">Per exemple \'Website\'</string>
+    <string name="profile__add_link_note">Nota: Qualsevol enllaç que afegiu serà visible públicament.</string>
+    <string name="profile__add_tag">Afegeix etiqueta</string>
+    <string name="profile__auth_approval_details">Detalls</string>
+    <string name="profile__create_nav_title">Crear perfil</string>
+    <string name="profile__edit_nav_title">Editar perfil</string>
+    <string name="profile__nav_title">Perfil</string>
+    <string name="profile__retry_load">Torna a intentar</string>
+    <string name="profile__suggestions">Suggeriments</string>
+    <string name="profile__your_name">El teu Nom</string>
     <string name="security__backup_button">Còpia de seguretat</string>
     <string name="security__backup_funds">Ara que tens alguns fons a la teva cartera, és hora de fer una còpia de seguretat dels teus diners!</string>
     <string name="security__backup_funds_no">Encara no hi ha fons a la teva cartera, però pots fer una còpia de seguretat si ho desitges.</string>
@@ -513,6 +537,7 @@
     <string name="security__reset_confirm">Sí, reinicia</string>
     <string name="security__reset_dialog_desc">Estàs segur que vols restablir la teva cartera Bitkit? Tens una còpia de seguretat de la teva frase de recuperació i les dades de la cartera?</string>
     <string name="security__reset_dialog_title">Reiniciar Bitkit?</string>
+    <string name="security__reset_graph_confirm">Sí, reinicia</string>
     <string name="security__reset_text">Fes còpia de seguretat de la teva cartera primer per evitar la pèrdua dels teus fons i dades de la cartera. Restablir sobreescriurà la teva configuració actual de Bitkit.</string>
     <string name="security__reset_title">Restablir i restaurar</string>
     <string name="security__success_bio">Has configurat correctament un codi PIN i {biometricsName} per millorar la seguretat de la cartera.</string>
@@ -736,6 +761,7 @@
     <string name="settings__support_title">Suport</string>
     <string name="settings__widgets__nav_title">Ginys</string>
     <string name="settings__widgets__showWidgets">Ginys</string>
+    <string name="slashtags__error_pay_title">No s\'ha pogut pagar el contacte.</string>
     <string name="settings__widgets__reset_suggestions">Restablir targetes de suggeriments</string>
     <string name="settings__widgets__reset_widgets">Restablir widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Estàs segur que vols restablir els widgets? Es mostrarà el conjunt de widgets predeterminat amb les configuracions predeterminades.</string>
@@ -746,6 +772,11 @@
     <string name="slashtags__onboarding_profile1_text">Configura el teu perfil públic i enllaços, perquè els teus contactes de Bitkit puguin contactar-te o pagar-te en qualsevol moment i lloc.</string>
     <string name="slashtags__profile">Perfil</string>
     <string name="slashtags__profile_create">Crear perfil</string>
+    <string name="subscriptions__cancel">Cancel·lar</string>
+    <string name="subscriptions__payments">Pagaments</string>
+    <string name="subscriptions__pending">Pendent</string>
+    <string name="subscriptions__proposal_queued_title">A la cua</string>
+    <string name="subscriptions__status">Estat</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Si us plau, espera mentre Bitkit cerca fons en adreces no compatibles (Legacy, Nested SegWit i Taproot).</string>
     <string name="sweep__checking_loading">CERCANT FONS...</string>
@@ -782,6 +813,7 @@
     <string name="wallet__activity_address">Adreça</string>
     <string name="wallet__activity_all">Tota l\'activitat</string>
     <string name="wallet__activity_assign">Assignar</string>
+    <string name="wallet__activity_assign_contact_title">Assignar contacte</string>
     <string name="wallet__activity_bitcoin_received">Rebut Bitcoin</string>
     <string name="wallet__activity_bitcoin_sent">Enviat Bitcoin</string>
     <string name="wallet__activity_boost">Impulsar</string>
@@ -794,7 +826,9 @@
     <string name="wallet__activity_confirmed">Confirmat</string>
     <string name="wallet__activity_confirming">Confirmant</string>
     <string name="wallet__activity_confirms_in">Confirma en {feeRateDescription}</string>
+    <string name="wallet__activity_contact">Contacte</string>
     <string name="wallet__activity_date">Data</string>
+    <string name="wallet__activity_detach">Desenganxa</string>
     <string name="wallet__activity_error_load_failed">Error en carregar l\'activitat</string>
     <string name="wallet__activity_error_not_found">Activitat no trobada</string>
     <string name="wallet__activity_explore">Explorar</string>
@@ -812,6 +846,7 @@
     <string name="wallet__activity_payment">Pagament</string>
     <string name="wallet__activity_payment_hash">Hash de pagament</string>
     <string name="wallet__activity_pending">Pendent</string>
+    <string name="wallet__activity_pending_nav_title">Pagament pendent</string>
     <string name="wallet__activity_preimage">Preimatge</string>
     <string name="wallet__activity_previous_month">Mes anterior</string>
     <string name="wallet__activity_received">Rebut</string>
@@ -933,6 +968,7 @@
     <string name="wallet__send_clipboard_empty_text">Si us plau, copieu una adreça o una factura.</string>
     <string name="wallet__send_clipboard_empty_title">Porta-retalls buit</string>
     <string name="wallet__send_confirming_in">Confirmant en</string>
+    <string name="wallet__send_contact_title">Selecciona Contacte</string>
     <string name="wallet__send_details">Detalls</string>
     <string name="wallet__send_dialog1">Sembla que estàs enviant més de 100 $. Vols continuar?</string>
     <string name="wallet__send_dialog2">Sembla que estàs enviant més del 50% del teu saldo total. Vols continuar?</string>
@@ -955,6 +991,7 @@
     <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_max_spending__description">L\'import màxim gastable és una mica inferior a causa d\'un saldo de reserva requerit.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
+    <string name="wallet__send_pending__nav_title">Pagament pendent</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagant\n&lt;accent&gt;factura...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Confirmar</string>
@@ -979,12 +1016,18 @@
     <string name="wallet__payment_invoice_request_expired">Aquesta sol·licitud de factura Lightning ha caducat. Demana una factura nova.</string>
     <string name="wallet__payment_invoice_request_rejected">El destinatari ha rebutjat aquesta sol·licitud de factura Lightning.</string>
     <string name="wallet__payment_recipient_rejected">El destinatari ha rebutjat aquest pagament Lightning. Comprova la factura i torna-ho a provar.</string>
+    <string name="wallet__payment_request_contact">Contacte</string>
+    <string name="wallet__payment_request_date">Data</string>
+    <string name="wallet__payment_request_note">Nota</string>
+    <string name="wallet__payment_request_sent_title">Enviat</string>
+    <string name="wallet__payment_request_time">Temps</string>
     <string name="wallet__payment_retries_exhausted">Bitkit ha provat diverses rutes Lightning, però el pagament no s\'ha pogut completar.</string>
     <string name="wallet__payment_route_not_found">Bitkit no ha pogut trobar cap ruta Lightning per a aquest pagament.</string>
     <string name="wallet__payment_timeout">El pagament ha esgotat el temps d\'espera. Torna-ho a provar.</string>
     <string name="wallet__payment_unknown_required_features">Aquesta factura Lightning utilitza funcions que Bitkit encara no admet.</string>
     <string name="wallet__toast_payment_failed_description">El teu pagament instantani ha fallat. Si us plau, torna-ho a provar.</string>
     <string name="wallet__toast_payment_failed_title">Pagament fallit</string>
+    <string name="wallet__toast_payment_sent_title">Pagament enviat</string>
     <string name="wallet__toast_received_transaction_replaced_description">La teva transacció rebuda ha estat substituïda per un augment de tarifa</string>
     <string name="wallet__toast_received_transaction_replaced_title">Transacció rebuda substituïda</string>
     <string name="wallet__toast_transaction_removed_description">La transacció ha estat eliminada de la mempool</string>
@@ -1000,6 +1043,7 @@
     <string name="widgets__blocks__description">Examina diverses estadístiques dels blocs de Bitcoin recentment minats.</string>
     <string name="widgets__blocks__field__block">Bloc</string>
     <string name="widgets__blocks__field__date">Data</string>
+    <string name="widgets__blocks__field__fees">Tarifes</string>
     <string name="widgets__blocks__field__size">Mida</string>
     <string name="widgets__blocks__field__time">Temps</string>
     <string name="widgets__blocks__field__transactions">Transaccions</string>
