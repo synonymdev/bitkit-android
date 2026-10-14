@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Retried Lightning payments now show the amount and fee of the attempt that succeeded. #1042
 - An expired Paykit session is now reported on startup when the profile service fails to start. #1305
-- Retrying a failed wallet restore no longer leaves the Lightning node in an error state after a temporary startup failure. #1294
+- Retrying a failed wallet restore no longer leaves the Lightning node in an error state after a temporary startup failure. #1291
 - Contact activity no longer hides hardware wallet payments that share a transaction ID with a boosted payment in another wallet. #1139
 - Restoring a wallet now keeps its activity tags and closed connections: a single tag that cannot be applied no longer discards the rest of the backup, and ordinary backups are held until the restore has finished so they cannot overwrite it first. #1171
 - Connecting to a custom Electrum server now explains when it is on the wrong Bitcoin network, when the TCP/TLS protocol does not match the port, or when its TLS certificate is untrusted or issued for another host. #1177
