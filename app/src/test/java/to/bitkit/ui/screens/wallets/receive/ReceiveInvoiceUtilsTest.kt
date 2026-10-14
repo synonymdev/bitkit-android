@@ -20,13 +20,21 @@ class ReceiveInvoiceUtilsTest {
         assertEquals(
             ReceiveInvoiceDisplayMode.ERROR,
             getReceiveInvoiceDisplayMode(
-                ReceiveTab.AUTO, null, hasInvoiceError = true, isUpdating = false, showDetails = true,
+                ReceiveTab.AUTO,
+                null,
+                hasInvoiceError = true,
+                isUpdating = false,
+                showDetails = true,
             ),
         )
         assertEquals(
             ReceiveInvoiceDisplayMode.LOADING,
             getReceiveInvoiceDisplayMode(
-                ReceiveTab.AUTO, null, hasInvoiceError = true, isUpdating = true, showDetails = true,
+                ReceiveTab.AUTO,
+                null,
+                hasInvoiceError = true,
+                isUpdating = true,
+                showDetails = true,
             ),
         )
     }
@@ -36,7 +44,11 @@ class ReceiveInvoiceUtilsTest {
         assertEquals(
             ReceiveInvoiceDisplayMode.DETAILS,
             getReceiveInvoiceDisplayMode(
-                ReceiveTab.SPENDING, "confirmed-cjit", hasInvoiceError = true, isUpdating = true, showDetails = true,
+                ReceiveTab.SPENDING,
+                "confirmed-cjit",
+                hasInvoiceError = true,
+                isUpdating = true,
+                showDetails = true,
             ),
         )
     }

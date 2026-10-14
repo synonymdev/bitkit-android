@@ -3,8 +3,6 @@ package to.bitkit.ui.screens.wallets.receive
 import to.bitkit.R
 import to.bitkit.utils.Bip21Utils
 
-internal enum class ReceiveInvoiceDisplayMode { LOADING, ERROR, DETAILS, QR }
-
 internal fun getReceiveInvoiceDisplayMode(
     tab: ReceiveTab,
     cjitInvoice: String?,
@@ -43,9 +41,10 @@ fun getInvoiceForTab(
     hardwareMessage: String = "",
     isReceiveInvoiceUpdating: Boolean = false,
 ): String {
-    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() &&
-        (tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING)
-    ) return ""
+    val needsLightningInvoice = tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING
+    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() && needsLightningInvoice) {
+        return ""
+    }
 
     return when (tab) {
         ReceiveTab.SAVINGS -> {

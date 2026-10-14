@@ -381,6 +381,7 @@ fun ReceiveQrScreen(
                             displayMode == ReceiveInvoiceDisplayMode.ERROR -> {
                                 ReceiveInvoiceErrorView(
                                     onRetry = onRetryInvoice,
+                                    onEdit = { onClickEditInvoice(tab) },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -587,6 +588,7 @@ private fun ReceiveQrView(
                     PrimaryButton(
                         text = stringResource(R.string.common__copy),
                         size = ButtonSize.Small,
+                        enabled = copyText.isNotBlank(),
                         onClick = {
                             context.setClipboardText(copyText)
                             coroutineScope.launch { qrButtonTooltipState.show() }
@@ -608,6 +610,7 @@ private fun ReceiveQrView(
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,
+                enabled = copyText.isNotBlank(),
                 onClick = {
                     qrBitmap?.let { bitmap ->
                         shareQrCode(context, bitmap, copyText)
@@ -808,6 +811,7 @@ private fun HardwareAddressLoadingView(
 @Composable
 private fun ReceiveInvoiceErrorView(
     onRetry: () -> Unit,
+    onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -821,6 +825,12 @@ private fun ReceiveInvoiceErrorView(
             text = stringResource(R.string.common__try_again),
             onClick = onRetry,
             modifier = Modifier.testTag("ReceiveInvoiceRetry")
+        )
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.common__edit),
+            onClick = onEdit,
+            modifier = Modifier.testTag("SpecifyInvoiceButton")
         )
     }
 }
