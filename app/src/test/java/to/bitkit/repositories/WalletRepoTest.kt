@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.GetAddressesResponse
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -47,6 +48,8 @@ import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.ServiceError
 import java.io.IOException
+import java.util.ArrayDeque
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -146,8 +149,8 @@ class WalletRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut() = WalletRepo(
-        bgDispatcher = testDispatcher,
+    private fun createSut(dispatcher: CoroutineDispatcher = testDispatcher) = WalletRepo(
+        bgDispatcher = dispatcher,
         keychain = keychain,
         coreService = coreService,
         settingsStore = settingsStore,
@@ -161,6 +164,48 @@ class WalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
     )
+
+    private class DeferredReceiveDispatcher : CoroutineDispatcher() {
+        private val tasks = ArrayDeque<Runnable>()
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            tasks.addLast(block)
+        }
+
+        fun runOldestFirst() {
+            while (tasks.isNotEmpty()) tasks.removeFirst().run()
+        }
+
+        fun runNewestFirst() {
+            while (tasks.isNotEmpty()) tasks.removeLast().run()
+        }
+    }
+
+    @Test
+    fun `latest receive invocation wins despite reversed background scheduling`() = test {
+        val dispatcher = DeferredReceiveDispatcher()
+        sut = createSut(dispatcher)
+        dispatcher.runOldestFirst()
+        sut.setOnchainAddress(ADDRESS)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer { invocation ->
+            val amount = invocation.getArgument<ULong?>(0)
+            Result.success(if (amount == SATS) INVOICE else INVOICE_REPLACEMENT)
+        }
+        val older = launch { sut.updateBip21Invoice(SATS, "older") }
+        val newer = launch { sut.updateBip21Invoice(SATS / 2uL, "latest") }
+        assertTrue(sut.walletState.value.isReceiveInvoiceUpdating)
+        dispatcher.runNewestFirst()
+        older.join()
+        newer.join()
+
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertEquals(
+            sut.buildBip21Url(ADDRESS, SATS / 2uL, "latest", INVOICE_REPLACEMENT),
+            sut.walletState.value.bip21,
+        )
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
 
     @Test
     fun `retry must repeat the failed edited amount`() = test {

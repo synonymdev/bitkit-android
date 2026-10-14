@@ -348,6 +348,13 @@ fun ReceiveQrScreen(
                     items = visibleTabs,
                     key = { _, tab -> tab.name }
                 ) { _, tab ->
+                    val displayMode = getReceiveInvoiceDisplayMode(
+                        tab = tab,
+                        cjitInvoice = cjitInvoice,
+                        hasInvoiceError = walletState.hasReceiveInvoiceError,
+                        isUpdating = walletState.isReceiveInvoiceUpdating,
+                        showDetails = showDetails,
+                    )
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -370,16 +377,14 @@ fun ReceiveQrScreen(
                                 )
                             }
 
-                            walletState.hasReceiveInvoiceError && !walletState.isReceiveInvoiceUpdating &&
-                                cjitInvoice.isNullOrEmpty() &&
-                                (tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING) -> {
+                            displayMode == ReceiveInvoiceDisplayMode.ERROR -> {
                                 ReceiveInvoiceErrorView(
                                     onRetry = onRetryInvoice,
                                     modifier = Modifier.weight(1f)
                                 )
                             }
 
-                            showDetails -> {
+                            displayMode == ReceiveInvoiceDisplayMode.DETAILS -> {
                                 ReceiveDetailsView(
                                     tab = tab,
                                     walletState = walletState,

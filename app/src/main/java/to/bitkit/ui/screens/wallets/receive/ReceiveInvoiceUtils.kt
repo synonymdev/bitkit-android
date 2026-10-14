@@ -3,6 +3,22 @@ package to.bitkit.ui.screens.wallets.receive
 import to.bitkit.R
 import to.bitkit.utils.Bip21Utils
 
+internal enum class ReceiveInvoiceDisplayMode { LOADING, ERROR, DETAILS, QR }
+
+internal fun getReceiveInvoiceDisplayMode(
+    tab: ReceiveTab,
+    cjitInvoice: String?,
+    hasInvoiceError: Boolean,
+    isUpdating: Boolean,
+    showDetails: Boolean,
+): ReceiveInvoiceDisplayMode {
+    if ((tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING) && cjitInvoice.isNullOrEmpty()) {
+        if (isUpdating) return ReceiveInvoiceDisplayMode.LOADING
+        if (hasInvoiceError) return ReceiveInvoiceDisplayMode.ERROR
+    }
+    return if (showDetails) ReceiveInvoiceDisplayMode.DETAILS else ReceiveInvoiceDisplayMode.QR
+}
+
 /**
  * Returns the appropriate invoice/address for the selected tab.
  *

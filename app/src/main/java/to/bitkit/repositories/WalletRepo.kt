@@ -120,7 +120,7 @@ class WalletRepo @Inject constructor(
         changePendingReceiveUpdates(1)
         try {
             beforeLock()
-            return withContext(bgDispatcher) { receiveStateMutex.withLock { block() } }
+            return receiveStateMutex.withLock { withContext(bgDispatcher) { block() } }
         } finally {
             changePendingReceiveUpdates(-1)
         }

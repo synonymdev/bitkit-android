@@ -6,6 +6,42 @@ import kotlin.test.assertEquals
 class ReceiveInvoiceUtilsTest {
 
     @Test
+    fun `pending updates keep Details on the loading view`() {
+        for (tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
+            assertEquals(
+                ReceiveInvoiceDisplayMode.LOADING,
+                getReceiveInvoiceDisplayMode(tab, null, hasInvoiceError = false, isUpdating = true, showDetails = true),
+            )
+        }
+    }
+
+    @Test
+    fun `terminal invoice failure overrides Details while retry shows loading`() {
+        assertEquals(
+            ReceiveInvoiceDisplayMode.ERROR,
+            getReceiveInvoiceDisplayMode(
+                ReceiveTab.AUTO, null, hasInvoiceError = true, isUpdating = false, showDetails = true,
+            ),
+        )
+        assertEquals(
+            ReceiveInvoiceDisplayMode.LOADING,
+            getReceiveInvoiceDisplayMode(
+                ReceiveTab.AUTO, null, hasInvoiceError = true, isUpdating = true, showDetails = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `confirmed CJIT Details remain available during receive updates`() {
+        assertEquals(
+            ReceiveInvoiceDisplayMode.DETAILS,
+            getReceiveInvoiceDisplayMode(
+                ReceiveTab.SPENDING, "confirmed-cjit", hasInvoiceError = true, isUpdating = true, showDetails = true,
+            ),
+        )
+    }
+
+    @Test
     fun `pending receive updates hide previous invoices on Auto and Spending`() {
         for (tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
             assertEquals(
