@@ -39,7 +39,6 @@ import com.synonym.bitkitcore.UsdtDeposit
 import com.synonym.bitkitcore.UsdtDepositDetail
 import com.synonym.bitkitcore.UsdtDepositNetwork
 import com.synonym.bitkitcore.UsdtDestination
-import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -531,5 +530,5 @@ internal val UsdtDepositDetail.canRefund get() = deposit.asset == "USDT" && depo
     providerStatus !in listOf("completed", "refunded", "refunding", "refund_requested")
 
 private fun ULong?.usdtText(hidden: Boolean) = (
-    if (hidden) UiConstants.HIDE_BALANCE_SHORT else this?.let { usdtFormatAmount(it) } ?: "—"
+    if (hidden) UiConstants.HIDE_BALANCE_SHORT else this?.let { usdtOverviewAmount(it) } ?: "—"
     ) + " USDT"
