@@ -58,7 +58,8 @@ fun UsdtIntroSheet(onDecline: () -> Unit, onEnable: () -> Unit, modifier: Modifi
             SecondaryButton(
                 stringResource(R.string.usdt__intro_decline),
                 onClick = onDecline,
-                modifier = Modifier.weight(1f).testTag("UsdtIntroDecline")
+                testTag = "UsdtIntroDecline",
+                modifier = Modifier.weight(1f)
             )
             PrimaryButton(
                 stringResource(R.string.usdt__enable),

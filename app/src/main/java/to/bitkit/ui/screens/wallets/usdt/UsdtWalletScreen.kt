@@ -127,7 +127,7 @@ fun UsdtWalletScreen(
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    var page by rememberUsdtPage(initialRecipient, state.submitted)
+    var page by rememberUsdtPage(initialRecipient, state)
     val sending = page in listOf(UsdtPage.RECIPIENT, UsdtPage.MANUAL, UsdtPage.AMOUNT)
     DisposableEffect(viewModel, sending) {
         if (sending) viewModel.isSendPresented = true
@@ -290,15 +290,17 @@ fun UsdtWalletScreen(
 }
 
 @Composable
-internal fun rememberUsdtPage(initialRecipient: String, submitted: Boolean): MutableState<UsdtPage> =
-    rememberSaveable(
+internal fun rememberUsdtPage(initialRecipient: String, state: UsdtSendState): MutableState<UsdtPage> {
+    val paymentInProgress = state.submitted || (state.busy && state.quote != null)
+    return rememberSaveable(
         stateSaver = Saver(
-            save = { if (submitted) UsdtPage.WALLET.name else it.name },
-            restore = { UsdtPage.valueOf(it) },
+            save = { if (paymentInProgress) UsdtPage.WALLET.name else it.name },
+            restore = { if (paymentInProgress) UsdtPage.AMOUNT else UsdtPage.valueOf(it) },
         ),
     ) {
         mutableStateOf(if (initialRecipient.isEmpty()) UsdtPage.WALLET else UsdtPage.AMOUNT)
     }
+}
 
 @Composable
 private fun UsdtWalletContent(

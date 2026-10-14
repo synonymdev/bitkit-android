@@ -4208,6 +4208,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 whenever(usdtRepo.isSendPresented).thenReturn(true)
                 clearInvocations(toastManager)
                 for (input in listOf(uri, "0x2222222222222222222222222222222222222222")) {
+                    assertFalse(sut.canDecodeClipboard(input))
                     sut.onClipboardAutoRead(input)
                     advanceUntilIdle()
                     expectNoEvents()
@@ -4246,6 +4247,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             for (isReviewing in listOf(false, true)) {
                 whenever(usdtRepo.isSendPresented).thenReturn(isReviewing)
                 for (input in inputs) {
+                    assertFalse(sut.canDecodeClipboard(input))
                     sut.onClipboardAutoRead(input)
                     sut.onScanResult(input)
                     advanceUntilIdle()

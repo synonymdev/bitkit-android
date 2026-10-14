@@ -15,6 +15,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.testing.TestNavHostController
 import androidx.navigation.toRoute
+import com.synonym.bitkitcore.UsdtDestination
+import com.synonym.bitkitcore.UsdtQuote
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.test.annotations.ComposeUi
@@ -30,21 +32,38 @@ class UsdtPaymentNavigationTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun submittedPaymentRestoresWalletWhileUnpaidDraftKeepsItsPage() {
+    fun paymentProgressSurvivesRecreationWithoutRestoringAnEditableDraftAfterProcessDeath() {
         val restoration = StateRestorationTester(composeTestRule)
-        val submitted = mutableStateOf(false)
+        var sendState = mutableStateOf(UsdtSendState())
+        lateinit var page: MutableState<UsdtPage>
         restoration.setContent {
-            val page by rememberUsdtPage("owned recipient", submitted.value)
-            Text(page.name)
+            val state by remember { sendState }
+            page = rememberUsdtPage("owned recipient", state)
+            Text(page.value.name)
         }
-        composeTestRule.onNodeWithText(UsdtPage.AMOUNT.name).assertExists()
         restoration.emulateSavedInstanceStateRestore()
         composeTestRule.onNodeWithText(UsdtPage.AMOUNT.name).assertExists()
-        composeTestRule.runOnIdle { submitted.value = true }
-        composeTestRule.onNodeWithText(UsdtPage.AMOUNT.name).assertExists()
-        restoration.emulateSavedInstanceStateRestore()
-        composeTestRule.runOnIdle { submitted.value = false }
-        composeTestRule.onNodeWithText(UsdtPage.WALLET.name).assertExists()
+
+        val quote = UsdtQuote(
+            id = "payment", recipient = "owned recipient", destination = UsdtDestination.ARBITRUM,
+            bridgeProvider = null, amount = 1u, receivedAmount = 1u, maximumFee = 1u, expiresAt = 100u,
+        )
+        for (state in listOf(
+            UsdtSendState(quote = quote, busy = true),
+            UsdtSendState(quote = quote, busy = true, submitted = true),
+            UsdtSendState(quote = quote, submitted = true),
+        )) {
+            composeTestRule.runOnIdle {
+                page.value = UsdtPage.AMOUNT
+                sendState.value = state
+            }
+            restoration.emulateSavedInstanceStateRestore()
+            composeTestRule.onNodeWithText(UsdtPage.AMOUNT.name).assertExists()
+
+            composeTestRule.runOnIdle { sendState = mutableStateOf(UsdtSendState()) }
+            restoration.emulateSavedInstanceStateRestore()
+            composeTestRule.onNodeWithText(UsdtPage.WALLET.name).assertExists()
+        }
     }
 
     @Test
@@ -63,7 +82,7 @@ class UsdtPaymentNavigationTest {
                 composable<Routes.Home> { Text("Home") }
                 composable<Routes.UsdtPayment> { entry ->
                     val payment = entry.toRoute<Routes.UsdtPayment>()
-                    page = rememberUsdtPage(payment.recipient, submitted = false)
+                    page = rememberUsdtPage(payment.recipient, UsdtSendState())
                     Text("${page.value} ${payment.recipient} ${payment.amount}")
                 }
             }

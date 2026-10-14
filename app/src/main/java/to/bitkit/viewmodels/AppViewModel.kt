@@ -6681,7 +6681,8 @@ class AppViewModel @Inject constructor(
 
     suspend fun canDecodeClipboard(text: String): Boolean = withContext(bgDispatcher) {
         when {
-            isUsdtPaymentInput(text.trim()) -> isUsdtEnabled.value && parseUsdtPaymentRequest(text.trim()).isSuccess
+            isUsdtPaymentInput(text.trim()) ->
+                isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
             else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
         }
     }
