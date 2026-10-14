@@ -39,6 +39,7 @@ import java.text.DecimalFormatSymbols
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -47,6 +48,7 @@ import kotlin.time.Instant
 class UsdtRepo @Inject constructor(
     private val service: UsdtService,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val clock: Clock = Clock.System,
 ) {
     private val mutex = Mutex()
 
@@ -217,6 +219,7 @@ class UsdtRepo @Inject constructor(
         mutex.withLock {
             runSuspendCatching {
                 beforeSend()
+                quote.requireValidForSubmission(clock.now())
                 service.send(quote, submissionDeadline).also { transfer ->
                     _state.update {
                         it.copy(
@@ -231,6 +234,10 @@ class UsdtRepo @Inject constructor(
             }
         }
     }
+}
+
+internal fun UsdtQuote.requireValidForSubmission(now: Instant) {
+    if (expiresAt <= (now + 5.seconds).epochSeconds.toULong()) throw UsdtException.QuoteExpired()
 }
 
 fun parseUsdtPaymentRequest(value: String, destination: UsdtDestination = UsdtDestination.ARBITRUM) = runCatching {

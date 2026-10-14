@@ -1258,6 +1258,7 @@
     <string name="usdt__deposit_reference">Deposit reference</string>
     <string name="usdt__deposit_refresh">Refresh</string>
     <string name="usdt__deposit_refund">Request Refund</string>
+    <string name="usdt__deposit_refund_action">Request refund</string>
     <string name="usdt__deposit_refund_address">USDT address on {network}</string>
     <string name="usdt__deposit_refund_confirm">Confirm Refund</string>
     <string name="usdt__deposit_refund_confirmation">Request refund for {amount} deposit?\n\nNetwork:\n{network}\n\nRefund address:\n{address}\n\nConfirm this address can receive USDT on {source}. Refund fees may apply.</string>
@@ -1300,6 +1301,7 @@
     <string name="usdt__failed">Failed</string>
     <string name="usdt__fee_note">All fees are paid in USDT. Final fee may be lower.</string>
     <string name="usdt__from_address">From address</string>
+    <string name="usdt__hide_details">Hide details</string>
     <string name="usdt__history_sync">Older activity is still syncing. Your balance is up to date when the connection is available.</string>
     <string name="usdt__intro_decline">No Thanks</string>
     <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to send and receive digital dollars with Bitkit.</string>

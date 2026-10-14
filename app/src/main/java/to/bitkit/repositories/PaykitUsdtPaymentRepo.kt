@@ -39,6 +39,7 @@ import to.bitkit.models.PaykitRequestPayment
 import to.bitkit.models.PaykitUsdt
 import to.bitkit.models.PaykitUsdtStateBackup
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ContactPaymentContext
@@ -178,9 +179,14 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         val receipts: List<PaykitUsdtReceipt> = emptyList(),
     )
 
+    private data class Reconciliation(val wallet: String, val identity: String, val generation: Long)
+
     private var activeWallet: String? = null
     private var activeIdentity: String? = null
     private val mutex = Mutex()
+    private val reconcileMutex = Mutex()
+    private var stateGeneration = 0L
+
     private val _attempts = MutableStateFlow<List<PaykitUsdtAttempt>>(emptyList())
     val attempts = _attempts.asStateFlow()
     private val _receipts = MutableStateFlow<List<PaykitUsdtReceipt>>(emptyList())
@@ -199,6 +205,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
 
     suspend fun restoreBackup(backup: PaykitUsdtStateBackup) = withContext(ioDispatcher) {
         mutex.withLock {
+            stateGeneration++
             unboundAttempts.update { emptyList() }
             _resumableRequests.update { emptySet() }
             val state = load()
@@ -331,13 +338,15 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     ) =
         withContext(ioDispatcher) {
             runSuspendCatching {
+                quote.requireValidForSubmission(clock.now())
                 mutex.withLock {
-                    val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
+                    val identity = currentIdentity(Priority.Interactive)
+                        ?: throw PaykitPaymentRequestError.RequestUnavailable
                     validateQuote(context, quote, amount, paymentTerms)
                     val request = context.incomingPaymentRequest
                     val owner = usdt.paymentEndpoint().getOrThrow().value.lowercase()
-                    activeWallet = owner
-                    activeIdentity = identity
+                    quote.requireValidForSubmission(clock.now())
+                    activate(owner, identity)
                     val state = load()
                     validateReplacement(state, owner, identity, request, quote.id)
                     val binding = request?.let {
@@ -362,7 +371,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                             request?.billingPeriod
                         )
                     val existing = state.attempts.firstOrNull { it.wallet == owner && it.quoteId == quote.id }
-                    val previousBinding = existing?.copy(proof = null, proofQueued = false, paymentStarted = false)
+                    val previousBinding = existing?.bindingState()
                     if (previousBinding != null && previousBinding != attempt) {
                         throw PaykitPaymentRequestError.OperationInProgress
                     }
@@ -433,53 +442,89 @@ class PaykitUsdtPaymentRepo @Inject constructor(
 
     suspend fun reconcile() = withContext(ioDispatcher) {
         runSuspendCatching {
-            mutex.withLock {
-                unboundAttempts.update { emptyList() }
-                _resumableRequests.update { emptySet() }
+            reconcileMutex.withLock {
+                val generation = mutex.withLock {
+                    unboundAttempts.update { emptyList() }
+                    _resumableRequests.update { emptySet() }
+                    stateGeneration
+                }
                 val identity = currentIdentity() ?: return@withLock
                 val owner = usdt.paymentEndpoint().getOrThrow().value.lowercase()
-                activeWallet = owner
-                activeIdentity = identity
-                val state = load()
-                publish(state)
-                reconcileAttempts(owner, identity, state)
-                reconcileReceipts(owner, identity)
+                val (reconciliation, state) = mutex.withLock snapshot@{
+                    if (stateGeneration != generation) return@snapshot null
+                    activate(owner, identity)
+                    val state = load()
+                    publish(state)
+                    Reconciliation(owner, identity, stateGeneration) to state
+                } ?: return@withLock
+                reconcileAttempts(reconciliation, state)
+                reconcileReceipts(reconciliation)
             }
         }
     }
 
-    private suspend fun reconcileAttempts(owner: String, identity: String, state: State) {
-        val localAttempts = state.attempts.filter { it.wallet == owner && it.identity == identity }
-        val resumable = mutableSetOf<PaykitPaymentRequestId>()
+    private fun activate(owner: String, identity: String) {
+        if (activeWallet != owner || activeIdentity != identity) {
+            stateGeneration++
+            unboundAttempts.update { emptyList() }
+            _resumableRequests.update { emptySet() }
+        }
+        activeWallet = owner
+        activeIdentity = identity
+    }
+
+    private fun isCurrent(reconciliation: Reconciliation): Boolean =
+        stateGeneration == reconciliation.generation && activeWallet == reconciliation.wallet &&
+            activeIdentity == reconciliation.identity
+
+    private suspend fun reconcileAttempts(reconciliation: Reconciliation, state: State) {
+        val localAttempts = state.attempts.filter {
+            it.wallet == reconciliation.wallet && it.identity == reconciliation.identity
+        }
+        val resumable = mutableListOf<PaykitUsdtAttempt>()
         val unbound = mutableListOf<PaykitUsdtAttempt>()
         for (attempt in localAttempts) {
             val requestId = attempt.requestId ?: continue
+            if (!mutex.withLock { isCurrent(reconciliation) }) return
             runSuspendCatching {
                 val transfer = storedTransfer(attempt.quoteId).getOrThrow()
-                if (!transfer.isUnresolved(attempt.paymentStarted)) resumable += requestId
+                if (!transfer.isUnresolved(attempt.paymentStarted)) resumable += attempt
                 if (attempt.canReleaseBinding(transfer)) {
                     unbound += attempt
                 }
                 if (!attempt.proofQueued &&
                     (attempt.proof != null || transfer?.status == UsdtTransferStatus.CONFIRMED)
                 ) {
-                    submitAttemptProof(attempt, requestId)
+                    submitAttemptProof(reconciliation, attempt, requestId)
                 }
             }.onFailure { Logger.warn("Failed to reconcile a Paykit USDT payment attempt", it, context = TAG) }
         }
-        unboundAttempts.update { unbound.filter { it in _attempts.value } }
-        _resumableRequests.update { resumable }
+        mutex.withLock {
+            if (!isCurrent(reconciliation)) return@withLock
+            val current = load()
+            publish(current)
+            unboundAttempts.update { unbound.filter { it in current.attempts } }
+            _resumableRequests.update {
+                resumable.filter { it in current.attempts }.mapNotNull { it.requestId }.toSet()
+            }
+        }
     }
 
     private fun PaykitUsdtAttempt.canReleaseBinding(transfer: UsdtTransfer?): Boolean =
         proof == null && !proofQueued && !transfer.isUnresolved(paymentStarted)
 
-    private suspend fun submitAttemptProof(attempt: PaykitUsdtAttempt, requestId: PaykitPaymentRequestId) {
+    private suspend fun submitAttemptProof(
+        reconciliation: Reconciliation,
+        attempt: PaykitUsdtAttempt,
+        requestId: PaykitPaymentRequestId,
+    ) {
+        if (!mutex.withLock { isCurrent(reconciliation) }) return
         val binding = attempt.binding ?: return
         val proof = attempt.proof
             ?: paymentProof(attempt.quoteId, binding).getOrThrow()?.let(::PaykitUsdtProof)
             ?: return
-        if (attempt.proof == null) updateAttempt(attempt) { it.copy(proof = proof) }
+        val saved = updateAttempt(reconciliation, attempt) { it.copy(proof = it.proof ?: proof) } ?: return
+        if (saved.proof != proof || saved.proofQueued) return
         val pending = PendingPaykitPaymentProof(
             identity = attempt.identity,
             requestId = requestId,
@@ -491,35 +536,36 @@ class PaykitUsdtPaymentRepo @Inject constructor(
             billingPeriod = attempt.billingPeriod,
             conversionQuoteId = binding.conversionQuoteId.takeIf { it.isNotEmpty() },
         )
-        if (proofs.submit(pending).getOrThrow()) updateAttempt(attempt) { it.copy(proofQueued = true) }
+        if (proofs.submit(pending).getOrThrow()) {
+            updateAttempt(reconciliation, saved) { if (it.proof == proof) it.copy(proofQueued = true) else it }
+        }
     }
 
-    private suspend fun updateAttempt(attempt: PaykitUsdtAttempt, update: (PaykitUsdtAttempt) -> PaykitUsdtAttempt) {
-        val current = load()
-        save(
-            current.copy(
-                attempts = current.attempts.map {
-                    if (
-                        it.quoteId == attempt.quoteId && it.wallet == attempt.wallet && it.identity == attempt.identity
-                    ) {
-                        update(
-                            it
-                        )
-                    } else {
-                        it
-                    }
-                }
-            )
-        )
+    private suspend fun updateAttempt(
+        reconciliation: Reconciliation,
+        attempt: PaykitUsdtAttempt,
+        update: (PaykitUsdtAttempt) -> PaykitUsdtAttempt,
+    ): PaykitUsdtAttempt? = mutex.withLock {
+        if (!isCurrent(reconciliation)) return@withLock null
+        val state = load()
+        val current = state.attempts.singleOrNull { it.bindingState() == attempt.bindingState() }
+            ?: return@withLock null
+        val updated = update(current)
+        if (updated != current) save(state.copy(attempts = state.attempts.map { if (it == current) updated else it }))
+        updated
     }
 
-    private suspend fun reconcileReceipts(owner: String, identity: String) {
+    private fun PaykitUsdtAttempt.bindingState() = copy(proof = null, proofQueued = false, paymentStarted = false)
+
+    private suspend fun reconcileReceipts(reconciliation: Reconciliation) {
+        if (!mutex.withLock { isCurrent(reconciliation) }) return
         for (record in sdk.paymentRequests().filter { it.localRole == PaymentRequestLocalRole.PAYEE }) {
             val submissions = record.paymentProofs.filter {
                 it.paymentEndpointIdentifier == MethodId.UsdtArbitrum.rawValue
             }
             for (submission in submissions) {
-                reconcileReceipt(record, submission, owner, identity)
+                if (!mutex.withLock { isCurrent(reconciliation) }) return
+                reconcileReceipt(record, submission, reconciliation)
             }
         }
     }
@@ -545,14 +591,13 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     private suspend fun reconcileReceipt(
         record: PaymentRequestRecord,
         submission: PaymentProofRecord,
-        owner: String,
-        identity: String,
+        reconciliation: Reconciliation,
     ) {
         val request = receivedRequest(record, submission) ?: return
         val proof = submittedProof(submission) ?: return
         val binding = binding(
             request,
-            identity,
+            reconciliation.identity,
             submission.paymentAppId,
             submission.conversionQuoteId,
             submission.billingPeriod
@@ -561,13 +606,10 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         if (paymentResult.exceptionOrNull() is UsdtException.InvalidPaymentProof ||
             paymentResult.isSuccess && paymentResult.getOrNull() == null
         ) {
-            invalidateReceipt(submission.eventId, request.id, owner, identity)
+            invalidateReceipt(submission.eventId, request.id, reconciliation)
             return
         }
         val payment = paymentResult.getOrThrow() ?: return
-        val current = load()
-        val samePayment = current.receipts.filter { it.wallet == owner && it.paymentId == payment.paymentId }
-        if (samePayment.any { it.identity != identity || it.requestId != request.id }) return
         val receivedAt = Instant.fromEpochSeconds(payment.timestamp.toLong())
         val terms = runCatching {
             request.payment(
@@ -579,8 +621,8 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         if (terms != null) {
             val amount = PaykitAmount(PaykitAsset.USDT, payment.amount)
             val receipt = PaykitUsdtReceipt(
-                wallet = owner,
-                identity = identity,
+                wallet = reconciliation.wallet,
+                identity = reconciliation.identity,
                 requestId = request.id,
                 paymentId = payment.paymentId,
                 proofEventId = submission.eventId,
@@ -591,8 +633,18 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                 underpaid = amount.atomic < terms.amount.atomic,
                 afterExpiry = !terms.isValid(receivedAt),
             )
-            if (samePayment.singleOrNull() != receipt) {
-                save(current.copy(receipts = current.receipts - samePayment.toSet() + receipt))
+            mutex.withLock {
+                if (!isCurrent(reconciliation)) return@withLock
+                val current = load()
+                val samePayment = current.receipts.filter {
+                    it.wallet == reconciliation.wallet && it.paymentId == payment.paymentId
+                }
+                if (samePayment.any { it.identity != reconciliation.identity || it.requestId != request.id }) {
+                    return@withLock
+                }
+                if (samePayment.singleOrNull() != receipt) {
+                    save(current.copy(receipts = current.receipts - samePayment.toSet() + receipt))
+                }
             }
         }
     }
@@ -600,14 +652,14 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     private suspend fun invalidateReceipt(
         proofEventId: String,
         requestId: PaykitPaymentRequestId,
-        owner: String,
-        identity: String,
-    ) {
+        reconciliation: Reconciliation,
+    ) = mutex.withLock {
+        if (!isCurrent(reconciliation)) return@withLock
         val current = load()
         val matching = current.receipts.filter {
-            it.wallet == owner && it.identity == identity && it.requestId == requestId
+            it.wallet == reconciliation.wallet && it.identity == reconciliation.identity && it.requestId == requestId
         }.filter { it.proofEventId == proofEventId && it.verified }.toSet()
-        if (matching.isEmpty()) return
+        if (matching.isEmpty()) return@withLock
         save(current.copy(receipts = current.receipts.map { if (it in matching) it.copy(verified = false) else it }))
     }
 
@@ -617,8 +669,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     private suspend fun verifyPayment(binding: UsdtPaymentProofBinding, proof: UsdtPaymentProof) =
         usdt.operation { wallet().verifyPaymentProof(binding, proof) }
 
-    private suspend fun currentIdentity(): String? = sdk.identityStatus()?.takeIf {
-        it.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
-    }
-        ?.publicKey?.let(PubkyPublicKeyFormat::normalized)
+    private suspend fun currentIdentity(priority: Priority = Priority.Ordered): String? =
+        sdk.identityStatus(priority)?.takeIf { it.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE }
+            ?.publicKey?.let(PubkyPublicKeyFormat::normalized)
 }

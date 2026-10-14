@@ -12745,6 +12745,52 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `USDT contact submission pauses background work until preparation and sending finish`() = test {
+        setActiveContactPaymentContext(testPublicKey)
+        val preparing = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(paykitUsdtPayments.prepare(any(), any(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            preparing.complete(Unit)
+            release.await()
+            Result.success(Unit)
+        }
+        val quote = mock<UsdtQuote>()
+        val send = launch { sut.sendPaykitUsdt(quote) }
+        preparing.await()
+        assertTrue(paymentSubmissionActive.value)
+        assertTrue(runCatching { sut.sendPaykitUsdt(quote) }.exceptionOrNull() is PaykitPaymentRequestError)
+        whenever(paykitUsdtPayments.send(any(), anyOrNull(), any())).doSuspendableAnswer {
+            assertTrue(paymentSubmissionActive.value)
+            Result.success(Unit)
+        }
+        release.complete(Unit)
+        send.join()
+        assertFalse(paymentSubmissionActive.value)
+        verify(paykitUsdtPayments).send(eq(quote), eq(null), any())
+    }
+
+    @Test
+    fun `USDT contact submission resumes background work on failure and cancellation`() = test {
+        setActiveContactPaymentContext(testPublicKey)
+        whenever(paykitUsdtPayments.prepare(any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.failure(UsdtException.QuoteExpired()))
+        assertTrue(runCatching { sut.sendPaykitUsdt(mock()) }.exceptionOrNull() is UsdtException.QuoteExpired)
+        assertFalse(paymentSubmissionActive.value)
+
+        val preparing = CompletableDeferred<Unit>()
+        whenever(paykitUsdtPayments.prepare(any(), any(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            preparing.complete(Unit)
+            awaitCancellation()
+        }
+        val send = launch { sut.sendPaykitUsdt(mock()) }
+        preparing.await()
+        assertTrue(paymentSubmissionActive.value)
+        send.cancelAndJoin()
+        assertFalse(paymentSubmissionActive.value)
+        verify(paykitUsdtPayments, never()).send(any(), anyOrNull(), any())
+    }
+
+    @Test
     fun `accepting a USDT request retains its send context until the flow closes`() = test {
         val deadline = Clock.System.now() + 3600.seconds
         val request = paymentRequest().copy(

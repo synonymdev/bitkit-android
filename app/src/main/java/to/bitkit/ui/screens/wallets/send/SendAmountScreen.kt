@@ -323,6 +323,7 @@ private fun SendAmountNodeRunning(
 
             val textAvailable = when {
                 uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
+                uiState.paykitUsesUsdt -> R.string.wallet__send_available
                 uiState.hardwareWalletId != null -> R.string.wallet__send_available
                 uiState.isUnified -> R.string.wallet__send_available
                 uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available

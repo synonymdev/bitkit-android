@@ -23,6 +23,8 @@ import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -30,6 +32,10 @@ class UsdtRepoTest : BaseUnitTest() {
     private val service: UsdtService = mock()
     private val wallet: UsdtWallet = mock()
     private val transfer: UsdtTransfer = mock()
+
+    private fun quote(expiresAt: ULong = ULong.MAX_VALUE): UsdtQuote = mock {
+        on { this.expiresAt }.thenReturn(expiresAt)
+    }
 
     @Test
     fun `own address has a specific error for exact and maximum sends`() = test {
@@ -46,7 +52,7 @@ class UsdtRepoTest : BaseUnitTest() {
         mockStatic(Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")).use { native ->
             native.`when`<ULong> { usdtParseAmount("1") }.thenReturn(1_000_000u)
             val other = "0x1111111111111111111111111111111111111111"
-            val quote: UsdtQuote = mock()
+            val quote = quote()
             whenever(wallet.quoteTransfer(other, 1_000_000u, UsdtDestination.ARBITRUM)).thenReturn(quote)
             assertEquals(quote, repo.quote(other, "1", UsdtDestination.ARBITRUM).getOrThrow())
         }
@@ -195,7 +201,7 @@ class UsdtRepoTest : BaseUnitTest() {
         val repo = UsdtRepo(service, testDispatcher)
         val preceding = launch { UsdtDepositRepo(repo).depositNetworks().getOrThrow() }
         runCurrent()
-        val quote: UsdtQuote = mock()
+        val quote = quote()
         var authorized = false
         var expired = false
         val send = launch {
@@ -217,7 +223,7 @@ class UsdtRepoTest : BaseUnitTest() {
 
     @Test
     fun `pending submission stays successful when subsequent history is unreadable`() = test {
-        val quote: UsdtQuote = mock()
+        val quote = quote()
         whenever(service.wallet()).thenReturn(wallet)
         whenever(wallet.history()).thenThrow(UsdtException.Storage("unreadable history"))
         val submitted = incoming("submitted").copy(
@@ -235,7 +241,7 @@ class UsdtRepoTest : BaseUnitTest() {
 
     @Test
     fun `failed send publishes its durably queued transfer and preserves the error`() = test {
-        val quote: UsdtQuote = mock()
+        val quote = quote()
         val error = UsdtException.BackupUnavailable()
         val queued = incoming("queued").copy(
             isIncoming = false,
@@ -250,6 +256,46 @@ class UsdtRepoTest : BaseUnitTest() {
         assertEquals(error, repo.send(quote).exceptionOrNull())
         assertEquals(listOf(queued), repo.state.value.transfers)
         verify(service).send(quote)
+    }
+
+    @Test
+    fun `fee quote expiration while waiting for wallet work prevents submission`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        val release = CompletableDeferred<Unit>()
+        whenever(service.depositNetworks()).doSuspendableAnswer {
+            release.await()
+            emptyList()
+        }
+        val repo = UsdtRepo(service, testDispatcher, clock)
+        val preceding = launch { UsdtDepositRepo(repo).depositNetworks().getOrThrow() }
+        val quote = quote(now.epochSeconds.toULong() + 120u)
+        var authorized = false
+        val send = launch {
+            val result = repo.send(quote) { authorized = true }
+            assertTrue(result.exceptionOrNull() is UsdtException.QuoteExpired)
+        }
+        runCurrent()
+        assertEquals(false, authorized)
+        now += 116.seconds
+        release.complete(Unit)
+        preceding.join()
+        send.join()
+        assertTrue(authorized)
+        verify(service, never()).send(quote)
+    }
+
+    @Test
+    fun `fee quote is rechecked after authorization finishes`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        val quote = quote(now.epochSeconds.toULong() + 120u)
+        val repo = UsdtRepo(service, testDispatcher, clock)
+
+        val result = repo.send(quote) { now += 120.seconds }
+
+        assertTrue(result.exceptionOrNull() is UsdtException.QuoteExpired)
+        verify(service, never()).send(quote)
     }
 
     @Test

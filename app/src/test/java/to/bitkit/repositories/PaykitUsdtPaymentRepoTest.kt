@@ -30,6 +30,9 @@ import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.After
@@ -44,6 +47,7 @@ import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -53,6 +57,8 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PaykitUsdt
+import to.bitkit.models.PaykitUsdtStateBackup
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
@@ -167,7 +173,7 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(any())).thenAnswer { stored }
         whenever(keychain.upsertString(any(), any())).doSuspendableAnswer { stored = it.getArgument(1) }
         whenever(
-            sdk.identityStatus()
+            sdk.identityStatus(any())
         ).thenReturn(IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         whenever(sdk.paymentRequests()).thenReturn(emptyList())
         whenever(usdt.paymentEndpoint()).thenReturn(Result.success(endpoint))
@@ -211,6 +217,162 @@ class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     }
 
     private fun repo() = PaykitUsdtPaymentRepo(testDispatcher, keychain, sdk, proofs, usdt, clock)
+
+    @Test
+    fun `expired quotes fail before waiting for payment state or identity`() = test {
+        val repo = repo()
+        for (remaining in listOf(0uL, 5uL)) {
+            val result = repo.prepare(
+                context(),
+                quote.copy(expiresAt = clock.now().epochSeconds.toULong() + remaining),
+                amount,
+                request.payment(MethodId.UsdtArbitrum, clock.now()),
+            )
+            assertTrue(result.exceptionOrNull() is UsdtException.QuoteExpired)
+        }
+        verify(sdk, never()).identityStatus(any())
+        verify(keychain, never()).upsertString(any(), any())
+    }
+
+    @Test
+    fun `receipt verification permits preparation and preserves concurrent attempts`() = test {
+        val verifying = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val record = receivedRequest()
+        whenever(sdk.paymentRequests()).thenReturn(listOf(record))
+        whenever(wallet.verifyPaymentProof(any(), any())).doSuspendableAnswer {
+            verifying.complete(Unit)
+            release.await()
+            UsdtVerifiedPayment("payment", "transfer", "sender", address, 50_000u, 1_800_000_000u)
+        }
+        val repo = repo()
+        val reconciliation = launch { repo.reconcile().getOrThrow() }
+        verifying.await()
+        val preparation = async {
+            repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        }
+        try {
+            assertTrue(preparation.isCompleted)
+        } finally {
+            release.complete(Unit)
+        }
+        preparation.await()
+        reconciliation.join()
+        assertEquals(quote.id, repo.backupSnapshot().attempts.single().quoteId)
+        assertEquals("payment", repo.receipts.value.single().paymentId)
+        verify(sdk).identityStatus(Priority.Interactive)
+    }
+
+    @Test
+    fun `stale transfer observations cannot reopen an attempt that started sending`() = test {
+        val repo = repo()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        val observing = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(usdt.operation<Any?>(any())).doSuspendableAnswer {
+            observing.complete(Unit)
+            release.await()
+            Result.success(null)
+        }
+        val reconciliation = launch { repo.reconcile().getOrThrow() }
+        observing.await()
+        stubSend(Result.success(mock()))
+        val send = async { repo.send(quote).getOrThrow() }
+        try {
+            assertTrue(send.isCompleted)
+        } finally {
+            release.complete(Unit)
+        }
+        send.await()
+        reconciliation.join()
+        assertTrue(repo.attempts.value.single().paymentStarted)
+        assertTrue(repo.hasBinding(request.id))
+        assertTrue(repo.resumableRequests.value.isEmpty())
+    }
+
+    @Test
+    fun `restore during proof generation discards the previous reconciliation`() = test {
+        val repo = repo()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        val backup = repo.backupSnapshot()
+        stubStoredTransfer(Result.success(mock { on { status }.thenReturn(UsdtTransferStatus.CONFIRMED) }))
+        val generating = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(service.paymentProof(any(), any())).doSuspendableAnswer {
+            generating.complete(Unit)
+            release.await()
+            UsdtPaymentProof("42161", "transaction", "0", "signature")
+        }
+        val reconciliation = launch { repo.reconcile().getOrThrow() }
+        generating.await()
+        val restore = async { repo.restoreBackup(backup) }
+        try {
+            assertTrue(restore.isCompleted)
+        } finally {
+            release.complete(Unit)
+        }
+        restore.await()
+        reconciliation.join()
+        assertEquals(backup, repo.backupSnapshot())
+        assertTrue(repo.resumableRequests.value.isEmpty())
+        verify(proofs, never()).submit(any())
+    }
+
+    @Test
+    fun `restore during receipt verification discards stale verified evidence`() = test {
+        val verifying = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val record = receivedRequest()
+        whenever(sdk.paymentRequests()).thenReturn(listOf(record))
+        whenever(wallet.verifyPaymentProof(any(), any())).doSuspendableAnswer {
+            verifying.complete(Unit)
+            release.await()
+            UsdtVerifiedPayment("payment", "transfer", "sender", address, 50_000u, 1_800_000_000u)
+        }
+        val repo = repo()
+        val reconciliation = launch { repo.reconcile().getOrThrow() }
+        verifying.await()
+        val backup = PaykitUsdtStateBackup(emptyList(), emptyList())
+        val restore = async { repo.restoreBackup(backup) }
+        try {
+            assertTrue(restore.isCompleted)
+        } finally {
+            release.complete(Unit)
+        }
+        restore.await()
+        reconciliation.join()
+        assertEquals(backup, repo.backupSnapshot())
+        assertTrue(repo.receipts.value.isEmpty())
+    }
+
+    @Test
+    fun `ownership changed during context lookup cannot be replaced by stale reconciliation`() = test {
+        val reading = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(sdk.identityStatus(Priority.Ordered)).doSuspendableAnswer {
+            reading.complete(Unit)
+            release.await()
+            IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        whenever(sdk.identityStatus(Priority.Interactive))
+            .thenReturn(IdentityStatus(contact, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        val repo = repo()
+        val reconciliation = launch { repo.reconcile().getOrThrow() }
+        reading.await()
+        val preparation = async {
+            repo.prepare(context().copy(incomingPaymentRequest = null), quote, amount, null).getOrThrow()
+        }
+        try {
+            assertTrue(preparation.isCompleted)
+        } finally {
+            release.complete(Unit)
+        }
+        preparation.await()
+        reconciliation.join()
+        assertEquals(contact, repo.attempts.value.single().identity)
+        verify(sdk, never()).paymentRequests()
+    }
+
     private fun context(request: PaykitPaymentRequest = this.request) =
         ContactPaymentContext(
             contact,

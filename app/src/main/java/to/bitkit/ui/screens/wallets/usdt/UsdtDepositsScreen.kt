@@ -38,6 +38,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.synonym.bitkitcore.UsdtDeposit
 import com.synonym.bitkitcore.UsdtDepositDetail
 import com.synonym.bitkitcore.UsdtDepositNetwork
+import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -215,7 +216,7 @@ internal fun UsdtDepositsContent(
     onRefund: () -> Unit,
 ) {
     val detail = state.detail
-    var showDetails by rememberSaveable(detail?.deposit?.id) { mutableStateOf(true) }
+    var showDetails by rememberSaveable(detail?.deposit?.id) { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxSize().imePadding()) {
         AppTopBar(
             titleText = stringResource(
@@ -297,7 +298,7 @@ private fun UsdtDepositDetailActions(
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         if (showDetails && canRefund) {
             PrimaryButton(
-                text = stringResource(R.string.usdt__deposit_refund),
+                text = stringResource(R.string.usdt__deposit_refund_action),
                 onClick = onRefund,
                 enabled = !busy && address.isNotBlank(),
                 isLoading = busy,
@@ -316,7 +317,7 @@ private fun UsdtDepositDetailActions(
         }
         PrimaryButton(
             text = stringResource(
-                if (showDetails) R.string.common__hide_details else R.string.wallet__send_details
+                if (showDetails) R.string.usdt__hide_details else R.string.wallet__send_details
             ),
             onClick = onToggleDetails,
             size = ButtonSize.Small,
@@ -422,12 +423,17 @@ private fun UsdtDepositSummary(detail: UsdtDepositDetail) {
             modifier = Modifier.weight(1f)
         )
         UsdtDetailCell(
-            title = stringResource(R.string.usdt__sender_network),
-            value = detail.deposit.network.depositNetwork()?.label ?: detail.deposit.network,
+            title = stringResource(R.string.usdt__receiving_network),
+            value = UsdtDestination.ARBITRUM.label,
             icon = R.drawable.usdt_network,
             modifier = Modifier.weight(1f)
         )
     }
+    UsdtDetailCell(
+        title = stringResource(R.string.usdt__sender_network),
+        value = detail.deposit.network.depositNetwork()?.label ?: detail.deposit.network,
+        icon = R.drawable.usdt_network,
+    )
     UsdtDetailField(caption = stringResource(R.string.usdt__deposit_provider_status)) {
         BodySSB(stringResource(R.string.usdt__deposit_status_note), style = UsdtDetailStyles.Body)
     }

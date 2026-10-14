@@ -96,7 +96,7 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
         whenever(keychain.loadString(any())).thenAnswer { stored }
         whenever(keychain.upsertString(any(), any())).doSuspendableAnswer { stored = it.getArgument(1) }
         whenever(
-            sdk.identityStatus()
+            sdk.identityStatus(any())
         ).thenReturn(IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         whenever(sdk.paymentRequests()).thenReturn(emptyList())
         whenever(usdt.paymentEndpoint()).thenReturn(Result.success(endpoint))

@@ -95,8 +95,8 @@ internal fun UsdtActivityRow(transfer: UsdtTransfer, hideBalance: Boolean, onCli
 private fun UsdtActivityIcon(transfer: UsdtTransfer, size: Dp = 40.dp) {
     CircularIcon(
         icon = painterResource(transfer.iconResource),
-        iconColor = Colors.Usdt,
-        backgroundColor = Colors.Usdt.copy(alpha = 0.16f),
+        iconColor = transfer.activityIconColor,
+        backgroundColor = transfer.activityIconColor.copy(alpha = 0.16f),
         size = size
     )
 }
@@ -389,6 +389,12 @@ private val UsdtTransfer.iconResource: Int get() = when (status) {
     UsdtTransferStatus.BRIDGING -> R.drawable.ic_transfer
     UsdtTransferStatus.BRIDGE_REFUNDED -> R.drawable.ic_received
     UsdtTransferStatus.CONFIRMED -> if (isIncoming) R.drawable.ic_received else R.drawable.ic_sent
+}
+
+private val UsdtTransfer.activityIconColor get() = when (status) {
+    UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED, UsdtTransferStatus.BRIDGE_FAILED -> Colors.Red
+    UsdtTransferStatus.PENDING, UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION -> Colors.Yellow
+    else -> Colors.Usdt
 }
 
 private val UsdtTransfer.statusColor get() = when (status) {

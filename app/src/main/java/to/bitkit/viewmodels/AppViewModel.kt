@@ -3260,7 +3260,7 @@ class AppViewModel @Inject constructor(
     suspend fun sendPaykitUsdt(quote: UsdtQuote) {
         val current = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
             ?.takeUnless { isSubmittingPaymentRequest } ?: throw PaykitPaymentRequestError.RequestUnavailable
-        isSubmittingPaymentRequest = current.incomingPaymentRequest != null
+        isSubmittingPaymentRequest = true
         val reviewedAmount = paykitReviewedAmount
         val paymentTerms = paykitPaymentTerms
         try {
