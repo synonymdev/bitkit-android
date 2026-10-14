@@ -146,6 +146,44 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refund eligibility follows supported asset network and current order`() {
+        val deposit = UsdtDeposit("deposit", "bsc", "USDT", 100u, "tx", "held", null, null)
+        val detail = UsdtDepositDetail(deposit, null)
+        assertTrue(detail.canRefund)
+        listOf("completed", "refunded", "refunding", "refund_requested").forEach { status ->
+            assertFalse(detail.copy(deposit = deposit.copy(status = status)).canRefund)
+            assertFalse(detail.copy(order = UsdtDepositOrder(status, 100u, null, null, null, null)).canRefund)
+        }
+        assertFalse(detail.copy(deposit = deposit.copy(asset = "USDC")).canRefund)
+        assertFalse(detail.copy(deposit = deposit.copy(network = "unknown")).canRefund)
+    }
+
+    @Test
+    fun `returning to history shows the refreshed order status and refund acknowledgment`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf()))
+        val deposit = UsdtDeposit("deposit", "bsc", "USDT", 100u, "tx", "held", "stale", null)
+        val order = UsdtDepositOrder("delivering", 100u, null, null, null, null)
+        whenever(repo.depositHistory(0u)).thenReturn(Result.success(UsdtDepositPage(listOf(deposit), null)))
+        whenever(repo.depositDetail("deposit", 0u)).thenReturn(Result.success(UsdtDepositDetail(deposit, order)))
+        whenever(repo.refundDeposit("deposit", 0u, "address", UsdtDepositNetwork.BSC)).thenReturn(Result.success(Unit))
+        val model = UsdtDepositViewModel(repo)
+        model.history().join()
+        model.detail("deposit")
+        assertEquals("delivering", model.state.value.deposits.single().status)
+        assertNull(model.state.value.deposits.single().code)
+        model.refund("deposit", 0u, "address", UsdtDepositNetwork.BSC).join()
+        assertEquals("refund_requested", model.state.value.deposits.single().status)
+        model.back()
+        assertEquals(
+            R.string.usdt__deposit_refunding,
+            depositStatus(
+                model.state.value.deposits.single().status,
+                model.state.value.deposits.single().code,
+            )
+        )
+    }
+
+    @Test
     fun `receive request locks network and navigation until cancellation`() = test {
         whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf(UsdtDepositNetwork.TRON)))
         val result = CompletableDeferred<Result<UsdtDepositAddress>>()

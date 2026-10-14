@@ -76,6 +76,15 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
         }
     }
 
+    fun more() {
+        _state.value.nextOffset?.let { history(it) }
+    }
+
+    fun refresh() = viewModelScope.launch {
+        val id = _state.value.detail?.deposit?.id
+        if (id == null) history().join() else detail(id)
+    }
+
     suspend fun detail(id: String) {
         operation {
             repo.depositDetail(
@@ -86,6 +95,16 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
                 _state.update {
                     it.copy(
                         detail = detail,
+                        deposits = it.deposits.map { deposit ->
+                            if (deposit.id == id) {
+                                detail.deposit.copy(
+                                    status = detail.providerStatus,
+                                    code = detail.statusCode
+                                )
+                            } else {
+                                deposit
+                            }
+                        }.toImmutableList(),
                         offset = pageOffsets[id] ?: it.offset,
                         message = if (status in listOf("completed", "refunded")) {
                             null
@@ -115,9 +134,7 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
 
     fun refund(id: String, offset: UInt, address: String, network: UsdtDepositNetwork) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
-        if (detail.deposit.id != id || (detail.order?.status ?: detail.deposit.status) in
-            listOf("completed", "refunded", "refunding", "refund_requested")
-        ) {
+        if (detail.deposit.id != id || !detail.canRefund || detail.deposit.network.depositNetwork() != network) {
             return@launch
         }
         operation {
@@ -130,6 +147,9 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
                                 order = detail.order?.copy(status = "refund_requested", code = null),
                             )
                         },
+                        deposits = it.deposits.map { deposit ->
+                            if (deposit.id == id) deposit.copy(status = "refund_requested", code = null) else deposit
+                        }.toImmutableList(),
                         message = R.string.usdt__deposit_refund_requested,
                     )
                 }

@@ -1,0 +1,16 @@
+<journey name="usdt bridge details">
+  <description>Use an isolated provider fixture with a pending Arbitrum receipt, an outgoing Orchestra transfer that is delivering, and supported and unsupported provider deposits. No funded wallet, payment submission, support submission or real refund is required. Native Android and iOS confirmation dialogs differ in platform styling.</description>
+  <actions>
+    <action>Open the pending incoming USDT activity. Verify the Receiving USDT title, incoming amount, teal down arrow, yellow Pending status, receiving network, date, time, payment and available fee.</action>
+    <action>Tap Details (id "UsdtActivityDetails"). Verify the real wallet transaction and available addresses are shown without inventing a provider deposit reference or refund eligibility.</action>
+    <action>Open Cross-Network Deposits (id "UsdtDepositHistory"). Verify the Provider Status note says the spendable balance updates when USDT arrives on Arbitrum, and each row shows its source network, provider status and available amount.</action>
+    <action>Open a supported deposit that needs attention (id "UsdtDepositRow-{depositId}"). Verify its own source transaction and deposit reference are shown. Verify the refund instructions and address placeholder name that deposit's source network.</action>
+    <action>Enter an owned test refund address (id "UsdtRefundAddress") and tap Request Refund (id "UsdtDepositRefund"). Verify Confirm Refund shows the exact deposit amount, network, full refund address and refund fee note. Cancel without submitting.</action>
+    <action>Tap Hide details (id "UsdtDepositDetails"), then Details again. Verify the provider status remains separate from wallet activity and the entered refund address is retained.</action>
+    <action>Open completed, refunded and refund-in-progress deposit fixtures. Verify Request Refund is unavailable and the current provider status and available refund transaction are shown. An unsupported asset or network must show support guidance instead of a refund form.</action>
+    <action>Open the outgoing delivering USDT activity. Verify the Delivering USDT title, outgoing amount, teal up arrow, yellow Delivering status and actual receiving network.</action>
+    <action>Tap Details (id "UsdtActivityDetails"). Verify the source transaction, sender and recipient addresses, sender and recipient networks, Orchestra provider and bridge reference. Verify Open Block Explorer (id "UsdtActivityExplorer") and Hide details remain reachable.</action>
+    <action>For a delayed, failed, refunding, refunded or support-needed bridge fixture, verify Contact Support (id "UsdtContactSupport") and Copy Details (id "UsdtCopyDetails") remain reachable from its details without submitting either action.</action>
+    <action>Open USDT Receive, then Network. Verify Cross-Network Deposits (id "UsdtDepositHistory") remains reachable before any Arbitrum receipt exists.</action>
+  </actions>
+</journey>

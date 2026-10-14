@@ -33,6 +33,7 @@ import com.synonym.bitkitcore.UsdtTransfer
 import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.uiDateStyleFor
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -104,11 +105,13 @@ internal fun UsdtActivityDetail(
     onBack: () -> Unit,
 ) {
     val contactName = paykitContactName(transfer.id)
+    val app = appViewModel
+    val canOpenDeposits = transfer.isIncoming && Env.usdtDepositsUrl != null
     var showDetails by rememberSaveable(transfer.id) { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxSize()) {
         AppTopBar(
             titleText = stringResource(
-                if (transfer.isIncoming) R.string.usdt__payment_received else R.string.usdt__sent_title
+                transfer.detailTitleResource
             ),
             onBackClick = onBack,
             actions = { DrawerNavIcon() }
@@ -120,27 +123,15 @@ internal fun UsdtActivityDetail(
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
-            ) {
-                BalanceHeader(
-                    isBitcoinPrimary = false,
-                    smallRowText = usdtOverviewAmount(transfer.activityAmount),
-                    smallRowSymbol = "$",
-                    smallRowModifier = Modifier.padding(bottom = 4.dp),
-                    largeRowText = usdtOverviewAmount(transfer.activityAmount),
-                    largeRowSymbol = "",
-                    largeRowPrefix = if (transfer.isIncoming) "+" else "−",
-                    showSymbol = false,
-                    hideBalance = hideBalance,
-                    onClick = {},
-                    modifier = Modifier.weight(1f)
-                )
-                UsdtActivityIcon(transfer, size = 48.dp)
-            }
+            UsdtActivityAmountHeader(
+                amount = transfer.activityAmount,
+                isIncoming = transfer.isIncoming,
+                hideBalance = hideBalance,
+                modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
+            )
             if (showDetails) {
                 UsdtTechnicalDetails(transfer, hideBalance, walletAddress)
+                if (canOpenDeposits) UsdtTransactionDetails(transfer)
             } else {
                 UsdtActivitySummary(transfer, hideBalance)
                 if (contactName != null) {
@@ -165,17 +156,71 @@ internal fun UsdtActivityDetail(
                 },
                 modifier = Modifier.testTag("UsdtActivityDetails")
             )
-            if (transfer.destination != UsdtDestination.ARBITRUM) UsdtSupportActions(transfer.supportDetails)
+            if (transfer.destination != UsdtDestination.ARBITRUM && (
+                    showDetails || transfer.status in setOf(
+                        UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION, UsdtTransferStatus.BRIDGE_FAILED,
+                        UsdtTransferStatus.FAILED, UsdtTransferStatus.BRIDGE_REFUNDED,
+                    )
+                    )
+            ) {
+                UsdtSupportActions(transfer.supportDetails)
+            }
         }
-        if (showDetails && transfer.txHash != null) {
+        if (showDetails && (transfer.txHash != null || canOpenDeposits)) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.padding(16.dp)
             ) {
-                UsdtTransactionDetails(transfer)
+                if (canOpenDeposits) {
+                    PrimaryButton(
+                        text = stringResource(R.string.usdt__deposit_history),
+                        onClick = { app?.navigateToUsdtDeposits() },
+                        modifier = Modifier.testTag("UsdtDepositHistory")
+                    )
+                } else {
+                    UsdtTransactionDetails(transfer)
+                }
             }
         }
     }
+}
+
+@Composable
+internal fun UsdtActivityAmountHeader(
+    amount: ULong?,
+    isIncoming: Boolean,
+    hideBalance: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(verticalAlignment = Alignment.Bottom, modifier = modifier) {
+        BalanceHeader(
+            isBitcoinPrimary = false,
+            smallRowText = amount?.let { usdtOverviewAmount(it) } ?: "—",
+            smallRowSymbol = "$",
+            smallRowModifier = Modifier.padding(bottom = 4.dp),
+            largeRowText = amount?.let { usdtOverviewAmount(it) } ?: "—",
+            largeRowSymbol = "",
+            largeRowPrefix = if (isIncoming) "+" else "−",
+            prefixSpacing = 6.dp,
+            showSymbol = false,
+            hideBalance = hideBalance,
+            onClick = {},
+            modifier = Modifier.weight(1f)
+        )
+        CircularIcon(
+            icon = painterResource(if (isIncoming) R.drawable.ic_received else R.drawable.ic_sent),
+            iconColor = Colors.Usdt,
+            backgroundColor = Colors.Usdt.copy(alpha = 0.16f),
+            size = 48.dp,
+        )
+    }
+}
+
+internal val UsdtTransfer.detailTitleResource: Int get() = when {
+    isIncoming && status == UsdtTransferStatus.PENDING -> R.string.usdt__receiving_title
+    isIncoming -> R.string.usdt__payment_received
+    status == UsdtTransferStatus.BRIDGING -> R.string.usdt__delivering_title
+    else -> R.string.usdt__sent_title
 }
 
 @Composable
@@ -211,6 +256,28 @@ private fun UsdtTechnicalDetails(transfer: UsdtTransfer, hideBalance: Boolean, w
         )
     }
     transfer.orchestra?.let { UsdtOrchestraDetails(it, hideBalance) }
+    if (transfer.destination != UsdtDestination.ARBITRUM && transfer.status !in setOf(
+            UsdtTransferStatus.BRIDGE_REFUNDED, UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED,
+        )
+    ) {
+        SendCell(
+            caption = stringResource(
+                if (transfer.status == UsdtTransferStatus.CONFIRMED) {
+                    R.string.usdt__recipient_gets
+                } else {
+                    R.string.usdt__expected_amount
+                }
+            )
+        ) {
+            BodySSB(
+                if (hideBalance) {
+                    UiConstants.HIDE_BALANCE_SHORT
+                } else {
+                    usdtOverviewAmount(transfer.receivedAmount) + " USDT"
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -219,13 +286,18 @@ private fun UsdtActivitySummary(transfer: UsdtTransfer, hideBalance: Boolean) {
         UsdtDetailCell(
             stringResource(R.string.wallet__activity_status),
             stringResource(transfer.status.labelResource),
-            if (transfer.status == UsdtTransferStatus.CONFIRMED) R.drawable.ic_check_circle else transfer.iconResource,
+            when (transfer.status) {
+                UsdtTransferStatus.CONFIRMED -> R.drawable.ic_check_circle
+                UsdtTransferStatus.BRIDGING -> R.drawable.ic_hourglass_simple
+                else -> transfer.iconResource
+            },
             valueColor = transfer.statusColor,
+            iconColor = transfer.statusColor,
             modifier = Modifier.weight(1f).testTag("UsdtActivityStatus")
         )
         UsdtDetailCell(
-            stringResource(R.string.usdt__network),
-            UsdtDestination.ARBITRUM.label,
+            stringResource(R.string.usdt__receiving_network),
+            transfer.destination.label,
             R.drawable.usdt_network,
             modifier = Modifier.weight(1f)
         )
@@ -258,28 +330,6 @@ private fun UsdtActivitySummary(transfer: UsdtTransfer, hideBalance: Boolean) {
             modifier = Modifier.weight(1f)
         )
     }
-    if (transfer.destination != UsdtDestination.ARBITRUM && transfer.status !in setOf(
-            UsdtTransferStatus.BRIDGE_REFUNDED, UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED,
-        )
-    ) {
-        SendCell(
-            caption = stringResource(
-                if (transfer.status == UsdtTransferStatus.CONFIRMED) {
-                    R.string.usdt__recipient_gets
-                } else {
-                    R.string.usdt__expected_amount
-                }
-            )
-        ) {
-            BodySSB(
-                if (hideBalance) {
-                    UiConstants.HIDE_BALANCE_SHORT
-                } else {
-                    usdtOverviewAmount(transfer.receivedAmount) + " USDT"
-                }
-            )
-        }
-    }
 }
 
 @Composable
@@ -289,6 +339,7 @@ internal fun UsdtDetailCell(
     icon: Int,
     modifier: Modifier = Modifier,
     valueColor: Color = Colors.White,
+    iconColor: Color = Colors.Usdt,
     minValueHeight: Dp = 0.dp,
 ) {
     SendCell(caption = title, modifier = modifier) {
@@ -297,7 +348,7 @@ internal fun UsdtDetailCell(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.heightIn(min = minValueHeight).wrapContentHeight(Alignment.Top),
         ) {
-            Icon(painterResource(icon), null, tint = Colors.Usdt, modifier = Modifier.size(16.dp))
+            Icon(painterResource(icon), null, tint = iconColor, modifier = Modifier.size(16.dp))
             BodySSB(value, color = valueColor)
         }
     }
@@ -321,6 +372,7 @@ private val UsdtTransfer.iconResource: Int get() = when (status) {
 
 private val UsdtTransfer.statusColor get() = when (status) {
     UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED -> Colors.Red
+    UsdtTransferStatus.PENDING, UsdtTransferStatus.BRIDGING,
     UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION, UsdtTransferStatus.BRIDGE_FAILED -> Colors.Yellow
     else -> Colors.Usdt
 }
@@ -329,7 +381,7 @@ private val UsdtTransferStatus.labelResource: Int get() = when (this) {
     UsdtTransferStatus.PENDING -> R.string.usdt__pending
     UsdtTransferStatus.CONFIRMED -> R.string.usdt__confirmed
     UsdtTransferStatus.FAILED -> R.string.usdt__failed
-    UsdtTransferStatus.BRIDGING -> R.string.wallet__activity_transferring
+    UsdtTransferStatus.BRIDGING -> R.string.usdt__delivering
     UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION, UsdtTransferStatus.BRIDGE_FAILED -> R.string.usdt__bridge_attention
     UsdtTransferStatus.BRIDGE_REFUNDED -> R.string.usdt__deposit_refunded
     UsdtTransferStatus.REPLACED -> R.string.usdt__replaced
@@ -359,8 +411,10 @@ private fun paykitContactName(transferId: String): String? {
 
 @Composable
 private fun UsdtOrchestraDetails(bridge: UsdtOrchestraTransfer, hideBalance: Boolean) {
-    SendCell(caption = stringResource(R.string.usdt__bridge_provider)) { BodySSB("Orchestra") }
-    SendCell(caption = stringResource(R.string.usdt__bridge_reference)) { SelectionContainer { BodyS(bridge.quoteId) } }
+    UsdtDetailCell(stringResource(R.string.usdt__bridge_provider), "Orchestra", R.drawable.ic_transfer)
+    SelectionContainer {
+        UsdtDetailCell(stringResource(R.string.usdt__bridge_reference), bridge.quoteId, R.drawable.ic_note)
+    }
     bridge.destinationTx?.let { hash ->
         SendCell(
             caption = stringResource(R.string.usdt__destination_tx)
@@ -387,6 +441,6 @@ private fun UsdtTransactionDetails(transfer: UsdtTransfer) {
         }
         PrimaryButton(text = stringResource(R.string.wallet__activity_explorer), onClick = {
             uri.openUri("https://arbiscan.io/tx/" + txHash)
-        })
+        }, modifier = Modifier.testTag("UsdtActivityExplorer"))
     }
 }

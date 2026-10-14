@@ -6143,6 +6143,13 @@ class AppViewModel @Inject constructor(
 
     fun resetQuickPay() = _quickPayData.update { null }
 
+    fun navigateToUsdtDeposits() {
+        viewModelScope.launch {
+            hideSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.UsdtDeposits))
+        }
+    }
+
     fun navigateToUsdtActivity(transferId: String) {
         viewModelScope.launch {
             hideSheet()

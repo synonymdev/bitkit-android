@@ -169,6 +169,7 @@ import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
+import to.bitkit.ui.screens.wallets.usdt.UsdtDepositsScreen
 import to.bitkit.ui.screens.wallets.usdt.UsdtWalletScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
@@ -1262,6 +1263,9 @@ private fun NavGraphBuilder.home(
             )
         }
     }
+    composableWithDefaultTransitions<Routes.UsdtDeposits> {
+        UsdtDepositsScreen(onBack = { navController.popBackStack() })
+    }
     composableWithDefaultTransitions<Routes.UsdtActivity> { entry ->
         UsdtWalletScreen(onBack = {
             navController.popBackStack()
@@ -2299,6 +2303,9 @@ sealed interface Routes {
 
     @Serializable
     data object UsdtWallet : Routes.DeepLinkable
+
+    @Serializable
+    data object UsdtDeposits : Routes.InternalOnly
 
     @Serializable
     data class UsdtActivity(val transferId: String) : Routes.InternalOnly
