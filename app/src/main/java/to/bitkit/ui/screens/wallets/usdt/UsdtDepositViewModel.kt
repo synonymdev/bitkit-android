@@ -87,33 +87,35 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
 
     suspend fun detail(id: String) {
         operation {
-            repo.depositDetail(
-                id,
-                pageOffsets[id] ?: _state.value.offset
-            ).onSuccess { detail ->
-                val status = detail.order?.status ?: detail.deposit.status
-                _state.update {
-                    it.copy(
-                        detail = detail,
-                        deposits = it.deposits.map { deposit ->
-                            if (deposit.id == id) {
-                                detail.deposit.copy(
-                                    status = detail.providerStatus,
-                                    code = detail.statusCode
-                                )
-                            } else {
-                                deposit
-                            }
-                        }.toImmutableList(),
-                        offset = pageOffsets[id] ?: it.offset,
-                        message = if (status in listOf("completed", "refunded")) {
-                            null
-                        } else {
-                            it.message
-                        },
-                    )
-                }
-            }
+            repo.depositDetail(id, pageOffsets[id] ?: _state.value.offset).onSuccess(::updateDetail)
+        }
+    }
+
+    suspend fun refreshDetail(id: String) {
+        val current = _state.value
+        if (current.busy || current.detail?.deposit?.id != id) return
+        val result = repo.depositDetail(id, current.offset)
+        if (_state.value !== current) return
+        result.onSuccess(::updateDetail).onFailure { error ->
+            _state.update { it.copy(error = error.messageResource()) }
+        }
+    }
+
+    private fun updateDetail(detail: UsdtDepositDetail) {
+        _state.update {
+            it.copy(
+                detail = detail,
+                deposits = it.deposits.map { deposit ->
+                    if (deposit.id == detail.deposit.id) {
+                        detail.deposit.copy(status = detail.providerStatus, code = detail.statusCode)
+                    } else {
+                        deposit
+                    }
+                }.toImmutableList(),
+                offset = pageOffsets[detail.deposit.id] ?: it.offset,
+                message = if (detail.providerStatus in listOf("completed", "refunded")) null else it.message,
+                error = null,
+            )
         }
     }
 

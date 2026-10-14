@@ -90,7 +90,7 @@ internal fun UsdtDepositsScreen(
         approval = null
     }
     LaunchedEffect(deposits) { deposits.history() }
-    DepositPolling(state.detail, lifecycle, approval != null) { deposits.detail(it) }
+    DepositPolling(state.detail, lifecycle, approval != null, deposits::refreshDetail)
     BackHandler(onBack = back)
     if (authentication) {
         UsdtAuthentication(

@@ -10,6 +10,7 @@ import com.synonym.bitkitcore.UsdtException
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import org.junit.Test
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
@@ -26,6 +27,66 @@ import kotlin.test.assertTrue
 
 class UsdtDepositViewModelTest : BaseUnitTest() {
     private val repo: UsdtDepositRepo = mock()
+
+    @Test
+    fun `background detail refresh leaves editing enabled and updates refund eligibility`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf()))
+        val deposit = UsdtDeposit("deposit", "bsc", "USDT", 100u, "tx", "held", null, null)
+        whenever(repo.depositDetail("deposit", 0u)).thenReturn(Result.success(UsdtDepositDetail(deposit, null)))
+        val model = UsdtDepositViewModel(repo)
+        model.detail("deposit")
+        val result = CompletableDeferred<Result<UsdtDepositDetail>>()
+        whenever(repo.depositDetail("deposit", 0u)).doSuspendableAnswer { result.await() }
+
+        val refresh = launch { model.refreshDetail("deposit") }
+        assertFalse(model.state.value.busy)
+        assertTrue(requireNotNull(model.state.value.detail).canRefund)
+        result.complete(Result.success(UsdtDepositDetail(deposit.copy(status = "completed"), null)))
+        refresh.join()
+        assertFalse(model.state.value.busy)
+        assertFalse(requireNotNull(model.state.value.detail).canRefund)
+    }
+
+    @Test
+    fun `background detail refresh cannot reopen a deposit after back`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf()))
+        val deposit = UsdtDeposit("deposit", "bsc", "USDT", 100u, "tx", "held", null, null)
+        val detail = UsdtDepositDetail(deposit, null)
+        whenever(repo.depositDetail("deposit", 0u)).thenReturn(Result.success(detail))
+        val model = UsdtDepositViewModel(repo)
+        model.detail("deposit")
+        val result = CompletableDeferred<Result<UsdtDepositDetail>>()
+        whenever(repo.depositDetail("deposit", 0u)).doSuspendableAnswer { result.await() }
+
+        val refresh = launch { model.refreshDetail("deposit") }
+        assertTrue(model.back())
+        result.complete(Result.success(detail))
+        refresh.join()
+        assertNull(model.state.value.detail)
+        assertFalse(model.state.value.busy)
+    }
+
+    @Test
+    fun `background detail refresh cannot undo an acknowledged refund or duplicate its request`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf()))
+        val deposit = UsdtDeposit("deposit", "bsc", "USDT", 100u, "tx", "held", null, null)
+        val detail = UsdtDepositDetail(deposit, null)
+        whenever(repo.depositDetail("deposit", 0u)).thenReturn(Result.success(detail))
+        whenever(repo.refundDeposit("deposit", 0u, "address", UsdtDepositNetwork.BSC)).thenReturn(Result.success(Unit))
+        val model = UsdtDepositViewModel(repo)
+        model.detail("deposit")
+        val result = CompletableDeferred<Result<UsdtDepositDetail>>()
+        whenever(repo.depositDetail("deposit", 0u)).doSuspendableAnswer { result.await() }
+
+        val refresh = launch { model.refreshDetail("deposit") }
+        model.refund("deposit", 0u, "address", UsdtDepositNetwork.BSC).join()
+        result.complete(Result.success(detail))
+        refresh.join()
+        assertEquals("refund_requested", model.state.value.detail?.deposit?.status)
+        assertEquals(R.string.usdt__deposit_refund_requested, model.state.value.message)
+        model.refund("deposit", 0u, "address", UsdtDepositNetwork.BSC).join()
+        verify(repo, times(1)).refundDeposit("deposit", 0u, "address", UsdtDepositNetwork.BSC)
+    }
 
     @Test
     fun `bridge cost rejection shows no deposit address or invented minimum`() = test {

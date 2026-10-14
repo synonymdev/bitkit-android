@@ -10,7 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -152,7 +154,13 @@ class UsdtBridgeDetailsTest {
         composeTestRule.onNodeWithTag("UsdtDepositRefund").assertIsNotEnabled()
         assertHeight("UsdtRefundAddress", 52f)
         screenshot("receiving-details")
-        composeTestRule.onNodeWithTag("UsdtRefundAddress").performTextInput(address)
+        val refundField = composeTestRule.onNodeWithTag("UsdtRefundAddress")
+        refundField.performTextInput(address.take(20))
+        composeTestRule.runOnIdle {
+            state.value = state.value.copy(detail = UsdtDepositDetail(deposit.copy(status = "below_minimum"), null))
+        }
+        refundField.assertIsFocused().performTextInput(address.drop(20))
+        refundField.assertTextContains(address)
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("UsdtDepositRefund").performScrollTo().performClick()
         composeTestRule.waitForIdle()
