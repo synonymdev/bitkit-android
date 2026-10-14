@@ -101,7 +101,9 @@ class WalletRepo @Inject constructor(
                         settledReceiveAddress = update.settledReceiveAddress,
                     )
                 }.onFailure {
-                    _walletState.update { state -> state.copy(hasReceiveInvoiceError = true) }
+                    _walletState.update { state ->
+                        state.copy(hasReceiveInvoiceError = state.hasReceiveInvoiceError || state.bolt11.isEmpty())
+                    }
                     Logger.error("Failed to refresh receive state for event '${update.event}'", it, context = TAG)
                 }
             }
@@ -115,14 +117,15 @@ class WalletRepo @Inject constructor(
 
     private suspend fun <T> updateReceiveState(
         beforeLock: () -> Unit = {},
+        trackPending: Boolean = true,
         block: suspend () -> T,
     ): T {
-        changePendingReceiveUpdates(1)
+        if (trackPending) changePendingReceiveUpdates(1)
         try {
             beforeLock()
             return receiveStateMutex.withLock { withContext(bgDispatcher) { block() } }
         } finally {
-            changePendingReceiveUpdates(-1)
+            if (trackPending) changePendingReceiveUpdates(-1)
         }
     }
 
@@ -261,7 +264,7 @@ class WalletRepo @Inject constructor(
             runSuspendCatching {
                 lightningRepo.syncState()
                 lightningRepo.updateGeoBlockState()
-                refreshAddressIfNeeded().getOrThrow()
+                refreshAddressForInvoice().getOrThrow()
                 updateBip21InvoiceLocked(state.bip21AmountSats, state.bip21Description).getOrThrow()
             }.onFailure {
                 _walletState.update { current -> current.copy(hasReceiveInvoiceError = true) }
@@ -283,7 +286,7 @@ class WalletRepo @Inject constructor(
             emptyList()
         }
 
-        val addressResult = refreshAddressIfNeeded()
+        val addressResult = refreshAddressForInvoice()
         if (addressResult.isFailure) return@withContext addressResult
         val invoiceResult = updateBip21InvoiceLocked()
         if (invoiceResult.isFailure) return@withContext invoiceResult
@@ -449,6 +452,12 @@ class WalletRepo @Inject constructor(
 
     private suspend fun refreshAddressIfNeeded(): Result<Unit> = refreshReusableReceiveAddressLocked()
 
+    private suspend fun refreshAddressForInvoice(): Result<Unit> {
+        val result = refreshAddressIfNeeded()
+        if (result.isFailure && getOnchainAddress().isNotEmpty()) return Result.success(Unit)
+        return result
+    }
+
     private fun invalidateSettledReceiveInvoice(settledBolt11: String): Boolean {
         while (true) {
             val state = _walletState.value
@@ -465,7 +474,7 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun refreshReusableReceiveAddress(): Result<Unit> = updateReceiveState {
+    suspend fun refreshReusableReceiveAddress(): Result<Unit> = updateReceiveState(trackPending = false) {
         refreshReusableReceiveAddressLocked()
     }
 
@@ -580,7 +589,7 @@ class WalletRepo @Inject constructor(
             .onFailure { error -> Logger.error("Failed to generate new address", error, context = TAG) }
     }
 
-    suspend fun refreshReusableReceiveAddressIfReserved(): Result<Unit> = updateReceiveState {
+    suspend fun refreshReusableReceiveAddressIfReserved(): Result<Unit> = updateReceiveState(trackPending = false) {
         runSuspendCatching {
             if (!privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(getOnchainAddress())) {
                 return@runSuspendCatching
@@ -705,7 +714,7 @@ class WalletRepo @Inject constructor(
         _walletState.update { it.copy(bolt11 = bolt11, bip21 = bip21, hasReceiveInvoiceError = false) }
     }
 
-    suspend fun setBip21(bip21: String) = updateReceiveState { setBip21Locked(bip21) }
+    suspend fun setBip21(bip21: String) = updateReceiveState(trackPending = false) { setBip21Locked(bip21) }
 
     private suspend fun setBip21Locked(bip21: String) {
         cacheStore.setBip21(bip21)
