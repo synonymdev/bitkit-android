@@ -88,6 +88,7 @@ class WalletRepo @Inject constructor(
     private val receiveStateMutex = Mutex()
     private val receiveUpdateStatusLock = Any()
     private var pendingReceiveUpdates = 0
+    private var pendingReceiveCacheLoads = 0
     private var pendingReceiveValidation: String? = null
     private var committedReceiveBip21 = ""
 
@@ -138,11 +139,17 @@ class WalletRepo @Inject constructor(
         updateReceivePendingState()
     }
 
+    private fun changePendingReceiveCacheLoads(delta: Int) = synchronized(receiveUpdateStatusLock) {
+        pendingReceiveCacheLoads += delta
+        updateReceivePendingState()
+    }
+
     private fun updateReceivePendingState() {
         _walletState.update { state ->
             val isValidatingCurrentInvoice = pendingReceiveValidation != null &&
                 state.bolt11 == pendingReceiveValidation
-            state.copy(isReceiveInvoiceUpdating = pendingReceiveUpdates > 0 || isValidatingCurrentInvoice)
+            val isUpdating = pendingReceiveUpdates > 0 || pendingReceiveCacheLoads > 0 || isValidatingCurrentInvoice
+            state.copy(isReceiveInvoiceUpdating = isUpdating)
         }
     }
 
@@ -168,6 +175,7 @@ class WalletRepo @Inject constructor(
     }
 
     fun loadFromCache() {
+        changePendingReceiveCacheLoads(1)
         repoScope.launch {
             receiveStateMutex.withLock {
                 val cacheData = cacheStore.data.first()
@@ -184,7 +192,7 @@ class WalletRepo @Inject constructor(
                     _balanceState.update { balance }
                 }
             }
-        }
+        }.invokeOnCompletion { changePendingReceiveCacheLoads(-1) }
     }
 
     fun walletExists(): Boolean = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
@@ -432,9 +440,19 @@ class WalletRepo @Inject constructor(
         settledReceiveInvoice: SettledReceiveInvoice? = null,
         settledReceiveAddress: SettledReceiveAddress? = null,
     ) {
-        if (!shouldHandleReceiveEvent(event, settledReceiveInvoice, settledReceiveAddress)) return
-        updateReceiveState(trackPending = event !is Event.OnchainTransactionReceived) {
-            refreshBip21ForEventLocked(event, settledReceiveInvoice, settledReceiveAddress)
+        val trackPending = synchronized(receiveUpdateStatusLock) {
+            val cacheLoadPending = pendingReceiveCacheLoads > 0
+            if (!shouldHandleReceiveEvent(event, settledReceiveInvoice, settledReceiveAddress, cacheLoadPending)) return
+            val track = event !is Event.OnchainTransactionReceived || cacheLoadPending
+            if (track) changePendingReceiveUpdates(1)
+            track
+        }
+        try {
+            updateReceiveState(trackPending = false) {
+                refreshBip21ForEventLocked(event, settledReceiveInvoice, settledReceiveAddress)
+            }
+        } finally {
+            if (trackPending) changePendingReceiveUpdates(-1)
         }
     }
 
@@ -499,14 +517,15 @@ class WalletRepo @Inject constructor(
         event: Event,
         settledReceiveInvoice: SettledReceiveInvoice?,
         settledReceiveAddress: SettledReceiveAddress?,
+        cacheLoadPending: Boolean,
     ): Boolean {
         return when (event) {
             is Event.ChannelReady, is Event.ChannelClosed -> true
             is Event.PaymentReceived -> settledReceiveInvoice?.bolt11?.let {
-                it.isNotEmpty() && it == getBolt11()
+                it.isNotEmpty() && (cacheLoadPending || it == getBolt11())
             } == true
             is Event.OnchainTransactionReceived -> settledReceiveAddress?.address?.let {
-                it.isNotEmpty() && it == getOnchainAddress()
+                it.isNotEmpty() && (cacheLoadPending || it == getOnchainAddress())
             } == true
             else -> false
         }

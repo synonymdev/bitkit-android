@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.LnurlException
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,7 +22,10 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
@@ -202,6 +206,127 @@ class LightningRepoTest : BaseUnitTest() {
 
         startNodeForTesting()
         return requireNotNull(capturedHandler)
+    }
+
+    private suspend fun receiveWalletForSettlementTest(): WalletRepo {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever { cacheStore.update(any()) }.thenReturn(Unit)
+        val hardware = mock<HwWalletRepo>()
+        whenever(hardware.wallets).thenReturn(MutableStateFlow(persistentListOf()))
+        val reservations = mock<PrivatePaykitAddressReservationRepo>()
+        whenever { reservations.nextReusableReceiveAddress() }.thenReturn(Result.success("new-address"))
+        whenever { reservations.isUnavailableForReusableReceive(any()) }.thenReturn(false)
+        return WalletRepo(
+            bgDispatcher = testDispatcher,
+            keychain = keychain,
+            coreService = coreService,
+            settingsStore = settingsStore,
+            lightningRepo = sut,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            deriveBalanceStateUseCase = mock(),
+            wipeWalletUseCase = mock(),
+            privatePaykitAddressReservationRepo = reservations,
+            transferRepo = mock(),
+            activityRepo = mock(),
+            hwWalletRepo = hardware,
+        )
+    }
+
+    @Test
+    fun `produced lightning settlement survives a captured unpublished receive cache snapshot`() = test {
+        val eventHandler = startNodeAndCaptureEvents()
+        var cached = AppCacheData(
+            onchainAddress = "cached-address",
+            bolt11 = "cached-invoice",
+            bolt11PaymentHash = "010203",
+            bip21 = "bitcoin:cached-address?lightning=cached-invoice",
+        )
+        val snapshotCaptured = CompletableDeferred<Unit>()
+        val releaseSnapshot = CompletableDeferred<Unit>()
+        var cacheReads = 0
+        whenever(cacheStore.data).thenReturn(flow {
+            val snapshot = cached
+            if (cacheReads++ == 0) {
+                snapshotCaptured.complete(Unit)
+                releaseSnapshot.await()
+            }
+            emit(snapshot)
+        })
+        whenever(cacheStore.invalidateReceiveLightningInvoice("cached-invoice")).doSuspendableAnswer {
+            cached = cached.invalidateReceiveLightningInvoice()
+            true
+        }
+        whenever(coreService.activity).thenReturn(mock())
+        val wallet = receiveWalletForSettlementTest()
+        val actionablePaidUris = mutableListOf<String>()
+        wallet.walletState.onEach {
+            if (!it.isReceiveInvoiceUpdating && it.bip21.contains("cached-invoice")) {
+                actionablePaidUris.add(it.bip21)
+            }
+        }.launchIn(backgroundScope)
+        testScheduler.runCurrent()
+        wallet.loadFromCache()
+        snapshotCaptured.await()
+
+        eventHandler(Event.PaymentSuccessful("payment", "hash", "preimage", 10uL))
+        eventHandler(Event.PaymentReceived("received", "010203", 1000uL, emptyList()))
+        assertEquals("", cached.bolt11)
+        releaseSnapshot.complete(Unit)
+        testScheduler.runCurrent()
+
+        assertEquals("", wallet.walletState.value.bolt11)
+        assertFalse(wallet.walletState.value.bip21.contains("cached-invoice"))
+        assertFalse(wallet.walletState.value.isReceiveInvoiceUpdating)
+        assertTrue(actionablePaidUris.isEmpty())
+        verify(cacheStore).invalidateReceiveLightningInvoice("cached-invoice")
+    }
+
+    @Test
+    fun `produced address settlement survives a captured unpublished receive cache snapshot`() = test {
+        val eventHandler = startNodeAndCaptureEvents()
+        var cached = AppCacheData(onchainAddress = "cached-address", bip21 = "bitcoin:cached-address")
+        val snapshotCaptured = CompletableDeferred<Unit>()
+        val releaseSnapshot = CompletableDeferred<Unit>()
+        var cacheReads = 0
+        whenever(cacheStore.data).thenReturn(flow {
+            val snapshot = cached
+            if (cacheReads++ == 0) {
+                snapshotCaptured.complete(Unit)
+                releaseSnapshot.await()
+            }
+            emit(snapshot)
+        })
+        whenever(cacheStore.invalidateReceiveOnchainAddress("cached-address")).doSuspendableAnswer {
+            cached = cached.invalidateReceiveOnchainAddress()
+            true
+        }
+        val details = mock<TransactionDetails>()
+        val output = mock<TxOutput>()
+        whenever(output.scriptpubkeyAddress).thenReturn("cached-address")
+        whenever(details.outputs).thenReturn(listOf(output))
+        val wallet = receiveWalletForSettlementTest()
+        val actionablePaidUris = mutableListOf<String>()
+        wallet.walletState.onEach {
+            if (!it.isReceiveInvoiceUpdating && it.bip21.contains("cached-address")) {
+                actionablePaidUris.add(it.bip21)
+            }
+        }.launchIn(backgroundScope)
+        testScheduler.runCurrent()
+        wallet.loadFromCache()
+        snapshotCaptured.await()
+
+        eventHandler(Event.OnchainTransactionReceived("txid", details))
+        assertEquals("", cached.onchainAddress)
+        releaseSnapshot.complete(Unit)
+        testScheduler.runCurrent()
+
+        assertEquals("new-address", wallet.walletState.value.onchainAddress)
+        assertFalse(wallet.walletState.value.bip21.contains("cached-address"))
+        assertFalse(wallet.walletState.value.isReceiveInvoiceUpdating)
+        assertTrue(actionablePaidUris.isEmpty())
+        verify(cacheStore).invalidateReceiveOnchainAddress("cached-address")
     }
 
     private fun lnurlPayData() = LnurlPayData(

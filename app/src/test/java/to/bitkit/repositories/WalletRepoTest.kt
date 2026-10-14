@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -55,6 +56,7 @@ import to.bitkit.utils.ServiceError
 import java.io.IOException
 import java.util.ArrayDeque
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -184,6 +186,48 @@ class WalletRepoTest : BaseUnitTest() {
         networkType = NetworkType.REGTEST,
         payeeNodeId = null,
     )
+
+    @Test
+    fun `concurrent cache loads keep receive pending until both complete`() = test {
+        val firstSnapshot = CompletableDeferred<Unit>()
+        val secondSnapshot = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        val releaseSecond = CompletableDeferred<Unit>()
+        var reads = 0
+        whenever(cacheStore.data).thenReturn(flow {
+            if (reads++ == 0) {
+                firstSnapshot.complete(Unit)
+                releaseFirst.await()
+            } else {
+                secondSnapshot.complete(Unit)
+                releaseSecond.await()
+            }
+            emit(AppCacheData(onchainAddress = ADDRESS))
+        })
+        sut.loadFromCache()
+        firstSnapshot.await()
+        sut.loadFromCache()
+        val pendingWithBothLoads = sut.walletState.value.isReceiveInvoiceUpdating
+        releaseFirst.complete(Unit)
+        secondSnapshot.await()
+        val pendingAfterFirstLoad = sut.walletState.value.isReceiveInvoiceUpdating
+        releaseSecond.complete(Unit)
+        testScheduler.runCurrent()
+
+        assertTrue(pendingWithBothLoads)
+        assertTrue(pendingAfterFirstLoad)
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `cancelled cache hydration releases its pending ownership`() = test {
+        whenever(cacheStore.data).thenReturn(flow<AppCacheData> { throw CancellationException("cancel hydration") })
+
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
 
     @Test
     fun `buffered unrelated event cannot delay hiding a matched settled invoice`() = test {
