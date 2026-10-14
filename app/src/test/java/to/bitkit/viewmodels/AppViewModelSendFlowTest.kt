@@ -442,6 +442,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever { pubkyRepo.refreshContacts() }.thenReturn(true)
+        whenever { pubkyRepo.importShopContacts() }.thenReturn(Result.success(Unit))
         whenever { refreshContactPaykitLink(any()) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }
             .thenReturn(Result.success(Unit))
@@ -687,11 +688,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         var cancelled = false
+        var importCancelled = false
         whenever(pubkyRepo.refreshContacts()).doSuspendableAnswer {
             try {
                 awaitCancellation()
             } finally {
                 cancelled = true
+            }
+        }
+        whenever(pubkyRepo.importShopContacts()).doSuspendableAnswer {
+            try {
+                awaitCancellation()
+            } finally {
+                importCancelled = true
             }
         }
         try {
@@ -700,11 +709,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.stopPaykitPaymentRequestPolling()
             runCurrent()
             assertTrue(cancelled)
+            assertTrue(importCancelled)
 
             doReturn(true).whenever(pubkyRepo).refreshContacts()
+            doReturn(Result.success(Unit)).whenever(pubkyRepo).importShopContacts()
             sut.startPaykitPaymentRequestPolling()
             runCurrent()
             verifyBlocking(pubkyRepo, times(2)) { refreshContacts() }
+            verifyBlocking(pubkyRepo, times(2)) { importShopContacts() }
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `existing request polls coalesce Shop import and retry after it completes`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        val imported = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.importShopContacts()).doSuspendableAnswer {
+            imported.await()
+            Result.success(Unit)
+        }
+        try {
+            sut.startPaykitPaymentRequestPolling()
+            runCurrent()
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            verifyBlocking(pubkyRepo) { importShopContacts() }
+
+            imported.complete(Unit)
+            runCurrent()
+            advanceTimeBy(10.seconds.inWholeMilliseconds)
+            runCurrent()
+            verifyBlocking(pubkyRepo, times(2)) { importShopContacts() }
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }

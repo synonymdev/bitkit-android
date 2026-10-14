@@ -1137,6 +1137,17 @@ class PubkyRepo @Inject constructor(
 
     // region Contact management
 
+    private val shopContactImporter = ShopContactImporter(pubkyService)
+
+    suspend fun importShopContacts(): Result<Unit> = runSuspendCatching {
+        withContext<Unit>(ioDispatcher) {
+            val signIn = currentSignIn() ?: return@withContext
+            shopContactImporter.importPage(signIn, refreshContacts = { loadContactRecords() }) { isCurrent(signIn) }
+        }
+    }.onFailure {
+        Logger.warn("Failed to import Shop contacts", it, context = TAG)
+    }
+
     suspend fun refreshContacts(): Boolean {
         val signIn = currentSignIn() ?: return false
         val refresh = synchronized(contactsLock) {

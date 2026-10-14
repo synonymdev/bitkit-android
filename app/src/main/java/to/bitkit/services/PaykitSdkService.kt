@@ -577,6 +577,13 @@ class PaykitSdkService @Inject constructor(
     suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray =
         publicRead { it.fetchPubkyFileBounded(uri, maxBytes) } ?: throw PubkyFileNotFoundError()
 
+    suspend fun listPublicDirectoryPage(uri: String, cursor: String?, limit: UShort): List<String> =
+        publicRead(PaykitReadLane.Bulk, 5.seconds) { it.listPubkyDirectoryPage(uri, cursor, limit) }
+
+    suspend fun fetchPublicFile(uri: String, maxBytes: ULong): ByteArray =
+        publicRead(PaykitReadLane.Bulk, 5.seconds) { it.fetchPubkyFileBounded(uri, maxBytes) }
+            ?: throw PubkyFileNotFoundError()
+
     suspend fun publishPaykitProfile(profile: PaykitProfile): PaykitProfileRecord {
         isSetup.await()
         return operationLock.withLock {
@@ -698,6 +705,31 @@ class PaykitSdkService @Inject constructor(
                 completeSdkCall { handle.saveContactsAndUnblockPeers(updates) }
             }
         }
+    }
+
+    suspend fun importShopContacts(
+        publicKeys: List<String>,
+        expectedIdentity: String,
+        isStillCurrent: () -> Boolean,
+    ): List<ContactRecord> {
+        if (publicKeys.isEmpty()) return emptyList()
+        isSetup.await()
+        val generation = runtimeGeneration
+        var imported: List<ContactRecord>?
+        do {
+            isPaymentSubmissionActive.first { !it }
+            imported = operationLock.withLock(Priority.Background) {
+                if (runtimeGeneration != generation || !isStillCurrent()) throw PubkyContactError.SignInChanged
+                if (isPaymentSubmissionActive.value) return@withLock null
+                withStateRevisionTracking { handle ->
+                    currentCoroutineContext().ensureActive()
+                    if (!isStillCurrent()) throw PubkyContactError.SignInChanged
+                    if (isPaymentSubmissionActive.value) return@withStateRevisionTracking null
+                    completeSdkCall { handle.importContacts(expectedIdentity, publicKeys) }
+                }
+            }
+        } while (imported == null)
+        return imported
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? {

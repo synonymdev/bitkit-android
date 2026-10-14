@@ -3446,6 +3446,47 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Shop import reads again after an older foreground refresh`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val released = CompletableDeferred<Unit>()
+        val committed = CompletableDeferred<Unit>()
+        val cached = createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Saved"))
+        val added = createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("Shop"))
+        var reads = 0
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).doSuspendableAnswer {
+            if (++reads == 1) {
+                released.await()
+                listOf(cached)
+            } else {
+                listOf(cached, added)
+            }
+        }
+        val seller = VALID_CONTACT_KEY_B.removePrefix("pubky")
+        val root = "pubky://${VALID_SELF_KEY.removePrefix("pubky")}${ShopContactImporter.MARKER_PATH}"
+        whenever(pubkyService.listPublicDirectoryPage(root, null, 10u)).thenReturn(listOf("$root$seller.json"))
+        whenever(pubkyService.fetchPublicFile("$root$seller.json", ShopContactImporter.MARKER_MAX_BYTES))
+            .thenReturn("{\"seller\":\"$seller\",\"completedAt\":1}".toByteArray())
+        val shopUri = "pubky://$seller${ShopContactImporter.SHOP_PATH}"
+        whenever(pubkyService.fetchPublicFile(shopUri, ShopContactImporter.SHOP_MAX_BYTES))
+            .thenReturn("{\"schemaVersion\":1,\"recordType\":\"shop\",\"ownerPubky\":\"$seller\"}".toByteArray())
+        whenever(pubkyService.importShopContacts(eq(listOf(VALID_CONTACT_KEY_B)), eq(VALID_SELF_KEY), any()))
+            .doSuspendableAnswer {
+                committed.complete(Unit)
+                listOf(added)
+            }
+        val foreground = async { sut.refreshContacts() }
+        runCurrent()
+        val importing = async { sut.importShopContacts() }
+        committed.await()
+        released.complete(Unit)
+
+        assertTrue(foreground.await())
+        assertTrue(importing.await().isSuccess)
+        assertEquals(2, reads)
+        assertEquals(setOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B), sut.contacts.value.map { it.publicKey }.toSet())
+    }
+
+    @Test
     fun `refreshContacts does not count an older successful read as its own success`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val released = CompletableDeferred<Unit>()

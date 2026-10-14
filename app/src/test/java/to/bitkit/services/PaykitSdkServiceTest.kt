@@ -131,6 +131,50 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `shop import uses the atomic SDK operation and rejects an ended sign in`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val existing = "pubky" + "y".repeat(52)
+        val blocked = "pubky" + "b".repeat(51) + "y"
+        val added = "pubky" + "n".repeat(51) + "y"
+        val records = listOf(mock<ContactRecord>())
+        whenever(sdk.importContacts(any(), any())).thenReturn(records)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val keys = listOf(existing, blocked, added, added, RING_PUBKY)
+        assertEquals(records, service.importShopContacts(keys, RING_PUBKY) { true })
+        verify(sdk).importContacts(RING_PUBKY, keys)
+        verify(sdk, never()).saveContacts(any())
+        verify(sdk, never()).saveContactsAndUnblockPeers(any())
+        verify(sdk, never()).observeState()
+        assertFailsWith<PubkyContactError.SignInChanged> { service.importShopContacts(keys, RING_PUBKY) { false } }
+        verify(sdk, times(1)).importContacts(any(), any())
+    }
+
+    @Test
+    fun `shop import defers during payment and cannot cross a runtime reset`() = runTest {
+        for (reset in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.importContacts(any(), any())).thenReturn(emptyList())
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            service.setPaymentSubmissionActive(true)
+            val pending = async {
+                runSuspendCatching { service.importShopContacts(listOf(RING_PUBKY), RING_PUBKY) { true } }
+            }
+            runCurrent()
+            assertFalse(pending.isCompleted)
+            verify(sdk, never()).importContacts(any(), any())
+            service.linkedPeers(Priority.Interactive)
+            if (reset) service.clearState()
+            service.setPaymentSubmissionActive(false)
+            if (reset) {
+                assertIs<PubkyContactError.SignInChanged>(pending.await().exceptionOrNull())
+            } else {
+                assertEquals(emptyList(), pending.await().getOrThrow())
+            }
+            verify(sdk, times(if (reset) 0 else 1)).importContacts(any(), any())
+        }
+    }
+
+    @Test
     fun `queued state observation is rejected after runtime replacement`() = runTest {
         val sdk = mock<PaykitSdk>()
         val release = CompletableDeferred<Unit>()

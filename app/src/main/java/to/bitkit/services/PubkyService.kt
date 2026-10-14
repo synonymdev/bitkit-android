@@ -181,6 +181,21 @@ class PubkyService @Inject constructor(
         paykitSdkService.fetchFile(uri, maxBytes)
     }
 
+    suspend fun listPublicDirectoryPage(uri: String, cursor: String?, limit: UShort): List<String> =
+        cancellablePublicRead { paykitSdkService.listPublicDirectoryPage(uri, cursor, limit) }
+
+    suspend fun fetchPublicFile(uri: String, maxBytes: ULong): ByteArray = cancellablePublicRead {
+        paykitSdkService.fetchPublicFile(uri, maxBytes)
+    }
+
+    suspend fun importShopContacts(
+        publicKeys: List<String>,
+        expectedIdentity: String,
+        isStillCurrent: () -> Boolean,
+    ): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.importShopContacts(publicKeys, expectedIdentity, isStillCurrent)
+    }
+
     // endregion
 
     // region Profile & contacts
