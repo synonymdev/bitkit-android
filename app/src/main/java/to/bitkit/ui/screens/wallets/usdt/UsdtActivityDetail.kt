@@ -1,11 +1,14 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +27,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,16 +42,16 @@ import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.uiDateStyleFor
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.BalanceHeader
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.LargeRow
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -114,6 +118,7 @@ internal fun UsdtActivityDetail(
                 transfer.detailTitleResource
             ),
             onBackClick = onBack,
+            titleStyle = UsdtDetailStyles.Title,
             actions = { DrawerNavIcon() }
         )
         Column(
@@ -135,9 +140,9 @@ internal fun UsdtActivityDetail(
             } else {
                 UsdtActivitySummary(transfer, hideBalance)
                 if (contactName != null) {
-                    SendCell(
+                    UsdtDetailField(
                         caption = stringResource(R.string.wallet__payment_request_contact)
-                    ) { BodySSB(contactName) }
+                    ) { BodySSB(contactName, style = UsdtDetailStyles.Body) }
                 }
             }
             PrimaryButton(
@@ -146,6 +151,7 @@ internal fun UsdtActivityDetail(
                 ),
                 onClick = { showDetails = !showDetails },
                 size = ButtonSize.Small,
+                textStyle = UsdtDetailStyles.SmallButton,
                 icon = {
                     Icon(
                         painterResource(if (showDetails) R.drawable.ic_eye_slash else R.drawable.ic_git_branch),
@@ -174,6 +180,7 @@ internal fun UsdtActivityDetail(
                 if (canOpenDeposits) {
                     PrimaryButton(
                         text = stringResource(R.string.usdt__deposit_history),
+                        textStyle = UsdtDetailStyles.Button,
                         onClick = { app?.navigateToUsdtDeposits() },
                         modifier = Modifier.testTag("UsdtDepositHistory")
                     )
@@ -192,27 +199,31 @@ internal fun UsdtActivityAmountHeader(
     hideBalance: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Row(verticalAlignment = Alignment.Bottom, modifier = modifier) {
-        BalanceHeader(
-            isBitcoinPrimary = false,
-            smallRowText = amount?.let { usdtOverviewAmount(it) } ?: "—",
-            smallRowSymbol = "$",
-            smallRowModifier = Modifier.padding(bottom = 4.dp),
-            largeRowText = amount?.let { usdtOverviewAmount(it) } ?: "—",
-            largeRowSymbol = "",
-            largeRowPrefix = if (isIncoming) "+" else "−",
-            prefixSpacing = 6.dp,
-            showSymbol = false,
-            hideBalance = hideBalance,
-            onClick = {},
-            modifier = Modifier.weight(1f)
+    val amountText = amount?.let { usdtOverviewAmount(it) } ?: "—"
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = modifier) {
+        Caption13Up(
+            text = "$ " + if (hideBalance) UiConstants.HIDE_BALANCE_SHORT else amountText,
+            color = Colors.White64,
+            style = UsdtDetailStyles.Caption,
         )
-        CircularIcon(
-            icon = painterResource(if (isIncoming) R.drawable.ic_received else R.drawable.ic_sent),
-            iconColor = Colors.Usdt,
-            backgroundColor = Colors.Usdt.copy(alpha = 0.16f),
-            size = 48.dp,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(36.dp)) {
+            LargeRow(
+                prefix = if (isIncoming) "+" else "-",
+                text = amountText,
+                symbol = "",
+                showSymbol = false,
+                hideBalance = hideBalance,
+                prefixSpacing = 6.dp,
+                modifier = Modifier.weight(1f).wrapContentHeight(unbounded = true)
+            )
+            CircularIcon(
+                icon = painterResource(if (isIncoming) R.drawable.ic_received else R.drawable.ic_sent),
+                iconColor = Colors.Usdt,
+                backgroundColor = Colors.Usdt.copy(alpha = 0.16f),
+                size = 48.dp,
+                modifier = Modifier.requiredSize(48.dp)
+            )
+        }
     }
 }
 
@@ -226,18 +237,18 @@ internal val UsdtTransfer.detailTitleResource: Int get() = when {
 @Composable
 private fun UsdtTechnicalDetails(transfer: UsdtTransfer, hideBalance: Boolean, walletAddress: String) {
     transfer.txHash?.let { hash ->
-        SendCell(caption = stringResource(R.string.wallet__activity_tx_id)) {
-            SelectionContainer { BodySSB(hash) }
+        UsdtDetailField(caption = stringResource(R.string.wallet__activity_tx_id)) {
+            SelectionContainer { BodySSB(hash, style = UsdtDetailStyles.Body) }
         }
     }
     val sender = transfer.sender ?: walletAddress.takeIf { !transfer.isIncoming && it.isNotEmpty() }
     if (sender != null) {
-        SendCell(caption = stringResource(R.string.usdt__from_address)) {
-            SelectionContainer { BodySSB(sender) }
+        UsdtDetailField(caption = stringResource(R.string.usdt__from_address)) {
+            SelectionContainer { BodySSB(sender, style = UsdtDetailStyles.Body) }
         }
     }
-    SendCell(caption = stringResource(R.string.usdt__to_address)) {
-        SelectionContainer { BodySSB(transfer.recipient) }
+    UsdtDetailField(caption = stringResource(R.string.usdt__to_address)) {
+        SelectionContainer { BodySSB(transfer.recipient, style = UsdtDetailStyles.Body) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         if (!transfer.isIncoming) {
@@ -260,7 +271,7 @@ private fun UsdtTechnicalDetails(transfer: UsdtTransfer, hideBalance: Boolean, w
             UsdtTransferStatus.BRIDGE_REFUNDED, UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED,
         )
     ) {
-        SendCell(
+        UsdtDetailField(
             caption = stringResource(
                 if (transfer.status == UsdtTransferStatus.CONFIRMED) {
                     R.string.usdt__recipient_gets
@@ -291,6 +302,7 @@ private fun UsdtActivitySummary(transfer: UsdtTransfer, hideBalance: Boolean) {
                 UsdtTransferStatus.BRIDGING -> R.drawable.ic_hourglass_simple
                 else -> transfer.iconResource
             },
+            textStyle = UsdtDetailStyles.Body,
             valueColor = transfer.statusColor,
             iconColor = transfer.statusColor,
             modifier = Modifier.weight(1f).testTag("UsdtActivityStatus")
@@ -307,6 +319,7 @@ private fun UsdtActivitySummary(transfer: UsdtTransfer, hideBalance: Boolean) {
             stringResource(R.string.wallet__activity_date),
             uiDateText(transfer.timestamp, UiDateStyle.DATE),
             R.drawable.ic_calendar,
+            textStyle = UsdtDetailStyles.Body,
             modifier = Modifier.weight(1f)
         )
         UsdtDetailCell(
@@ -341,15 +354,23 @@ internal fun UsdtDetailCell(
     valueColor: Color = Colors.White,
     iconColor: Color = Colors.Usdt,
     minValueHeight: Dp = 0.dp,
+    textStyle: TextStyle = UsdtDetailStyles.Value,
 ) {
-    SendCell(caption = title, modifier = modifier) {
+    UsdtDetailField(caption = title, modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.heightIn(min = minValueHeight).wrapContentHeight(Alignment.Top),
         ) {
-            Icon(painterResource(icon), null, tint = iconColor, modifier = Modifier.size(16.dp))
-            BodySSB(value, color = valueColor)
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(16.dp)) {
+                Icon(
+                    painterResource(icon),
+                    null,
+                    tint = iconColor,
+                    modifier = if (icon == R.drawable.ic_clock) Modifier.size(13.dp, 14.dp) else Modifier.size(16.dp)
+                )
+            }
+            BodySSB(value, color = valueColor, style = textStyle)
         }
     }
 }
@@ -416,17 +437,17 @@ private fun UsdtOrchestraDetails(bridge: UsdtOrchestraTransfer, hideBalance: Boo
         UsdtDetailCell(stringResource(R.string.usdt__bridge_reference), bridge.quoteId, R.drawable.ic_note)
     }
     bridge.destinationTx?.let { hash ->
-        SendCell(
+        UsdtDetailField(
             caption = stringResource(R.string.usdt__destination_tx)
         ) { SelectionContainer { BodyS(hash) } }
     }
     bridge.refundAmount?.let { amount ->
-        SendCell(caption = stringResource(R.string.usdt__deposit_refunded)) {
+        UsdtDetailField(caption = stringResource(R.string.usdt__deposit_refunded)) {
             BodySSB(if (hideBalance) UiConstants.HIDE_BALANCE_SHORT else usdtFormatAmount(amount) + " USDT")
         }
     }
     bridge.refundTx?.let { hash ->
-        SendCell(caption = stringResource(R.string.usdt__refund_tx)) { SelectionContainer { BodyS(hash) } }
+        UsdtDetailField(caption = stringResource(R.string.usdt__refund_tx)) { SelectionContainer { BodyS(hash) } }
     }
 }
 
@@ -439,8 +460,11 @@ private fun UsdtTransactionDetails(transfer: UsdtTransfer) {
                 uri.openUri("https://layerzeroscan.com/tx/" + txHash)
             })
         }
-        PrimaryButton(text = stringResource(R.string.wallet__activity_explorer), onClick = {
-            uri.openUri("https://arbiscan.io/tx/" + txHash)
-        }, modifier = Modifier.testTag("UsdtActivityExplorer"))
+        PrimaryButton(
+            text = stringResource(R.string.wallet__activity_explorer),
+            textStyle = UsdtDetailStyles.Button,
+            onClick = { uri.openUri("https://arbiscan.io/tx/" + txHash) },
+            modifier = Modifier.testTag("UsdtActivityExplorer")
+        )
     }
 }

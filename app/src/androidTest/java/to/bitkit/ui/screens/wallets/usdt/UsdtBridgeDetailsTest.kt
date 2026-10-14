@@ -28,6 +28,7 @@ import com.synonym.bitkitcore.UsdtTransferStatus
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.collections.immutable.persistentListOf
+import org.junit.Assert.assertEquals
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -75,6 +76,7 @@ class UsdtBridgeDetailsTest {
         composeTestRule.onNodeWithText("Receiving USDT").assertIsDisplayed()
         composeTestRule.onNodeWithText("Pending").assertIsDisplayed()
         composeTestRule.onNodeWithText("RECEIVING NETWORK").assertIsDisplayed()
+        assertSummaryDimensions()
         screenshot("receiving")
         composeTestRule.onNodeWithTag("UsdtActivityDetails").performClick()
         composeTestRule.waitForIdle()
@@ -137,11 +139,13 @@ class UsdtBridgeDetailsTest {
         }
         composeTestRule.onNodeWithText("Needs attention").assertIsDisplayed()
         composeTestRule.onNodeWithText("BNB Smart Chain").assertIsDisplayed()
+        assertHeight("UsdtDepositRow-" + deposit.id, 72f)
         screenshot("deposits")
         composeTestRule.onNodeWithTag("UsdtDepositRow-" + deposit.id).performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("USDT address on BSC").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag("UsdtDepositRefund").assertIsNotEnabled()
+        assertHeight("UsdtRefundAddress", 52f)
         screenshot("receiving-details")
         composeTestRule.onNodeWithTag("UsdtRefundAddress").performTextInput(address)
         composeTestRule.waitForIdle()
@@ -186,6 +190,24 @@ class UsdtBridgeDetailsTest {
                 Box(modifier = Modifier.fillMaxSize()) { content() }
             }
         }
+    }
+
+    private fun assertSummaryDimensions() {
+        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val fiat = composeTestRule.onNodeWithText("$ 50.00").fetchSemanticsNode().boundsInRoot
+        val status = composeTestRule.onNodeWithText("STATUS").fetchSemanticsNode().boundsInRoot
+        val date = composeTestRule.onNodeWithText("DATE").fetchSemanticsNode().boundsInRoot
+        val value = composeTestRule.onNodeWithText("Pending").fetchSemanticsNode().boundsInRoot
+        assertEquals("Caption line height", 18f, status.height / density, 0.5f)
+        assertEquals("Value line height", 20f, value.height / density, 0.5f)
+        assertEquals("Amount header and section gap", 102f, (status.top - fiat.top) / density, 1f)
+        assertEquals("Detail row cadence", 78f, (date.top - status.top) / density, 1f)
+    }
+
+    private fun assertHeight(tag: String, expectedDp: Float) {
+        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val bounds = composeTestRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        assertEquals(tag, expectedDp, bounds.height / density, 0.5f)
     }
 
     // PrimaryButton debounces repeat clicks for 500 ms.

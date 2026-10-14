@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -49,7 +50,6 @@ import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -222,6 +222,7 @@ internal fun UsdtDepositsContent(
                 if (detail == null) R.string.usdt__deposit_history else R.string.usdt__receiving_title
             ),
             onBackClick = onBack,
+            titleStyle = UsdtDetailStyles.Title,
             actions = { DrawerNavIcon() },
         )
         PullToRefreshBox(
@@ -275,6 +276,7 @@ internal fun UsdtDepositsContent(
         if (detail != null) {
             PrimaryButton(
                 text = stringResource(R.string.usdt__deposit_history),
+                textStyle = UsdtDetailStyles.Button,
                 onClick = onHistory,
                 enabled = !state.busy,
                 modifier = Modifier.padding(16.dp).testTag("UsdtDepositHistory")
@@ -300,6 +302,7 @@ private fun UsdtDepositDetailActions(
                 enabled = !busy && address.isNotBlank(),
                 isLoading = busy,
                 size = ButtonSize.Small,
+                textStyle = UsdtDetailStyles.SmallButton,
                 icon = {
                     Icon(
                         painterResource(R.drawable.ic_coins),
@@ -317,6 +320,7 @@ private fun UsdtDepositDetailActions(
             ),
             onClick = onToggleDetails,
             size = ButtonSize.Small,
+            textStyle = UsdtDetailStyles.SmallButton,
             icon = {
                 Icon(
                     painterResource(
@@ -339,8 +343,8 @@ private fun ColumnScope.UsdtDepositHistory(
     onDetail: (String) -> Unit,
     onMore: () -> Unit,
 ) {
-    SendCell(caption = stringResource(R.string.usdt__deposit_provider_status)) {
-        BodySSB(stringResource(R.string.usdt__deposit_status_note))
+    UsdtDetailField(caption = stringResource(R.string.usdt__deposit_provider_status)) {
+        BodySSB(stringResource(R.string.usdt__deposit_status_note), style = UsdtDetailStyles.Body)
     }
     if (state.deposits.isEmpty() && !state.busy) {
         BodyS(stringResource(R.string.usdt__deposit_empty), color = Colors.White64)
@@ -366,9 +370,18 @@ private fun UsdtDepositRow(deposit: UsdtDeposit, hideBalance: Boolean, onClick: 
             size = 40.dp,
         )
         HorizontalSpacer(16.dp)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-            BodyMSB(deposit.network.depositNetwork()?.label ?: deposit.network, maxLines = 1)
-            CaptionB(stringResource(status), color = Colors.White64, maxLines = 1)
+        Column(modifier = Modifier.weight(1f)) {
+            BodyMSB(
+                deposit.network.depositNetwork()?.label ?: deposit.network,
+                maxLines = 1,
+                style = UsdtDetailStyles.HistoryTitle
+            )
+            CaptionB(
+                stringResource(status),
+                color = Colors.White64,
+                maxLines = 1,
+                style = UsdtDetailStyles.HistorySubtitle
+            )
         }
         HorizontalSpacer(16.dp)
         AmountViewContent(
@@ -384,6 +397,9 @@ private fun UsdtDepositRow(deposit: UsdtDeposit, hideBalance: Boolean, onClick: 
                 "—"
             },
             hideBalance = hideBalance,
+            titleStyle = UsdtDetailStyles.HistoryTitle,
+            subtitleStyle = UsdtDetailStyles.HistorySubtitle,
+            verticalSpacing = 0.dp,
         )
     }
 }
@@ -400,6 +416,7 @@ private fun UsdtDepositSummary(detail: UsdtDepositDetail) {
             } else {
                 R.drawable.ic_hourglass_simple
             },
+            textStyle = UsdtDetailStyles.Body,
             valueColor = if (settled) Colors.Usdt else Colors.Yellow,
             iconColor = if (settled) Colors.Usdt else Colors.Yellow,
             modifier = Modifier.weight(1f)
@@ -411,8 +428,8 @@ private fun UsdtDepositSummary(detail: UsdtDepositDetail) {
             modifier = Modifier.weight(1f)
         )
     }
-    SendCell(caption = stringResource(R.string.usdt__deposit_provider_status)) {
-        BodySSB(stringResource(R.string.usdt__deposit_status_note))
+    UsdtDetailField(caption = stringResource(R.string.usdt__deposit_provider_status)) {
+        BodySSB(stringResource(R.string.usdt__deposit_status_note), style = UsdtDetailStyles.Body)
     }
 }
 
@@ -429,15 +446,21 @@ private fun UsdtDepositTechnicalDetails(
         BodyS(stringResource(R.string.usdt__deposit_wrong_asset), color = Colors.White64)
     } else if (detail.canRefund) {
         val network = detail.deposit.network.depositNetwork()?.refundLabel.orEmpty()
-        SendCell(caption = stringResource(R.string.usdt__deposit_refund_title)) {
-            BodySSB(stringResource(R.string.usdt__deposit_refund_instructions).replace("{network}", network))
+        UsdtDetailField(caption = stringResource(R.string.usdt__deposit_refund_title)) {
+            BodySSB(
+                stringResource(R.string.usdt__deposit_refund_instructions).replace("{network}", network),
+                style = UsdtDetailStyles.Body
+            )
         }
         TextInput(
             value = address,
             onValueChange = { if (!busy) onAddress(it) },
             enabled = !busy,
+            singleLine = true,
+            textStyle = UsdtDetailStyles.Body,
+            placeholderColor = Colors.White.copy(alpha = 0.5f),
             placeholder = stringResource(R.string.usdt__deposit_refund_address).replace("{network}", network),
-            modifier = Modifier.fillMaxWidth().testTag("UsdtRefundAddress")
+            modifier = Modifier.fillMaxWidth().height(52.dp).testTag("UsdtRefundAddress")
         )
     } else {
         UsdtDepositSummary(detail)
@@ -450,8 +473,8 @@ private fun DepositSettlement(detail: UsdtDepositDetail, hideBalance: Boolean) {
     val order = detail.order?.takeUnless { it.status == "refunded" }
     order?.amountOut?.let { DepositField(R.string.usdt__deposit_batch, it.usdtText(hideBalance)) }
     order?.destinationTx?.let {
-        SendCell(caption = stringResource(R.string.wallet__activity_tx_id) + " · Arbitrum One") {
-            SelectionContainer { BodySSB(it) }
+        UsdtDetailField(caption = stringResource(R.string.wallet__activity_tx_id) + " · Arbitrum One") {
+            SelectionContainer { BodySSB(it, style = UsdtDetailStyles.Body) }
         }
     }
     (detail.order?.refundTx ?: detail.deposit.refundTx)?.let { DepositField(R.string.usdt__refund_tx, it) }
@@ -464,7 +487,9 @@ private fun DepositSettlement(detail: UsdtDepositDetail, hideBalance: Boolean) {
 
 @Composable
 private fun DepositField(title: Int, value: String) {
-    SendCell(caption = stringResource(title)) { SelectionContainer { BodySSB(value) } }
+    UsdtDetailField(caption = stringResource(title)) {
+        SelectionContainer { BodySSB(value, style = UsdtDetailStyles.Body) }
+    }
 }
 
 @Composable

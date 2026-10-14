@@ -113,6 +113,7 @@ fun PrimaryButton(
     color: Color? = null,
     enableGradient: Boolean = true,
     contentColor: Color = Colors.White,
+    textStyle: TextStyle? = null,
 ) {
     val contentPadding = PaddingValues(horizontal = size.primaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
     val buttonShape = MaterialTheme.shapes.extraLarge
@@ -166,7 +167,7 @@ fun PrimaryButton(
                     text?.let {
                         Text(
                             text = text,
-                            style = size.textStyle(),
+                            style = textStyle ?: size.textStyle(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )

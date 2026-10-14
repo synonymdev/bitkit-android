@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -141,12 +142,13 @@ fun Title(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Ellipsis,
     textAlign: TextAlign = TextAlign.Unspecified,
+    style: TextStyle = AppTextStyles.Title,
 ) {
     Text(
         text = text,
         maxLines = maxLines,
         overflow = overflow,
-        style = AppTextStyles.Title.merge(
+        style = style.merge(
             color = color,
             textAlign = textAlign,
         ),
@@ -185,9 +187,11 @@ fun BodyM(
     minLines: Int = 1,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
     letterSpacing: TextUnit = TextUnit.Unspecified,
+    style: TextStyle = AppTextStyles.BodyM,
 ) {
     BodyM(
         text = AnnotatedString(text),
+        style = style,
         letterSpacing = letterSpacing,
         color = color,
         modifier = modifier,
@@ -208,10 +212,11 @@ fun BodyM(
     minLines: Int = 1,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
     letterSpacing: TextUnit = TextUnit.Unspecified,
+    style: TextStyle = AppTextStyles.BodyM,
 ) {
     Text(
         text = text,
-        style = AppTextStyles.BodyM.merge(
+        style = style.merge(
             letterSpacing = letterSpacing,
             color = color,
             textAlign = textAlign,
@@ -232,9 +237,11 @@ fun BodyMSB(
     overflow: TextOverflow = TextOverflow.Clip,
     textAlign: TextAlign = TextAlign.Start,
     letterSpacing: TextUnit = TextUnit.Unspecified,
+    style: TextStyle = AppTextStyles.BodyMSB,
 ) {
     BodyMSB(
         text = AnnotatedString(text),
+        style = style,
         letterSpacing = letterSpacing,
         color = color,
         maxLines = maxLines,
@@ -253,10 +260,11 @@ fun BodyMSB(
     overflow: TextOverflow = TextOverflow.Clip,
     textAlign: TextAlign = TextAlign.Start,
     letterSpacing: TextUnit = TextUnit.Unspecified,
+    style: TextStyle = AppTextStyles.BodyMSB,
 ) {
     Text(
         text = text,
-        style = AppTextStyles.BodyMSB.merge(
+        style = style.merge(
             letterSpacing = letterSpacing,
             color = color,
             textAlign = textAlign,
@@ -339,9 +347,11 @@ fun BodySSB(
     color: Color = MaterialTheme.colorScheme.primary,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    style: TextStyle = AppTextStyles.BodySSB,
 ) {
     BodySSB(
         text = AnnotatedString(text),
+        style = style,
         color = color,
         modifier = modifier,
         maxLines = maxLines,
@@ -356,10 +366,11 @@ fun BodySSB(
     color: Color = MaterialTheme.colorScheme.primary,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    style: TextStyle = AppTextStyles.BodySSB,
 ) {
     Text(
         text = text,
-        style = AppTextStyles.BodySSB.merge(
+        style = style.merge(
             color = color,
         ),
         modifier = modifier,
@@ -458,9 +469,11 @@ fun CaptionB(
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
     letterSpacing: TextUnit = TextUnit.Unspecified,
     lineHeight: TextUnit = TextUnit.Unspecified,
+    style: TextStyle = AppTextStyles.CaptionB,
 ) {
     CaptionB(
         text = AnnotatedString(text),
+        style = style,
         modifier = modifier,
         color = color,
         textAlign = textAlign,
@@ -481,10 +494,11 @@ fun CaptionB(
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
     letterSpacing: TextUnit = TextUnit.Unspecified,
     lineHeight: TextUnit = TextUnit.Unspecified,
+    style: TextStyle = AppTextStyles.CaptionB,
 ) {
     Text(
         text = text,
-        style = AppTextStyles.CaptionB.merge(
+        style = style.merge(
             letterSpacing = letterSpacing,
             lineHeight = lineHeight,
             color = color,
@@ -504,10 +518,11 @@ fun Caption13Up(
     textAlign: TextAlign = TextAlign.Start,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    style: TextStyle = AppTextStyles.CaptionM,
 ) {
     Text(
         text = text.uppercase(),
-        style = AppTextStyles.CaptionM.merge(
+        style = style.merge(
             color = color,
             textAlign = textAlign,
         ),
