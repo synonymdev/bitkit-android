@@ -76,7 +76,7 @@
     <string name="contacts__detail_title">Contacto</string>
     <string name="contacts__edit_contact_title">Editar contacto</string>
     <string name="contacts__intro_add_contact">Añadir contacto</string>
-    <string name="contacts__intro_title">Dinámico\n&lt;accent&gt;contactos&lt;/accent&gt;</string>
+    <string name="contacts__intro_title">Contactos\n&lt;accent&gt;dinámicos&lt;/accent&gt;</string>
     <string name="fee__custom__description">Depende de la tarifa</string>
     <string name="fee__custom__duration">Depende de la tarifa</string>
     <string name="fee__custom__shortDescription">Depende de la tarifa</string>
@@ -461,7 +461,7 @@
     <string name="profile__retry_load">Inténtelo de nuevo</string>
     <string name="profile__suggestions">Sugerencias</string>
     <string name="profile__suggestions_to_add">Sugerencias para añadir</string>
-    <string name="profile__your_name">Su Apellido</string>
+    <string name="profile__your_name">Su Nombre</string>
     <string name="security__backup_button">Realizar copia de seguridad</string>
     <string name="security__backup_funds">Ahora que tiene fondos en su cartera, ¡és momento de hacer una copia de seguridad de su dinero!</string>
     <string name="security__backup_funds_no">Todavía no hay fondos en su cartera, pero puede crear una copia de seguridad si lo desea.</string>

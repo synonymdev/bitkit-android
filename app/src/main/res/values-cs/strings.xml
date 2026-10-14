@@ -69,7 +69,7 @@
     <string name="common__usable">Použitelné</string>
     <string name="common__yes">Ano</string>
     <string name="common__yes_proceed">Ano, pokračovat</string>
-    <string name="contacts__add_button">Vložit</string>
+    <string name="contacts__add_button">Přidat</string>
     <string name="contacts__add_contact_title">Přidat kontakt</string>
     <string name="contacts__add_scan_qr">Skenovat QR</string>
     <string name="contacts__add_sheet_title">Přidat kontakt</string>

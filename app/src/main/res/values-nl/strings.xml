@@ -447,7 +447,7 @@
     <string name="other__update_title">Update\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
     <string name="profile__add_link">Link Toevoegen</string>
     <string name="profile__add_link_label_placeholder">Bijvoorbeeld \'Website\'</string>
-    <string name="profile__add_link_note">Let op: Iedere link die u toevoegd is openbaar beschikbaar.</string>
+    <string name="profile__add_link_note">Let op: Iedere link die u toevoegt is openbaar beschikbaar.</string>
     <string name="profile__add_tag">Tag toevoegen</string>
     <string name="profile__create_nav_title">Profiel aanmaken</string>
     <string name="profile__edit_nav_title">Profiel Bewerken</string>
@@ -989,7 +989,7 @@
     <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_max_spending__description">Het maximaal te besteden bedrag is iets lager vanwege een vereist reservesaldo.</string>
     <string name="wallet__send_max_spending__title">Reservesaldo</string>
-    <string name="wallet__send_pending__description">Deze betaling duurt iets anger dan verwacht. U kunt Bitkit blijven gebruiken.</string>
+    <string name="wallet__send_pending__description">Deze betaling duurt iets langer dan verwacht. U kunt Bitkit blijven gebruiken.</string>
     <string name="wallet__send_pending__nav_title">Betaling Onderweg</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Factuur\n&lt;accent&gt;betalen...&lt;/accent&gt;</string>
