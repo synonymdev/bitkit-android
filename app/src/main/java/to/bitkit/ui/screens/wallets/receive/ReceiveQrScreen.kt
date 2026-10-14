@@ -159,6 +159,7 @@ fun ReceiveQrScreen(
         hardwareReceiveState.address,
         walletState.bip21AmountSats,
         walletState.bip21Description,
+        walletState.isReceiveInvoiceUpdating,
     ) {
         visibleTabs.associateWith { tab ->
             getInvoiceForTab(
@@ -172,6 +173,7 @@ fun ReceiveQrScreen(
                 hardwareAddress = hardwareReceiveState.address?.address.orEmpty(),
                 hardwareAmountSats = walletState.bip21AmountSats,
                 hardwareMessage = walletState.bip21Description,
+                isReceiveInvoiceUpdating = walletState.isReceiveInvoiceUpdating,
             )
         }
     }
@@ -368,7 +370,8 @@ fun ReceiveQrScreen(
                                 )
                             }
 
-                            walletState.hasReceiveInvoiceError && cjitInvoice.isNullOrEmpty() &&
+                            walletState.hasReceiveInvoiceError && !walletState.isReceiveInvoiceUpdating &&
+                                cjitInvoice.isNullOrEmpty() &&
                                 (tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING) -> {
                                 ReceiveInvoiceErrorView(
                                     onRetry = onRetryInvoice,

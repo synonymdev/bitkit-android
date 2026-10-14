@@ -12,8 +12,9 @@
     <action>Close and reopen Receive three times in quick succession, then select Auto</action>
     <action>Wait for the QR code to finish loading and verify its URI still contains a nonempty lightning parameter</action>
     <action>Open Edit, enter a small amount within the channel's inbound capacity, and return to the QR code</action>
-    <action>Immediately reopen Edit, change the amount to a different small amount, and return to Auto</action>
+    <action>Immediately reopen Edit, change the amount to a different small amount, type a new note, and return to Auto</action>
     <action>Wait for the QR code to finish loading and verify its URI contains the latest amount and a nonempty lightning parameter</action>
-    <action>Decode the Lightning invoice and verify its amount matches the latest amount entered</action>
+    <action>Decode the Lightning invoice and verify its amount and description match the latest amount and note entered</action>
+    <action>Reopen Edit and verify the latest note remains present</action>
   </actions>
 </journey>

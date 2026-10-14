@@ -25,7 +25,12 @@ fun getInvoiceForTab(
     hardwareAddress: String = "",
     hardwareAmountSats: ULong? = null,
     hardwareMessage: String = "",
+    isReceiveInvoiceUpdating: Boolean = false,
 ): String {
+    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() &&
+        (tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING)
+    ) return ""
+
     return when (tab) {
         ReceiveTab.SAVINGS -> {
             // Return BIP21 without lightning parameter to preserve amount and other parameters

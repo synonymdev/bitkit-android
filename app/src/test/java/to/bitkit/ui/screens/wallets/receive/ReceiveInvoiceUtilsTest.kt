@@ -6,6 +6,40 @@ import kotlin.test.assertEquals
 class ReceiveInvoiceUtilsTest {
 
     @Test
+    fun `pending receive updates hide previous invoices on Auto and Spending`() {
+        for (tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
+            assertEquals(
+                "",
+                getInvoiceForTab(
+                    tab = tab,
+                    bip21 = "bitcoin:address?lightning=old-invoice",
+                    bolt11 = "old-invoice",
+                    cjitInvoice = null,
+                    isNodeRunning = true,
+                    onchainAddress = "address",
+                    isReceiveInvoiceUpdating = true,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `pending receive updates preserve a confirmed CJIT invoice`() {
+        assertEquals(
+            "confirmed-cjit",
+            getInvoiceForTab(
+                tab = ReceiveTab.SPENDING,
+                bip21 = "bitcoin:address",
+                bolt11 = "old-invoice",
+                cjitInvoice = "confirmed-cjit",
+                isNodeRunning = true,
+                onchainAddress = "address",
+                isReceiveInvoiceUpdating = true,
+            ),
+        )
+    }
+
+    @Test
     fun `getInvoiceForTab HARDWARE returns only the hardware address`() {
         val result = getInvoiceForTab(
             tab = ReceiveTab.HARDWARE,
