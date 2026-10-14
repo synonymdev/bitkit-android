@@ -1,0 +1,17 @@
+<journey name="bip21 core validation">
+  <description>Preconditions: an onboarded English-language regtest wallet with at least 100,000 sats in Savings, Quickpay disabled, and a bitkit-core release containing PR #151. Do not pay any fixture. Open each bitcoin: link through the platform's external-URI delivery command described in this suite's README. This checks that the native decoder rejects ambiguous payments while accepting bitcoin: text as metadata.</description>
+  <actions>
+    <action>Open bitcoin:bcrt1qr289x0fhg62672e8urudfnxnsr8tcax64xk2vk?amount=0.000035&amp;message=bitcoin:donation</action>
+    <action>Verify Send shows the recipient bcrt1qr289x0fhg62672e8urudfnxnsr8tcax64xk2vk, an amount of 3,500 sats, and the note bitcoin:donation without a decoding error</action>
+    <action>Close Send without paying</action>
+    <action>Open bitcoin:bcrt1qr289x0fhg62672e8urudfnxnsr8tcax64xk2vk?amount=0.0000002&amp;message=Bitkitbitcoin:bcrt1qr289x0fhg62672e8urudfnxnsr8tcax64xk2vk?amount=0.0000003&amp;message=Bitkit</action>
+    <action>Verify a decoding error appears and Send does not open with the previous payment</action>
+    <action>Open bitcoin:bcrt1qr289x0fhg62672e8urudfnxnsr8tcax64xk2vk?amount=0.000035&amp;AMOUNT=0.00005</action>
+    <action>Verify a decoding error appears and no payment sheet opens</action>
+    <action>Open bitcoin:bcrt1qr289x0fhg62672e8urudfnxnsr8tcax64xk2vk?message=first&amp;Message=second</action>
+    <action>Verify a decoding error appears and no payment sheet opens</action>
+    <action>Open bitcoin:bcrt1qr289x0fhg62672e8urudfnxnsr8tcax64xk2vk?amount=0.000035&amp;custom=bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT</action>
+    <action>Verify Send still shows bcrt1qr289x0fhg62672e8urudfnxnsr8tcax64xk2vk as the recipient and 3,500 sats as the amount</action>
+    <action>Close Send without paying</action>
+  </actions>
+</journey>
