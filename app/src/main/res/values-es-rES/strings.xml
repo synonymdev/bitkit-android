@@ -100,8 +100,8 @@
     <string name="fee__slow__duration">±1 hora</string>
     <string name="fee__slow__shortDescription">±1h</string>
     <string name="fee__slow__title">Lento</string>
-    <string name="hardware__passphrase_button">Frase de acesso</string>
-    <string name="hardware__passphrase_title">Frase de acesso</string>
+    <string name="hardware__passphrase_button">Frase de acceso</string>
+    <string name="hardware__passphrase_title">Frase de acceso</string>
     <string name="lightning__availability__text">La transferencia de fondos a ahorros suele ser instantánea, pero la liquidación puede tardar hasta &lt;accent&gt;14 días&lt;/accent&gt; en ciertas condiciones de red.</string>
     <string name="lightning__availability__title">Disponibilidad\n&lt;accent&gt;de fondos&lt;/accent&gt;</string>
     <string name="lightning__balance">Saldo</string>
@@ -311,7 +311,7 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Precaución:&lt;/accent&gt;\nmúltiples dispositivos</string>
     <string name="onboarding__multiple_text">No instales tu frase de recuperación de Bitkit en varios teléfonos simultáneamente, ya que esto puede corromper tus datos.</string>
     <string name="onboarding__new_wallet">Cartera nueva</string>
-    <string name="onboarding__passphrase">Frase de acesso</string>
+    <string name="onboarding__passphrase">Frase de acceso</string>
     <string name="onboarding__passphrase_header">Asegurar con &lt;accent&gt;contraseña&lt;/accent&gt;</string>
     <string name="onboarding__passphrase_text">Puedes añadir una frase de secreta a la frase de recuperación de 12 palabras. Si lo hace, asegúrese de no olvidarla.</string>
     <string name="onboarding__pp_checkbox">Política de privacidad</string>
@@ -324,7 +324,7 @@
     <string name="onboarding__restore_no_backup_button">Proceder sin respaldo de la copia de seguridad</string>
     <string name="onboarding__restore_no_backup_warn">Si anteriormente tenía una copia de seguridad Lightning, ésta se sobrescribirá y se perderá. Esto podría provocar una pérdida de fondos.</string>
     <string name="onboarding__restore_passphrase_meaning">*Opcional, introduce solo si has configurado una.</string>
-    <string name="onboarding__restore_passphrase_placeholder">Frase de acesso*</string>
+    <string name="onboarding__restore_passphrase_placeholder">Frase de acceso*</string>
     <string name="onboarding__restore_phrase">Introduzca su frase de recuperación a partir de cualquier copia de seguridad (en papel).</string>
     <string name="onboarding__restore_red_explain">Si una palabra se muestra en &lt;accent&gt;rojo&lt;/accent&gt;, significa que no se encontró en el diccionario de frases de recuperación. Comprueba si hay errores ortográficos.</string>
     <string name="onboarding__restore_success_header">Monedero &lt;accent&gt;restaurado&lt;/accent&gt;</string>
@@ -505,13 +505,13 @@
     <string name="security__mnemonic_use">Utilice las 12 palabras siguientes para recuperar su dinero más adelante.</string>
     <string name="security__mnemonic_write">Escribe estas {length} palabras en el orden correcto y guárdalas en un lugar seguro.</string>
     <string name="security__mnemonic_your">Su frase de recuperación</string>
-    <string name="security__pass">frase de acesso</string>
-    <string name="security__pass_confirm">Confirmar frase de acesso</string>
-    <string name="security__pass_confirm_text">Introduzca la frase de acesso que añadió al configurar y crear su monedero.</string>
+    <string name="security__pass">frase de acceso</string>
+    <string name="security__pass_confirm">Confirmar frase de acceso</string>
+    <string name="security__pass_confirm_text">Introduzca la frase de acceso que añadió al configurar y crear su monedero.</string>
     <string name="security__pass_never_share">&lt;accent&gt;Nunca compartas&lt;/accent&gt; tu contraseña con nadie, ya que estoy podría desembocar en la pérdida de fondos.</string>
     <string name="security__pass_recovery">&lt;accent&gt;Contraseña:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Añadiste una passphrase a tu frase de recuperación al configurar tu wallet.</string>
-    <string name="security__pass_your">Su frase de acesso</string>
+    <string name="security__pass_your">Su frase de acceso</string>
     <string name="security__pin_attempts">Quedan {attemptsRemaining} intentos. ¿Olvidó su PIN?</string>
     <string name="security__pin_choose_header">Elija un PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su monedero.</string>
