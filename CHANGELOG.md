@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bitkit can move subscription renewals forward from Dev Settings for testing. #1341
 - Bitkit can now hide all toasts from Dev Settings. #1371
 - Support Pubky grant signup links through the existing authorization and profile setup flows. #1446
+- Bitkit now shows helpful guidance the first time you switch the displayed balance unit or swipe to hide your wallet balance. #1272
 
 ### Changed
 - Standardized intro sheets with consistent artwork, spacing, actions, and localized messaging. #1314
@@ -35,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Retried Lightning payments now show the amount and fee of the attempt that succeeded. #1042
-- An expired Paykit session is now reported on startup when the profile service fails to start. #1093
-- Retrying a failed wallet restore no longer leaves the Lightning node in an error state after a temporary startup failure. #1125
+- An expired Paykit session is now reported on startup when the profile service fails to start. #1305
+- Retrying a failed wallet restore no longer leaves the Lightning node in an error state after a temporary startup failure. #1291
 - Contact activity no longer hides hardware wallet payments that share a transaction ID with a boosted payment in another wallet. #1139
 - Restoring a wallet now keeps its activity tags and closed connections: a single tag that cannot be applied no longer discards the rest of the backup, and ordinary backups are held until the restore has finished so they cannot overwrite it first. #1171
 - Connecting to a custom Electrum server now explains when it is on the wrong Bitcoin network, when the TCP/TLS protocol does not match the port, or when its TLS certificate is untrusted or issued for another host. #1177
@@ -46,7 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refreshed the Subscriptions screens to match their designs, including blurred top and bottom bars the list now scrolls behind. #1269
 - Polished wallet, transfer, receive, onboarding, and settings screens with corrected spacing, typography, icons, and amount displays. #1270
 - Improved Pubky identity discovery by periodically refreshing existing identity records while Bitkit is open. #1271
-- Bitkit now shows helpful guidance the first time you switch the displayed balance unit or swipe to hide your wallet balance. #1272
 - Fixed toasts being obscured or dimmed by modal sheets. #1273
 - The mandatory update screen now also appears before a wallet is created or restored. #1295
 - Transfers to spending no longer stay in progress after their Lightning channel was closed. #1303
@@ -78,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New incoming Payment Requests open automatically while Bitkit is unlocked. The payment amount and confirmation slider stay visible while details scroll. #1405
 - Pubky profile, contact and payment features no longer fail after a cold start until the app is restarted. #1416
 - Contact tag changes and edits still waiting to save when you sign out of Pubky are now dropped, instead of saving to the profile signed in next. #1417
-- Keep contact linking retries independent and prioritize contacts added or refreshed while Bitkit is active. #1419
+- Keep contact linking retries independent and prioritize contacts added or refreshed while Bitkit is active. #1451
 - Fixed a contact that was removed and added again showing its outdated profile. #1434
 - Pause scheduled contact preparation while Bitkit is backgrounded and preserve background priority for contact retries. #1436
 - Pay fixed-price Paykit requests in Bitcoin using the issuer's quoted amount and stop preparation with feedback when the destination is not payable. #1437
