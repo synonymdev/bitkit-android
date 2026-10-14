@@ -1390,7 +1390,7 @@
     <string name="settings__quickpay__settings__daily_label">Dzienny limit QuickPay</string>
     <string name="settings__quickpay__settings__daily_text">Płać do ${limit} dziennie bez wprowadzania PIN-u. Po przekroczeniu limitu potwierdzaj każdą płatność.</string>
     <string name="settings__quickpay__settings__multiplier_format">{multiplier}×</string>
-    <string name="slashtags__error_pay_empty_msg">Kontakt, do którego chesz wysłać, nie aktywował płatności.</string>
+    <string name="slashtags__error_pay_empty_msg">Kontakt, do którego chcesz wysłać, nie aktywował płatności.</string>
     <string name="slashtags__error_pay_not_opened_msg">Brak dostępnego zgodnego punktu płatności.</string>
     <string name="slashtags__error_pay_waiting_msg">Oczekiwanie, aż kontakt zaktualizuje swoje dane płatności. Spróbuj ponownie za chwilę.</string>
     <string name="subscriptions__active">Aktywne</string>

@@ -1392,9 +1392,9 @@
     <string name="settings__quickpay__settings__daily_label">Dagelijkse QuickPay-limiet</string>
     <string name="settings__quickpay__settings__daily_text">Betaal tot ${limit} per dag zonder uw PIN in te voeren. Daarna bevestigt u elke betaling.</string>
     <string name="settings__quickpay__settings__multiplier_format">{multiplier}×</string>
-    <string name="slashtags__error_pay_empty_msg">Der Kontakt, an den Sie zu senden versuchen, hat keine Zahlungen aktiviert.</string>
+    <string name="slashtags__error_pay_empty_msg">Het contact waaraan u probeert te betalen, heeft geen betalingen ingeschakeld.</string>
     <string name="slashtags__error_pay_not_opened_msg">Er is geen compatibel betaaleindpunt beschikbaar.</string>
-    <string name="slashtags__error_pay_title">Kontakt konnte nicht bezahlt werden</string>
+    <string name="slashtags__error_pay_title">Contact kan niet worden betaald</string>
     <string name="slashtags__error_pay_waiting_msg">Wachten tot het contact de betaalgegevens bijwerkt. Probeer het zo opnieuw.</string>
     <string name="subscriptions__active">Actief</string>
     <string name="subscriptions__cancel_subscription">Abonnement opzeggen</string>
