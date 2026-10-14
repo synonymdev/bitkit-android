@@ -312,6 +312,7 @@ class WalletRepoTest : BaseUnitTest() {
     fun `address-only refresh preserves a failed edit error`() = test {
         sut.loadFromCache()
         sut.setBolt11(INVOICE)
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
         whenever(lightningRepo.getChannels()).thenReturn(channels)
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.failure(error))
         assertTrue(sut.updateBip21Invoice(SATS, "failed edit").isFailure)
