@@ -194,16 +194,18 @@ class WalletRepoTest : BaseUnitTest() {
         val releaseFirst = CompletableDeferred<Unit>()
         val releaseSecond = CompletableDeferred<Unit>()
         var reads = 0
-        whenever(cacheStore.data).thenReturn(flow {
-            if (reads++ == 0) {
-                firstSnapshot.complete(Unit)
-                releaseFirst.await()
-            } else {
-                secondSnapshot.complete(Unit)
-                releaseSecond.await()
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                if (reads++ == 0) {
+                    firstSnapshot.complete(Unit)
+                    releaseFirst.await()
+                } else {
+                    secondSnapshot.complete(Unit)
+                    releaseSecond.await()
+                }
+                emit(AppCacheData(onchainAddress = ADDRESS))
             }
-            emit(AppCacheData(onchainAddress = ADDRESS))
-        })
+        )
         sut.loadFromCache()
         firstSnapshot.await()
         sut.loadFromCache()

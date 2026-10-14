@@ -246,14 +246,16 @@ class LightningRepoTest : BaseUnitTest() {
         val snapshotCaptured = CompletableDeferred<Unit>()
         val releaseSnapshot = CompletableDeferred<Unit>()
         var cacheReads = 0
-        whenever(cacheStore.data).thenReturn(flow {
-            val snapshot = cached
-            if (cacheReads++ == 0) {
-                snapshotCaptured.complete(Unit)
-                releaseSnapshot.await()
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                val snapshot = cached
+                if (cacheReads++ == 0) {
+                    snapshotCaptured.complete(Unit)
+                    releaseSnapshot.await()
+                }
+                emit(snapshot)
             }
-            emit(snapshot)
-        })
+        )
         whenever(cacheStore.invalidateReceiveLightningInvoice("cached-invoice")).doSuspendableAnswer {
             cached = cached.invalidateReceiveLightningInvoice()
             true
@@ -290,14 +292,16 @@ class LightningRepoTest : BaseUnitTest() {
         val snapshotCaptured = CompletableDeferred<Unit>()
         val releaseSnapshot = CompletableDeferred<Unit>()
         var cacheReads = 0
-        whenever(cacheStore.data).thenReturn(flow {
-            val snapshot = cached
-            if (cacheReads++ == 0) {
-                snapshotCaptured.complete(Unit)
-                releaseSnapshot.await()
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                val snapshot = cached
+                if (cacheReads++ == 0) {
+                    snapshotCaptured.complete(Unit)
+                    releaseSnapshot.await()
+                }
+                emit(snapshot)
             }
-            emit(snapshot)
-        })
+        )
         whenever(cacheStore.invalidateReceiveOnchainAddress("cached-address")).doSuspendableAnswer {
             cached = cached.invalidateReceiveOnchainAddress()
             true
