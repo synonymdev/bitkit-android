@@ -20,6 +20,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -340,6 +341,119 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertTrue(sut.walletState.value.hasReceiveInvoiceError)
         assertEquals(INVOICE, sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `irrelevant node events queued behind address maintenance keep invoice available`() = test {
+        val received = Event.PaymentReceived("payment", "hash", 1000uL, emptyList())
+        val onchain = Event.OnchainTransactionReceived("txid", mock<TransactionDetails>())
+        val updates = listOf(
+            NodeEventUpdate(Event.PaymentSuccessful("payment", "hash", "preimage", 10uL)),
+            NodeEventUpdate(Event.SyncCompleted(SyncType.ONCHAIN_WALLET, 100u)),
+            NodeEventUpdate(received),
+            NodeEventUpdate(received, settledReceiveInvoice = SettledReceiveInvoice(INVOICE_REPLACEMENT)),
+            NodeEventUpdate(onchain),
+            NodeEventUpdate(onchain, settledReceiveAddress = SettledReceiveAddress(ADDRESS_NEW)),
+        )
+        val pendingStates = mutableListOf<Boolean>()
+        for (update in updates) {
+            val events = MutableSharedFlow<NodeEventUpdate>()
+            whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+            whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+            sut = createSut()
+            sut.setOnchainAddress(ADDRESS)
+            sut.setBolt11(INVOICE)
+            val expectedBip21 = sut.walletState.value.bip21
+            val releaseCheck = CompletableDeferred<Unit>()
+            whenever(coreService.isAddressUsed(any())).doSuspendableAnswer {
+                releaseCheck.await()
+                false
+            }
+            val maintenance = launch { sut.refreshReusableReceiveAddress() }
+            val event = launch { events.emit(update) }
+            testScheduler.runCurrent()
+            pendingStates.add(sut.walletState.value.isReceiveInvoiceUpdating)
+            val invoiceWhileQueued = sut.walletState.value.bolt11
+            val bip21WhileQueued = sut.walletState.value.bip21
+            releaseCheck.complete(Unit)
+            maintenance.join()
+            event.join()
+
+            assertEquals(INVOICE, invoiceWhileQueued)
+            assertEquals(expectedBip21, bip21WhileQueued)
+        }
+        assertFalse(pendingStates.any { it }, updates.zip(pendingStates).joinToString())
+    }
+
+    @Test
+    fun `matched lightning settlement queued behind address maintenance stays pending`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        val releaseCheck = CompletableDeferred<Unit>()
+        whenever(coreService.isAddressUsed(any())).doSuspendableAnswer {
+            releaseCheck.await()
+            false
+        }
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE_REPLACEMENT))
+        val maintenance = launch { sut.refreshReusableReceiveAddress() }
+        val settlement = launch {
+            events.emit(
+                NodeEventUpdate(
+                    Event.PaymentReceived("payment", "hash", 1000uL, emptyList()),
+                    settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
+                ),
+            )
+        }
+        testScheduler.runCurrent()
+        val updatingWhileSettled = sut.walletState.value.isReceiveInvoiceUpdating
+        val replacement = launch { sut.updateBip21Invoice(SATS, "latest") }
+        releaseCheck.complete(Unit)
+        maintenance.join()
+        replacement.join()
+        settlement.join()
+
+        assertTrue(updatingWhileSettled)
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains(INVOICE_REPLACEMENT))
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `onchain settlement address rotation keeps the spending invoice available`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        val releaseAddress = CompletableDeferred<Unit>()
+        whenever { privatePaykitAddressReservationRepo.nextReusableReceiveAddress() }.doSuspendableAnswer {
+            releaseAddress.await()
+            Result.success(ADDRESS_NEW)
+        }
+        val event = launch {
+            events.emit(
+                NodeEventUpdate(
+                    Event.OnchainTransactionReceived("txid", mock<TransactionDetails>()),
+                    settledReceiveAddress = SettledReceiveAddress(ADDRESS),
+                ),
+            )
+        }
+        testScheduler.runCurrent()
+        val updatingDuringRotation = sut.walletState.value.isReceiveInvoiceUpdating
+        val invoiceDuringRotation = sut.walletState.value.bolt11
+        releaseAddress.complete(Unit)
+        event.join()
+
+        assertFalse(updatingDuringRotation)
+        assertEquals(INVOICE, invoiceDuringRotation)
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
     }
 
     @Test

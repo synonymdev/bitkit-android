@@ -397,7 +397,7 @@ class WalletRepo @Inject constructor(
         event: Event,
         settledReceiveInvoice: SettledReceiveInvoice? = null,
         settledReceiveAddress: SettledReceiveAddress? = null,
-    ) = updateReceiveState {
+    ) = updateReceiveState(trackPending = shouldTrackReceiveEvent(event, settledReceiveInvoice)) {
         when (event) {
             is Event.ChannelReady,
             is Event.ChannelClosed,
@@ -447,6 +447,16 @@ class WalletRepo @Inject constructor(
             is Event.OnchainTransactionReceived -> Unit
 
             else -> Unit
+        }
+    }
+
+    private fun shouldTrackReceiveEvent(event: Event, settledReceiveInvoice: SettledReceiveInvoice?): Boolean {
+        return when (event) {
+            is Event.ChannelReady, is Event.ChannelClosed -> true
+            is Event.PaymentReceived -> settledReceiveInvoice?.bolt11?.let {
+                it.isNotEmpty() && it == getBolt11()
+            } == true
+            else -> false
         }
     }
 
