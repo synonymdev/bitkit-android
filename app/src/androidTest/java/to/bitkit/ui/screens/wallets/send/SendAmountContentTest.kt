@@ -23,7 +23,8 @@ class SendAmountContentTest {
     private val uiState = SendUiState(
         payMethod = SendMethod.LIGHTNING,
         amount = 100u,
-        isUnified = true
+        isUnified = true,
+        canSwitchFundingSource = true,
     )
 
     private val nodeLifecycleState = NodeLifecycleState.Running
@@ -83,7 +84,7 @@ class SendAmountContentTest {
         composeTestRule.setContent {
             SendAmountContent(
                 nodeLifecycleState = nodeLifecycleState,
-                uiState = uiState,
+                uiState = uiState.copy(isAmountInputValid = true),
                 amountInputViewModel = previewAmountInputViewModel(),
                 onContinue = { eventTriggered = true }
             )
@@ -122,7 +123,7 @@ class SendAmountContentTest {
             )
         }
 
-        composeTestRule.onNodeWithTag("AssetButton-switch").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("AssetButton-switch").assertHasNoClickAction()
         composeTestRule.onNodeWithTag("ContinueAmount").assertIsNotEnabled()
     }
 
