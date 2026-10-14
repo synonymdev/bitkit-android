@@ -606,9 +606,13 @@ class WalletViewModel @Inject constructor(
 
     fun refreshReceiveState() = viewModelScope.launch {
         launch { blocktankRepo.refreshInfo() }
-        lightningRepo.syncState()
-        lightningRepo.updateGeoBlockState()
-        walletRepo.refreshBip21()
+        walletRepo.refreshReceiveState().onFailure { error ->
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__error_invoice_update),
+                description = error.message ?: context.getString(R.string.common__error_body)
+            )
+        }
     }
 
     fun wipeWallet() = viewModelScope.launch(bgDispatcher) {

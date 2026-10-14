@@ -107,6 +107,7 @@ fun ReceiveQrScreen(
     hardwareReceiveState: HwReceiveUiState = HwReceiveUiState(),
     onLoadHardwareAddress: (String) -> Unit = {},
     onRetryHardwareAddress: () -> Unit = {},
+    onRetryInvoice: () -> Unit = {},
     onVerifyHardwareAddress: () -> Unit = {},
     showPaymentRequestContacts: Boolean = false,
     onClickPaymentRequestContacts: () -> Unit = {},
@@ -364,6 +365,14 @@ fun ReceiveQrScreen(
                                     hasFailed = hardwareReceiveState.addressLoadFailed,
                                     onRetry = onRetryHardwareAddress,
                                     modifier = Modifier.weight(1f),
+                                )
+                            }
+
+                            walletState.hasReceiveInvoiceError && cjitInvoice.isNullOrEmpty() &&
+                                (tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING) -> {
+                                ReceiveInvoiceErrorView(
+                                    onRetry = onRetryInvoice,
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
 
@@ -782,6 +791,26 @@ private fun HardwareAddressLoadingView(
         } else if (isLoading) {
             GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
         }
+    }
+}
+
+@Composable
+private fun ReceiveInvoiceErrorView(
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        BodyM(text = stringResource(R.string.wallet__error_invoice_update))
+        VerticalSpacer(16.dp)
+        PrimaryButton(
+            text = stringResource(R.string.common__try_again),
+            onClick = onRetry,
+            modifier = Modifier.testTag("ReceiveInvoiceRetry")
+        )
     }
 }
 

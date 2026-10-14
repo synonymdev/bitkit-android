@@ -27,6 +27,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
@@ -44,6 +45,7 @@ import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.ServiceError
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -384,6 +386,107 @@ class WalletRepoTest : BaseUnitTest() {
         assertEquals(INVOICE_REPLACEMENT, state.bolt11)
         assertTrue(state.bip21.contains("lightning=$INVOICE_REPLACEMENT"))
         assertEquals("newer", state.bip21Description)
+    }
+
+    @Test
+    fun `cache failure does not terminate the receive event collector`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE))
+        var cacheCalls = 0
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
+            if (cacheCalls++ == 0) throw IOException("injected cache write failure")
+            Unit
+        }
+        sut = createSut()
+        events.emit(NodeEventUpdate(channelReady))
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+
+        events.emit(NodeEventUpdate(channelReady))
+
+        verify(lightningRepo, times(2)).createInvoice(anyOrNull(), any(), any())
+        assertFalse(sut.walletState.value.hasReceiveInvoiceError)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `opening refresh delayed by geo cannot replace a newer invoice edit`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE), Result.success(INVOICE_REPLACEMENT))
+        val releaseGeo = CompletableDeferred<Unit>()
+        whenever(lightningRepo.updateGeoBlockState()).doSuspendableAnswer { releaseGeo.await() }
+        val earlier = launch { sut.refreshReceiveState() }
+        val newer = launch { sut.updateBip21Invoice(SATS, "latest edit") }
+        releaseGeo.complete(Unit)
+        earlier.join()
+        newer.join()
+
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertEquals(SATS, sut.walletState.value.bip21AmountSats)
+        assertEquals("latest edit", sut.walletState.value.bip21Description)
+        assertTrue(sut.walletState.value.bip21.contains("lightning=$INVOICE_REPLACEMENT"))
+    }
+
+    @Test
+    fun `invoice creation failure reports terminal state and retry recovers`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.failure(error), Result.success(INVOICE))
+
+        assertTrue(sut.refreshReceiveState().isFailure)
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+
+        assertTrue(sut.updateBip21Invoice().isSuccess)
+        assertFalse(sut.walletState.value.hasReceiveInvoiceError)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains("lightning=$INVOICE"))
+    }
+
+    @Test
+    fun `invoice publication uses the requested amount and description across suspension`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val releaseInvoice = CompletableDeferred<Unit>()
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            releaseInvoice.await()
+            Result.success(INVOICE)
+        }
+        val refresh = launch { sut.updateBip21Invoice(SATS, "requested") }
+        sut.setBip21AmountSats(SATS * 2uL)
+        sut.setBip21Description("changed during creation")
+        releaseInvoice.complete(Unit)
+        refresh.join()
+
+        val state = sut.walletState.value
+        assertEquals(SATS, state.bip21AmountSats)
+        assertEquals("requested", state.bip21Description)
+        assertEquals(sut.buildBip21Url(ADDRESS, SATS, "requested", INVOICE), state.bip21)
+    }
+
+    @Test
+    fun `failed invoice edit preserves the previous matching receive tuple`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        sut.setBolt11(INVOICE)
+        val previous = sut.walletState.value
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.failure(error))
+
+        assertTrue(sut.updateBip21Invoice(SATS, "unsaved edit").isFailure)
+
+        val state = sut.walletState.value
+        assertEquals(previous.bolt11, state.bolt11)
+        assertEquals(previous.bip21, state.bip21)
+        assertEquals(previous.bip21AmountSats, state.bip21AmountSats)
+        assertEquals(previous.bip21Description, state.bip21Description)
+        assertTrue(state.hasReceiveInvoiceError)
     }
 
     @Test
