@@ -115,7 +115,8 @@ class UsdtBridgeDetailsTest {
     }
 
     @Test
-    fun providerRefundShowsSourceNetworkAndExactAmountAndHonorsEligibility() {
+    fun providerRefundShowsSourceNetworkAndLocalizedAmountAndHonorsEligibility() {
+        Locale.setDefault(Locale.GERMANY)
         val state = mutableStateOf(DepositUiState(deposits = persistentListOf(deposit)))
         val refundAddress = mutableStateOf("")
         val showConfirmation = mutableStateOf(false)
@@ -143,6 +144,10 @@ class UsdtBridgeDetailsTest {
         screenshot("deposits")
         composeTestRule.onNodeWithTag("UsdtDepositRow-" + deposit.id).performClick()
         composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("RECEIVING NETWORK").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("UsdtRefundAddress").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtDepositDetails").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("USDT address on BSC").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag("UsdtDepositRefund").assertIsNotEnabled()
         assertHeight("UsdtRefundAddress", 52f)
@@ -152,7 +157,7 @@ class UsdtBridgeDetailsTest {
         composeTestRule.onNodeWithTag("UsdtDepositRefund").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("Confirm Refund").assertIsDisplayed()
-        composeTestRule.onNodeWithText("50.000001 USDT", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("50,00 USDT", substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("Refund address:\n" + address, substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("BNB Smart Chain (BSC)", substring = true).assertIsDisplayed()
         screenshot("refund")
@@ -172,6 +177,8 @@ class UsdtBridgeDetailsTest {
         composeTestRule.onNodeWithTag("NavigationBack").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("UsdtDepositRow-" + deposit.id).assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("UsdtDepositDetails").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         for (status in listOf("completed", "refunded", "refunding", "refund_requested")) {
             composeTestRule.runOnIdle {
