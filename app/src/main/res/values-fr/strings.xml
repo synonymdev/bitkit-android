@@ -568,6 +568,10 @@
     <string name="settings__general__section_payments">Paiements</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
+    <string name="slashtags__onboarding_profile1_header">Détenez votre \n&lt;accent&gt;profil&lt;/accent&gt;</string>
+    <string name="slashtags__onboarding_profile1_text">Configurez votre profil public et vos liens, afin que vos contacts Bitkit puissent vous joindre ou vous payer à tout moment et en tout lieu.</string>
+    <string name="slashtags__profile">Profil</string>
+    <string name="slashtags__profile_create">Créer un profil</string>
     <string name="settings__widgets__reset_suggestions">Réinitialiser les cartes de suggestions</string>
     <string name="settings__widgets__reset_widgets">Réinitialiser les widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Êtes-vous sûr de vouloir réinitialiser les widgets ? L\'ensemble de widgets par défaut avec les configurations par défaut sera affiché.</string>

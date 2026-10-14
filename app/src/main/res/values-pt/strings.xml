@@ -354,6 +354,7 @@
     <string name="other__update_critical_text">Há uma atualização disponível para a Bitkit. Atualize para continuar usando o app.</string>
     <string name="other__update_critical_button">Atualize a Bitkit</string>
     <string name="other__clipboard_redirect_title">Dados na Aréa de Transferência Detectados</string>
+    <string name="other__coming_soon">Em breve</string>
     <string name="other__clipboard_redirect_msg">Deseja ser redirecionado para a tela relevante?</string>
     <string name="other__pay_insufficient_savings">Saldo de Poupança Insuficiente</string>
     <string name="other__pay_insufficient_spending">Saldo de Gastos Insuficiente</string>
@@ -565,6 +566,10 @@
     <string name="settings__general__section_payments">Pagamentos</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
+    <string name="slashtags__onboarding_profile1_header">Tenha seu próprio\n&lt;accent&gt;perfil&lt;/accent&gt;</string>
+    <string name="slashtags__onboarding_profile1_text">Configure seu perfil público e seus links, para que seus contatos possam pagá-lo a qualquer hora e em qualquer lugar.</string>
+    <string name="slashtags__profile">Perfil</string>
+    <string name="slashtags__profile_create">Criar Perfil</string>
     <string name="settings__widgets__reset_suggestions">Repor cartões de sugestões</string>
     <string name="settings__widgets__reset_widgets">Repor widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Tem certeza de que deseja repor os widgets? O conjunto padrão de widgets com configurações padrão será exibido.</string>
