@@ -37,7 +37,7 @@ import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.ActivityListViewModel
 
-private fun UsdtTransfer.matchesActivityFilter(
+internal fun UsdtTransfer.matchesActivityFilter(
     tab: ActivityTab,
     noTagFilter: Boolean,
     search: String,
@@ -51,7 +51,7 @@ private fun UsdtTransfer.matchesActivityFilter(
         ActivityTab.OTHER -> false
     }
     val searchMatches = search.isEmpty() || recipient.contains(search, ignoreCase = true) ||
-        txHash?.contains(search, ignoreCase = true) == true || "USDT".contains(search, ignoreCase = true)
+        txHash?.contains(search, ignoreCase = true) == true || search.equals("USDT", ignoreCase = true)
     return tabMatches && noTagFilter && searchMatches &&
         (start?.let { timestamp >= (it / 1000).toULong() } != false) &&
         (end?.let { timestamp <= (it / 1000).toULong() } != false)

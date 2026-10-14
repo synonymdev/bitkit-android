@@ -9,5 +9,6 @@
     <action>Replace it with an owned valid EVM address. Continue to Amount, enter six decimal places and try a seventh; verify the amount remains limited to six. Close before requesting a quote.</action>
     <action>Set an amount and note in Bitcoin Receive, then close it. Open a fresh USDT Receive sheet and switch to Savings and Spending. Verify Savings shows a fresh Bitcoin QR with no previous amount or note. Spending shows a fresh Lightning QR when receive liquidity is available; an unfunded wallet shows the Spending receive setup instead. Verify hardware-wallet receive remains available when paired.</action>
     <action>Return Home and open Bitcoin Receive. Verify the Bitcoin address, network and amount controls remain separate from USDT.</action>
+    <action>With saved USDT activity, open All Activity. Search for USDT and usdt and verify both show USDT rows. Search for u, us or t and verify a USDT row appears only if its recipient or transaction ID contains the query. Verify a matching recipient or transaction-ID fragment still finds the row, and clearing search restores the list.</action>
   </actions>
 </journey>
