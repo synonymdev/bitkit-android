@@ -88,6 +88,7 @@ class WalletRepo @Inject constructor(
     private val receiveStateMutex = Mutex()
     private val receiveUpdateStatusLock = Any()
     private var pendingReceiveUpdates = 0
+    private var pendingReceiveValidation: String? = null
     private var committedReceiveBip21 = ""
 
     init {
@@ -101,9 +102,7 @@ class WalletRepo @Inject constructor(
                         settledReceiveAddress = update.settledReceiveAddress,
                     )
                 }.onFailure {
-                    _walletState.update { state ->
-                        state.copy(hasReceiveInvoiceError = state.hasReceiveInvoiceError || state.bolt11.isEmpty())
-                    }
+                    validateReceiveInvoiceAfterEventFailure()
                     Logger.error("Failed to refresh receive state for event '${update.event}'", it, context = TAG)
                 }
             }
@@ -131,7 +130,41 @@ class WalletRepo @Inject constructor(
 
     private fun changePendingReceiveUpdates(delta: Int) = synchronized(receiveUpdateStatusLock) {
         pendingReceiveUpdates += delta
-        _walletState.update { it.copy(isReceiveInvoiceUpdating = pendingReceiveUpdates > 0) }
+        updateReceivePendingState()
+    }
+
+    private fun setPendingReceiveValidation(bolt11: String?) = synchronized(receiveUpdateStatusLock) {
+        pendingReceiveValidation = bolt11
+        updateReceivePendingState()
+    }
+
+    private fun updateReceivePendingState() {
+        _walletState.update { state ->
+            val isValidatingCurrentInvoice = pendingReceiveValidation != null &&
+                state.bolt11 == pendingReceiveValidation
+            state.copy(isReceiveInvoiceUpdating = pendingReceiveUpdates > 0 || isValidatingCurrentInvoice)
+        }
+    }
+
+    private suspend fun validateReceiveInvoiceAfterEventFailure() {
+        val failedState = _walletState.value
+        setPendingReceiveValidation(failedState.bolt11)
+        try {
+            val hasUsableInvoice = runSuspendCatching {
+                if (failedState.bolt11.isEmpty()) return@runSuspendCatching false
+                val decoded = coreService.decode(failedState.bolt11) as? Scanner.Lightning
+                decoded?.invoice?.isExpired == false
+            }.getOrDefault(false)
+            _walletState.update { current ->
+                if (current.bolt11 != failedState.bolt11) {
+                    current
+                } else {
+                    current.copy(hasReceiveInvoiceError = current.hasReceiveInvoiceError || !hasUsableInvoice)
+                }
+            }
+        } finally {
+            setPendingReceiveValidation(null)
+        }
     }
 
     fun loadFromCache() {
@@ -146,6 +179,7 @@ class WalletRepo @Inject constructor(
                         bip21 = cacheData.bip21,
                     )
                 }
+                synchronized(receiveUpdateStatusLock) { updateReceivePendingState() }
                 cacheData.balance?.let { balance ->
                     _balanceState.update { balance }
                 }
@@ -397,7 +431,18 @@ class WalletRepo @Inject constructor(
         event: Event,
         settledReceiveInvoice: SettledReceiveInvoice? = null,
         settledReceiveAddress: SettledReceiveAddress? = null,
-    ) = updateReceiveState(trackPending = shouldTrackReceiveEvent(event, settledReceiveInvoice)) {
+    ) {
+        if (!shouldHandleReceiveEvent(event, settledReceiveInvoice, settledReceiveAddress)) return
+        updateReceiveState(trackPending = event !is Event.OnchainTransactionReceived) {
+            refreshBip21ForEventLocked(event, settledReceiveInvoice, settledReceiveAddress)
+        }
+    }
+
+    private suspend fun refreshBip21ForEventLocked(
+        event: Event,
+        settledReceiveInvoice: SettledReceiveInvoice?,
+        settledReceiveAddress: SettledReceiveAddress?,
+    ) {
         when (event) {
             is Event.ChannelReady,
             is Event.ChannelClosed,
@@ -429,7 +474,7 @@ class WalletRepo @Inject constructor(
 
             is Event.PaymentReceived if settledReceiveInvoice != null -> {
                 val settledBolt11 = settledReceiveInvoice.bolt11
-                if (!invalidateSettledReceiveInvoice(settledBolt11)) return@updateReceiveState
+                if (!invalidateSettledReceiveInvoice(settledBolt11)) return
                 Logger.debug("Refreshing BIP21 for event '$event'", context = TAG)
                 updateBip21Url()
                 refreshAddressIfNeeded().getOrThrow()
@@ -439,7 +484,7 @@ class WalletRepo @Inject constructor(
 
             is Event.OnchainTransactionReceived if settledReceiveAddress != null -> {
                 val settledAddress = settledReceiveAddress.address
-                if (!invalidateSettledReceiveAddress(settledAddress)) return@updateReceiveState
+                if (!invalidateSettledReceiveAddress(settledAddress)) return
                 Logger.debug("Refreshing BIP21 for event '$event'", context = TAG)
                 refreshReusableReceiveAddressLocked()
             }
@@ -450,11 +495,18 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    private fun shouldTrackReceiveEvent(event: Event, settledReceiveInvoice: SettledReceiveInvoice?): Boolean {
+    private fun shouldHandleReceiveEvent(
+        event: Event,
+        settledReceiveInvoice: SettledReceiveInvoice?,
+        settledReceiveAddress: SettledReceiveAddress?,
+    ): Boolean {
         return when (event) {
             is Event.ChannelReady, is Event.ChannelClosed -> true
             is Event.PaymentReceived -> settledReceiveInvoice?.bolt11?.let {
                 it.isNotEmpty() && it == getBolt11()
+            } == true
+            is Event.OnchainTransactionReceived -> settledReceiveAddress?.address?.let {
+                it.isNotEmpty() && it == getOnchainAddress()
             } == true
             else -> false
         }
