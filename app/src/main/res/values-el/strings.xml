@@ -446,7 +446,7 @@
     <string name="profile__auth_approval_ok">ΟΚ</string>
     <string name="profile__create_nav_title">Δημιουργία προφίλ</string>
     <string name="profile__nav_title">Προφίλ</string>
-    <string name="profile__retry_load">Προσπαθείστε Ξανά</string>
+    <string name="profile__retry_load">Προσπαθήστε Ξανά</string>
     <string name="profile__suggestions">Προτάσεις</string>
     <string name="security__backup_button">Αντίγραφο ασφαλείας</string>
     <string name="security__backup_funds">Τώρα που έχεις κεφάλαια στο πορτοφόλι σου, ήρθε η ώρα να δημιουργήσεις αντίγραφο ασφαλείας των χρημάτων σου!</string>

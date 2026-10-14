@@ -132,7 +132,7 @@
     <string name="lightning__conn_pending">Conexões pendentes</string>
     <string name="lightning__connection">Conexão</string>
     <string name="lightning__connection_closed__description">Os fundos de seu saldo de gastos foram transferidos para sua poupança.</string>
-    <string name="lightning__connection_closed__title">Conexão Desativada</string>
+    <string name="lightning__connection_closed__title">Conexão fechada</string>
     <string name="lightning__connections">Conexões Lightning</string>
     <string name="lightning__created_on">Criado em</string>
     <string name="lightning__error_add">Bitkit não foi capaz de adicionar o par Lightning.</string>

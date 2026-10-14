@@ -38,7 +38,7 @@
     <string name="contacts__add_contact_title">Añadir contacto</string>
     <string name="contacts__add_scan_qr">Escanear QR</string>
     <string name="contacts__add_sheet_title">Añadir contacto</string>
-    <string name="contacts__detail_title">Contactar</string>
+    <string name="contacts__detail_title">Contacto</string>
     <string name="contacts__edit_contact_title">Editar contacto</string>
     <string name="contacts__intro_add_contact">Añadir contacto</string>
     <string name="common__try_again">Inténtelo de nuevo</string>
@@ -455,7 +455,7 @@
     <string name="profile__retry_load">Inténtelo de nuevo</string>
     <string name="profile__suggestions">Sugerencias</string>
     <string name="profile__suggestions_to_add">Sugerencias para añadir</string>
-    <string name="profile__your_name">Su Apellido</string>
+    <string name="profile__your_name">Su Nombre</string>
     <string name="other__update_text">Por favor, ¡actualice Bitkit a la última versión para nuevas funciones y corregir errores!</string>
     <string name="security__backup_wallet">Copia de seguridad de la cartera</string>
     <string name="security__backup_title">&lt;accent&gt;Resguarda&lt;/accent&gt; tus Bitcoin</string>
@@ -881,7 +881,7 @@
     <string name="wallet__payment_invoice_request_expired">Esta solicitud de factura Lightning ha caducado. Solicita una factura nueva.</string>
     <string name="wallet__payment_invoice_request_rejected">El destinatario ha rechazado esta solicitud de factura Lightning.</string>
     <string name="wallet__payment_recipient_rejected">El destinatario ha rechazado este pago Lightning. Comprueba la factura e inténtalo de nuevo.</string>
-    <string name="wallet__payment_request_contact">Contactar</string>
+    <string name="wallet__payment_request_contact">Contacto</string>
     <string name="wallet__payment_request_date">Fecha</string>
     <string name="wallet__payment_request_note">Nota</string>
     <string name="wallet__payment_request_sent_title">Enviado</string>
@@ -937,7 +937,7 @@
     <string name="wallet__activity_received">Recibido</string>
     <string name="wallet__activity_transfer">Transferir</string>
     <string name="wallet__activity_confirms_in">Confirma en {feeRateDescription}</string>
-    <string name="wallet__activity_contact">Contactar</string>
+    <string name="wallet__activity_contact">Contacto</string>
     <string name="wallet__activity_bitcoin_sent">Bitcoin enviado</string>
     <string name="wallet__activity_bitcoin_received">Bitcoin recibido</string>
     <string name="wallet__activity_confirming">Confirmando</string>

@@ -40,7 +40,7 @@
     <string name="contacts__add_sheet_title">Ajouter un contact</string>
     <string name="contacts__edit_contact_title">Modifier le contact</string>
     <string name="contacts__intro_add_contact">Ajouter un contact</string>
-    <string name="contacts__intro_title">Dynamique \n&lt;accent&gt;contacts&lt;/accent&gt;</string>
+    <string name="contacts__intro_title">Contacts\n&lt;accent&gt;dynamiques&lt;/accent&gt;</string>
     <string name="common__try_again">Réessayer</string>
     <string name="common__dialog_cancel">Non, annuler</string>
     <string name="common__sat_vbyte">₿ / vbyte</string>
@@ -533,7 +533,7 @@
     <string name="security__reset_button_backup">Sauvegarder</string>
     <string name="security__reset_button_reset">Réinitialiser</string>
     <string name="security__reset_dialog_title">Réinitialiser Bitkit ?</string>
-    <string name="security__reset_graph_confirm">Oui, Réinitialisation</string>
+    <string name="security__reset_graph_confirm">Oui, Réinitialiser</string>
     <string name="security__reset_dialog_desc">Êtes-vous sûr de vouloir réinitialiser votre portefeuille Bitkit ? Avez-vous une sauvegarde de votre phrase de récupération et des données de votre portefeuille ?</string>
     <string name="security__reset_confirm">Oui, Réinitialiser</string>
     <string name="security__recovery">Récupération</string>
