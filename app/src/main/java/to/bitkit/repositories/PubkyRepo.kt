@@ -16,6 +16,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -168,6 +170,7 @@ class PubkyRepo @Inject constructor(
     private var completedProfileSignInGeneration = -1L
     private var completedProfileWriteGeneration = -1L
     private val loadContactsMutex = Mutex()
+    private var contactRefresh: Pair<PubkySignIn, Deferred<Boolean>>? = null
     private val contactsLock = Any()
     private var contactsRevision = 0L
     private val sessionContactProfiles = mutableMapOf<String, SessionContactProfile>()
@@ -1134,6 +1137,29 @@ class PubkyRepo @Inject constructor(
 
     // region Contact management
 
+    suspend fun refreshContacts(): Boolean {
+        val signIn = currentSignIn() ?: return false
+        val refresh = synchronized(contactsLock) {
+            contactRefresh?.takeIf { isCurrent(it.first) && it.second.isActive }?.second
+                ?: scope.async(start = CoroutineStart.LAZY) {
+                    if (!isCurrent(signIn)) return@async false
+                    val loaded = loadContactRecords()
+                    loaded && isCurrent(signIn)
+                }.also {
+                    contactRefresh = signIn to it
+                    it.start()
+                }
+        }
+        return try {
+            refresh.await()
+        } finally {
+            if (!currentCoroutineContext().isActive) refresh.cancel()
+            synchronized(contactsLock) {
+                if (contactRefresh?.second === refresh && refresh.isCompleted) contactRefresh = null
+            }
+        }
+    }
+
     /**
      * Publishes the saved contact records without waiting for any profile lookup. A record without a profile override
      * or a stored Paykit profile shows the profile resolved earlier in this session, else its label, and is then
@@ -1141,16 +1167,21 @@ class PubkyRepo @Inject constructor(
      * was resolved less than [CONTACT_PROFILE_FRESHNESS] ago.
      */
     suspend fun loadContacts() {
-        val signIn = currentSignIn() ?: return
+        loadContactRecords()
+    }
+
+    private suspend fun loadContactRecords(): Boolean {
+        val signIn = currentSignIn() ?: return false
         val pk = signIn.publicKey
         loadContactsMutex.lock()
         if (!isCurrent(signIn)) {
             loadContactsMutex.unlock()
-            return
+            return false
         }
 
         _isLoadingContacts.update { true }
         var shouldMarkLoadCompleted = false
+        var loaded = false
         var contactsToRefresh = emptyList<SavedContact>()
         try {
             var reload: Boolean
@@ -1179,6 +1210,7 @@ class PubkyRepo @Inject constructor(
                         contactsToRefresh = loadedContacts.filter { it.needsRefresh }
                     }
                     markContactsLoaded()
+                    loaded = true
                     shouldMarkLoadCompleted = true
                 }.onFailure {
                     shouldMarkLoadCompleted = isCurrent(signIn)
@@ -1191,6 +1223,7 @@ class PubkyRepo @Inject constructor(
             if (shouldMarkLoadCompleted && isCurrent(signIn)) markContactsLoadCompleted()
         }
         if (isCurrent(signIn)) refreshContactProfiles(pk, contactsToRefresh)
+        return loaded && isCurrent(signIn)
     }
 
     /**
@@ -2072,6 +2105,10 @@ class PubkyRepo @Inject constructor(
             evictPubkyImages()
             profileWriteGeneration.incrementAndGet()
             runSuspendCatching { pubkyStore.reset() }
+        }
+        synchronized(contactsLock) {
+            contactRefresh?.second?.cancel()
+            contactRefresh = null
         }
         _publicKey.update { null }
         setProfile(null)

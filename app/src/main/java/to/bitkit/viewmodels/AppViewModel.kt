@@ -433,6 +433,7 @@ class AppViewModel @Inject constructor(
         }
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
+    private var paykitContactsRefreshJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
@@ -1021,6 +1022,7 @@ class AppViewModel @Inject constructor(
         if (paykitPaymentRequestPollingJob?.isActive == true) return
 
         startPaykitSessionRestoreRetries()
+        startPaykitContactsRefresh()
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
             refreshIncomingPaykitPaymentRequests(messagePriority = Priority.Background, onlyWhileActive = true)
@@ -1056,6 +1058,18 @@ class AppViewModel @Inject constructor(
                     refreshIdlePaykitContactEndpoints(refreshIdentity)
                     refreshPaymentRequestTargets(force = true)
                 }
+            }
+        }
+    }
+
+    private fun startPaykitContactsRefresh() {
+        if (paykitContactsRefreshJob?.isActive == true) return
+        paykitContactsRefreshJob = viewModelScope.launch {
+            pubkyRepo.awaitInitialization()
+            combine(isOnline, isPaykitEnabled, pubkyRepo.publicKey) { connectivity, enabled, publicKey ->
+                publicKey.takeIf { connectivity == ConnectivityState.CONNECTED && enabled }
+            }.distinctUntilChanged().collectLatest { publicKey ->
+                if (publicKey != null && walletRepo.walletExists()) pubkyRepo.refreshContacts()
             }
         }
     }
@@ -1119,6 +1133,8 @@ class AppViewModel @Inject constructor(
     }
 
     fun stopPaykitPaymentRequestPolling() {
+        paykitContactsRefreshJob?.cancel()
+        paykitContactsRefreshJob = null
         privatePaykitRepo.setContactPreparationActive(false)
         isPaymentRequestPollingStopped.update { true }
         paykitSessionRestoreRetryJob?.cancel()
@@ -2949,14 +2965,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun awaitContactDataForDeeplink(isContactLink: Boolean): Boolean {
         if (!isContactLink || pubkyRepo.publicKey.value == null) return true
-
-        pubkyRepo.contactsLoadCompletionVersion.first { it > 0 }
-        if (pubkyRepo.contactsLoadVersion.value > 0L) return true
-
-        val completionVersion = pubkyRepo.contactsLoadCompletionVersion.value
-        pubkyRepo.loadContacts()
-        pubkyRepo.contactsLoadCompletionVersion.first { it > completionVersion }
-        return pubkyRepo.contactsLoadVersion.value > 0L
+        return pubkyRepo.refreshContacts()
     }
 
     private suspend fun isPaykitUiEnabledFromSettings() =

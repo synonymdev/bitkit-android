@@ -3418,6 +3418,88 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refreshContacts coalesces overlapping reads and refreshes warm contacts`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val cached = createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Saved"))
+        val added = createContactRecord(VALID_CONTACT_KEY_B, profile = createPaykitProfile("Shop"))
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).thenReturn(listOf(cached))
+        sut.loadContacts()
+        val released = CompletableDeferred<Unit>()
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).doSuspendableAnswer {
+            released.await()
+            listOf(cached, added)
+        }
+        clearInvocations(pubkyService)
+
+        val foreground = async { sut.refreshContacts() }
+        val checkout = async { sut.refreshContacts() }
+        runCurrent()
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        verifyBlocking(pubkyService) { observedContactRecords(VALID_SELF_KEY) }
+
+        released.complete(Unit)
+        assertTrue(foreground.await())
+        assertTrue(checkout.await())
+        assertEquals(setOf(VALID_CONTACT_KEY_A, VALID_CONTACT_KEY_B), sut.contacts.value.map { it.publicKey }.toSet())
+        assertTrue(sut.refreshContacts())
+        verifyBlocking(pubkyService, times(2)) { observedContactRecords(VALID_SELF_KEY) }
+    }
+
+    @Test
+    fun `refreshContacts does not count an older successful read as its own success`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val released = CompletableDeferred<Unit>()
+        val cached = createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Saved"))
+        var reads = 0
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).doSuspendableAnswer {
+            if (++reads == 1) {
+                released.await()
+                listOf(cached)
+            } else {
+                throw TestAppError("Offline")
+            }
+        }
+        val older = launch { sut.loadContacts() }
+        runCurrent()
+        val refresh = async { sut.refreshContacts() }
+        runCurrent()
+        assertEquals(1, reads)
+        released.complete(Unit)
+        older.join()
+
+        assertFalse(refresh.await())
+        assertEquals(2, reads)
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        doReturn(emptyList<ContactRecord>()).whenever(pubkyService).observedContactRecords(VALID_SELF_KEY)
+        assertTrue(sut.refreshContacts())
+        assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
+    fun `cancelling contact refresh preserves cache and permits another refresh`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val cached = createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Saved"))
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).thenReturn(listOf(cached))
+        sut.loadContacts()
+        val released = CompletableDeferred<Unit>()
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).doSuspendableAnswer {
+            released.await()
+            emptyList()
+        }
+        val refresh = launch { sut.refreshContacts() }
+        runCurrent()
+        refresh.cancel()
+        refresh.join()
+        runCurrent()
+
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        assertFalse(sut.isLoadingContacts.value)
+        released.complete(Unit)
+        assertTrue(sut.refreshContacts())
+        assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
     fun `addContact should replace existing contact with normalized key`() = test {
         authenticateForTesting()
         val original = PubkyProfile(

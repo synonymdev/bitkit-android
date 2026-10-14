@@ -441,6 +441,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             if (pubkyPublicKey.value != null) PubkyIdentityReadiness.Ready else PubkyIdentityReadiness.Missing
         }
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
+        whenever { pubkyRepo.refreshContacts() }.thenReturn(true)
         whenever { refreshContactPaykitLink(any()) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }
             .thenReturn(Result.success(Unit))
@@ -649,6 +650,64 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.onAppResumed()
         verify(pubkyRepo).restoreSessionIfNeeded()
+    }
+
+    @Test
+    fun `foreground refreshes contacts once and repeats only after resume or reconnect`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(pubkyRepo)
+        try {
+            sut.startPaykitPaymentRequestPolling()
+            runCurrent()
+            sut.startPaykitPaymentRequestPolling()
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            verifyBlocking(pubkyRepo) { refreshContacts() }
+
+            connectivityState.value = ConnectivityState.DISCONNECTED
+            runCurrent()
+            connectivityState.value = ConnectivityState.CONNECTED
+            runCurrent()
+            verifyBlocking(pubkyRepo, times(2)) { refreshContacts() }
+
+            sut.stopPaykitPaymentRequestPolling()
+            runCurrent()
+            sut.startPaykitPaymentRequestPolling()
+            runCurrent()
+            verifyBlocking(pubkyRepo, times(3)) { refreshContacts() }
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `backgrounding cancels pending contact refresh and resume retries`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        var cancelled = false
+        whenever(pubkyRepo.refreshContacts()).doSuspendableAnswer {
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled = true
+            }
+        }
+        try {
+            sut.startPaykitPaymentRequestPolling()
+            runCurrent()
+            sut.stopPaykitPaymentRequestPolling()
+            runCurrent()
+            assertTrue(cancelled)
+
+            doReturn(true).whenever(pubkyRepo).refreshContacts()
+            sut.startPaykitPaymentRequestPolling()
+            runCurrent()
+            verifyBlocking(pubkyRepo, times(2)) { refreshContacts() }
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
     }
 
     @Test
@@ -3978,6 +4037,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         val initialized = CompletableDeferred<Unit>()
         whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        whenever(pubkyRepo.refreshContacts()).doSuspendableAnswer {
+            pubkyContactsLoadVersion.first { it > 0 }
+            true
+        }
         sut.mainScreenEffect.test {
             sut.handleDeeplinkIntent(
                 Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$nonCanonicalTestPublicKey".toUri()),
@@ -4009,25 +4072,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `contact deeplink retries contacts after initial load failure`() = test {
+    fun `contact deeplink refreshes warm contacts before choosing saved contact routing`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        whenever(pubkyRepo.loadContacts()).thenAnswer {
+        pubkyContactsLoadVersion.value = 1L
+        pubkyContactsLoadCompletionVersion.value = 1L
+        val released = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.refreshContacts()).doSuspendableAnswer {
+            released.await()
             pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
-            pubkyContactsLoadVersion.value = 1L
-            pubkyContactsLoadCompletionVersion.value = 2L
+            true
         }
         sut.mainScreenEffect.test {
             sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
             runCurrent()
             expectNoEvents()
 
-            pubkyContactsLoadCompletionVersion.value = 1L
+            released.complete(Unit)
 
             assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
             advanceUntilIdle()
         }
-        verify(pubkyRepo).loadContacts()
+        verify(pubkyRepo).refreshContacts()
         verify(refreshContactPaykitLink).invoke(testPublicKey)
         verify(coreService, never()).decode(any())
     }
@@ -4037,7 +4103,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val retryAttempted = CompletableDeferred<Unit>()
-        whenever(pubkyRepo.loadContacts()).thenAnswer { retryAttempted.complete(Unit) }
+        val released = CompletableDeferred<Boolean>()
+        whenever(pubkyRepo.refreshContacts()).doSuspendableAnswer {
+            retryAttempted.complete(Unit)
+            released.await()
+        }
         sut.mainScreenEffect.test {
             sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "bitkit://contact?pubky=$testPublicKey".toUri()))
             runCurrent()
@@ -4050,11 +4120,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
             pubkyContactsLoadVersion.value = 1L
             pubkyContactsLoadCompletionVersion.value = 2L
+            released.complete(true)
 
             assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
             advanceUntilIdle()
         }
-        verify(pubkyRepo).loadContacts()
+        verify(pubkyRepo).refreshContacts()
         verify(refreshContactPaykitLink).invoke(testPublicKey)
         verify(coreService, never()).decode(any())
     }
@@ -4063,9 +4134,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `contact deeplink rejects when contacts retry fails`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        whenever(pubkyRepo.loadContacts()).thenAnswer {
-            pubkyContactsLoadCompletionVersion.value = 2L
-        }
+        pubkyContactsLoadVersion.value = 1L
+        whenever(pubkyRepo.refreshContacts()).thenReturn(false)
         whenever(context.getString(R.string.other__scan_err_decoding)).thenReturn("Decoding Error")
         whenever(context.getString(R.string.other__scan__error__generic)).thenReturn("Unable to read data")
         sut.mainScreenEffect.test {
@@ -4078,7 +4148,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             expectNoEvents()
         }
-        verify(pubkyRepo).loadContacts()
+        verify(pubkyRepo).refreshContacts()
         verify(toastManager).enqueue(
             check {
                 assertEquals(Toast.ToastType.ERROR, it.type)
