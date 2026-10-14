@@ -29,6 +29,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -412,18 +413,20 @@ fun ReceiveQrScreen(
                                     else -> invoice
                                 }
 
-                                ReceiveQrView(
-                                    uri = invoice,
-                                    copyText = copyText,
-                                    qrLogoPainter = painterResource(getQrLogoResource(tab)),
-                                    onClickEditInvoice = if (tab == ReceiveTab.HARDWARE) {
-                                        onClickHardwareEditInvoice
-                                    } else {
-                                        { onClickEditInvoice(tab) }
-                                    },
-                                    tab = tab,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                key(displayMode, invoice) {
+                                    ReceiveQrView(
+                                        uri = invoice,
+                                        copyText = copyText,
+                                        qrLogoPainter = painterResource(getQrLogoResource(tab)),
+                                        onClickEditInvoice = if (tab == ReceiveTab.HARDWARE) {
+                                            onClickHardwareEditInvoice
+                                        } else {
+                                            { onClickEditInvoice(tab) }
+                                        },
+                                        tab = tab,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                     }
