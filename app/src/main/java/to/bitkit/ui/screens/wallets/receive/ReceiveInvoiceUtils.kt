@@ -10,7 +10,7 @@ internal fun getReceiveInvoiceDisplayMode(
     isUpdating: Boolean,
     showDetails: Boolean,
 ): ReceiveInvoiceDisplayMode {
-    if ((tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING) && cjitInvoice.isNullOrEmpty()) {
+    if (tab.usesLightningInvoice() && cjitInvoice.isNullOrEmpty()) {
         if (isUpdating) return ReceiveInvoiceDisplayMode.LOADING
         if (hasInvoiceError) return ReceiveInvoiceDisplayMode.ERROR
     }
@@ -41,8 +41,7 @@ fun getInvoiceForTab(
     hardwareMessage: String = "",
     isReceiveInvoiceUpdating: Boolean = false,
 ): String {
-    val needsLightningInvoice = tab == ReceiveTab.AUTO || tab == ReceiveTab.SPENDING
-    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() && needsLightningInvoice) {
+    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() && tab.usesLightningInvoice()) {
         return ""
     }
 
@@ -133,3 +132,5 @@ fun getQrLogoResource(tab: ReceiveTab): Int {
         ReceiveTab.HARDWARE -> R.drawable.ic_btc_circle_blue
     }
 }
+
+private fun ReceiveTab.usesLightningInvoice(): Boolean = this == ReceiveTab.AUTO || this == ReceiveTab.SPENDING
