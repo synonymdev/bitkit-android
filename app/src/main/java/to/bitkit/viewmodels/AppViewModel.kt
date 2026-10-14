@@ -2982,7 +2982,7 @@ class AppViewModel @Inject constructor(
         suppressQuickPay: Boolean = false,
     ): Job? {
         if (contactPaymentContext == null &&
-            data.trim().startsWith("ethereum:", ignoreCase = true) && hasActiveUsdtSend()
+            isUsdtPaymentInput(data.trim()) && hasActiveUsdtSend()
         ) {
             return null
         }
@@ -6687,7 +6687,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun onClipboardAutoRead(data: String) {
-        if (isUsdtPaymentInput(data.trim()) && !isUsdtEnabled.value) return
+        if (isUsdtPaymentInput(data.trim()) && (!isUsdtEnabled.value || hasActiveUsdtSend())) return
         viewModelScope.launch {
             mainScreenEffect(MainScreenEffect.ProcessClipboardAutoRead(data))
         }

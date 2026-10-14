@@ -4206,11 +4206,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 parser.`when`<Result<UsdtPaymentRequest>> { parseUsdtPaymentRequest(uri, UsdtDestination.ARBITRUM) }
                     .thenReturn(Result.success(UsdtPaymentRequest("owned recipient", 10001u, 42161u)))
                 whenever(usdtRepo.isSendPresented).thenReturn(true)
-                setActiveContactPaymentContext(testPublicKey)
-                sut.onScanResult(uri)
-                advanceUntilIdle()
-                expectNoEvents()
-                assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
+                clearInvocations(toastManager)
+                for (input in listOf(uri, "0x2222222222222222222222222222222222222222")) {
+                    sut.onClipboardAutoRead(input)
+                    advanceUntilIdle()
+                    expectNoEvents()
+                    setActiveContactPaymentContext(testPublicKey)
+                    sut.onScanResult(input)
+                    advanceUntilIdle()
+                    expectNoEvents()
+                    assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
+                }
+                verify(toastManager, never()).enqueue(any())
             }
         }
         verify(coreService, never()).decode(any())
@@ -4218,7 +4225,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `USDT links preserve a contact draft before payment review`() = test {
+    fun `USDT payment inputs preserve an active contact draft`() = test {
         val recipient = "0x1111111111111111111111111111111111111111"
         val endpoint = Endpoint(MethodId.UsdtArbitrum, recipient, rawPayload = "")
         sut.openContactPayment(recipient, testPublicKey, endpoints = listOf(endpoint))
@@ -4229,15 +4236,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val contact = activeContactPaymentContext()
         assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
 
+        clearInvocations(toastManager)
+        val otherRecipient = "0x2222222222222222222222222222222222222222"
+        val inputs = listOf(
+            "ethereum:0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9@42161/transfer?address=$otherRecipient",
+            " $otherRecipient ",
+        )
         sut.mainScreenEffect.test {
-            sut.onScanResult("ethereum:0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9@42161/transfer?address=$recipient")
-            advanceUntilIdle()
-            expectNoEvents()
+            for (isReviewing in listOf(false, true)) {
+                whenever(usdtRepo.isSendPresented).thenReturn(isReviewing)
+                for (input in inputs) {
+                    sut.onClipboardAutoRead(input)
+                    sut.onScanResult(input)
+                    advanceUntilIdle()
+                    expectNoEvents()
+                    assertEquals(draft, sut.sendUiState.value)
+                    assertEquals(contact, activeContactPaymentContext())
+                    assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
+                }
+            }
         }
-
-        assertEquals(draft, sut.sendUiState.value)
-        assertEquals(contact, activeContactPaymentContext())
-        assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
+        verify(toastManager, never()).enqueue(any())
     }
 
     @Test
