@@ -54,6 +54,7 @@ fun BalanceHeaderView(
     showBitcoinSymbol: Boolean = true,
     useSwipeToHide: Boolean = true,
     showEyeIcon: Boolean = false,
+    isUnavailable: Boolean = false,
     testTag: String = "",
 ) {
     val isPreview = LocalInspectionMode.current
@@ -99,11 +100,11 @@ fun BalanceHeaderView(
         BalanceHeader(
             isBitcoinPrimary = isBitcoinPrimary,
             smallRowSymbol = if (isBitcoinPrimary) fiat.symbol else btc.symbol,
-            smallRowText = if (isBitcoinPrimary) fiat.formatted else btc.value,
+            smallRowText = if (isUnavailable) "—" else if (isBitcoinPrimary) fiat.formatted else btc.value,
             smallRowIsSymbolSuffix = if (isBitcoinPrimary) fiat.isSymbolSuffix else false,
             smallRowModifier = Modifier.testTag("$testTag-secondary"),
             largeRowPrefix = prefix,
-            largeRowText = if (isBitcoinPrimary) btc.value else fiat.formatted,
+            largeRowText = if (isUnavailable) "—" else if (isBitcoinPrimary) btc.value else fiat.formatted,
             largeRowSymbol = if (isBitcoinPrimary) btc.symbol else fiat.symbol,
             largeRowIsSymbolSuffix = if (isBitcoinPrimary) false else fiat.isSymbolSuffix,
             largeRowModifier = Modifier.testTag("$testTag-primary"),

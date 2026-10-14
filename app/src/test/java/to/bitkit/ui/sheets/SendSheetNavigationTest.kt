@@ -19,6 +19,29 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 class SendSheetNavigationTest {
     @Test
+    fun `pending clears earlier send screens after prepared amount review`() {
+        for (start in listOf(SendRoute.Confirm, SendRoute.ContactSelect, SendRoute.Amount)) {
+            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+                navigatorProvider.addNavigator(ComposeNavigator())
+                graph = createGraph(startDestination = start) {
+                    composable<SendRoute.Confirm> {}
+                    composable<SendRoute.ContactSelect> {}
+                    composable<SendRoute.Amount> {}
+                    composable<SendRoute.Pending> {}
+                }
+            }
+            navController.navigateToSendAmount(start)
+            navController.navigateTo(SendRoute.Confirm)
+            navController.navigateToSendPending(
+                SendRoute.Pending(paymentHash = "payment", amount = 1000, walletId = "wallet0")
+            )
+            assertNull(navController.previousBackStackEntry)
+            navController.popBackStack()
+            assertNull(navController.currentDestination)
+        }
+    }
+
+    @Test
     fun `prepared requests discard confirmation while contact payments retain their previous screen`() {
         for (start in listOf(SendRoute.Confirm, SendRoute.ContactSelect)) {
             val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {

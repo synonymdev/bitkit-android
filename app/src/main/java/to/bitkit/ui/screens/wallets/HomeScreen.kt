@@ -124,6 +124,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
 import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
+import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransportType
 import to.bitkit.models.WidgetSize
@@ -619,6 +620,9 @@ private fun UsdtHomeRefreshEffect() {
     UsdtRefreshEffect(viewModel, pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING })
 }
 
+private fun usdtHeadlineSats(balance: ULong?, visible: Boolean, rate: PaykitExchangeRate?): Long? =
+    if (visible && balance != 0uL) balance?.let { usdtDisplaySats(usdtFormatAmount(it), rate) } else 0L
+
 @Suppress("MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -643,17 +647,13 @@ private fun WalletPage(
     val slotCapacity = if (isSmallScreen) SMALL_SCREEN_SLOT_CAPACITY else LARGE_SCREEN_SLOT_CAPACITY
     val showUsdt = appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true
     val rate = LocalCurrencies.current.paykitRate
-    val usdtSats = remember(
-        usdt.balance,
-        showUsdt,
-        rate
-    ) { usdt.balance?.takeIf { showUsdt }?.let { usdtDisplaySats(usdtFormatAmount(it), rate) } ?: 0L }
+    val usdtSats = usdtHeadlineSats(usdt.balance, showUsdt, rate)
     val headlineSats = BigInteger(
         balances.totalWithHardwareSats.toString()
-    ).add(BigInteger.valueOf(usdtSats)).min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
+    ).add(BigInteger.valueOf(usdtSats ?: 0L)).min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
-    val hasActivity = !latestActivities.isNullOrEmpty() || (showUsdt && usdt.transfers.isNotEmpty())
+    val hasActivity = !latestActivities.isNullOrEmpty() || usdt.transfers.isNotEmpty()
 
     PullToRefreshBox(
         state = pullToRefreshState,
@@ -683,6 +683,7 @@ private fun WalletPage(
 
             BalanceHeaderView(
                 sats = headlineSats,
+                isUnavailable = usdtSats == null,
                 showEyeIcon = true,
                 testTag = "TotalBalance",
                 modifier = Modifier

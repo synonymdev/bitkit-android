@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PublicationStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,13 +26,16 @@ import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.UsdtPreference
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPublicContactPaymentResolution
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -54,6 +58,9 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
     private val clock = mock<Clock>()
+    private val usdtRepo = mock<UsdtRepo> {
+        on { state }.thenReturn(MutableStateFlow(UsdtWalletState()))
+    }
 
     private val publicKey = MutableStateFlow<String?>("pubkyself")
     private val isRestoringSession = MutableStateFlow(false)
@@ -87,6 +94,25 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @After
     fun tearDown() {
         PublicPaykitRepo.lightningRouteHintsValidator = null
+    }
+
+    @Test
+    fun `optional USDT endpoint failure preserves bitcoin publication and propagates cancellation`() = test {
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        settingsFlow.value = SettingsData(
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+            publicPaykitUsdtEnabled = true,
+            usdtPreference = UsdtPreference.ENABLED,
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        val endpoints = argumentCaptor<List<Endpoint>>()
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture()) }
+        assertEquals(listOf(MethodId.P2tr), endpoints.firstValue.map { it.methodId })
+
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
+        assertFailsWith<CancellationException> { sut.syncCurrentPublishedEndpoints() }
     }
 
     @Test
@@ -385,7 +411,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         walletRepo = walletRepo,
         lightningRepo = lightningRepo,
         coreService = coreService,
-        usdtRepo = mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
+        usdtRepo = usdtRepo,
         paykitSdkService = paykitSdkService,
         settingsStore = settingsStore,
         clock = clock,

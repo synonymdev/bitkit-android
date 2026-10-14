@@ -48,6 +48,7 @@ import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAmountConversion
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -141,6 +142,8 @@ internal fun PaymentRequestAmountContent(
     contact: PubkyProfile?,
     onBack: () -> Unit,
     onContinue: (PaykitPaymentRequestDraft) -> Unit,
+    allowedAssets: ImmutableList<PaykitAsset> = persistentListOf(PaykitAsset.BTC, PaykitAsset.USD),
+    conversion: PaykitAmountConversion = remember { PaykitAmountConversion() },
 ) {
     val currencies = LocalCurrencies.current
     val amountState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
@@ -153,7 +156,7 @@ internal fun PaymentRequestAmountContent(
     val entered = if (asset == PaykitAsset.BTC) {
         PaykitAmount(asset, amountState.sats.toULong())
     } else {
-        runCatching { PaykitAmount.parse(asset, dollars) }.getOrNull()
+        runCatching { PaykitAmount.parseInput(asset, dollars) }.getOrNull()
     }
     LaunchedEffect(initialDraft.amount) {
         if (initialDraft.amount.asset == PaykitAsset.BTC) {
@@ -205,6 +208,8 @@ internal fun PaymentRequestAmountContent(
                 PaymentRequestAssetSelector(
                     asset = asset,
                     amount = entered,
+                    allowedAssets = allowedAssets,
+                    conversion = conversion,
                     onConverted = {
                         asset = it.asset
                         if (it.asset == PaykitAsset.BTC) {
@@ -276,10 +281,12 @@ private fun PaymentRequestAssetSelector(
     amount: PaykitAmount?,
     onConverted: (PaykitAmount) -> Unit,
     onUnavailable: () -> Unit,
+    allowedAssets: ImmutableList<PaykitAsset>,
+    conversion: PaykitAmountConversion,
 ) {
     val currencies = LocalCurrencies.current
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(PaykitAsset.BTC, PaykitAsset.USD).forEach { option ->
+        allowedAssets.forEach { option ->
             NumberPadActionButton(
                 text = option.code.uppercase(),
                 outlined = asset != option,
@@ -288,9 +295,12 @@ private fun PaymentRequestAssetSelector(
                 onClick = {
                     if (option != asset) {
                         runCatching {
-                            amount?.takeIf { it.atomic > 0uL }?.convertedTo(
-                                option, currencies.paykitRate, Clock.System.now().toEpochMilliseconds()
-                            ) ?: PaykitAmount(option, 0uL)
+                            conversion.convert(
+                                amount,
+                                option,
+                                currencies.paykitRate,
+                                Clock.System.now().toEpochMilliseconds()
+                            )
                         }.onSuccess(onConverted).onFailure { onUnavailable() }
                     }
                 },

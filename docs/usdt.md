@@ -61,6 +61,8 @@ Core waits for the app to acknowledge a VSS upload before first submission or au
 
 Restore merges records for the derived account without overwriting newer local outcomes. Signed operations imported into an empty database are reconciled against chain evidence before retry; already discovered transactions retain their restored application IDs. A failed restore retains the downloaded envelope and blocks replacement backups. Bitcoin-only backups remain readable. Seed-only recovery restores account control and chain history, but cannot reconstruct a never-mined signed operation or its Paykit attribution. Missing evidence never authorizes a second payment.
 
+A backup containing USDT recovery data requires a build with USDT configured to complete the restore. A build with USDT compiled out retains the downloaded recovery envelope and keeps replacement backups blocked; it does not discard the USDT state to finish a Bitcoin-only restore. Resume with a compatible USDT-enabled build. Turning USDT off in Settings is separate from this build limitation and does not remove recovery data.
+
 ## Outbound provider selection
 
 Configure `USDT_BRIDGES_URL` with the gateway's credential-free `/v1/usdt/bridges` route to enable Orchestra. The network selector combines the gateway's enabled Orchestra destinations with the app's `USDT_BRIDGE_NETWORKS` USDT0 destinations. Direct Arbitrum and Paykit remain unchanged. Core chooses the best usable estimated receipt per maximum total source debit, including the source paymaster fee; a tie prefers USDT0.

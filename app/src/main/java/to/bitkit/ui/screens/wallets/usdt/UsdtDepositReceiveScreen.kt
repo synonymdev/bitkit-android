@@ -356,7 +356,7 @@ private fun ColumnScope.Content(
             }, modifier = Modifier.testTag("UsdtReceiveFeesContinue"))
         }
         ReceivePage.ADDRESS -> {
-            val atomic = runCatching { PaykitAmount.parse(PaykitAsset.USDT, amount).atomic }.getOrNull()
+            val atomic = runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount).atomic }.getOrNull()
             val uri = if (atomic == null) wallet.receiveUri else wallet.receiveUri + "&uint256=$atomic"
             UsdtReceiveContent(
                 address = state.address?.address ?: wallet.address,
@@ -502,6 +502,7 @@ private fun DepositDetail(
         TextInput(
             value = address,
             onValueChange = { if (!busy) onAddress(it) },
+            enabled = !busy,
             placeholder = stringResource(R.string.usdt__deposit_refund_address),
             modifier = Modifier.testTag("UsdtRefundAddress")
         )

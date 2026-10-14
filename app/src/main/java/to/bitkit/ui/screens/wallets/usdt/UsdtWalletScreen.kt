@@ -136,6 +136,7 @@ fun UsdtWalletScreen(
     var selectedTransferId by rememberSaveable(initialTransferId) { mutableStateOf(initialTransferId) }
     var recipient by rememberSaveable { mutableStateOf(initialRecipient) }
     var amount by rememberSaveable { mutableStateOf(initialAmount) }
+    var maximumAmount by rememberSaveable { mutableStateOf<String?>(null) }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(UsdtDestination.ARBITRUM) }
     val dismissalBlocked = state.busy || state.authenticationRequired
@@ -248,6 +249,8 @@ fun UsdtWalletScreen(
                         destinations = destinations,
                         onDestinationChange = {
                             if (destination != it) {
+                                if (amount == maximumAmount) amount = ""
+                                maximumAmount = null
                                 destination = it
                                 if (recipient.isNotEmpty() && !viewModel.isValidRecipient(recipient, it)) {
                                     page = UsdtPage.MANUAL
@@ -259,7 +262,10 @@ fun UsdtWalletScreen(
                             recipient = it
                             viewModel.edit()
                         },
-                        onAmountChange = { amount = it },
+                        onAmountChange = {
+                            amount = it
+                            maximumAmount = null
+                        },
                         onRecipientContinue = { value ->
                             viewModel.validateRecipient(value, destination) { request ->
                                 if (request.chainId != null) destination = UsdtDestination.ARBITRUM
@@ -275,7 +281,12 @@ fun UsdtWalletScreen(
                             }
                         },
                         onBack = back, onReview = { viewModel.quote(recipient, amount, destination) },
-                        onMaximum = { viewModel.quoteMaximum(recipient, destination) { amount = it } },
+                        onMaximum = {
+                            viewModel.quoteMaximum(recipient, destination) {
+                                amount = it
+                                maximumAmount = it
+                            }
+                        },
                         onConfirm = { viewModel.confirm() }, onDone = dismiss,
                         hideBalance = settings.hideBalance,
                         onDetails = {

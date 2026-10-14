@@ -587,10 +587,10 @@ private fun OnChainDetails(
                         stringResource(R.string.wallet__savings__title)
                     },
                     color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
-                    enabled = uiState.canSwitchFundingSource && interactionsEnabled,
+                    enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
                     isLoading = uiState.isFundingSourceLoading,
                     clickable = interactionsEnabled && !uiState.isRetainedHardwarePayment,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchBitcoinFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -735,9 +735,9 @@ private fun LightningDetails(
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__spending__title),
                     color = Colors.Purple,
-                    enabled = uiState.canSwitchFundingSource && interactionsEnabled,
+                    enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
                     isLoading = uiState.isFundingSourceLoading,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchBitcoinFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )

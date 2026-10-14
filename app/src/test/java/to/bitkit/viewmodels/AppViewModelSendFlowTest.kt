@@ -7901,12 +7901,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        assertTrue(sut.sendUiState.value.paykitUsesUsdt)
-        assertTrue(sut.sendUiState.value.isAmountEditable)
-        sut.onUsdtAmountChange("0.01")
-        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
-        advanceUntilIdle()
-
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
         assertFalse(sut.sendUiState.value.paykitUsesUsdt)
         assertFalse(sut.sendUiState.value.isAmountEditable)
@@ -7928,6 +7922,57 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
         assertEquals(10_000uL, sut.sendUiState.value.amount)
         assertFalse(sut.sendUiState.value.isAmountEditable)
+    }
+
+    @Test
+    fun `confirmation source cycling stays on bitcoin even when the contact accepts USDT`() = test {
+        val bolt11 = "lnbcrt1contactfixed"
+        stubLightningScan(bolt11, amountSats = 10_000u)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 10_000u),
+                usdtRecipient = "0x1111111111111111111111111111111111111111",
+                amount = 10_000u,
+                payMethod = SendMethod.ONCHAIN,
+            ),
+        )
+        repeat(4) {
+            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            advanceUntilIdle()
+            assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+            assertEquals(if (it % 2 == 0) SendMethod.LIGHTNING else SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        }
+    }
+
+    @Test
+    fun `hardware mixed contact uses only its onchain endpoint`() = test {
+        val bolt11 = "lnbcrt1contactfixed"
+        stubLightningScan(bolt11, amountSats = 10_000u)
+        whenever(coreService.validateBitcoinAddress(REGTEST_ADDRESS)).thenReturn(
+            ValidationResult(REGTEST_ADDRESS, NetworkType.REGTEST, AddressType.P2WPKH),
+        )
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(48_000uL))
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            endpoints = listOf(
+                Endpoint(MethodId.Bolt11, bolt11, rawPayload = ""),
+                Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+                Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = ""),
+            ),
+        )
+        advanceUntilIdle()
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertNull(sut.sendUiState.value.usdtRecipient)
     }
 
     @Test

@@ -116,6 +116,10 @@ internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
     }
 }
 
+internal fun NavController.navigateToSendPending(route: SendRoute.Pending) {
+    navigateTo(route) { popUpTo(graph.id) { inclusive = true } }
+}
+
 @Suppress("CyclomaticComplexMethod")
 @Composable
 fun SendSheet(
@@ -266,7 +270,7 @@ fun SendSheet(
                         is SendEffect.NavigateToFeeCustom -> navController.navigateTo(SendRoute.FeeCustom)
                         is SendEffect.NavigateToComingSoon -> navController.navigateTo(SendRoute.ComingSoon)
                         is SendEffect.NavigateToContacts -> navController.navigateTo(SendRoute.ContactSelect)
-                        is SendEffect.NavigateToPending -> navController.navigateTo(
+                        is SendEffect.NavigateToPending -> navController.navigateToSendPending(
                             SendRoute.Pending(
                                 it.paymentHash,
                                 it.amount,
@@ -274,7 +278,7 @@ fun SendSheet(
                                 isOnchain = it.isOnchain,
                                 refusalReason = it.refusalReason,
                             )
-                        ) { popUpTo(startDestination) { inclusive = true } }
+                        )
                         is SendEffect.NavigateToError -> navController.navigateTo(
                             SendRoute.errorFromFailure(
                                 failure = it.failure,
@@ -423,7 +427,7 @@ fun SendSheet(
                         isNodeRunning = uiState.hardwareWalletId != null ||
                             lightningState.nodeLifecycleState.isRunning(),
                         canAutoStart = !isOffline && !shouldShowSyncOverlay,
-                        canGoBack = startDestination != SendRoute.Confirm,
+                        canGoBack = navController.previousBackStackEntry != null,
                         onBack = {
                             val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
                             if (!didPopToAmount && !navController.popBackStack()) {
@@ -602,16 +606,14 @@ fun SendSheet(
                             },
                             onPaymentPending = { paymentHash, amount, paymentRequest ->
                                 appViewModel.preserveContactPaymentContext(paymentHash)
-                                navController.navigateTo(
+                                navController.navigateToSendPending(
                                     SendRoute.Pending(
                                         paymentHash = paymentHash,
                                         amount = amount,
                                         retryRoute = SendRetryRoute.QuickPay,
                                         paymentRequest = paymentRequest,
                                     )
-                                ) {
-                                    popUpTo(startDestination) { inclusive = true }
-                                }
+                                )
                             },
                             onFallBackToConfirm = {
                                 appViewModel.resetQuickPay()

@@ -55,6 +55,8 @@ data class PaykitAmount(val asset: PaykitAsset, val atomic: ULong) {
             return PaykitAmount(asset, atomic(scaled))
         }
 
+        fun parseInput(asset: PaykitAsset, value: String): PaykitAmount = parse(asset, value.trim().removeSuffix("."))
+
         private fun atomic(value: BigDecimal): ULong = value.setScale(0, RoundingMode.CEILING)
             .toPlainString().toULongOrNull() ?: throw PaykitAmountError.InvalidAmount
     }
@@ -88,4 +90,23 @@ data class PaykitAmount(val asset: PaykitAsset, val atomic: ULong) {
     }
 
     private fun decimalValue() = atomic.toString().toBigDecimal().movePointLeft(asset.decimals)
+}
+
+class PaykitAmountConversion {
+    private var original: PaykitAmount? = null
+    private var converted: PaykitAmount? = null
+
+    fun convert(
+        input: PaykitAmount?,
+        asset: PaykitAsset,
+        rate: PaykitExchangeRate?,
+        nowMillis: Long,
+    ): PaykitAmount {
+        val source = if (input == converted) original else input
+        val result = source?.takeIf { it.atomic > 0uL }?.convertedTo(asset, rate, nowMillis)
+            ?: PaykitAmount(asset, 0uL)
+        original = source
+        converted = result
+        return result
+    }
 }

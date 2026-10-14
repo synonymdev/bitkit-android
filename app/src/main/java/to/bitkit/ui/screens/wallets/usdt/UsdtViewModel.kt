@@ -29,6 +29,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.UsdtSelfSendError
 import to.bitkit.repositories.parseUsdtPaymentRequest
@@ -68,6 +69,11 @@ class UsdtViewModel @Inject constructor(
         SettingsData(hideBalance = true)
     )
     var sendPayment: (suspend (UsdtQuote) -> Unit)? = null
+        set(value) {
+            if (value != null) requiresPaymentContext = true
+            field = value
+        }
+    private var requiresPaymentContext = false
     private val _state = MutableStateFlow(UsdtSendState())
     private var maximumQuote: UsdtQuote? = null
     val state = _state.asStateFlow()
@@ -117,7 +123,7 @@ class UsdtViewModel @Inject constructor(
     }
 
     fun quote(recipient: String, amount: String, destination: UsdtDestination) = viewModelScope.launch {
-        if (_state.value.busy || _state.value.authenticationRequired || _state.value.warning != null) return@launch
+        if (!_state.value.canQuote) return@launch
         _state.update { UsdtSendState(busy = true, refreshError = it.refreshError) }
         val maximum = maximumQuote?.takeIf {
             it.recipient == recipient && it.destination == destination && usdtFormatAmount(it.amount) == amount
@@ -139,7 +145,7 @@ class UsdtViewModel @Inject constructor(
         destination: UsdtDestination,
         onAmount: (String) -> Unit,
     ) = viewModelScope.launch {
-        if (_state.value.busy || _state.value.authenticationRequired || _state.value.warning != null) return@launch
+        if (!_state.value.canQuote) return@launch
         _state.update { UsdtSendState(busy = true, preparingMaximum = true, refreshError = it.refreshError) }
         repo.quoteMaximum(recipient, destination)
             .onSuccess { quote ->
@@ -220,6 +226,7 @@ class UsdtViewModel @Inject constructor(
         _state.update { it.copy(busy = true, error = null) }
         runSuspendCatching {
             val payment = sendPayment
+            if (requiresPaymentContext && payment == null) throw PaykitPaymentRequestError.RequestUnavailable
             if (payment != null) payment(quote) else repo.send(quote).getOrThrow()
         }
             .onSuccess {
@@ -251,7 +258,10 @@ data class UsdtSendState(
     val confirmedWarnings: ImmutableList<SanityWarning> = persistentListOf(),
     @StringRes val error: Int? = null,
     @StringRes val refreshError: Int? = null,
-)
+) {
+    val canQuote: Boolean
+        get() = !busy && !submitted && !authenticationRequired && warning == null
+}
 
 private fun UsdtQuote.warnings(balance: ULong?, warnOver100: Boolean): List<SanityWarning> = buildList {
     if (balance != null && amount > balance / 2u) add(SanityWarning.OVER_HALF_BALANCE)
@@ -263,6 +273,8 @@ private fun UsdtQuote.warnings(balance: ULong?, warnOver100: Boolean): List<Sani
 @StringRes
 @Suppress("CyclomaticComplexMethod")
 internal fun Throwable.messageResource(): Int = when (this) {
+    is PaykitPaymentRequestError.RequestExpired -> R.string.wallet__payment_request_expired
+    is PaykitPaymentRequestError -> R.string.wallet__payment_request_unavailable
     is UsdtSelfSendError -> R.string.usdt__error_self_send
     is UsdtException.NotConfigured -> R.string.usdt__error_configuration
     is UsdtException.InvalidAmount -> R.string.usdt__error_amount

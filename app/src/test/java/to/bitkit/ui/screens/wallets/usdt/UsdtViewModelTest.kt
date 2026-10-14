@@ -42,6 +42,53 @@ import kotlin.test.assertTrue
 
 class UsdtViewModelTest : BaseUnitTest() {
     @Test
+    fun `settled payment rejects replacement quotes until explicitly edited`() = test {
+        val viewModel = createViewModel()
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        viewModel.waitForTransfer()
+        viewModel.quote(quote.recipient, "2", quote.destination).join()
+        viewModel.quoteMaximum(quote.recipient, quote.destination) {
+            error("Submitted payment must stay terminal")
+        }.join()
+        viewModel.confirm().join()
+        assertTrue(viewModel.state.value.submitted)
+        assertEquals(quote, viewModel.state.value.quote)
+        verify(repo, times(1)).quote(any(), any(), any(), any())
+        verify(repo, never()).quoteMaximum(any(), any())
+        verify(repo, times(1)).send(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `detached Paykit handler cannot fall back to raw send after authentication`() = test {
+        val viewModel = createViewModel()
+        viewModel.sendPayment = { error("Detached handler must not run") }
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        viewModel.sendPayment = null
+        viewModel.authenticationVerified()
+        assertEquals(R.string.wallet__payment_request_unavailable, viewModel.state.value.error)
+        assertFalse(viewModel.state.value.submitted)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `detached Paykit handler cannot fall back while payment settings load`() = test {
+        val viewModel = createViewModel()
+        val delayed = MutableSharedFlow<SettingsData>()
+        whenever(settingsStore.data).thenReturn(delayed)
+        viewModel.sendPayment = { error("Detached handler must not run") }
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        val confirmation = viewModel.confirm()
+        viewModel.sendPayment = null
+        delayed.emit(SettingsData(isPinEnabled = false))
+        confirmation.join()
+        assertEquals(R.string.wallet__payment_request_unavailable, viewModel.state.value.error)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
+    @Test
     fun `fee collection failures offer an actionable message without classifying other rejections`() {
         assertEquals(
             R.string.usdt__error_fee_collection,

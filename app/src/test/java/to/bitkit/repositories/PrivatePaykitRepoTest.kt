@@ -61,6 +61,7 @@ import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PrivatePaykitContactCacheData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.UsdtPreference
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
@@ -110,6 +111,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val paymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val coreService = mock<CoreService>()
+    private val usdtRepo = mock<UsdtRepo> {
+        on { state }.thenReturn(MutableStateFlow(UsdtWalletState()))
+    }
     private val clock = mock<Clock>()
 
     private val cacheData = MutableStateFlow(PrivatePaykitCacheData())
@@ -399,6 +403,28 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(paykitSdkService).hasPrivatePaymentAccess()
         verify(pubkyService, never()).currentPublicKey()
+    }
+
+    @Test
+    fun `private bitcoin publication survives optional USDT failure but cancellation propagates`() = test {
+        settingsData.value = SettingsData(
+            publicPaykitUsdtEnabled = true,
+            usdtPreference = UsdtPreference.ENABLED,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
+        sut.setContactPreparationActive(false)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+        val updates = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(updates.capture(), eq(false))
+        assertEquals(listOf(MethodId.P2wpkh.rawValue), updates.firstValue.single().reservations.map { it.identifier })
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
+        assertFailsWith<CancellationException> {
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
+        }
     }
 
     @Test
@@ -3575,7 +3601,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         walletRepo = walletRepo,
         publicPaykitRepo = publicPaykitRepo,
         paymentRequestRepo = paymentRequestRepo,
-        usdtRepo = mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
+        usdtRepo = usdtRepo,
         coreService = coreService,
         clock = clock,
     ).also { it.setContactPreparationActive(true) }

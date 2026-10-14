@@ -67,7 +67,43 @@ import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
+@Suppress("LargeClass")
 class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
+    @Test
+    fun `started missing transfers stay bound but terminal proof free transfers release their rail`() = test {
+        val repo = repo()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        stubSend(Result.success(mock()))
+        repo.send(quote) {}.getOrThrow()
+        repo.reconcile().getOrThrow()
+        assertTrue(repo.hasBinding(request.id))
+        for (status in listOf(UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED)) {
+            stubStoredTransfer(Result.success(mock { on { this.status }.thenReturn(status) }))
+            repo.reconcile().getOrThrow()
+            assertFalse(repo.hasBinding(request.id))
+            assertTrue(repo.attempts.value.single().paymentStarted)
+        }
+        stubStoredTransfer(Result.success(null))
+        repo.reconcile().getOrThrow()
+        assertTrue(repo.hasBinding(request.id))
+    }
+
+    @Test
+    fun `unparseable proof period does not block later valid receipts`() = test {
+        val malformed = receivedRequest()
+        whenever(malformed.paymentProofs.single().billingPeriod)
+            .thenReturn(BillingPeriod("not-an-instant", "2027-02-01T08:00:00Z"))
+        val valid = receivedRequest("550e8400-e29b-41d4-a716-446655440001")
+        whenever(sdk.paymentRequests()).thenReturn(listOf(malformed, valid))
+        stubVerification(
+            Result.success(UsdtVerifiedPayment("payment", "transfer", "sender", address, 50_000u, 1_800_000_000u))
+        )
+        val repo = repo()
+        repo.reconcile().getOrThrow()
+        assertEquals(valid.paymentRequestId, repo.receipts.value.single().requestId.paymentRequestId)
+        verify(wallet, times(1)).verifyPaymentProof(any(), any())
+    }
+
     private val identity = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     private val contact = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     private val address = "0x1111111111111111111111111111111111111111"

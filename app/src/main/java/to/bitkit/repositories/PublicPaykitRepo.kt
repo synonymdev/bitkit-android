@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import androidx.annotation.VisibleForTesting
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.validateBitcoinAddress
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -107,6 +108,7 @@ class PublicPaykitRepo @Inject constructor(
     private val usdtRepo: UsdtRepo,
 ) {
     companion object {
+        private const val TAG = "PublicPaykitRepo"
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
 
         internal val payablePreferenceOrder = listOf(
@@ -370,7 +372,12 @@ class PublicPaykitRepo @Inject constructor(
         }
 
         if (isUsdtPaymentOptionEnabled(settings, usdtRepo.state.value)) {
-            endpoints += usdtRepo.paymentEndpoint().getOrThrow()
+            usdtRepo.paymentEndpoint()
+                .onSuccess { endpoints += it }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    Logger.warn("Failed to prepare public Paykit USDT endpoint", it, context = TAG)
+                }
         }
 
         if (endpoints.isEmpty() && requireEndpoint) throw PublicPaykitError.NoSupportedEndpoint

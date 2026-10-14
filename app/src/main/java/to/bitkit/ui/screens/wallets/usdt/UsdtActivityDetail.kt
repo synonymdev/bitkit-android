@@ -53,6 +53,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityRowSurface
 import to.bitkit.ui.screens.wallets.activity.components.AmountViewContent
 import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.uiDateText
@@ -257,7 +258,10 @@ private fun UsdtActivitySummary(transfer: UsdtTransfer, hideBalance: Boolean) {
             modifier = Modifier.weight(1f)
         )
     }
-    if (transfer.destination != UsdtDestination.ARBITRUM) {
+    if (transfer.destination != UsdtDestination.ARBITRUM && transfer.status !in setOf(
+            UsdtTransferStatus.BRIDGE_REFUNDED, UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED,
+        )
+    ) {
         SendCell(
             caption = stringResource(
                 if (transfer.status == UsdtTransferStatus.CONFIRMED) {
@@ -340,6 +344,9 @@ internal val UsdtTransfer.activityAmount: ULong get() {
 
 @Composable
 private fun paykitContactName(transferId: String): String? {
+    val settings = settingsViewModel ?: return null
+    val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    if (!isPaykitEnabled) return null
     val app = appViewModel ?: return null
     val attempts by app.paykitUsdtPayments.attempts.collectAsStateWithLifecycle()
     val receipts by app.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()

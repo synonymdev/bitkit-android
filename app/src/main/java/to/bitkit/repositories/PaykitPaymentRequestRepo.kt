@@ -239,6 +239,7 @@ private data class ParsedPaykitPaymentRequestTerms(
     val endpoints: List<String>,
     val expiresAt: Instant?,
     val paymentDeadlineAt: Instant?,
+    val convertedToBitcoin: Boolean = false,
 )
 
 enum class PaykitPaymentRequestDeliveryStatus { Queued, Sent }
@@ -1916,17 +1917,24 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     if (requiresActionableRequest && paymentDeadlineAt?.let { now > it } == true) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
     }
-    val asset = PaykitAsset.entries.firstOrNull { it.code == requestTerms.amount.asset }
-        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
-    val amount = runCatching { PaykitAmount.parse(asset, requestTerms.amount.value) }.getOrNull()
-        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount)
-    if (asset == PaykitAsset.BTC && amount.atomic > ULong.MAX_VALUE / 1000uL) {
-        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.AmountOutOfRange)
-    }
-    val endpoints = PaykitIssuerInterop.supportedEndpointIdentifiers(
+    val supportedEndpoints = PaykitIssuerInterop.supportedEndpointIdentifiers(
         requestTerms.acceptedPaymentEndpointIdentifiers,
         network,
     )
+    val asset = PaykitAsset.entries.firstOrNull { it.code == requestTerms.amount.asset }
+    val bitcoinPayment = if (asset == null) {
+        PaykitBitcoinRequestPricing.bitcoinPayment(requestTerms, supportedEndpoints.filter { it.startsWith("btc-") })
+            ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
+    } else {
+        null
+    }
+    val amount = bitcoinPayment?.let { PaykitAmount(PaykitAsset.BTC, it.amountSats) }
+        ?: runCatching { PaykitAmount.parse(requireNotNull(asset), requestTerms.amount.value) }.getOrNull()
+        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount)
+    if (amount.asset == PaykitAsset.BTC && amount.atomic > ULong.MAX_VALUE / 1000uL) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.AmountOutOfRange)
+    }
+    val endpoints = bitcoinPayment?.endpointIdentifiers ?: supportedEndpoints
     if (requiresActionableRequest && endpoints.isEmpty()) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.NoSupportedEndpoint)
     }
@@ -1940,7 +1948,14 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
     }
 
-    val parsedTerms = ParsedPaykitPaymentRequestTerms(requestTerms, amount, endpoints, expiresAt, paymentDeadlineAt)
+    val parsedTerms = ParsedPaykitPaymentRequestTerms(
+        requestTerms,
+        amount,
+        endpoints,
+        expiresAt,
+        paymentDeadlineAt,
+        bitcoinPayment != null,
+    )
     return PaykitPaymentRequestParseResult.Parsed(toPaykitPaymentRequest(expectedRole, parsedTerms, now))
 }
 
@@ -1954,7 +1969,11 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     counterparty = counterparty,
     amount = parsedTerms.amount,
     paymentReference = parsedTerms.terms.paymentReference.exportText(),
-    pricing = PaykitRequestPricing(parsedTerms.terms.conversion, parsedTerms.terms.paymentDeadline, conversionQuotes),
+    pricing = PaykitRequestPricing(
+        parsedTerms.terms.conversion.takeUnless { parsedTerms.convertedToBitcoin },
+        parsedTerms.terms.paymentDeadline,
+        conversionQuotes,
+    ),
     note = parsedTerms.terms.metadata.note(),
     createdAt = lastEventAt?.let { runCatching { Instant.parse(it) }.getOrNull() },
     expiresAt = parsedTerms.expiresAt,

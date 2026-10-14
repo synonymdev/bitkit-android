@@ -63,6 +63,7 @@ import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAmountConversion
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
@@ -122,6 +123,7 @@ fun CreateSubscriptionSheet(
     val receivingMethods by appViewModel.paykitReceivingMethods.collectAsStateWithLifecycle()
     var step by remember { mutableStateOf(SubscriptionCreationStep.Details) }
     var amount by remember { mutableStateOf(PaykitAmount(PaykitAsset.BTC, 0uL)) }
+    val amountConversion = remember { PaykitAmountConversion() }
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var frequency by remember { mutableStateOf(PaykitRecurrenceUnit.Month) }
@@ -149,15 +151,12 @@ fun CreateSubscriptionSheet(
             onClickAsset = { asset ->
                 if (asset != amount.asset) {
                     runCatching {
-                        if (amount.atomic == 0uL) {
-                            PaykitAmount(asset, 0uL)
-                        } else {
-                            amount.convertedTo(
-                                asset,
-                                currencies.paykitRate,
-                                Clock.System.now().toEpochMilliseconds()
-                            )
-                        }
+                        amountConversion.convert(
+                            amount,
+                            asset,
+                            currencies.paykitRate,
+                            Clock.System.now().toEpochMilliseconds()
+                        )
                     }.onSuccess { amount = it }.onFailure {
                         appViewModel.toast(
                             type = Toast.ToastType.ERROR,
@@ -194,6 +193,10 @@ fun CreateSubscriptionSheet(
         )
         SubscriptionCreationStep.Amount -> PaymentRequestAmountContent(
             amountInputViewModel = amountInputViewModel,
+            allowedAssets = listOf(PaykitAsset.BTC, PaykitAsset.USD).filter {
+                PaykitRequestPricing.subscriptionEndpoints(it, receivingMethods).isNotEmpty()
+            }.toImmutableList(),
+            conversion = amountConversion,
             initialDraft = PaykitPaymentRequestDraft(
                 amount = amount,
                 note = name,

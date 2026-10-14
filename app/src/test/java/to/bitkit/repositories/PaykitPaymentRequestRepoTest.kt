@@ -81,6 +81,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
@@ -968,6 +969,26 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.refresh().getOrThrow()
         assertEquals(record.paymentRequestId, sut.pendingRequests.value.single().paymentRequestId)
+    }
+
+    @Test
+    fun `fixed unknown denominations retain the prior bitcoin fallback without applying the rate twice`() {
+        for (asset in listOf("eur", "gbp")) {
+            val deadline = PaymentDeadline.At((clock.now() + 1.hours).toString())
+            val record = paymentRequestRecord(
+                asset = asset,
+                amount = "10",
+                conversion = PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.000011"))),
+                paymentDeadline = deadline,
+                endpoints = listOf(MethodId.Bolt11.rawValue, MethodId.UsdtArbitrum.rawValue),
+            )
+            val parsed = record.parseIncomingPaykitPaymentRequest(clock.now()) as PaykitPaymentRequestParseResult.Parsed
+            assertEquals(PaykitAmount(PaykitAsset.BTC, 11_000u), parsed.request.amount)
+            assertEquals(listOf(MethodId.Bolt11.rawValue), parsed.request.acceptedPaymentEndpointIdentifiers)
+            assertEquals(parsed.request.amount, parsed.request.payment(MethodId.Bolt11, clock.now()).amount)
+            assertEquals(deadline, parsed.request.pricing.deadline)
+            assertEquals(asset, record.terms?.amount?.asset)
+        }
     }
 
     @Test

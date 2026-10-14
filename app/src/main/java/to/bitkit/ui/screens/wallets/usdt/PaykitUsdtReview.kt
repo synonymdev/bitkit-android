@@ -62,7 +62,9 @@ fun PaykitUsdtReview(
         }
     }
     LaunchedEffect(Unit) {
-        viewModel.quote(requireNotNull(uiState.usdtRecipient), uiState.paykitAmount, UsdtDestination.ARBITRUM)
+        if (viewModel.state.value.quote == null) {
+            viewModel.quote(requireNotNull(uiState.usdtRecipient), uiState.paykitAmount, UsdtDestination.ARBITRUM)
+        }
     }
     LaunchedEffect(state.submitted, lifecycle) {
         if (state.submitted) {
