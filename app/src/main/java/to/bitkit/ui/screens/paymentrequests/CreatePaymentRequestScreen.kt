@@ -41,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -86,6 +87,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
@@ -392,7 +394,11 @@ internal fun PaymentRequestDetailsContent(
                 )
             }
             VerticalSpacer(32.dp)
-            Caption13Up(text = stringResource(R.string.wallet__payment_request_note), color = Colors.White64)
+            Caption13Up(
+                text = stringResource(R.string.wallet__payment_request_note),
+                color = Colors.White64,
+                style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+            )
             VerticalSpacer(8.dp)
             TextInput(
                 value = note,
@@ -415,11 +421,12 @@ internal fun PaymentRequestDetailsContent(
             ) {
                 PubkyContactAvatar(profile = contact, size = 40.dp)
                 Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-                    BodyMSB(text = contact.name, maxLines = 1)
-                    BodyS(
+                    BodyMSB(text = contact.name, maxLines = 1, letterSpacing = 0.sp)
+                    CaptionB(
                         text = note.ifBlank { stringResource(R.string.wallet__payment_request) },
                         color = Colors.White64,
                         maxLines = 1,
+                        letterSpacing = 0.sp,
                     )
                 }
                 PaykitAmountCell(initialDraft.amount)
@@ -438,7 +445,11 @@ internal fun PaymentRequestDetailsContent(
                             .testTag("PaymentRequestExpiry${option.name}"),
                     ) {
                         VerticalSpacer(8.dp)
-                        CaptionB(text = option.title(), color = if (isSelected) Colors.White else Colors.White50)
+                        CaptionB(
+                            text = option.title(),
+                            color = if (isSelected) Colors.White else Colors.White50,
+                            letterSpacing = 0.sp,
+                        )
                         VerticalSpacer(8.dp)
                         HorizontalDivider(
                             thickness = 2.dp,

@@ -35,9 +35,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LnurlPayData
@@ -85,6 +87,7 @@ import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
@@ -511,6 +514,10 @@ private fun FundingSourceOption(option: SendFundingOption, state: SendUiState, o
         WalletBalanceContent(
             title = title,
             icon = { FundingSourceIcon(source) },
+            titleStyle = AppTextStyles.CaptionM.copy(
+                letterSpacing = 1.sp,
+                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+            ),
             titleTrailing = {
                 option.transportType?.let { transport ->
                     HorizontalSpacer(8.dp)
@@ -556,7 +563,8 @@ private fun FundingSourceBalance(option: SendFundingOption) {
     val source = option.source
     if (source == SendFundingSource.Usdt) {
         BodyMSB(
-            if (hidden) UiConstants.HIDE_BALANCE_SHORT else usdt?.balance?.let { usdtOverviewAmount(it) } ?: "—"
+            if (hidden) UiConstants.HIDE_BALANCE_SHORT else usdt?.balance?.let { usdtOverviewAmount(it) } ?: "—",
+            letterSpacing = 0.sp,
         )
     } else {
         MoneyMSB(
@@ -567,15 +575,7 @@ private fun FundingSourceBalance(option: SendFundingOption) {
             },
             unit = PrimaryDisplay.BITCOIN,
             showSymbol = false,
-        )
-    }
-    if (source == SendFundingSource.Spending) {
-        HorizontalSpacer(4.dp)
-        Icon(
-            painterResource(R.drawable.ic_transfer),
-            contentDescription = null,
-            tint = Colors.White64,
-            modifier = Modifier.size(16.dp)
+            letterSpacing = 0.sp,
         )
     }
 }

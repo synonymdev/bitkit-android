@@ -371,6 +371,7 @@ private fun UsdtSharingChoice(
                 BodyM(
                     text = stringResource(R.string.profile__auth_approval_share_usdt_optional),
                     color = Colors.White64,
+                    letterSpacing = 0.sp,
                     modifier = Modifier.weight(1f)
                 )
                 Switch(

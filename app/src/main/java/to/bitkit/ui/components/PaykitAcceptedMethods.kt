@@ -2,9 +2,10 @@ package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
@@ -30,7 +31,10 @@ fun PaykitAcceptedMethods(
     Column(modifier = modifier) {
         Caption13Up(text = title, color = Colors.White64)
         VerticalSpacer(8.dp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             PaykitPaymentOption.entries.forEach { option ->
                 val endpoints = option.endpoints(availableMethods)
                 if (endpoints.isNotEmpty()) {
@@ -41,20 +45,17 @@ fun PaykitAcceptedMethods(
                             PaykitPaymentOption.Spending -> stringResource(R.string.lightning__spending)
                             PaykitPaymentOption.Usdt -> "USDT"
                         },
-                        color = if (!selected) {
-                            Colors.White32
-                        } else {
-                            when (option) {
-                                PaykitPaymentOption.Savings -> Colors.Brand
-                                PaykitPaymentOption.Spending -> Colors.Purple
-                                PaykitPaymentOption.Usdt -> Colors.Usdt
-                            }
+                        color = when (option) {
+                            PaykitPaymentOption.Savings -> Colors.Brand
+                            PaykitPaymentOption.Spending -> Colors.Purple
+                            PaykitPaymentOption.Usdt -> Colors.Usdt
                         },
                         outlined = true,
                         textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
-                        trailingIcon = R.drawable.ic_x.takeIf { selected },
+                        trailingIcon = if (selected) R.drawable.ic_x else R.drawable.ic_plus_small,
                         onClick = { onClickMethod(option) },
                         modifier = Modifier
+                            .alpha(if (selected) 1f else 0.5f)
                             .semantics { this.selected = selected }
                             .testTag("${testTagPrefix}Accept-${option.id}")
                     )

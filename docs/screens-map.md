@@ -70,7 +70,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| CreatePaymentRequestScreen.kt | Payment Request (from Receive > Contacts OR Contact profile OR Payment Requests) › Request payment enter amount / Payment Request (from Edit invoice) › [Request payment details](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49115-131077) |
+| CreatePaymentRequestScreen.kt | Payment Request (from Receive > Contacts OR Contact profile OR Payment Requests) › Request payment enter amount / Payment Request (from Edit invoice) › Request payment details |
 | IncomingPaymentRequestDetailsScreen.kt | Subscriptions › Payment Request Details |
 | PaymentRequestsScreen.kt | Payment Requests › Payment Requests |
 
@@ -121,7 +121,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| CreateSubscriptionScreen.kt | Subscriptions › [Create Subscription](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49027-623659) / Choose Subscription Recipient / Sent Subscription Proposal |
+| CreateSubscriptionScreen.kt | Subscriptions › Create Subscription / Choose Subscription Recipient / Sent Subscription Proposal |
 | SubscriptionsScreen.kt | Subscriptions › Subscriptions Intro / Subscriptions overview |
 
 ## ui/screens/transfer
@@ -225,7 +225,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| UsdtDepositReceiveScreen.kt | Receive USDT › [Network selection and Cross-Network Deposits](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49893-663424) / HW QR / Recipient / Specify Amount (populated) / Fee To Add Liquidity |
+| UsdtDepositReceiveScreen.kt | Receive USDT › Network selection and Cross-Network Deposits / HW QR / Recipient / Specify Amount (populated) / Fee To Add Liquidity |
 | UsdtDepositsScreen.kt | Activity › Transaction Cross Network USDT / Transaction Receiving USDT Tech details |
 | UsdtWalletScreen.kt | Savings, Spending, Hardware, USDT Balances › Wallet USDT (funds & activity) / Wallet USDT (empty) |
 

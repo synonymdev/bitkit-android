@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -100,6 +101,7 @@ import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -343,7 +345,11 @@ internal fun CreateSubscriptionDetails(
                     modifier = Modifier.testTag("SubscriptionAcceptedMethods")
                 )
                 VerticalSpacer(24.dp)
-                Caption13Up(text = stringResource(R.string.subscriptions__name), color = Colors.White64)
+                Caption13Up(
+                    text = stringResource(R.string.subscriptions__name),
+                    color = Colors.White64,
+                    style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                )
                 VerticalSpacer(8.dp)
                 TextInput(
                     value = name,
@@ -355,7 +361,11 @@ internal fun CreateSubscriptionDetails(
                 VerticalSpacer(24.dp)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Caption13Up(text = stringResource(R.string.subscriptions__description), color = Colors.White64)
+                        Caption13Up(
+                            text = stringResource(R.string.subscriptions__description),
+                            color = Colors.White64,
+                            style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                        )
                         VerticalSpacer(8.dp)
                         TextInput(
                             value = description,
@@ -367,7 +377,11 @@ internal fun CreateSubscriptionDetails(
                         )
                     }
                     Column {
-                        Caption13Up(text = stringResource(R.string.subscriptions__custom_icon), color = Colors.White64)
+                        Caption13Up(
+                            text = stringResource(R.string.subscriptions__custom_icon),
+                            color = Colors.White64,
+                            style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                        )
                         VerticalSpacer(8.dp)
                         val iconDescription = stringResource(R.string.subscriptions__custom_icon_description)
                         Box(
@@ -416,6 +430,8 @@ private fun SubscriptionFrequencyPicker(
         currentTabIndex = creationFrequencies.indexOfFirst { it.unit == selected },
         onTabChange = { onSelected(it.unit) },
         selectedColor = Colors.White,
+        labelStyle = AppTextStyles.CaptionB.copy(letterSpacing = 0.sp),
+        labelMinHeight = 18.dp,
     )
 }
 

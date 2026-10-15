@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -51,7 +51,7 @@ fun NumberPadActionButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = modifier
-                .requiredHeight(height)
+                .heightIn(min = height)
                 .then(
                     if (outlined) {
                         Modifier.border(width = 1.dp, color = color, shape = buttonShape)
@@ -98,7 +98,7 @@ fun NumberPadActionButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = modifier
-                .requiredHeight(height)
+                .heightIn(min = height)
                 .border(
                     width = 1.dp,
                     color = color,

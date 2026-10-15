@@ -627,6 +627,7 @@ private fun UsdtReviewHeader(
 
 @Composable
 private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
+    var showFullAddress by rememberSaveable(quote.recipient) { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         UsdtDetailField(caption = stringResource(R.string.usdt__pay_from), modifier = Modifier.weight(1f)) {
             NumberPadActionButton(
@@ -694,9 +695,12 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
             SelectionContainer {
                 BodySSB(
                     quote.recipient,
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                    style = UsdtDetailStyles.Value.copy(letterSpacing = 0.sp)
+                    maxLines = if (showFullAddress) Int.MAX_VALUE else 1,
+                    overflow = if (showFullAddress) TextOverflow.Clip else TextOverflow.MiddleEllipsis,
+                    style = UsdtDetailStyles.Value.copy(letterSpacing = 0.sp),
+                    modifier = Modifier
+                        .clickable { showFullAddress = !showFullAddress }
+                        .testTag("UsdtReviewAddress")
                 )
             }
         }

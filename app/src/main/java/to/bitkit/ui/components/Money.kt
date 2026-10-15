@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
@@ -128,11 +129,13 @@ fun MoneyMSB(
     color: Color = MaterialTheme.colorScheme.primary,
     accent: Color = Colors.White64,
     showSymbol: Boolean = unit == PrimaryDisplay.FIAT,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     rememberMoneyText(sats = sats, unit = unit, showSymbol = showSymbol)?.let { text ->
         BodyMSB(
             text = text.withAccent(accentColor = accent),
             color = color,
+            letterSpacing = letterSpacing,
             modifier = modifier.testTag("MoneyText")
         )
     }

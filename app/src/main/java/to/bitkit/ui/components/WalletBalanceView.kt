@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,6 +37,7 @@ import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.animations.BalanceAnimations
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -160,11 +163,19 @@ fun RowScope.WalletBalanceContent(
     icon: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     titleTrailing: @Composable RowScope.() -> Unit = {},
+    titleStyle: TextStyle = AppTextStyles.CaptionM,
     amount: @Composable () -> Unit,
 ) {
     Column(modifier = Modifier.weight(1f).then(modifier)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text13Up(text = title, color = Colors.White64, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            Caption13Up(
+                text = title,
+                color = Colors.White64,
+                style = titleStyle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
             titleTrailing()
         }
         VerticalSpacer(8.dp)

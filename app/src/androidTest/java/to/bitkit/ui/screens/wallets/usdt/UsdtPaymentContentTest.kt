@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.UsdtBridgeProvider
 import com.synonym.bitkitcore.UsdtDestination
@@ -26,6 +29,8 @@ import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import java.util.Locale
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @HiltAndroidTest
 @ComposeUi
@@ -81,6 +86,24 @@ class UsdtPaymentContentTest {
         composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
         total.assertDoesNotExist()
         composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertDoesNotExist()
+    }
+
+    @Test
+    fun recipientAddressCanBeFullyReviewed() {
+        composeTestRule.setContent { Content(UsdtSendState(quote = quote), UsdtPage.AMOUNT) }
+        composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
+        val address = composeTestRule.onNodeWithTag("UsdtReviewAddress")
+        address.performScrollTo().assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        address.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.single().isLineEllipsized(0))
+        address.performClick()
+        composeTestRule.waitForIdle()
+        layouts.clear()
+        address.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.single().lineCount > 1)
+        assertFalse(layouts.single().hasVisualOverflow)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
     }
 
     @Test

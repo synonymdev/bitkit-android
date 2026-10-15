@@ -22,14 +22,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -42,6 +45,8 @@ fun <T : TabItem> CustomTabRowWithSpacing(
     /** Labels that replace a tab's own text, for tabs whose name depends on runtime data. */
     labelOverrides: ImmutableMap<T, String> = persistentMapOf(),
     badgeCount: (T) -> Int? = { null },
+    labelStyle: TextStyle = AppTextStyles.CaptionB,
+    labelMinHeight: Dp = TabBadgeSize,
 ) {
     Column(modifier = modifier) {
         Row(
@@ -59,6 +64,8 @@ fun <T : TabItem> CustomTabRowWithSpacing(
                         text = labelOverrides[tab] ?: tab.uiText,
                         color = if (isSelected) Colors.White else Colors.White50,
                         badgeCount = badgeCount(tab)?.takeIf { it > 0 },
+                        style = labelStyle,
+                        minHeight = labelMinHeight,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickableAlpha { onTabChange(tab) }
@@ -100,10 +107,12 @@ private fun TabLabel(
     color: Color,
     badgeCount: Int?,
     modifier: Modifier = Modifier,
+    style: TextStyle = AppTextStyles.CaptionB,
+    minHeight: Dp = TabBadgeSize,
 ) {
     Layout(
         contents = listOf(
-            { CaptionB(text, maxLines = 1, overflow = TextOverflow.Ellipsis, color = color) },
+            { CaptionB(text, maxLines = 1, overflow = TextOverflow.Ellipsis, color = color, style = style) },
             {
                 badgeCount?.let { count ->
                     Box(
@@ -125,7 +134,7 @@ private fun TabLabel(
             constraints.copy(minWidth = 0, maxWidth = (constraints.maxWidth - 2 * reserved).coerceAtLeast(0))
         )
         val width = constraints.maxWidth
-        val height = maxOf(label.height, TabBadgeSize.roundToPx())
+        val height = maxOf(label.height, minHeight.roundToPx(), badge?.height ?: 0)
 
         layout(width, height) {
             val labelX = (width - label.width) / 2
