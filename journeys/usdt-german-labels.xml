@@ -1,0 +1,23 @@
+<journey name="USDT screens in German">
+  <description>
+    The USDT screens show German text, not English fallbacks, when the app language is German, and
+    no German label is cut off. Use a fresh onboarded wallet with USDT services and cross-network
+    deposits configured, no USDT balance and no deposits. No payment is submitted. Brand and network
+    names (USDT, Tether, Arbitrum, Tron) stay in English.
+
+    The journey changes only the app language and restores it at the end. Restart after each
+    language change if the app asks for it.
+  </description>
+  <actions>
+    <action>From Home, open the menu (id "HeaderMenu") and Settings (id "DrawerSettings"), open Language (id "LanguageSettings"), and record the currently selected language</action>
+    <action>Select Deutsch, confirm the change, then terminate and relaunch Bitkit and unlock if needed</action>
+    <action>On Home, verify the USDT intro sheet (id "UsdtIntro") shows "Neu: USDT", the heading "DOLLAR? DU ENTSCHEIDEST" and the button "USDT aktivieren", with no English text on the sheet</action>
+    <action>Tap "USDT aktivieren" and verify the USDT tile appears on Home</action>
+    <action>Open Receive, select the USDT tab and verify the title reads "Dollar empfangen" and the network row reads "USDT-Netzwerk"</action>
+    <action>Open the network selector and verify the picker (id "UsdtNetworkPicker") shows its explanation in German; close it</action>
+    <action>Tap "Einzahlungen anderer Netze" and verify the screen is titled "Einzahlungen anderer Netze" and the empty state reads "Noch keine Einzahlungen."; go back and close Receive</action>
+    <action>Open the USDT wallet, then Send, and verify the screen is titled "USDT senden" and the network row reads "Empfängernetzwerk"; go back without paying</action>
+    <action>Verify from screenshots of each screen above that no German label is truncated or overlaps its neighbour</action>
+    <action>Open Settings, Language (id "LanguageSettings"), select the language recorded at the start, then terminate and relaunch Bitkit</action>
+  </actions>
+</journey>
