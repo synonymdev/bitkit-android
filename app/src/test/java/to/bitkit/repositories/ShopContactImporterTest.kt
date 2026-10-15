@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -43,11 +44,13 @@ class ShopContactImporterTest {
         whenever(service.importShopContacts(any(), any(), any())).thenReturn(listOf(mock<ContactRecord>()))
         val importer = ShopContactImporter(service)
 
-        repeat(4) { importer.importPage(signIn) { true } }
+        repeat(4) { importer.importPage(PubkySignIn(signIn.publicKey, signIn.generation)) { true } }
 
         verify(service).fetchPublicFile(first, ShopContactImporter.MARKER_MAX_BYTES)
         verify(service).fetchPublicFile(second, ShopContactImporter.MARKER_MAX_BYTES)
         verify(service, times(2)).listPublicDirectoryPage(root, null, 10u)
+        verify(service).importShopContacts(eq(listOf("pubky$seller")), any(), any())
+        verify(service).importShopContacts(eq(listOf("pubky$other")), any(), any())
     }
 
     @Test
@@ -151,12 +154,39 @@ class ShopContactImporterTest {
             }
             val before = refreshes
             offline = true
-            assertFailsWith<IOException> { importer.importPage(signIn, refresh) { true } }
+            assertFailsWith<IOException> {
+                importer.importPage(PubkySignIn(signIn.publicKey, signIn.generation), refresh) { true }
+            }
             assertEquals(before + 1, refreshes)
             verify(service, times(1)).importShopContacts(any(), any(), any())
             offline = false
             importer.importPage(signIn, refresh) { true }
             assertEquals(before + 2, refreshes)
+        }
+    }
+
+    @Test
+    fun `identity or generation change starts a fresh scan`() = runTest {
+        for (next in listOf(PubkySignIn(signIn.publicKey, 2), PubkySignIn("pubky$other", 1))) {
+            val service = mock<PubkyService>()
+            val uri = "$root$seller.json"
+            val nextRoot = "pubky://${next.publicKey.removePrefix("pubky")}${ShopContactImporter.MARKER_PATH}"
+            whenever(service.listPublicDirectoryPage(root, null, 10u)).thenReturn(listOf(uri))
+            whenever(service.listPublicDirectoryPage(nextRoot, null, 10u)).thenReturn(listOf("$nextRoot$seller.json"))
+            stubSeller(service, seller)
+            whenever(service.fetchPublicFile("$nextRoot$seller.json", ShopContactImporter.MARKER_MAX_BYTES))
+                .thenReturn("{\"seller\":\"$seller\",\"completedAt\":1}".toByteArray())
+            whenever(service.importShopContacts(any(), any(), any())).thenReturn(listOf(mock()))
+            val importer = ShopContactImporter(service)
+
+            assertTrue(importer.importPage(signIn) { true })
+            assertTrue(importer.importPage(next) { true })
+
+            verify(service, times(2)).fetchPublicFile(
+                "pubky://$seller${ShopContactImporter.SHOP_PATH}",
+                ShopContactImporter.SHOP_MAX_BYTES,
+            )
+            verify(service, never()).listPublicDirectoryPage(any(), eq(uri), any())
         }
     }
 

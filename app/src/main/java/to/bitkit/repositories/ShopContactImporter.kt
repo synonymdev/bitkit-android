@@ -42,7 +42,7 @@ internal class ShopContactImporter(private val service: PubkyService) {
         if (!mutex.tryLock()) return false
         try {
             requireCurrent(isStillCurrent)
-            if (owner !== signIn) {
+            if (owner?.publicKey != signIn.publicKey || owner?.generation != signIn.generation) {
                 owner = signIn
                 cursor = null
                 handled.clear()
