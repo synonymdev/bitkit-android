@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -28,6 +29,8 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitError
+import to.bitkit.repositories.UsdtDisableError
+import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -43,6 +46,7 @@ class SettingsViewModel @Inject constructor(
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
     private val widgetsStore: WidgetsStore,
     private val widgetsRepo: WidgetsRepo,
+    private val usdtPreferences: UsdtPreferencesRepo,
 ) : ViewModel() {
     private companion object {
         const val TAG = "SettingsViewModel"
@@ -59,6 +63,49 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun reset() = viewModelScope.launch { settingsStore.reset() }
+
+    private val usdtDisableChecked = MutableStateFlow(false)
+    val canDisableUsdt = combine(usdtPreferences.canDisable, usdtDisableChecked) { canDisable, checked ->
+        canDisable && checked
+    }.asStateFlow(initialValue = false)
+    val isUsdtEnabled = usdtPreferences.enabled.asStateFlow(initialValue = false)
+    private val _isUpdatingUsdt = MutableStateFlow(false)
+    val isUpdatingUsdt = _isUpdatingUsdt.asStateFlow()
+
+    fun refreshUsdtAvailability() = viewModelScope.launch {
+        usdtDisableChecked.value = false
+        if (usdtPreferences.enabled.first()) {
+            usdtDisableChecked.value = usdtPreferences.checkCanDisable().isSuccess
+        }
+    }
+
+    fun setUsdtEnabled(enabled: Boolean, onSuccess: () -> Unit = {}) {
+        if (_isUpdatingUsdt.value) return
+        _isUpdatingUsdt.update { true }
+        viewModelScope.launch {
+            try {
+                usdtPreferences.setEnabled(enabled).onSuccess {
+                    onSuccess()
+                    refreshUsdtAvailability()
+                }.onFailure {
+                    Logger.error("Failed to update USDT preference", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.usdt__settings_title),
+                        description = context.getString(
+                            if (it is UsdtDisableError) {
+                                R.string.usdt__disable_pending
+                            } else {
+                                R.string.usdt__disable_unavailable
+                            }
+                        ),
+                    )
+                }
+            } finally {
+                _isUpdatingUsdt.update { false }
+            }
+        }
+    }
 
     val hasSeenSpendingIntro = settingsStore.data.map { it.hasSeenSpendingIntro }
         .asStateFlow(initialValue = false)

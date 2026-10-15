@@ -37,7 +37,10 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         mavenLocal {
-            content { excludeModule("com.synonym", "paykit-android") }
+            content {
+                excludeModule("com.synonym", "paykit-android")
+                excludeModule("com.synonym", "bitkit-core-android")
+            }
         }
         google()
         mavenCentral()

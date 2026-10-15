@@ -93,6 +93,8 @@ dotted strings such as host IPs are where the dropping shows up first.
 
 ## Backend preconditions
 
+In a build with USDT configured, resolve the introductory USDT sheet by enabling or declining it before starting an unrelated journey. The choice persists; a fresh undecided wallet can show the sheet after Home appears. USDT journeys state whether they require opt-in.
+
 The dev flavor targets the **staging regtest** backend (`Env.kt` points regtest at
 `*.stag0.blocktank.to`), so most journeys need nothing running locally beyond the app. Fund and mine
 through the `lsp` helper at the repo root, which talks to the same staging LSP:
@@ -121,6 +123,8 @@ journey PR, which is what made this file conflict on every merge.
 
 | Capability | Provided by |
 | --- | --- |
+| USDT wallet navigation without funding | an onboarded build with USDT configured; provider errors may remain visible while offline — [USDT QA](../docs/usdt-qa.md) |
+| Controlled USDT quotes, provider history, funded submission and recovery | an explicitly configured local USDT gateway/RPC/bundler fixture with owned test accounts and funds; absent from the standard journey environment. Report these steps as blocked unless that setup and transfer authorization are supplied — [USDT QA](../docs/usdt-qa.md) |
 | On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
 | Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
 | Lightning channels, CJIT orders and quoted maxima | the same staging LSP the dev flavor targets, plus its node as an external LN peer — [Backend preconditions](#backend-preconditions), [amount-limits](amount-limits/README.md) |
@@ -155,6 +159,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `coin-selection/manual-wallet-switch.xml` | same file, journey name and actions; iOS can open the picker on the wallet switch, Android on the next swipe. The iOS picker has no accessibility identifiers, so assert its visible "Coin Selection" title. |
 | `payment-requests/requested-resolution-failure.xml` | same file and journey name; both platforms keep the preparing confirmation open across retries and stop automatic retries when it closes. Native progress and request-row identifiers differ. Android's subscription-reminder preparation has no intermediate Send sheet; see `paykit-clock-changes.md`. |
 | `payment-requests/request-summary.xml` | same file and journey name; Android additionally checks the open Sent receipt's live lifecycle subtitle after payment. iOS keeps a static note/date receipt without that subtitle, so those checks are not ported. |
+| `usdt-payment-restoration.xml` | same file, journey name and actions; Android restores an unpaid amount draft after process death, while iOS may return to the wallet. A submitted payment must return to the wallet without reopening the paid draft on either platform. |
 | `payment-requests/success-dismissal.xml` | same file, journey name and actions; both platforms dismiss successful and unpaid requests without a send error or duplicate payment. |
 | `payment-requests/minimum-onchain-amount.xml` | shared — minimum amount feedback, preparation cleanup, and manual retry use the same journey and `PaymentRequestAmountTooLowToast` identifier on both platforms. |
 | No matching intermediate return route | `amount-limits/custom-fee-wallet-switch.xml` is iOS-only: Custom returns through the fee picker before confirmation. Android's `setTransactionSpeed` returns directly to confirmation. |

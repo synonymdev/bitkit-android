@@ -254,10 +254,12 @@ class MainActivity : FragmentActivity() {
                 )
 
                 val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
+                val hideBalance by settingsViewModel.hideBalance.collectAsStateWithLifecycle()
                 if (isAuthenticated && transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
                     NewTransactionSheet(
                         appViewModel = appViewModel,
                         bottomSheetOverlayState = bottomSheetOverlayState,
+                        hideBalance = hideBalance,
                     )
                 }
 

@@ -36,6 +36,7 @@ import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
+import to.bitkit.ui.screens.wallets.receive.ReceiveTab
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
@@ -71,6 +72,7 @@ sealed interface Sheet {
     ) : Sheet
     data class Receive(
         val route: ReceiveRoute = ReceiveRoute.QR,
+        val initialTab: ReceiveTab? = null,
         val hardwareWalletId: String? = null,
         val presentationId: String = UUID.randomUUID().toString(),
     ) : Sheet
@@ -105,7 +107,8 @@ sealed interface Sheet {
 
 /**@param priority Priority levels for timed sheets (higher number = higher priority)*/
 enum class TimedSheetType(val priority: Int) {
-    APP_UPDATE(priority = 5),
+    APP_UPDATE(priority = 6),
+    USDT(priority = 5),
     BACKUP(priority = 4),
     NOTIFICATIONS(priority = 3),
     QUICK_PAY(priority = 2),
