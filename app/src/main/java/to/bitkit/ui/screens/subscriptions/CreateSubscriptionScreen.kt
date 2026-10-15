@@ -412,6 +412,7 @@ internal fun CreateSubscriptionDetails(
         }
         PrimaryButton(
             text = stringResource(R.string.subscriptions__choose_recipient),
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             onClick = onChooseRecipient,
             enabled = amount.atomic > 0uL && name.isNotBlank() && !isLoadingIcon && acceptedMethods.isNotEmpty(),
             modifier = Modifier.testTag("SubscriptionChooseRecipient")

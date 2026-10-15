@@ -477,6 +477,7 @@ internal fun PaymentRequestDetailsContent(
         }
         PrimaryButton(
             text = stringResource(R.string.wallet__payment_request_send_request),
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             enabled = !isCreating && selectedMethods.isNotEmpty(),
             isLoading = isCreating,
             onClick = { onSend(updatedDraft(trimNote = true)) },

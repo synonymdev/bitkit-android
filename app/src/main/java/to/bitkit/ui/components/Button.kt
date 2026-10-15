@@ -190,6 +190,7 @@ fun SecondaryButton(
     fullWidth: Boolean = true,
     hazeState: HazeState? = null,
     testTag: String? = null,
+    textStyle: TextStyle? = null,
 ) {
     val contentPadding = PaddingValues(horizontal = size.secondaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
     val border = size.secondaryBorder(enabled)
@@ -256,7 +257,7 @@ fun SecondaryButton(
                         text?.let {
                             Text(
                                 text = text,
-                                style = size.textStyle(),
+                                style = textStyle ?: size.textStyle(),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )

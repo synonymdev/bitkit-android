@@ -48,6 +48,7 @@ import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.receive.ReceiveTab
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.Colors
 import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
@@ -257,6 +258,7 @@ private fun ColumnScope.NetworkSelector(
         PrimaryButton(
             stringResource(R.string.usdt__deposit_history),
             onClick = onHistory,
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             modifier = Modifier.testTag("UsdtDepositHistory")
         )
     }

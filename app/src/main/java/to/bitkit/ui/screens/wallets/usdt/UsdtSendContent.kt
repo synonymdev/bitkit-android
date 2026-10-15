@@ -95,7 +95,6 @@ import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
-import to.bitkit.ui.utils.withAccent
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("CyclomaticComplexMethod")
@@ -434,26 +433,36 @@ private fun UsdtAmountContent(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically)) {
-                Caption13Up(stringResource(R.string.wallet__send_available), color = Colors.White64)
+                Caption13Up(
+                    stringResource(R.string.wallet__send_available),
+                    color = Colors.White64,
+                    style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                )
                 VerticalSpacer(4.dp)
-                BodySSB(
-                    (
-                        if (hideBalance) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (!hideBalance && wallet.balance != null) BodySSB("$", color = Colors.White64)
+                    BodySSB(
+                        text = if (hideBalance) {
                             UiConstants.HIDE_BALANCE_SHORT
                         } else {
-                            wallet.balance?.let {
-                                "<accent>$</accent> " + usdtOverviewAmount(it)
-                            } ?: "—"
-                        }
-                        ).withAccent(accentColor = Colors.White64)
-                )
+                            wallet.balance?.let { usdtOverviewAmount(it) } ?: "—"
+                        },
+                        style = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+                    )
+                }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.align(Alignment.CenterVertically),
             ) {
-                NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
+                NumberPadActionButton(
+                    text = "USDT",
+                    color = Colors.Usdt,
+                    enabled = false,
+                    textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                    onClick = {},
+                )
                 if (onMaximum != null && amountEditable) {
                     NumberPadActionButton(
                         text = stringResource(R.string.common__max),
@@ -461,6 +470,7 @@ private fun UsdtAmountContent(
                         onClick = onMaximum,
                         enabled = !state.busy,
                         isLoading = state.preparingMaximum,
+                        textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
                         modifier = Modifier.testTag("UsdtMax")
                     )
                 }
@@ -492,6 +502,7 @@ private fun UsdtAmountContent(
             onClick = onReview,
             enabled = amount.isNotEmpty() && !state.busy,
             isLoading = state.busy && !state.preparingMaximum,
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             modifier = Modifier.testTag("UsdtReview")
         )
     }
@@ -552,6 +563,7 @@ private fun UsdtConfirmation(
             loading = state.busy && !completed,
             confirmed = state.busy || state.authenticationRequired || completed,
             progress = swipeProgress,
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             modifier = Modifier.fillMaxWidth().testTag("UsdtConfirm")
         )
     }
@@ -565,6 +577,7 @@ private fun ColumnScope.UsdtReviewDetailsButton(showDetails: Boolean, onClick: (
         ),
         size = ButtonSize.Small,
         onClick = onClick,
+        textStyle = UsdtDetailStyles.SmallButton,
         fullWidth = false,
         color = Colors.White06,
         enableGradient = false,
