@@ -205,6 +205,14 @@ Two mechanics differ from the Android runner, both hit while checking this corpu
   *with a usable ref*. Use that to reach an element the snapshot does not list, rather than
   concluding it is gone.
 
+### Paykit amount-entry rates
+
+`paykit-quoted-usdt.xml` preserves the originally entered amount across denomination switches until
+the user edits it. Conversion uses the current fresh BTC/USD rate on both platforms. An entered
+10 USD must return as exactly 10 USD; its BTC equivalent may change when the rate refreshes.
+Require identical converted amounts only with an unchanged rate. The same rule applies to
+subscription payment-method switches: preserve the originally entered denomination exactly.
+
 ### USDT full-balance errors
 
 `usdt-payment-links-and-scans.xml` accepts either the insufficient-balance message or the paymaster
