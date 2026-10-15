@@ -6,6 +6,88 @@ import kotlin.test.assertEquals
 class ReceiveInvoiceUtilsTest {
 
     @Test
+    fun `pending updates keep Details on the loading view`() {
+        for (tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
+            assertEquals(
+                ReceiveInvoiceDisplayMode.LOADING,
+                getReceiveInvoiceDisplayMode(tab, null, hasInvoiceError = false, isUpdating = true, showDetails = true),
+            )
+        }
+    }
+
+    @Test
+    fun `terminal invoice failure overrides Details while retry shows loading`() {
+        assertEquals(
+            ReceiveInvoiceDisplayMode.ERROR,
+            getReceiveInvoiceDisplayMode(
+                ReceiveTab.AUTO,
+                null,
+                hasInvoiceError = true,
+                isUpdating = false,
+                showDetails = true,
+            ),
+        )
+        assertEquals(
+            ReceiveInvoiceDisplayMode.LOADING,
+            getReceiveInvoiceDisplayMode(
+                ReceiveTab.AUTO,
+                null,
+                hasInvoiceError = true,
+                isUpdating = true,
+                showDetails = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `confirmed CJIT Details remain available during receive updates`() {
+        assertEquals(
+            ReceiveInvoiceDisplayMode.DETAILS,
+            getReceiveInvoiceDisplayMode(
+                ReceiveTab.SPENDING,
+                "confirmed-cjit",
+                hasInvoiceError = true,
+                isUpdating = true,
+                showDetails = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `pending receive updates hide previous invoices on Auto and Spending`() {
+        for (tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
+            assertEquals(
+                "",
+                getInvoiceForTab(
+                    tab = tab,
+                    bip21 = "bitcoin:address?lightning=old-invoice",
+                    bolt11 = "old-invoice",
+                    cjitInvoice = null,
+                    isNodeRunning = true,
+                    onchainAddress = "address",
+                    isReceiveInvoiceUpdating = true,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `pending receive updates preserve a confirmed CJIT invoice`() {
+        assertEquals(
+            "confirmed-cjit",
+            getInvoiceForTab(
+                tab = ReceiveTab.SPENDING,
+                bip21 = "bitcoin:address",
+                bolt11 = "old-invoice",
+                cjitInvoice = "confirmed-cjit",
+                isNodeRunning = true,
+                onchainAddress = "address",
+                isReceiveInvoiceUpdating = true,
+            ),
+        )
+    }
+
+    @Test
     fun `getInvoiceForTab HARDWARE returns only the hardware address`() {
         val result = getInvoiceForTab(
             tab = ReceiveTab.HARDWARE,
@@ -168,7 +250,7 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab AUTO returns onchain BIP21 when BIP21 has no lightning even if node running`() {
+    fun `getInvoiceForTab AUTO stays loading until the unified invoice is ready`() {
         val bip21WithoutLightning = "bitcoin:$testAddress?amount=0.001&message=Test"
 
         val result = getInvoiceForTab(
@@ -180,7 +262,7 @@ class ReceiveInvoiceUtilsTest {
             onchainAddress = testAddress
         )
 
-        assertEquals(bip21WithoutLightning, result)
+        assertEquals("", result)
     }
 
     @Test

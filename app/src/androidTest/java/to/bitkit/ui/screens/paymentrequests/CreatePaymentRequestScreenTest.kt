@@ -109,6 +109,8 @@ class CreatePaymentRequestScreenTest {
         assertEquals(listOf(MethodId.UsdtArbitrum.rawValue), submitted?.acceptedPaymentEndpointIdentifiers)
         composeTestRule.onNodeWithTag("PaymentRequestAccept-usdt").performClick().assertIsNotSelected()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsNotEnabled()
+        // Chip clicks use a 500 ms real-clock debounce, independent of the Compose test clock.
+        SystemClock.sleep(600)
         composeTestRule.onNodeWithTag("PaymentRequestAccept-savings").performClick().assertIsSelected()
         SystemClock.sleep(600)
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsEnabled().performClick()

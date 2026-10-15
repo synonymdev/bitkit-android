@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -115,6 +116,7 @@ fun ReceiveQrScreen(
     hardwareReceiveState: HwReceiveUiState = HwReceiveUiState(),
     onLoadHardwareAddress: (String) -> Unit = {},
     onRetryHardwareAddress: () -> Unit = {},
+    onRetryInvoice: () -> Unit = {},
     onVerifyHardwareAddress: () -> Unit = {},
     showPaymentRequestContacts: Boolean = false,
     onClickPaymentRequestContacts: () -> Unit = {},
@@ -169,6 +171,7 @@ fun ReceiveQrScreen(
         hardwareReceiveState.address,
         walletState.bip21AmountSats,
         walletState.bip21Description,
+        walletState.isReceiveInvoiceUpdating,
     ) {
         visibleTabs.associateWith { tab ->
             getInvoiceForTab(
@@ -182,6 +185,7 @@ fun ReceiveQrScreen(
                 hardwareAddress = hardwareReceiveState.address?.address.orEmpty(),
                 hardwareAmountSats = walletState.bip21AmountSats,
                 hardwareMessage = walletState.bip21Description,
+                isReceiveInvoiceUpdating = walletState.isReceiveInvoiceUpdating,
             )
         }
     }
@@ -387,6 +391,13 @@ fun ReceiveQrScreen(
                     items = visibleTabs,
                     key = { _, tab -> tab.name }
                 ) { _, tab ->
+                    val displayMode = getReceiveInvoiceDisplayMode(
+                        tab = tab,
+                        cjitInvoice = cjitInvoice,
+                        hasInvoiceError = walletState.hasReceiveInvoiceError,
+                        isUpdating = walletState.isReceiveInvoiceUpdating,
+                        showDetails = showDetails,
+                    )
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -409,7 +420,15 @@ fun ReceiveQrScreen(
                                 )
                             }
 
-                            showDetails -> {
+                            displayMode == ReceiveInvoiceDisplayMode.ERROR -> {
+                                ReceiveInvoiceErrorView(
+                                    onRetry = onRetryInvoice,
+                                    onEdit = { onClickEditInvoice(tab) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            displayMode == ReceiveInvoiceDisplayMode.DETAILS -> {
                                 ReceiveDetailsView(
                                     tab = tab,
                                     walletState = walletState,
@@ -437,18 +456,20 @@ fun ReceiveQrScreen(
                                     else -> invoice
                                 }
 
-                                ReceiveQrView(
-                                    uri = invoice,
-                                    copyText = copyText,
-                                    qrLogoPainter = painterResource(getQrLogoResource(tab)),
-                                    onClickEditInvoice = if (tab == ReceiveTab.HARDWARE) {
-                                        onClickHardwareEditInvoice
-                                    } else {
-                                        { onClickEditInvoice(tab) }
-                                    },
-                                    accentColor = tab.accentColor,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                key(displayMode, invoice) {
+                                    ReceiveQrView(
+                                        uri = invoice,
+                                        copyText = copyText,
+                                        qrLogoPainter = painterResource(getQrLogoResource(tab)),
+                                        onClickEditInvoice = if (tab == ReceiveTab.HARDWARE) {
+                                            onClickHardwareEditInvoice
+                                        } else {
+                                            { onClickEditInvoice(tab) }
+                                        },
+                                        accentColor = tab.accentColor,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                     }
@@ -612,6 +633,7 @@ fun ReceiveQrView(
                     PrimaryButton(
                         text = stringResource(R.string.common__copy),
                         size = ButtonSize.Small,
+                        enabled = copyText.isNotBlank(),
                         onClick = {
                             context.setClipboardText(copyText)
                             coroutineScope.launch { qrButtonTooltipState.show() }
@@ -633,6 +655,7 @@ fun ReceiveQrView(
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,
+                enabled = copyText.isNotBlank(),
                 onClick = {
                     qrBitmap?.let { bitmap ->
                         shareQrCode(context, bitmap, shareContent)
@@ -828,6 +851,33 @@ private fun HardwareAddressLoadingView(
         } else if (isLoading) {
             GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
         }
+    }
+}
+
+@Composable
+private fun ReceiveInvoiceErrorView(
+    onRetry: () -> Unit,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        BodyM(text = stringResource(R.string.wallet__error_invoice_update))
+        VerticalSpacer(16.dp)
+        PrimaryButton(
+            text = stringResource(R.string.common__try_again),
+            onClick = onRetry,
+            modifier = Modifier.testTag("ReceiveInvoiceRetry")
+        )
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.common__edit),
+            onClick = onEdit,
+            modifier = Modifier.testTag("SpecifyInvoiceButton")
+        )
     }
 }
 
