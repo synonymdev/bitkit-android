@@ -28,12 +28,14 @@ internal object UsdtDetailStyles {
 internal fun UsdtDetailField(
     caption: String,
     modifier: Modifier = Modifier,
+    alignDividerToBottom: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     SendCell(
         caption = caption,
         captionStyle = UsdtDetailStyles.Caption,
         dividerSpacing = 15.dp,
+        alignDividerToBottom = alignDividerToBottom,
         content = content,
         modifier = modifier
     )

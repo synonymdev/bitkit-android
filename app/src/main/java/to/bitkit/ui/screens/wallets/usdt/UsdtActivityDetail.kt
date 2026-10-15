@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -112,6 +113,8 @@ internal fun UsdtActivityDetail(
     val app = appViewModel
     val canOpenDeposits = transfer.isIncoming && Env.usdtDepositsUrl != null
     var showDetails by rememberSaveable(transfer.id) { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(transfer.id, showDetails) { scrollState.scrollTo(0) }
     Column(modifier = Modifier.fillMaxSize()) {
         AppTopBar(
             titleText = stringResource(
@@ -125,7 +128,7 @@ internal fun UsdtActivityDetail(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
         ) {
             UsdtActivityAmountHeader(
@@ -308,7 +311,13 @@ private fun UsdtActivitySummary(transfer: UsdtTransfer, hideBalance: Boolean) {
             modifier = Modifier.weight(1f).testTag("UsdtActivityStatus")
         )
         UsdtDetailCell(
-            stringResource(R.string.usdt__receiving_network),
+            stringResource(
+                if (transfer.status == UsdtTransferStatus.CONFIRMED) {
+                    R.string.usdt__network
+                } else {
+                    R.string.usdt__receiving_network
+                }
+            ),
             transfer.destination.label,
             R.drawable.usdt_network,
             modifier = Modifier.weight(1f)
@@ -355,8 +364,9 @@ internal fun UsdtDetailCell(
     iconColor: Color = Colors.Usdt,
     minValueHeight: Dp = 0.dp,
     textStyle: TextStyle = UsdtDetailStyles.Value,
+    alignDividerToBottom: Boolean = false,
 ) {
-    UsdtDetailField(caption = title, modifier = modifier) {
+    UsdtDetailField(caption = title, alignDividerToBottom = alignDividerToBottom, modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),

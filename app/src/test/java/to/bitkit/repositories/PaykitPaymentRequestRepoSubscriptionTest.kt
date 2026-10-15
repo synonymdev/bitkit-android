@@ -457,6 +457,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
                     description = " Thank you ",
                     frequency = PaykitRecurrenceUnit.Month,
                     expiresAt = expiresAt,
+                    acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
                 ),
                 target = target,
                 savedPublicKeys = listOf(COUNTERPARTY),
@@ -480,8 +481,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         }
         with(captured.firstValue) {
             assertEquals("0.001", amountValue)
-            assertFalse(MethodId.UsdtArbitrum.rawValue in acceptedPaymentEndpointIdentifiers)
-            assertTrue(acceptedPaymentEndpointIdentifiers.isNotEmpty())
+            assertEquals(listOf(MethodId.P2wpkh.rawValue), acceptedPaymentEndpointIdentifiers)
             assertEquals(null, conversion)
             assertEquals(expiresAt.toString(), proposalExpiresAt)
             assertEquals(1u, recurrence?.every)

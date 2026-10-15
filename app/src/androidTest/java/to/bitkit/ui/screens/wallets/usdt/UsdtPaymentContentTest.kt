@@ -1,22 +1,31 @@
 package to.bitkit.ui.screens.wallets.usdt
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.UsdtBridgeProvider
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtQuote
+import com.synonym.bitkitcore.UsdtTransfer
+import com.synonym.bitkitcore.UsdtTransferStatus
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.collections.immutable.persistentListOf
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -25,6 +34,7 @@ import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import java.util.Locale
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @HiltAndroidTest
@@ -60,29 +70,45 @@ class UsdtPaymentContentTest {
     }
 
     @Test
-    fun bridgeMaximumDebitRemainsVisibleWithoutScrolling() {
+    fun bridgeAmountsAndNetworksAreInExpandedDetails() {
         composeTestRule.setContent { Content(UsdtSendState(quote = quote), UsdtPage.AMOUNT) }
         val total = composeTestRule.onNodeWithTag("UsdtMaximumTotal")
         val swipe = composeTestRule.onNodeWithTag("UsdtConfirm")
-        composeTestRule.onNodeWithText("YOU SEND").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertIsDisplayed()
-        composeTestRule.onNodeWithText("≈ 2.99 USDT").assertIsDisplayed()
-        total.assertIsDisplayed()
-        composeTestRule.onNodeWithText("4.47 USDT").assertIsDisplayed()
+        composeTestRule.onNodeWithText("YOU SEND").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertDoesNotExist()
+        total.assertDoesNotExist()
         swipe.assertIsDisplayed()
-        assertTrue(total.fetchSemanticsNode().boundsInRoot.bottom <= swipe.fetchSemanticsNode().boundsInRoot.top)
-        composeTestRule.onNodeWithTag("UsdtReviewDetails").assertIsDisplayed().performClick()
-        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Arbitrum One").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("UsdtRecipientAmount").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("±2.99").assertIsDisplayed()
         total.assertIsDisplayed()
+        composeTestRule.onNodeWithText("4.47").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Polygon").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("All fees are paid in USDT. Final fee may be lower.").assertIsDisplayed()
         swipe.assertIsDisplayed()
-        val cost = composeTestRule.onNodeWithText("0.01 USDT")
-        cost.performScrollTo().assertIsDisplayed()
-        assertTrue(cost.fetchSemanticsNode().boundsInRoot.bottom <= total.fetchSemanticsNode().boundsInRoot.top)
-        composeTestRule.onNodeWithText(
-            "Delivery is estimated. Bridge costs are deducted from the amount; the network fee is additional."
-        ).performScrollTo().assertIsDisplayed()
-        total.assertIsDisplayed()
-        swipe.assertIsDisplayed()
+        SystemClock.sleep(600)
+        composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
+        total.assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertDoesNotExist()
+    }
+
+    @Test
+    fun recipientAddressCanBeFullyReviewed() {
+        composeTestRule.setContent { Content(UsdtSendState(quote = quote), UsdtPage.AMOUNT) }
+        composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
+        val address = composeTestRule.onNodeWithTag("UsdtReviewAddress")
+        address.performScrollTo().assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        address.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.single().isLineEllipsized(0))
+        address.performClick()
+        composeTestRule.waitForIdle()
+        layouts.clear()
+        address.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.single().lineCount > 1)
+        assertFalse(layouts.single().hasVisualOverflow)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
     }
 
     @Test
@@ -100,27 +126,126 @@ class UsdtPaymentContentTest {
         composeTestRule.onNodeWithTag("UsdtPaste").assertDoesNotExist()
     }
 
+    @Test
+    fun pendingDirectPaymentStaysSubmittedUntilSuccess() {
+        assertCompletionTransition(UsdtDestination.ARBITRUM, UsdtTransferStatus.PENDING)
+    }
+
+    @Test
+    fun bridgeStaysSubmittedUntilDeliverySuccess() {
+        assertCompletionTransition(UsdtDestination.POLYGON, UsdtTransferStatus.BRIDGING)
+    }
+
+    @Test
+    fun immediateConfirmationShowsCompletionBeforeSuccess() {
+        val payment = quote.copy(destination = UsdtDestination.ARBITRUM)
+        val state = mutableStateOf(UsdtSendState(quote = payment, submitted = true, busy = true))
+        val wallet = UsdtWalletState(transfers = persistentListOf(transfer(payment, UsdtTransferStatus.CONFIRMED)))
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent { Content(state.value, UsdtPage.AMOUNT, wallet = wallet) }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
+        composeTestRule.runOnUiThread { state.value = state.value.copy(busy = false) }
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Payment submitted").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeBy(700)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
+    }
+
+    @Test
+    fun returningToConfirmedPaymentDoesNotReopenReview() {
+        val showDetails = mutableStateOf(false)
+        val payment = transfer(quote, UsdtTransferStatus.BRIDGING)
+        val wallet = mutableStateOf(UsdtWalletState(transfers = persistentListOf(payment)))
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            if (!showDetails.value) {
+                Content(UsdtSendState(quote = quote, submitted = true), UsdtPage.AMOUNT, wallet = wallet.value) {
+                    showDetails.value = true
+                }
+            }
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithText("Details").performClick()
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithText("Payment submitted").assertDoesNotExist()
+        composeTestRule.runOnUiThread {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(payment.copy(status = UsdtTransferStatus.CONFIRMED)))
+            showDetails.value = false
+        }
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeBy(700)
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
+    }
+
+    private fun assertCompletionTransition(destination: UsdtDestination, pendingStatus: UsdtTransferStatus) {
+        val payment = quote.copy(destination = destination)
+        val transfer = transfer(payment, pendingStatus)
+        val wallet = mutableStateOf(UsdtWalletState(transfers = persistentListOf(transfer)))
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            Content(UsdtSendState(quote = payment, submitted = true), UsdtPage.AMOUNT, wallet = wallet.value)
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithText("Payment submitted").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
+        composeTestRule.runOnUiThread {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(transfer.copy(status = UsdtTransferStatus.CONFIRMED)))
+        }
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.onNodeWithText("Payment submitted").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeBy(700)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
+    }
+
+    private fun transfer(payment: UsdtQuote, status: UsdtTransferStatus) = UsdtTransfer(
+        id = payment.id, sender = null, txHash = null, userOperationHash = null,
+        bridgeGuid = null, orchestra = null, recipient = payment.recipient,
+        destination = payment.destination, amount = payment.amount, receivedAmount = payment.receivedAmount,
+        fee = null, isIncoming = false, status = status, timestamp = 1u,
+    )
+
     @Composable
-    private fun Content(state: UsdtSendState, page: UsdtPage, onDetails: () -> Unit = {}) {
+    private fun Content(
+        state: UsdtSendState,
+        page: UsdtPage,
+        wallet: UsdtWalletState = UsdtWalletState(),
+        onDetails: () -> Unit = {},
+    ) {
         AppThemeSurface {
-            Box(modifier = Modifier.size(width = 360.dp, height = 600.dp)) {
-                UsdtPaymentContent(
-                    wallet = UsdtWalletState(),
-                    state = state,
-                    page = page,
-                    recipient = quote.recipient,
-                    amount = "3",
-                    destination = quote.destination,
-                    onRecipientChange = {},
-                    onAmountChange = {},
-                    onRecipientContinue = {},
-                    onPageChange = {},
-                    onBack = {},
-                    onReview = {},
-                    onConfirm = {},
-                    onDone = {},
-                    onDetails = onDetails,
-                )
+            CompositionLocalProvider(LocalInspectionMode provides true) {
+                Box(modifier = Modifier.size(width = 360.dp, height = 600.dp)) {
+                    UsdtPaymentContent(
+                        wallet = wallet,
+                        state = state,
+                        page = page,
+                        recipient = quote.recipient,
+                        amount = "3",
+                        destination = state.quote?.destination ?: quote.destination,
+                        onRecipientChange = {},
+                        onAmountChange = {},
+                        onRecipientContinue = {},
+                        onPageChange = {},
+                        onBack = {},
+                        onReview = {},
+                        onConfirm = {},
+                        onDone = {},
+                        onDetails = onDetails,
+                    )
+                }
             }
         }
     }

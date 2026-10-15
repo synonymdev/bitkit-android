@@ -35,9 +35,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LnurlPayData
@@ -61,6 +63,7 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.HorizontalSpacer
@@ -85,6 +88,7 @@ import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
@@ -313,7 +317,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            FillHeight(min = 12.dp)
+            if (uiState.paykitUsesUsdt) VerticalSpacer(32.dp) else FillHeight(min = 12.dp)
             if (uiState.paykitRateUnavailable) {
                 BodyS(
                     stringResource(R.string.wallet__payment_request_rate_unavailable),
@@ -341,11 +345,20 @@ private fun SendAmountNodeRunning(
                         ) { onClickMax(availableAmount) }
                         .testTag("AvailableAmount")
                 ) {
-                    Text13Up(
-                        text = stringResource(textAvailable),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("available_balance")
-                    )
+                    if (uiState.paykitUsesUsdt) {
+                        Caption13Up(
+                            text = stringResource(textAvailable),
+                            color = Colors.White64,
+                            style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                            modifier = Modifier.testTag("available_balance")
+                        )
+                    } else {
+                        Text13Up(
+                            text = stringResource(textAvailable),
+                            color = Colors.White64,
+                            modifier = Modifier.testTag("available_balance")
+                        )
+                    }
                     VerticalSpacer(4.dp)
                     if (uiState.paykitUsesUsdt) {
                         val balance = if (hideBalance) {
@@ -353,7 +366,10 @@ private fun SendAmountNodeRunning(
                         } else {
                             usdtWallet?.balance?.let { "<accent>$</accent> " + usdtOverviewAmount(it) } ?: "—"
                         }
-                        BodySSB(balance.withAccent(accentColor = Colors.White64))
+                        BodySSB(
+                            balance.withAccent(accentColor = Colors.White64),
+                            style = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+                        )
                     } else {
                         MoneySSB(sats = availableAmount, showSymbol = true)
                     }
@@ -382,8 +398,8 @@ private fun SendAmountNodeRunning(
                             .testTag("SendAmountMax")
                     )
                 }
-                HorizontalSpacer(8.dp)
                 if (!uiState.paykitUsesUsdt) {
+                    HorizontalSpacer(8.dp)
                     UnitButton(
                         onClick = { amountInputViewModel.switchUnit(currencies) },
                         modifier = Modifier
@@ -393,20 +409,30 @@ private fun SendAmountNodeRunning(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
+            HorizontalDivider(modifier = Modifier.padding(top = if (uiState.paykitUsesUsdt) 16.dp else 12.dp))
 
             if (uiState.paykitUsesUsdt) {
-                NumberPad(
-                    type = NumberPadType.DECIMAL,
-                    availableHeight = maxHeight,
-                    enabled = uiState.isAmountEditable,
-                    onPress = {
-                        app?.onUsdtAmountChange(
-                            NumberPadInputHandler.handleInput(it, uiState.paykitAmount, maxLength = 21, maxDecimals = 6)
-                        )
-                    },
-                    onDeleteLongPress = { app?.onUsdtAmountChange("") }
-                )
+                BoxWithConstraints(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    NumberPad(
+                        type = NumberPadType.DECIMAL,
+                        availableHeight = this.maxHeight,
+                        enabled = uiState.isAmountEditable,
+                        onPress = {
+                            app?.onUsdtAmountChange(
+                                NumberPadInputHandler.handleInput(
+                                    it,
+                                    uiState.paykitAmount,
+                                    maxLength = 21,
+                                    maxDecimals = 6
+                                )
+                            )
+                        },
+                        onDeleteLongPress = { app?.onUsdtAmountChange("") }
+                    )
+                }
             } else {
                 NumberPad(
                     enabled = uiState.isAmountEditable,
@@ -418,12 +444,13 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            if (uiState.paykitUsesUsdt) VerticalSpacer(24.dp)
+            if (uiState.paykitUsesUsdt) VerticalSpacer(16.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
                 isLoading = uiState.isLoading,
                 onClick = onContinue,
+                textStyle = if (uiState.paykitUsesUsdt) AppTextStyles.BodySSB.copy(letterSpacing = 0.sp) else null,
                 modifier = Modifier.testTag("ContinueAmount")
             )
 
@@ -455,6 +482,11 @@ private fun PaymentMethodButton(
                 else -> stringResource(R.string.wallet__spending__title)
             },
             color = paymentMethodColor(uiState),
+            textStyle = if (uiState.paykitUsesUsdt) {
+                AppTextStyles.CaptionM.copy(letterSpacing = 1.sp)
+            } else {
+                AppTextStyles.CaptionM
+            },
             icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
             onClick = { expanded = true },
             enabled = uiState.fundingOptions.isNotEmpty(),
@@ -511,6 +543,10 @@ private fun FundingSourceOption(option: SendFundingOption, state: SendUiState, o
         WalletBalanceContent(
             title = title,
             icon = { FundingSourceIcon(source) },
+            titleStyle = AppTextStyles.CaptionM.copy(
+                letterSpacing = 1.sp,
+                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+            ),
             titleTrailing = {
                 option.transportType?.let { transport ->
                     HorizontalSpacer(8.dp)
@@ -556,7 +592,8 @@ private fun FundingSourceBalance(option: SendFundingOption) {
     val source = option.source
     if (source == SendFundingSource.Usdt) {
         BodyMSB(
-            if (hidden) UiConstants.HIDE_BALANCE_SHORT else usdt?.balance?.let { usdtOverviewAmount(it) } ?: "—"
+            if (hidden) UiConstants.HIDE_BALANCE_SHORT else usdt?.balance?.let { usdtOverviewAmount(it) } ?: "—",
+            letterSpacing = 0.sp,
         )
     } else {
         MoneyMSB(
@@ -567,15 +604,7 @@ private fun FundingSourceBalance(option: SendFundingOption) {
             },
             unit = PrimaryDisplay.BITCOIN,
             showSymbol = false,
-        )
-    }
-    if (source == SendFundingSource.Spending) {
-        HorizontalSpacer(4.dp)
-        Icon(
-            painterResource(R.drawable.ic_transfer),
-            contentDescription = null,
-            tint = Colors.White64,
-            modifier = Modifier.size(16.dp)
+            letterSpacing = 0.sp,
         )
     }
 }

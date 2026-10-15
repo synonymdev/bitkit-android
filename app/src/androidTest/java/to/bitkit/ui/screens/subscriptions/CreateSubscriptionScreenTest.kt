@@ -40,6 +40,7 @@ import to.bitkit.repositories.PaykitSubscriptionMetadata
 import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import to.bitkit.repositories.PaykitSubscriptionRole
 import to.bitkit.test.annotations.ComposeUi
+import to.bitkit.ui.components.PaykitPaymentOption
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestExpiration
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.test.assertEquals
@@ -55,15 +56,17 @@ class CreateSubscriptionScreenTest {
     @Test
     fun detailsRequiresAmountNameAndCompletedIconLoad() {
         var amount by mutableStateOf(0uL)
+        var asset by mutableStateOf(PaykitAsset.BTC)
         var name by mutableStateOf("")
         var frequency by mutableStateOf(PaykitRecurrenceUnit.Month)
         var isLoadingIcon by mutableStateOf(false)
         var choseRecipient = false
+        var clickedMethod: PaykitPaymentOption? = null
         var acceptedMethods by mutableStateOf(persistentListOf(MethodId.P2wpkh.rawValue))
         composeTestRule.setContent {
             AppThemeSurface {
                 CreateSubscriptionDetails(
-                    amount = PaykitAmount(PaykitAsset.BTC, amount),
+                    amount = PaykitAmount(asset, amount),
                     availableMethods = persistentListOf(MethodId.P2wpkh.rawValue, MethodId.UsdtArbitrum.rawValue),
                     acceptedMethods = acceptedMethods,
                     name = name,
@@ -72,7 +75,7 @@ class CreateSubscriptionScreenTest {
                     selectedIconUri = null,
                     isLoadingIcon = isLoadingIcon,
                     onAmountClick = {},
-                    onClickAsset = {},
+                    onClickMethod = { clickedMethod = it },
                     onNameChange = { name = it },
                     onDescriptionChange = {},
                     onFrequencyChange = { frequency = it },
@@ -97,9 +100,19 @@ class CreateSubscriptionScreenTest {
                 composeTestRule.onNodeWithTag("Tab-${option.name.lowercase()}").performClick()
                 assertEquals(option, frequency)
             }
+        composeTestRule.onNodeWithTag("SubscriptionAccept-savings").performClick()
+        assertEquals(PaykitPaymentOption.Savings, clickedMethod)
         composeTestRule.runOnIdle { acceptedMethods = persistentListOf() }
         composeTestRule.onNodeWithTag("SubscriptionChooseRecipient").assertIsNotEnabled()
-        composeTestRule.runOnIdle { acceptedMethods = persistentListOf(MethodId.P2wpkh.rawValue) }
+        composeTestRule.onNodeWithTag("SubscriptionAccept-savings").assertIsNotSelected()
+        composeTestRule.onNodeWithTag("SubscriptionAccept-usdt").performClick()
+        assertEquals(PaykitPaymentOption.Usdt, clickedMethod)
+        composeTestRule.runOnIdle {
+            asset = PaykitAsset.USD
+            acceptedMethods = persistentListOf(MethodId.UsdtArbitrum.rawValue)
+        }
+        composeTestRule.onNodeWithTag("SubscriptionAccept-usdt").assertIsSelected()
+        composeTestRule.onNodeWithTag("SubscriptionChooseRecipient").assertIsEnabled()
         composeTestRule.runOnIdle { isLoadingIcon = true }
         composeTestRule.onNodeWithTag("SubscriptionChooseRecipient").assertIsNotEnabled()
         composeTestRule.runOnIdle { isLoadingIcon = false }

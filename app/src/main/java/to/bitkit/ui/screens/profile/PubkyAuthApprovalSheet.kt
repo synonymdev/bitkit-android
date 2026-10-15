@@ -59,6 +59,7 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
@@ -72,6 +73,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppSwitchDefaults
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -241,7 +243,15 @@ private fun Content(
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
-        SheetTopBar(titleText = headerTitle, onBack = onBack)
+        SheetTopBar(
+            titleText = headerTitle,
+            onBack = onBack,
+            titleStyle = if (approvalState == ApprovalState.WatchOnlyConsent) {
+                AppTextStyles.Subtitle.copy(letterSpacing = 0.sp, lineHeight = 22.sp)
+            } else {
+                AppTextStyles.Subtitle
+            },
+        )
 
         when (approvalState) {
             ApprovalState.Loading -> LoadingContent()
@@ -314,22 +324,27 @@ private fun ColumnScope.WatchOnlyConsentContent(
             VerticalSpacer(32.dp)
             Display(
                 text = stringResource(R.string.profile__auth_approval_watch_only_intro_title)
-                    .withAccent(accentColor = Colors.Blue),
+                    .withAccent(
+                        accentColor = if (uiState.bitkitClaim?.sharesBitcoin == true) Colors.Blue else Colors.Usdt
+                    ),
             )
             VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(
-                    if (uiState.bitkitClaim?.sharesBitcoin == true) {
-                        R.string.profile__auth_approval_watch_only_intro_description
-                    } else {
-                        R.string.profile__auth_approval_usdt_intro_description
+                    when {
+                        uiState.bitkitClaim?.sharesBitcoin == true -> {
+                            R.string.profile__auth_approval_watch_only_intro_description
+                        }
+                        uiState.usdtRequired -> R.string.profile__auth_approval_usdt_intro_description
+                        else -> R.string.profile__auth_approval_usdt_intro_optional
                     }
                 ),
                 color = Colors.White64,
+                letterSpacing = 0.sp,
             )
         }
     }
-    if (uiState.showsUsdtDetails) {
+    if (uiState.showsUsdtDetails && (!uiState.usdtRequired || uiState.usdtAddress == null)) {
         VerticalSpacer(32.dp)
         UsdtSharingChoice(uiState, onShareUsdt, onRetryUsdt)
     }
@@ -338,12 +353,14 @@ private fun ColumnScope.WatchOnlyConsentContent(
         SecondaryButton(
             text = stringResource(R.string.common__cancel),
             onClick = onCancel,
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             modifier = Modifier.weight(1f).testTag("PubkyAuthWatchOnlyCancel")
         )
         PrimaryButton(
             text = stringResource(R.string.profile__auth_approval_watch_only_intro_approve),
             onClick = onApprove,
             enabled = uiState.canAuthorize,
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             modifier = Modifier.weight(1f).testTag("PubkyAuthWatchOnlyApprove")
         )
     }
@@ -366,8 +383,15 @@ private fun UsdtSharingChoice(
                     .testTag("PubkyAuthShareUsdt")
             ) {
                 BodyM(
-                    text = stringResource(R.string.profile__auth_approval_share_usdt_optional),
+                    text = stringResource(
+                        if (uiState.bitkitClaim?.sharesBitcoin == true) {
+                            R.string.profile__auth_approval_share_usdt_optional
+                        } else {
+                            R.string.profile__auth_approval_share_usdt
+                        }
+                    ),
                     color = Colors.White64,
+                    letterSpacing = 0.sp,
                     modifier = Modifier.weight(1f)
                 )
                 Switch(
@@ -381,10 +405,6 @@ private fun UsdtSharingChoice(
                     modifier = Modifier.clearAndSetSemantics {}
                 )
             }
-        }
-        if (uiState.shareUsdt || uiState.usdtRequired) {
-            if (!uiState.usdtRequired) VerticalSpacer(8.dp)
-            BodyS(text = stringResource(R.string.profile__auth_approval_usdt_privacy), color = Colors.White64)
         }
         if (uiState.usdtAddress == null) {
             VerticalSpacer(8.dp)
@@ -434,12 +454,14 @@ private fun ColumnScope.AuthorizeContent(
         SecondaryButton(
             text = stringResource(R.string.common__cancel),
             onClick = onCancel,
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             modifier = Modifier.weight(1f),
         )
         PrimaryButton(
             text = stringResource(R.string.profile__auth_approval_authorize),
             onClick = onAuthorize,
             enabled = uiState.canAuthorize,
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             modifier = Modifier
                 .weight(1f)
                 .testTag("PubkyAuthAuthorize")
@@ -586,6 +608,7 @@ private fun ColumnScope.SuccessContent(
     PrimaryButton(
         text = stringResource(R.string.profile__auth_approval_ok),
         onClick = onDismiss,
+        textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
         modifier = Modifier.testTag("PubkyAuthOK")
     )
     VerticalSpacer(16.dp)
@@ -714,10 +737,11 @@ private fun ProfileCard(profile: PubkyProfile) {
         }
 
         Column(modifier = Modifier.weight(1f)) {
-            Text13Up(
+            Caption13Up(
                 text = profile.authDisplayPublicKey,
                 color = Colors.White64,
                 maxLines = 1,
+                style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
             )
             BodyMSB(
                 text = profile.name,

@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -18,11 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.primaryButtonStyle
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -37,6 +39,8 @@ fun NumberPadActionButton(
     clickable: Boolean = true,
     outlined: Boolean = false,
     @DrawableRes icon: Int? = null,
+    @DrawableRes trailingIcon: Int? = null,
+    textStyle: TextStyle = AppTextStyles.CaptionM,
 ) {
     val contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
     val height = 28.dp
@@ -47,7 +51,7 @@ fun NumberPadActionButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = modifier
-                .requiredHeight(height)
+                .heightIn(min = height)
                 .then(
                     if (outlined) {
                         Modifier.border(width = 1.dp, color = color, shape = buttonShape)
@@ -78,14 +82,23 @@ fun NumberPadActionButton(
             Caption13Up(
                 text = text,
                 color = color,
+                style = textStyle,
             )
+            if (trailingIcon != null) {
+                Icon(
+                    painter = painterResource(trailingIcon),
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     } else {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = modifier
-                .requiredHeight(height)
+                .heightIn(min = height)
                 .border(
                     width = 1.dp,
                     color = color,
@@ -104,7 +117,16 @@ fun NumberPadActionButton(
             Caption13Up(
                 text = text,
                 color = color,
+                style = textStyle,
             )
+            if (trailingIcon != null) {
+                Icon(
+                    painter = painterResource(trailingIcon),
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }

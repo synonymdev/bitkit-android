@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.UsdtException
 import to.bitkit.R
 import to.bitkit.models.PaykitAmount
@@ -40,7 +41,7 @@ internal fun ColumnScope.UsdtReceiveAmountContent(
     Column(verticalArrangement = Arrangement.SpaceBetween, modifier = Modifier.heightIn(min = 146.dp)) {
         UsdtAmountHeader(amount.ifEmpty { "0" })
         depositAmountMessage(amount, limits, error)?.let { message ->
-            BodyS(message, color = Colors.Brand, modifier = Modifier.padding(vertical = 16.dp))
+            BodyS(message, color = Colors.Brand, letterSpacing = 0.sp, modifier = Modifier.padding(vertical = 16.dp))
         }
     }
     HorizontalDivider()
@@ -72,6 +73,7 @@ internal fun ColumnScope.UsdtReceiveAmountContent(
         onClick = onContinue,
         enabled = !busy && validAmount,
         isLoading = busy,
+        textStyle = UsdtDetailStyles.Body,
         modifier = Modifier.testTag("UsdtDepositCreate")
     )
 }

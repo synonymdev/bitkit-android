@@ -6,14 +6,23 @@ The drivable wallet navigation and request/subscription UI paths are in `journey
 
 Enable USDT through its introduction or Settings before starting payment checks. The opt-in, disable safeguards and disabled-link paths are covered by `journeys/usdt-opt-in.xml`.
 
+## Android camera availability
+
+Use a disposable unfunded wallet with USDT enabled. The no-camera case requires an emulator with both cameras disabled; this hardware configuration is outside the standard journey environment.
+
+- [ ] With camera permission denied, open USDT Send and verify Paste and Enter Manually remain available.
+- [ ] Grant camera permission on a device with no available camera. Verify a camera error is shown without closing the app. Enter Manually must still open recipient entry, and Paste must still process a supported address.
+- [ ] Leave and reopen Send. Verify camera initialization failure does not crash or prevent navigation.
+- [ ] Repeat with a working camera. Grant permission while the scanner is open, verify the preview starts, and scan an owned USDT address without submitting a payment.
+
 ## usdt bridge quotes
 
 A funded Arbitrum wallet uses the real gateway with USDT0 and Orchestra enabled. This journey obtains quotes only; do not swipe to pay or create any funded order.
 
 - [ ] Open USDT from the home balance, then Send. Verify UsdtNetwork offers Arbitrum and the enabled provider destinations.
 - [ ] Choose Base, open manual entry and enter an owned EVM address. Enter an affordable USDT amount and continue to review.
-- [ ] Verify the review displays Base, the selected Orchestra provider in details, estimated destination receipt, included bridge cost, maximum source fee and maximum total debit. All amounts use USDT.
-- [ ] Close without paying. Start a send to Polygon and obtain a quote to an owned address. Verify the selected provider is shown and the same amount and fee fields remain clear.
+- [ ] Verify the basic review shows the amount, illustration, Show Details and Swipe To Pay. Open Details and verify Pay from / Network, Payment / Fee, Recipient gets / Max total debit and Address / Recipient network. Network is Arbitrum One and Recipient network is Base. The received estimate follows the quote, with an approximation marker for Orchestra; Max total debit equals the payment plus maximum fee. All amounts use USDT.
+- [ ] Close without paying. Start a send to Polygon and obtain a quote to an owned address. Verify the same detail rows show the selected destination and quoted amounts. The fee note says all fees are paid in USDT and the final fee may be lower. Hide Details and verify the basic review remains free of technical rows.
 - [ ] Close without paying. Select Solana and verify an EVM address is rejected, then select Tron and verify an EVM address is rejected.
 - [ ] Close Send and verify the home balance has not changed and no outgoing payment was created.
 
@@ -24,7 +33,7 @@ USDT is configured against the real gateway; both app and service enable Polygon
 - [ ] Open the home screen and verify the USDT balance, then open USDT and Send.
 - [ ] Choose Polygon in UsdtNetwork and open manual address entry. Verify an invalid address cannot advance. Enter an Arbitrum-specific payment URI and verify the selected network changes to Arbitrum and uses the URI recipient and amount.
 - [ ] Change to Polygon from amount entry. Verify the valid EVM recipient and entered amount are retained. Change to Solana and verify a compatible recipient is required; entering a plain Solana address preserves the amount, while a supported payment URI with an explicit amount replaces it.
-- [ ] Enter the owned destination address and a small USDT amount. Verify the review shows Polygon, the full recipient, selected provider, estimated received amount, included Orchestra routing cost where applicable, additional maximum source fee and maximum total debit in USDT.
+- [ ] Enter the owned destination address and a small USDT amount. Open review Details and verify source Network is Arbitrum One, Recipient network is Polygon, and the recipient can be read or copied in full despite its shortened display. Verify Payment, maximum Fee, quoted Recipient gets and Max total debit in USDT. Hide Details to return to the basic confirmation before paying.
 - [ ] Authorize one payment. Verify it appears in activity as awaiting cross-network delivery rather than claiming delivery from source-chain execution alone.
 - [ ] Restart the app and verify the same transfer continues tracking without sending a second payment.
 - [ ] Verify destination delivery independently from its transaction receipt, token, recipient, amount and balance. Confirm activity details update and the Arbitrum wallet retains zero ETH.
@@ -38,7 +47,7 @@ Requires a wallet with USDT enabled and a matching backend with Orchestra creden
 - [ ] Open the network selector. Verify only configured supported sources are offered: Ethereum, Tron, Solana, Polygon, Base and BNB Smart Chain.
 - [ ] Select each enabled source network, enter an amount within its live limits, and get its deposit address. Verify the selected network, reusable address, estimated received amount and deduction are shown. Verify the QR and Copy action use the same address.
 - [ ] Return to Arbitrum One and verify its original wallet address remains unchanged.
-- [ ] Open cross-network deposit activity. Verify empty history and Load more work without showing a failure.
+- [ ] From Receive → Network, verify the full-width primary Cross-Network Deposits button stays pinned over the bottom of the network list while the rows and artwork scroll behind it. Scroll to the end and verify the last content clears the button. Repeat with large text and verify the label is not clipped. Open it before any receipt exists and verify empty history and Load more work without showing a failure.
 - [ ] Enter an amount below the route minimum and verify the limit error appears without a deposit address.
 - [ ] Edit the amount. Verify the old limit error clears immediately and the keypad and button remain fully visible. Get an address with an amount within the route limits.
 - [ ] Reopen the app and verify the reusable address and deposit history are recovered. Inspect any existing deposit details without claiming a new settlement.
@@ -88,7 +97,10 @@ Reference: [USDT designs](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bi
 - [ ] With an authorized incoming transfer or an explicitly identified fixture, verify teal receive confetti, Details and OK; Details opens that transfer.
 - [ ] With an authorized send or an explicitly identified fixture, check the swipe after warning and PIN prompts: loading and the completed checkmark stay at the right end, the swipe label is hidden, and confirmation keeps its side spacing until the success screen appears.
 - [ ] Verify bridge review, estimated fees and deposit history round displayed amounts to cents without changing the exact payment, QR or support-export values. Check a nonzero sub-cent value displays <0.01.
-- [ ] Open a payment-request review and verify From and For icons use the selected payment method’s color: orange for Savings, purple for Spending and teal for USDT.
+- [ ] In delayed, failed, refunding, refunded and support-needed bridge details, verify Contact Support and Copy Details are small 40-point buttons in one row, matching Request refund / Hide details. Copy Details retains the full references; Contact Support opens the prefilled report without submitting it.
+- [ ] With all three receiving methods enabled and available, open request creation and verify separate Savings, Spending and USDT chips, with an X on selected chips. Remove Spending, retain Savings and USDT, and verify the received request offers only the selected methods. Empty selection disables sending. On subscription creation, verify Savings and Spending may be selected together, while choosing USDT deselects both; selecting either Bitcoin rail deselects USDT. Verify the resulting proposal carries only selected, currently available endpoints.
+- [ ] Review the Earn introduction for combined Bitcoin/USDT and USDT-only authorization. Combined uses the blue heading and optional USDT switch; USDT-only uses the teal heading and its USDT-address description with no switch. Neither adds an address panel or balance/history explanation. Keep permission review, trust warning, loading/retry feedback and disabled-USDT behavior from `journeys/pubky-auth/share-receiving-details.xml`.
+- [ ] Open a payment-request review and verify From and For icons use the selected payment method’s color: orange for Savings, purple for Spending and teal for USDT. Keep this request summary on the basic confirmation.
 
 ## Paykit quoted reviews and history
 

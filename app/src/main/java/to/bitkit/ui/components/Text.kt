@@ -164,10 +164,11 @@ fun Subtitle(
     textAlign: TextAlign = TextAlign.Start,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+    style: TextStyle = AppTextStyles.Subtitle,
 ) {
     Text(
         text = text,
-        style = AppTextStyles.Subtitle.merge(
+        style = style.merge(
             color = color,
             textAlign = textAlign,
         ),

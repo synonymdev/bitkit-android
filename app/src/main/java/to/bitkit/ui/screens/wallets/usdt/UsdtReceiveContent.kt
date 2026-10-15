@@ -90,6 +90,7 @@ internal fun ColumnScope.UsdtReceiveContent(
         text = networkTitle,
         onClick = onNetwork,
         size = ButtonSize.Small,
+        textStyle = UsdtDetailStyles.SmallButton,
         icon = {
             Icon(
                 painterResource(R.drawable.usdt_network),
@@ -116,6 +117,7 @@ internal fun ColumnScope.UsdtReceiveContent(
             null
         },
         onClick = { showDetails = !showDetails },
+        textStyle = UsdtDetailStyles.Body,
         modifier = Modifier.testTag("UsdtReceiveDetails")
     )
 }

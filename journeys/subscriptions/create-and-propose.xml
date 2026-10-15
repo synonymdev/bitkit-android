@@ -12,9 +12,10 @@
     <action>Verify the Subscriptions screen (id "SubscriptionsScreen") appears with the Overview tab (id "Tab-overview") selected</action>
     <action>Tap Create (id "SubscriptionCreate")</action>
     <action>Verify the create sheet (id "CreateSubscription") appears with Choose Recipient disabled</action>
+    <action>With the keyboard closed, scroll the form and verify Choose Recipient (id "SubscriptionChooseRecipient") stays pinned while the fields scroll behind it. Scroll to the end and verify Description and Custom icon clear the button. Repeat with large text. Focus Name and Description and verify the focused field and Choose Recipient remain reachable above the keyboard, then dismiss the keyboard.</action>
     <action>Tap the amount pencil (id "SubscriptionEditAmount") and verify USD is not offered while USDT is disabled</action>
     <action>Tap the Bitcoin/fiat unit control (id "PaymentRequestAmountUnit") twice and verify both input units remain available for the BTC denomination. Select Bitcoin units, enter "5000" on the keypad, and tap Continue (id "PaymentRequestAmountContinue")</action>
-    <action>Verify the amount reads 5,000 sats and the accepted methods show only enabled Savings or Spending options, with no USDT</action>
+    <action>Verify the amount reads 5,000 sats and the accepted methods show separate selected Savings and Spending chips for enabled rails, each with a trailing X, and no USDT. A removed method retains its asset color at 50% opacity with a trailing +; tap it to restore it. If both rails are available, remove one and verify the other remains selected. Remove all selected rails and verify Choose Recipient stays disabled; restore the available Bitcoin rails before continuing.</action>
     <action>Type "Journey Sub" into the subscription name field (id "SubscriptionName")</action>
     <action>Enter 600 ASCII letters in the description field (id "SubscriptionDescription")</action>
     <action>Verify the frequency selector has "Monthly" selected (id "Tab-month")</action>

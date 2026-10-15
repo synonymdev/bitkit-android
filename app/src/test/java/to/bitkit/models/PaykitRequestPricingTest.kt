@@ -20,6 +20,30 @@ import kotlin.time.Instant
 class PaykitRequestPricingTest {
     private val now = Instant.fromEpochSeconds(1_800_000_000)
 
+    @Test fun `subscription methods respect selection and availability`() {
+        val savings = MethodId.P2wpkh.rawValue
+        val spending = MethodId.Bolt11.rawValue
+        val usdt = MethodId.UsdtArbitrum.rawValue
+        val available = listOf(savings, spending, usdt)
+        assertEquals(
+            listOf(spending),
+            PaykitRequestPricing.subscriptionEndpoints(PaykitAsset.BTC, available, listOf(spending, usdt))
+        )
+        assertEquals(
+            listOf(savings),
+            PaykitRequestPricing.subscriptionEndpoints(PaykitAsset.BTC, available, listOf(savings))
+        )
+        assertEquals(listOf(usdt), PaykitRequestPricing.subscriptionEndpoints(PaykitAsset.USD, available, available))
+        assertTrue(PaykitRequestPricing.subscriptionEndpoints(PaykitAsset.BTC, available, emptyList()).isEmpty())
+        assertTrue(
+            PaykitRequestPricing.subscriptionEndpoints(
+                PaykitAsset.USD,
+                listOf(savings, spending),
+                listOf(usdt)
+            ).isEmpty()
+        )
+    }
+
     @Test fun `fixed rates determine exact amounts without market rates`() {
         val pricing = PaykitRequestPricing(
             PaymentConversion.Fixed(
