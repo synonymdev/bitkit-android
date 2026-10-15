@@ -186,6 +186,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     private val mutex = Mutex()
     private val reconcileMutex = Mutex()
     private var stateGeneration = 0L
+    private var sending = false
 
     private val _attempts = MutableStateFlow<List<PaykitUsdtAttempt>>(emptyList())
     val attempts = _attempts.asStateFlow()
@@ -234,16 +235,25 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         beforeSend: suspend () -> Unit = {},
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            setPaymentStarted(quote.id, true).getOrThrow()
+            mutex.withLock {
+                if (sending) throw PaykitPaymentRequestError.OperationInProgress
+                sending = true
+                stateGeneration++
+            }
             var sent = false
             try {
+                setPaymentStarted(quote.id, true).getOrThrow()
                 usdt.send(quote, submissionDeadline, beforeSend).getOrThrow()
                 sent = true
             } finally {
-                if (!sent) {
-                    withContext(NonCancellable) {
-                        val history = storedTransfer(quote.id)
-                        if (history.isSuccess && history.getOrNull() == null) setPaymentStarted(quote.id, false)
+                withContext(NonCancellable) {
+                    try {
+                        if (!sent) {
+                            val history = storedTransfer(quote.id)
+                            if (history.isSuccess && history.getOrNull() == null) setPaymentStarted(quote.id, false)
+                        }
+                    } finally {
+                        mutex.withLock { sending = false }
                     }
                 }
             }
@@ -443,11 +453,12 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     suspend fun reconcile() = withContext(ioDispatcher) {
         runSuspendCatching {
             reconcileMutex.withLock {
-                val generation = mutex.withLock {
+                val generation = mutex.withLock snapshot@{
+                    if (sending) return@snapshot null
                     unboundAttempts.update { emptyList() }
                     _resumableRequests.update { emptySet() }
                     stateGeneration
-                }
+                } ?: return@withLock
                 val identity = currentIdentity() ?: return@withLock
                 val owner = usdt.paymentEndpoint().getOrThrow().value.lowercase()
                 val (reconciliation, state) = mutex.withLock snapshot@{
@@ -488,9 +499,15 @@ class PaykitUsdtPaymentRepo @Inject constructor(
             if (!mutex.withLock { isCurrent(reconciliation) }) return
             runSuspendCatching {
                 val transfer = storedTransfer(attempt.quoteId).getOrThrow()
-                if (!transfer.isUnresolved(attempt.paymentStarted)) resumable += attempt
-                if (attempt.canReleaseBinding(transfer)) {
-                    unbound += attempt
+                val current = if (transfer == null) {
+                    updateAttempt(reconciliation, attempt) { it.copy(paymentStarted = false) }
+                        ?: return@runSuspendCatching
+                } else {
+                    attempt
+                }
+                if (!transfer.isUnresolved(current.paymentStarted)) resumable += current
+                if (current.canReleaseBinding(transfer)) {
+                    unbound += current
                 }
                 if (!attempt.proofQueued &&
                     (attempt.proof != null || transfer?.status == UsdtTransferStatus.CONFIRMED)

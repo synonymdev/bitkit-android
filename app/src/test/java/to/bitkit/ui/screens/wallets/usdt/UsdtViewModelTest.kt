@@ -360,6 +360,33 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deducted bridge costs require the high fee warning`() = test {
+        val model = createViewModel(walletState = UsdtWalletState(balance = 100_000_000u))
+        val bridge = quote.copy(amount = 5_000_000u, receivedAmount = 2_000_000u, maximumFee = 100u)
+        whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(bridge))
+        model.quote(bridge.recipient, "5", bridge.destination).join()
+        model.confirm().join()
+        assertEquals(SanityWarning.FEE_OVER_HALF_VALUE, model.state.value.warning)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `recorded payment that exceeds its deadline retains recovery with an expiry error`() = test {
+        val retained: UsdtTransfer = mock { on { id }.thenReturn(quote.id) }
+        val model = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.SubmissionDeadlineExpired()))
+        model.quote(quote.recipient, "1", quote.destination).join()
+        model.confirm().join()
+        assertTrue(model.state.value.submitted)
+        assertEquals(quote, model.state.value.quote)
+        assertEquals(R.string.wallet__payment_request_expired, model.state.value.error)
+        model.confirm().join()
+        verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+    }
+
+    @Test
     fun `amount warnings require acknowledgment before payment authentication`() = test {
         val viewModel = createViewModel()
         val large = quote.copy(amount = 200_000_000u, receivedAmount = 200_000_000u)

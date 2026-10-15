@@ -4,6 +4,7 @@
     <action>On Home, verify the New: USDT sheet (id "UsdtIntro") shows the Tether coin, DOLLARS? YOUR CALL heading, No Thanks and Enable USDT.</action>
     <action>Swipe the intro sheet down. Verify Home shows Savings and Spending without a USDT tile. Open Receive and verify there is no USDT tab, then close it.</action>
     <action>Terminate and relaunch the app. Verify the USDT intro returns. Tap No Thanks (id "UsdtIntroDecline"), relaunch again, and verify the intro does not return.</action>
+    <action>While USDT remains off on this fresh wallet, use the local gateway request log to verify Home and wallet backups do not request the wallet's USDT balance or history. Bitcoin and Lightning continue normally.</action>
     <action>Open Settings, General, Payments. Verify USDT (Tether) (id "UsdtSettingsToggle") is off. Enable it, return Home, and verify the USDT tile appears. Open Receive and verify the USDT tab appears.</action>
     <action>Open USDT Send and its network pill. Verify the USDT Network picker (id "UsdtNetworkPicker") uses rounded rows with Tether icons, a teal selection check, the recipient-network explanation and Tether coin illustration. Choose another supported network and verify the pill updates while retaining its network icon.</action>
     <action>Return to Settings and turn USDT off while the wallet is empty and all transfers are complete. Verify the USDT tile, receive tab and new Paykit receiving option disappear. Existing payment history remains stored.</action>

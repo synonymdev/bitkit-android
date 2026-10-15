@@ -192,6 +192,7 @@ fun ReceiveSheet(
                         onClickPaymentRequestContacts = {
                             paymentRequestDraft = paymentRequestDraft.copy(
                                 amount = PaykitAmount(PaykitAsset.BTC, 0uL),
+                                acceptedPaymentEndpointIdentifiers = null,
                                 note = "",
                                 expiresAt = Clock.System.now() + 7.days,
                             )

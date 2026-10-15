@@ -76,22 +76,23 @@ import kotlin.time.Instant
 @Suppress("LargeClass")
 class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     @Test
-    fun `started missing transfers stay bound but terminal proof free transfers release their rail`() = test {
+    fun `inactive missing and terminal proof free transfers release their rail`() = test {
         val repo = repo()
         repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
         stubSend(Result.success(mock()))
         repo.send(quote) {}.getOrThrow()
         repo.reconcile().getOrThrow()
-        assertTrue(repo.hasBinding(request.id))
+        assertFalse(repo.hasBinding(request.id))
+        assertFalse(repo.attempts.value.single().paymentStarted)
         for (status in listOf(UsdtTransferStatus.FAILED, UsdtTransferStatus.REPLACED)) {
             stubStoredTransfer(Result.success(mock { on { this.status }.thenReturn(status) }))
             repo.reconcile().getOrThrow()
             assertFalse(repo.hasBinding(request.id))
-            assertTrue(repo.attempts.value.single().paymentStarted)
+            assertFalse(repo.attempts.value.single().paymentStarted)
         }
         stubStoredTransfer(Result.success(null))
         repo.reconcile().getOrThrow()
-        assertTrue(repo.hasBinding(request.id))
+        assertFalse(repo.hasBinding(request.id))
     }
 
     @Test

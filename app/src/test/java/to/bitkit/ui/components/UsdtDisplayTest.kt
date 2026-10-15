@@ -8,6 +8,13 @@ import kotlin.test.assertNull
 
 class UsdtDisplayTest {
     @Test
+    fun `exact amounts preserve token precision and locale separators`() {
+        assertEquals("4.996", usdtExactAmount(4_996_000u, Locale.US))
+        assertEquals("1,234567", usdtExactAmount(1_234_567u, Locale.GERMANY))
+        assertEquals("3,50", usdtExactAmount(3_500_000u, Locale.GERMANY))
+    }
+
+    @Test
     fun `bitcoin equivalent requires a fresh rate and fits display bounds`() {
         val now = 1_800_000_000_000L
         val rate = PaykitExchangeRate("100000", now)

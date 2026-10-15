@@ -118,6 +118,7 @@ import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.data.isUsdtEnabled
 import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
@@ -617,6 +618,8 @@ private fun UsdtHomeRefreshEffect() {
     if (LocalInspectionMode.current || !Env.isUsdtEnabled) return
     val viewModel = hiltViewModel<UsdtViewModel>()
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    if (!viewModel.shouldRefresh(settings.isUsdtEnabled)) return
     UsdtRefreshEffect(viewModel, pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING })
 }
 

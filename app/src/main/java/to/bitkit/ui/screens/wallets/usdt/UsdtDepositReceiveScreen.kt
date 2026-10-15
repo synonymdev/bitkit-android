@@ -50,6 +50,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.receive.ReceiveTab
 import to.bitkit.ui.theme.Colors
+import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -285,7 +286,7 @@ internal fun String.depositNetwork(): UsdtDepositNetwork? =
     UsdtDepositNetwork.entries.firstOrNull { it.name.equals(this, ignoreCase = true) }
 internal fun String.usdCents(locale: Locale = Locale.getDefault()): String = toULongOrNull()?.let {
     val whole = NumberFormat.getIntegerInstance(locale).format((it / 100u).toLong())
-    "$$whole.${(it % 100u).toString().padStart(2, '0')}"
+    "$$whole${DecimalFormatSymbols.getInstance(locale).decimalSeparator}${(it % 100u).toString().padStart(2, '0')}"
 } ?: "—"
 internal fun depositStatus(status: String, code: String?): Int = when (status) {
     "completed" -> R.string.usdt__confirmed

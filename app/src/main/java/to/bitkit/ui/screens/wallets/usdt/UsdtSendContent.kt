@@ -177,6 +177,7 @@ internal fun UsdtPaymentContent(
         showSubmitted && status == UsdtTransferStatus.BRIDGE_REFUNDED -> R.string.usdt__deposit_refunded
         showSubmitted && bridgeNeedsAttention -> R.string.usdt__bridge_attention
         showSubmitted && failed -> R.string.wallet__send_error_tx_failed
+        showSubmitted && state.error != null -> R.string.wallet__payment_request_expired
         showSubmitted -> R.string.usdt__submitted
         quote != null && isPaymentRequest -> R.string.wallet__payment_request
         quote != null -> R.string.wallet__send_review
@@ -194,6 +195,7 @@ internal fun UsdtPaymentContent(
                 failed,
                 bridgeNeedsAttention,
                 status == UsdtTransferStatus.BRIDGE_REFUNDED,
+                state.error,
                 onDetails,
                 onDone
             )
@@ -247,6 +249,7 @@ private fun ColumnScope.UsdtSubmittedContent(
     failed: Boolean,
     needsAttention: Boolean,
     refunded: Boolean,
+    error: Int?,
     onDetails: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -254,7 +257,7 @@ private fun ColumnScope.UsdtSubmittedContent(
     VerticalSpacer(32.dp)
     BodyM(
         stringResource(
-            when {
+            error ?: when {
                 refunded -> R.string.usdt__bridge_refunded_description
                 needsAttention -> R.string.usdt__bridge_attention
                 failed -> R.string.usdt__send_failed_description

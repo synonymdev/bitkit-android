@@ -11,7 +11,7 @@ USDT uses Arbitrum One regardless of the Bitcoin network setting. Builds use the
 | `USDT_DEPOSITS_URL` | `https://bitkit.to/v1/usdt/deposits` |
 | `USDT_RPC_URL` | `https://bitkit.to/v1/usdt/chain-rpc` |
 
-Gradle properties, environment variables or `local.properties` override these defaults. For local E2E testing, override all four URLs with the matching local service routes. Clearing the RPC or bundler build setting disables USDT; clearing the deposits or bridges setting disables that provider API.
+Gradle properties, environment variables or `local.properties` override these defaults. For local E2E testing, override all four URLs with the matching local service routes. Clearing the RPC or bundler build setting disables USDT network operations; local recovery-data backup and restore remain available. Clearing the deposits or bridges setting disables that provider API.
 
 Optional `USDT_DEPOSITS_URL` enables wallet-signed Orchestra deposits. Provider keys remain on the service. Source support covers Ethereum, Tron, Solana, Polygon, Base and BNB Smart Chain, subject to explicit service enablement and live route availability. Each source requires funded acceptance before release. Users approve a source-network refund address when requesting an eligible refund; unconverted Tron refunds require provider support. History and addresses recover under the same provider partner account. Linked order amounts are batch totals. Outbound USDT0 destinations are enabled with `USDT_BRIDGE_NETWORKS`, a comma-separated subset of `ethereum,polygon,plasma,stable`, matching the service configuration. An empty USDT0 network list disables USDT0 bridging; Orchestra destinations are discovered separately through `USDT_BRIDGES_URL`. Paykit always uses direct Arbitrum payments.
 
@@ -30,6 +30,8 @@ MAX reserves the quoted USDT fee and reuses that funded quote for payment review
 History catch-up is deferred while the USDT send sheet is open. Balance and pending-payment recovery continue; a history scan already in progress is allowed to finish. Unknown deposit-provider statuses require attention instead of appearing as ordinary pending deposits. Cross-network payment details label the recipient amount as expected until delivery is confirmed.
 
 ## Enabling USDT
+
+Unused wallets do not create USDT storage or poll the gateway merely for Home refreshes or backups. Existing wallet journals still allow payment/proof recovery while USDT is off.
 
 USDT starts off. The introductory sheet offers Enable USDT and No Thanks; dismissing it without a choice allows it to return next launch. Settings > General > Payments > USDT (Tether) changes the choice later.
 

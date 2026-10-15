@@ -198,7 +198,7 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
         repo.restoreBackup(PaykitUsdtStateBackup(listOf(original.copy(paymentStarted = true)), emptyList()))
         assertTrue(repo.hasBinding(request.id))
         repo.reconcile().getOrThrow()
-        assertTrue(repo.hasBinding(request.id))
+        assertFalse(repo.hasBinding(request.id))
         stored = unsubmittedState
         repo.reconcile().getOrThrow()
         stored = "unreadable"
@@ -304,7 +304,7 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restored started payment remains protected without local core history`() = test {
+    fun `restored started payment is released after confirming no local core history`() = test {
         val original = repo()
         original.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
         val unstartedState = stored
@@ -316,16 +316,16 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
             val restored = repo()
             restored.restoreBackup(backup)
             restored.reconcile().getOrThrow()
-            assertTrue(restored.resumableRequests.value.isEmpty())
+            assertEquals(setOf(request.id), restored.resumableRequests.value)
             assertTrue(
                 restored.prepare(
                     context(),
                     quote.copy(id = "replacement"),
                     amount,
                     request.payment(MethodId.UsdtArbitrum, clock.now())
-                ).isFailure
+                ).isSuccess
             )
-            assertEquals(backup, restored.backupSnapshot())
+            assertFalse(restored.backupSnapshot().attempts.single().paymentStarted)
         }
     }
 

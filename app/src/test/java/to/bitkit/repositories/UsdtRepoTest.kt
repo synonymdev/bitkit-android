@@ -38,6 +38,16 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unused disabled wallet does not refresh but stored recovery and opt in do`() {
+        val repo = UsdtRepo(service, testDispatcher)
+        assertEquals(false, repo.shouldRefresh(enabled = false))
+        assertTrue(repo.shouldRefresh(enabled = true))
+        whenever(service.hasStoredWallet).thenReturn(true)
+        assertTrue(repo.shouldRefresh(enabled = false))
+        verify(service, never()).wallet()
+    }
+
+    @Test
     fun `own address has a specific error for exact and maximum sends`() = test {
         val address = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
         whenever(service.wallet()).thenReturn(wallet)

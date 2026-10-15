@@ -31,8 +31,8 @@ class UsdtService @Inject constructor(
     private var credentialFingerprint: ByteArray? = null
 
     @Synchronized
-    fun wallet(): UsdtWallet {
-        if (!Env.isUsdtEnabled) throw UsdtException.NotConfigured()
+    fun wallet(requiresNetwork: Boolean = true): UsdtWallet {
+        if (requiresNetwork && !Env.isUsdtEnabled) throw UsdtException.NotConfigured()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw UsdtException.InvalidCredentials()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         val fingerprint = MessageDigest.getInstance("SHA-256")
@@ -46,8 +46,9 @@ class UsdtService @Inject constructor(
         return UsdtWallet(
             address = address,
             storagePath = File(Env.bitkitCoreStoragePath(0), "usdt-$address.sqlite").path,
-            rpcUrl = requireNotNull(Env.usdtRpcUrl),
-            bundlerUrl = Env.usdtBundlerUrl,
+            // Local backup access needs a wallet even when network configuration is disabled.
+            rpcUrl = Env.usdtRpcUrl ?: "http://127.0.0.1:1",
+            bundlerUrl = Env.usdtBundlerUrl.ifEmpty { "http://127.0.0.1:1" },
             bridgeUrl = Env.usdtBridgesUrl,
             backup = object : UsdtBackup {
                 override suspend fun persist(snapshot: String) {
@@ -92,18 +93,16 @@ class UsdtService @Inject constructor(
         return try { block(client, mnemonic, passphrase) } finally { client.close() }
     }
 
-    @Synchronized
-    fun backupSnapshot(): String? {
-        if (Env.isUsdtEnabled) return wallet().exportBackup()
-        val directory = File(Env.bitkitCoreStoragePath(0))
-        if (directory.exists()) {
+    val hasStoredWallet: Boolean
+        get() {
+            val directory = File(Env.bitkitCoreStoragePath(0))
+            if (!directory.exists()) return false
             val files = directory.listFiles() ?: throw IOException("Cannot read USDT storage")
-            if (files.any { it.name.startsWith("usdt-") && it.extension == "sqlite" }) {
-                throw UsdtException.NotConfigured()
-            }
+            return files.any { it.name.startsWith("usdt-") && it.extension == "sqlite" }
         }
-        return null
-    }
+
+    @Synchronized
+    fun backupSnapshot(): String? = if (hasStoredWallet) wallet(requiresNetwork = false).exportBackup() else null
 
     @Synchronized
     fun wipe() {

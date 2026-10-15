@@ -3301,7 +3301,7 @@ class AppViewModel @Inject constructor(
     }
 
     suspend fun reconcilePaykitUsdt() {
-        if (!Env.isUsdtEnabled) return
+        if (!Env.isUsdtEnabled || (!isUsdtEnabled.value && !usdtRepo.hasStoredWallet())) return
         val previousReceipts = paykitUsdtPayments.receipts.value
         paykitUsdtPayments.reconcile().onSuccess {
             if (previousReceipts != paykitUsdtPayments.receipts.value) {
@@ -3368,7 +3368,7 @@ class AppViewModel @Inject constructor(
                 payMethod = payMethod
             )
         }
-        usdtRepo.refresh(history = false)
+        if (usdtRepo.shouldRefresh(isUsdtEnabled.value)) usdtRepo.refresh(history = false)
         _sendUiState.update {
             it.copy(
                 isAmountInputValid = if (it.paykitUsesUsdt) {

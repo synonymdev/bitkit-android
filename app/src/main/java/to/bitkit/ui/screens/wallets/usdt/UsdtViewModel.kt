@@ -29,6 +29,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.USat
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.UsdtSelfSendError
@@ -85,6 +86,8 @@ class UsdtViewModel @Inject constructor(
             repo.isSendPresented = value
             if (!value) preparedQuote = null
         }
+
+    fun shouldRefresh(enabled: Boolean): Boolean = repo.shouldRefresh(enabled)
 
     suspend fun refresh(history: Boolean = false) {
         repo.refresh(history)
@@ -259,7 +262,9 @@ class UsdtViewModel @Inject constructor(
                         submitted = recorded,
                         busy = recorded,
                         quote = quote.takeIf { recorded },
-                        error = error.messageResource().takeUnless { recorded }
+                        error = error.messageResource().takeIf {
+                            !recorded || error is UsdtException.SubmissionDeadlineExpired
+                        }
                     )
                 }
             }
@@ -285,8 +290,9 @@ data class UsdtSendState(
 private fun UsdtQuote.warnings(balance: ULong?, warnOver100: Boolean): List<SanityWarning> = buildList {
     if (balance != null && amount > balance / 2u) add(SanityWarning.OVER_HALF_BALANCE)
     if (warnOver100 && amount > 100_000_000u) add(SanityWarning.VALUE_OVER_100_USD)
-    if (maximumFee > 10_000_000u) add(SanityWarning.FEE_OVER_10_USD)
-    if (maximumFee > amount / 2u) add(SanityWarning.FEE_OVER_HALF_VALUE)
+    val totalCost = USat(maximumFee) + USat(USat(amount) - USat(receivedAmount))
+    if (totalCost > 10_000_000u) add(SanityWarning.FEE_OVER_10_USD)
+    if (totalCost > amount / 2u) add(SanityWarning.FEE_OVER_HALF_VALUE)
 }
 
 @StringRes

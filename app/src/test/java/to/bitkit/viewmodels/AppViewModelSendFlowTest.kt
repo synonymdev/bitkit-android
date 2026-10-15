@@ -497,6 +497,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `foreground polling reconciles configured USDT payment proofs`() = test {
+        whenever(usdtRepo.hasStoredWallet()).thenReturn(true)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))

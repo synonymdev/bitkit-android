@@ -51,6 +51,7 @@ import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.usdtExactAmount
 import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
@@ -530,5 +531,5 @@ internal val UsdtDepositDetail.canRefund get() = deposit.asset == "USDT" && depo
     providerStatus !in listOf("completed", "refunded", "refunding", "refund_requested")
 
 private fun ULong?.usdtText(hidden: Boolean) = (
-    if (hidden) UiConstants.HIDE_BALANCE_SHORT else this?.let { usdtOverviewAmount(it) } ?: "—"
+    if (hidden) UiConstants.HIDE_BALANCE_SHORT else this?.let { usdtExactAmount(it) } ?: "—"
     ) + " USDT"

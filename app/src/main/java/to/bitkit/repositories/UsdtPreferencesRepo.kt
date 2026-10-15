@@ -34,7 +34,10 @@ class UsdtPreferencesRepo @Inject constructor(
 
     suspend fun setEnabled(enabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            if (!enabled && settingsStore.data.first().isUsdtEnabled(usdtRepo.state.value)) {
+            val settings = settingsStore.data.first()
+            if (!enabled && settings.usdtPreference != UsdtPreference.UNDECIDED &&
+                settings.isUsdtEnabled(usdtRepo.state.value)
+            ) {
                 checkCanDisable().getOrThrow()
             }
             settingsStore.update {

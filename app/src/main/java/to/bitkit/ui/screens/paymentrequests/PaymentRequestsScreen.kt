@@ -78,7 +78,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.components.usdtOverviewAmount
+import to.bitkit.ui.components.usdtExactAmount
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -801,5 +801,5 @@ internal fun paykitUsdtReceiptText(receipt: PaykitUsdtReceipt): String {
         receipt.afterExpiry -> R.string.wallet__payment_request_after_expiry
         else -> R.string.wallet__payment_request_payment_verified
     }
-    return stringResource(label) + " · " + usdtOverviewAmount(receipt.amount.atomic) + " USDT"
+    return stringResource(label) + " · " + usdtExactAmount(receipt.amount.atomic) + " USDT"
 }

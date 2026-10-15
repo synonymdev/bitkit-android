@@ -62,6 +62,15 @@ class UsdtPreferencesRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `declining introduction preserves existing funds without trapping the introduction`() = test {
+        wallet.value = UsdtWalletState(balance = 1u)
+        repo.setEnabled(false).getOrThrow()
+        assertEquals(UsdtPreference.DISABLED, settings.value.usdtPreference)
+        assertTrue(repo.enabled.first())
+        assertFalse(repo.canDisable.first())
+    }
+
+    @Test
     fun `funds or unavailable balance prevent disabling an enabled account`() = test {
         settings.value = SettingsData(usdtPreference = UsdtPreference.ENABLED)
         for (balance in listOf(null, 1uL)) {

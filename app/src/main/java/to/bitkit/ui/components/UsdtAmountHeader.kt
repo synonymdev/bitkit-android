@@ -57,6 +57,12 @@ internal fun usdtOverviewAmount(amount: ULong, locale: Locale = Locale.getDefaul
     return format.format(BigDecimal(amount.toString()).movePointLeft(PaykitAsset.USDT.decimals))
 }
 
+internal fun usdtExactAmount(amount: ULong, locale: Locale = Locale.getDefault()): String =
+    NumberFormat.getNumberInstance(locale).apply {
+        minimumFractionDigits = 2
+        maximumFractionDigits = PaykitAsset.USDT.decimals
+    }.format(BigDecimal(amount.toString()).movePointLeft(PaykitAsset.USDT.decimals))
+
 internal fun usdtDisplaySats(amount: String, rate: PaykitExchangeRate?, now: Long = nowMillis()): Long? {
     val dollars = amount.toBigDecimalOrNull()?.takeIf { it.signum() >= 0 } ?: return null
     val price = runCatching { rate?.value(now) }.getOrNull() ?: return null

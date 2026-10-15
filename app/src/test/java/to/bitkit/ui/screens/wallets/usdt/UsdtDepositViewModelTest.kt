@@ -20,6 +20,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.repositories.UsdtDepositRepo
 import to.bitkit.test.BaseUnitTest
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -27,6 +28,13 @@ import kotlin.test.assertTrue
 
 class UsdtDepositViewModelTest : BaseUnitTest() {
     private val repo: UsdtDepositRepo = mock()
+
+    @Test
+    fun `USD cents respect locale grouping and decimal separators`() {
+        assertEquals("$10,000.00", "1000000".usdCents(Locale.US))
+        assertEquals("$10.000,00", "1000000".usdCents(Locale.GERMANY))
+        assertEquals("$0,05", "5".usdCents(Locale.GERMANY))
+    }
 
     @Test
     fun `background detail refresh leaves editing enabled and updates refund eligibility`() = test {

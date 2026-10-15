@@ -137,12 +137,17 @@ class UsdtRepo @Inject constructor(
         (Env.usdtDestinations + service.wallet().orchestraDestinations()).distinct().toImmutableList()
     }
 
+    fun hasStoredWallet(): Boolean = runCatching { service.hasStoredWallet }.getOrDefault(false)
+
+    fun shouldRefresh(enabled: Boolean): Boolean = enabled || state.value.hasFundsOrPendingTransfers ||
+        (state.value.balance == null && hasStoredWallet())
+
     fun backupSnapshot(): String? = service.backupSnapshot()
 
     suspend fun restoreBackup(snapshot: String) = withContext(ioDispatcher) {
         mutex.withLock {
             runSuspendCatching {
-                val wallet = service.wallet()
+                val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
                 _state.update {
                     it.copy(
