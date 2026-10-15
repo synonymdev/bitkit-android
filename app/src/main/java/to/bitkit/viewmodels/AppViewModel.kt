@@ -3391,9 +3391,14 @@ class AppViewModel @Inject constructor(
         canUseBitcoin: Boolean,
     ): Boolean {
         val request = payment.incomingPaymentRequest
-        val requiresUsdt = request != null &&
-            (request.amount.asset != PaykitAsset.BTC || paykitUsdtPayments.hasBinding(request.id))
-        return requiresUsdt || !hasBitcoinEndpoint || (!canUseBitcoin && (usdtRepo.state.value.balance ?: 0u) > 0u)
+        if (!hasBitcoinEndpoint || request?.let { paykitUsdtPayments.hasBinding(it.id) } == true) return true
+        val balance = usdtRepo.state.value.balance ?: 0u
+        if (request != null && request.amount.asset != PaykitAsset.BTC) {
+            val now = Clock.System.now()
+            val quoted = runCatching { request.payment(MethodId.UsdtArbitrum, now) }.getOrNull()
+            return quoted != null && quoted.isValid(now) && balance >= quoted.amount.atomic
+        }
+        return !canUseBitcoin && balance > 0u
     }
 
     private fun canFundPaykitLightning(invoice: LightningInvoice?, lnurl: LnurlParams.LnurlPay?): Boolean {

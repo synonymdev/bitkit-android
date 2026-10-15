@@ -12697,6 +12697,49 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `dollar requests prefer USDT only when the quoted amount is covered`() = test {
+        val bitcoin = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val usdt = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
+        val endpoints = listOf(bitcoin, usdt)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 100u),
+            pricing = PaykitRequestPricing(
+                PaymentConversion.Fixed(
+                    listOf(
+                        ConversionRate("btc", "0.00001"),
+                        ConversionRate("usdt", "1"),
+                        ConversionRate("usdt-arbitrum", "1.2345678"),
+                    ),
+                )
+            ),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        val cases = listOf(
+            0uL to false,
+            1_000_000uL to false,
+            1_234_567uL to false,
+            1_234_568uL to true,
+            2_000_000uL to true,
+        )
+        for ((balance, expected) in cases) {
+            usdtState.value = UsdtWalletState(balance = balance)
+            sut.openContactPayment(
+                REGTEST_ADDRESS,
+                testPublicKey,
+                incomingPaymentRequest = request,
+                endpoints = endpoints,
+            )
+            advanceUntilIdle()
+            assertEquals(expected, sut.sendUiState.value.paykitUsesUsdt, "balance $balance")
+            assertEquals(if (expected) "1.234568" else "", sut.sendUiState.value.paykitAmount)
+            sut.resetSendState()
+        }
+    }
+
+    @Test
     fun `automatic USDT request finishes preparation and admits amount continue`() = test {
         val endpoint = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", null, null, "")
         val request = paymentRequest().copy(
