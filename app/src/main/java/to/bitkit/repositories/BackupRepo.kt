@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import com.synonym.bitkitcore.UsdtException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
@@ -22,6 +23,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
@@ -114,6 +117,8 @@ class BackupRepo @Inject constructor(
     private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
     private val privatePaykitAddressReservationRepo: Provider<PrivatePaykitAddressReservationRepo>,
     private val paykitPaymentProofRepo: Provider<PaykitPaymentProofRepo>,
+    private val paykitUsdtPaymentRepo: Provider<PaykitUsdtPaymentRepo>,
+    private val usdtRepo: Provider<UsdtRepo>,
     private val paykitPaymentProofStore: PaykitPaymentProofStore,
     private val paykitPaymentRequestRepo: Provider<PaykitPaymentRequestRepo>,
     private val paykitPresentationStore: PaykitPaymentRequestPresentationStore,
@@ -127,6 +132,7 @@ class BackupRepo @Inject constructor(
     private val clock: Clock,
     private val db: AppDb,
 ) {
+    private val walletBackupMutex = Mutex()
     private val scope = appScope(ioDispatcher, TAG)
 
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
@@ -370,6 +376,15 @@ class BackupRepo @Inject constructor(
         dataListenerJobs.add(observeBackupChanges(paykitSdkService.backupStateVersion, BackupCategory.WALLET))
         dataListenerJobs.add(observeBackupChanges(paykitPaymentProofStore.backupStateVersion, BackupCategory.WALLET))
         dataListenerJobs.add(observeBackupChanges(onchainSendAttemptStore.backupStateVersion, BackupCategory.WALLET))
+        dataListenerJobs.add(
+            observeBackupChanges(paykitUsdtPaymentRepo.get().backupStateVersion, BackupCategory.WALLET)
+        )
+        dataListenerJobs.add(
+            observeBackupChanges(
+                usdtRepo.get().state.map { it.transfers }.distinctUntilChanged(),
+                BackupCategory.WALLET,
+            )
+        )
         dataListenerJobs.add(observeBackupChanges(paykitPresentationStore.backupStateVersion, BackupCategory.WALLET))
         dataListenerJobs.add(
             observeBackupChanges(
@@ -521,12 +536,15 @@ class BackupRepo @Inject constructor(
                 backupRequired = maxOf(backupRequired, it.required, it.synced + 1)
                 it.copy(running = true, required = backupRequired)
             }
-            val data = runSuspendCatching { getBackupDataBytes(category) }
-                .getOrElse {
-                    markBackupFailed(category, backupRequired, it)
-                    return@withContext Result.failure(it)
+
+            val upload = if (category == BackupCategory.WALLET) {
+                uploadWalletBackup(null)
+            } else {
+                runSuspendCatching {
+                    vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
                 }
-            vssBackupClient.putObject(key = category.name, data = data)
+            }
+            upload
                 .onSuccess {
                     withContext(NonCancellable) {
                         cacheStore.updateBackupStatus(category) {
@@ -546,6 +564,20 @@ class BackupRepo @Inject constructor(
                 }
             }
         }
+    }
+
+    suspend fun persistWalletBackup(usdt: String? = null): Result<Unit> =
+        uploadWalletBackup(usdt).onFailure { markBackupRequired(BackupCategory.WALLET) }
+
+    private suspend fun uploadWalletBackup(usdt: String?): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            walletBackupMutex.withLock {
+                if (shouldSkipBackup()) throw UsdtException.BackupUnavailable()
+                vssBackupClient.setup().getOrThrow()
+                val data = getWalletBackupDataBytes(usdt)
+                vssBackupClient.putObject(key = BackupCategory.WALLET.name, data = data).getOrThrow()
+            }
+        }.map { }
     }
 
     private suspend fun markBackupFailed(category: BackupCategory, backupRequired: Long, e: Throwable) {
@@ -646,7 +678,7 @@ class BackupRepo @Inject constructor(
         json.encodeToString(payload).toByteArray()
     }
 
-    private suspend fun getWalletBackupDataBytes(): ByteArray {
+    private suspend fun getWalletBackupDataBytes(usdt: String? = null): ByteArray {
         check(!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
             "Wallet backup restore is incomplete"
         }
@@ -673,8 +705,9 @@ class BackupRepo @Inject constructor(
                     it.originalInputs == null && it.candidateTxids.isEmpty()
             } != true
         ) { "Waiting for signed receipt before wallet backup" }
-        check(privateRepo.backupStateVersion.value == privateVersion &&
-            paykitSdkService.backupStateVersion.value == sdkVersion
+        check(
+            privateRepo.backupStateVersion.value == privateVersion &&
+                paykitSdkService.backupStateVersion.value == sdkVersion
         ) { "Private payment state changed during wallet snapshot" }
         val proofs = snapshotProofs
         val active = snapshotAttempt?.let { attempt ->
@@ -693,10 +726,12 @@ class BackupRepo @Inject constructor(
             paykitSdkBackupState = paykitSdkBackupState,
             watchOnlyAccounts = watchOnlyAccountSnapshot.accounts,
             watchOnlyAccountAllocationState = watchOnlyAccountSnapshot.allocationState,
+            usdtWallet = usdt ?: usdtRepo.get().backupSnapshot(),
             paykitPaymentState = PaykitPaymentStateBackup(
                 subscriptions = paykitPresentationStore.backupSnapshot(),
                 pendingProofs = proofs,
                 activeOnchainAttempt = active,
+                usdt = paykitUsdtPaymentRepo.get().backupSnapshot(),
                 acceptedOneTimeRequests = paykitPresentationStore.acceptedOneTimeBackupSnapshot(),
             ),
         )
@@ -835,6 +870,7 @@ class BackupRepo @Inject constructor(
         keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, String(dataBytes))
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         var restoredAttempt: OnchainSendAttempt? = null
+        parsed.usdtWallet?.let { usdtRepo.get().restoreBackup(it).getOrThrow() }
         parsed.paykitPaymentState?.let {
             // Validate every proof before writing a guard or replacing existing payment state.
             it.pendingProofs.forEach { proof -> proof.restored() }
@@ -859,6 +895,7 @@ class BackupRepo @Inject constructor(
             paykitPaymentRequestRepo.get().clear()
             paykitPresentationStore.restoreBackup(it.subscriptions)
             paykitPaymentProofRepo.get().restoreBackup(it.pendingProofs)
+            it.usdt?.let { usdt -> paykitUsdtPaymentRepo.get().restoreBackup(usdt) }
             paykitPresentationStore.restoreAcceptedOneTimeRequests(it.acceptedOneTimeRequests.orEmpty())
         }
         db.transferDao().upsert(parsed.transfers)

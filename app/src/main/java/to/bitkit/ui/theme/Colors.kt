@@ -6,6 +6,7 @@ object Colors {
     // Accents
     val Brand = Color(0xFFFF4400)
     val Blue = Color(0xFF0085FF)
+    val Usdt = Color(0xFF009393)
     val Green = Color(0xFF75BF72)
     val Purple = Color(0xFFB95CE8)
     val Red = Color(0xFFE95164)
@@ -48,6 +49,7 @@ object Colors {
     val Brand24 = Brand.copy(alpha = 0.24f)
     val Brand32 = Brand.copy(alpha = 0.32f)
     val Brand50 = Brand.copy(alpha = 0.50f)
+    val Usdt16 = Usdt.copy(alpha = 0.16f)
     val Green16 = Green.copy(alpha = 0.16f)
     val Green24 = Green.copy(alpha = 0.24f)
     val Green32 = Green.copy(alpha = 0.32f)

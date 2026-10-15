@@ -45,6 +45,7 @@ class PaykitSubscriptionProposalTest {
 
     private fun terms(description: String, iconUri: String? = null) = PaykitPaymentRequestProposalTerms(
         amountValue = "0.001",
+        amountAsset = "btc",
         paymentReference = "bitkit-00000000-0000-0000-0000-000000000000",
         proposalExpiresAt = "2027-01-22T08:00:00.000Z",
         recurrence = PaykitPaymentRequestRecurrenceTerms(

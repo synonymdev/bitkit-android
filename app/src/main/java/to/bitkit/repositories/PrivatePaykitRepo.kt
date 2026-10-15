@@ -85,6 +85,7 @@ class PrivatePaykitRepo @Inject constructor(
     private val walletRepo: WalletRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val paymentRequestRepo: PaykitPaymentRequestRepo,
+    private val usdtRepo: UsdtRepo,
     private val coreService: CoreService,
     private val clock: Clock,
 ) {
@@ -292,9 +293,15 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private fun scheduleContactPreparation(publicKeys: Collection<String>, forceRefreshLightning: Boolean = false) {
+    private fun scheduleContactPreparation(
+        publicKeys: Collection<String>,
+        forceRefreshLightning: Boolean = false,
+        requeueActive: Boolean = false,
+    ) {
         if (isDeletingProfile) return
-        pendingPreparationKeys.addAll(publicKeys.filter { forceRefreshLightning || it !in activePreparationKeys })
+        pendingPreparationKeys.addAll(
+            publicKeys.filter { requeueActive || forceRefreshLightning || it !in activePreparationKeys }
+        )
         pendingForceRefreshLightning = pendingForceRefreshLightning || forceRefreshLightning
         if (preparationJob?.isActive == true || pendingPreparationKeys.isEmpty()) return
         preparationJob = retryScope.launch {
@@ -376,9 +383,10 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun refreshKnownSavedContactEndpoints(
         reason: String,
         forceRefreshLightning: Boolean = false,
+        requeueActive: Boolean = false,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
-            scheduleContactPreparation(knownSavedContactKeys.toList(), forceRefreshLightning)
+            scheduleContactPreparation(knownSavedContactKeys.toList(), forceRefreshLightning, requeueActive)
         }.onFailure {
             Logger.warn("Failed to refresh private Paykit endpoints for '$reason'", it, context = TAG)
         }
@@ -695,7 +703,8 @@ class PrivatePaykitRepo @Inject constructor(
                 pubkyService.currentPublicKey() ?: return@runSuspendCatching null
                 json.encodeToString(
                     PrivatePaykitBackup(
-                        sdkState = paykitSdkService.exportBackupState(),
+                        // This snapshot can be required before broadcast; it must not wait for payment to finish.
+                        sdkState = paykitSdkService.exportBackupState(Priority.Interactive),
                         consumedPrivatePaymentListVersions = ensureState().contacts
                             .mapNotNull { (publicKey, contactState) ->
                                 contactState.consumedPrivatePaymentListVersion?.let { publicKey to it }
@@ -870,6 +879,7 @@ class PrivatePaykitRepo @Inject constructor(
                     paymentListVersion = paymentListVersion,
                     previousPaymentListVersion = consumedVersion.takeIf { paymentListVersion != null },
                 ),
+                endpoints = privatePayable,
             )
         }
 
@@ -1633,6 +1643,14 @@ class PrivatePaykitRepo @Inject constructor(
         runSuspendCatching {
             val settings = settingsStore.data.first()
             val endpoints = mutableListOf<Endpoint>()
+            if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings, usdtRepo.state.value)) {
+                usdtRepo.paymentEndpoint()
+                    .onSuccess { endpoints += it }
+                    .onFailure {
+                        if (it is CancellationException) throw it
+                        Logger.warn("Failed to prepare private Paykit USDT endpoint", it, context = TAG)
+                    }
+            }
             if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
                 val reservedAddress = addressReservationRepo.currentOrRotatedAddress(
                     publicKey,

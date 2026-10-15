@@ -11,8 +11,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,12 +46,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,21 +62,29 @@ import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAmountConversion
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionDraft
+import to.bitkit.repositories.paykitRate
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.MoneyDisplay
+import to.bitkit.ui.components.PaykitAcceptedAssets
+import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactRow
 import to.bitkit.ui.components.TextInput
@@ -92,6 +106,7 @@ import to.bitkit.utils.SubscriptionClockOffset
 import to.bitkit.utils.SubscriptionIcon
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
+import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @Composable
@@ -100,12 +115,15 @@ fun CreateSubscriptionSheet(
     amountInputViewModel: AmountInputViewModel = hiltViewModel(key = "SubscriptionAmount"),
 ) {
     val context = LocalContext.current
+    val currencies = LocalCurrencies.current
     val scope = rememberCoroutineScope()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val isCreating by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
+    val receivingMethods by appViewModel.paykitReceivingMethods.collectAsStateWithLifecycle()
     var step by remember { mutableStateOf(SubscriptionCreationStep.Details) }
-    var amountSats by remember { mutableStateOf(0uL) }
+    var amount by remember { mutableStateOf(PaykitAmount(PaykitAsset.BTC, 0uL)) }
+    val amountConversion = remember { PaykitAmountConversion() }
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var frequency by remember { mutableStateOf(PaykitRecurrenceUnit.Month) }
@@ -118,13 +136,36 @@ fun CreateSubscriptionSheet(
 
     when (step) {
         SubscriptionCreationStep.Details -> CreateSubscriptionDetails(
-            amountSats = amountSats,
+            amount = amount,
+            availableMethods = receivingMethods.toImmutableList(),
+            acceptedMethods = PaykitRequestPricing.subscriptionEndpoints(
+                amount.asset,
+                receivingMethods,
+            ).toImmutableList(),
             name = name,
             description = description,
             frequency = frequency,
             selectedIconUri = selectedIconUri,
             isLoadingIcon = isLoadingIcon,
             onAmountClick = { step = SubscriptionCreationStep.Amount },
+            onClickAsset = { asset ->
+                if (asset != amount.asset) {
+                    runCatching {
+                        amountConversion.convert(
+                            amount,
+                            asset,
+                            currencies.paykitRate,
+                            Clock.System.now().toEpochMilliseconds()
+                        )
+                    }.onSuccess { amount = it }.onFailure {
+                        appViewModel.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = context.getString(R.string.wallet__payment_request_rate_unavailable),
+                        )
+                    }
+                }
+            },
             onNameChange = { name = it.take(256) },
             onDescriptionChange = { description = it.take(1024) },
             onFrequencyChange = { frequency = it },
@@ -152,15 +193,19 @@ fun CreateSubscriptionSheet(
         )
         SubscriptionCreationStep.Amount -> PaymentRequestAmountContent(
             amountInputViewModel = amountInputViewModel,
+            allowedAssets = listOf(PaykitAsset.BTC, PaykitAsset.USD).filter {
+                PaykitRequestPricing.subscriptionEndpoints(it, receivingMethods).isNotEmpty()
+            }.toImmutableList(),
+            conversion = amountConversion,
             initialDraft = PaykitPaymentRequestDraft(
-                amountSats = amountSats,
+                amount = amount,
                 note = name,
                 expiresAt = SubscriptionClockOffset.subscriptionNow() + expiration.duration,
             ),
             contact = null,
             onBack = { step = SubscriptionCreationStep.Details },
             onContinue = {
-                amountSats = it.amountSats
+                amount = it.amount
                 step = SubscriptionCreationStep.Details
             },
             modifier = Modifier.sheetHeight()
@@ -180,7 +225,7 @@ fun CreateSubscriptionSheet(
                 selectedTarget?.let { target ->
                     appViewModel.createSubscription(
                         draft = PaykitSubscriptionDraft(
-                            amountSats = amountSats,
+                            amount = amount,
                             name = name,
                             description = description,
                             frequency = frequency,
@@ -210,13 +255,16 @@ fun CreateSubscriptionSheet(
 
 @Composable
 internal fun CreateSubscriptionDetails(
-    amountSats: ULong,
+    amount: PaykitAmount,
+    availableMethods: ImmutableList<String>,
+    acceptedMethods: ImmutableList<String>,
     name: String,
     description: String,
     frequency: PaykitRecurrenceUnit,
     selectedIconUri: Uri?,
     isLoadingIcon: Boolean,
     onAmountClick: () -> Unit,
+    onClickAsset: (PaykitAsset) -> Unit,
     onNameChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onFrequencyChange: (PaykitRecurrenceUnit) -> Unit,
@@ -241,7 +289,7 @@ internal fun CreateSubscriptionDetails(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .gradientBackground()
+            .background(Colors.Gray7)
             .navigationBarsPadding()
             .imePadding()
             .padding(horizontal = 16.dp)
@@ -250,17 +298,17 @@ internal fun CreateSubscriptionDetails(
         SheetTopBar(titleText = stringResource(R.string.subscriptions__create_subscription))
         LazyColumn(modifier = Modifier.weight(1f)) {
             item {
+                VerticalSpacer(8.dp)
                 Caption13Up(text = stringResource(R.string.wallet__payment_request_amount), color = Colors.White64)
-                VerticalSpacer(12.dp)
+                VerticalSpacer(16.dp)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().clickableAlpha(onClick = onAmountClick)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.clickableAlpha(onClick = onAmountClick).testTag("SubscriptionEditAmount")
                 ) {
-                    MoneyDisplay(
-                        sats = amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-                        showSymbol = true,
-                        modifier = Modifier.weight(1f, fill = false)
+                    PaykitAmountDisplay(
+                        amount = amount,
+                        modifier = Modifier.weight(1f, fill = false).width(IntrinsicSize.Max)
                     )
                     Icon(
                         painter = painterResource(R.drawable.ic_pencil_simple),
@@ -274,6 +322,15 @@ internal fun CreateSubscriptionDetails(
                 VerticalSpacer(8.dp)
                 SubscriptionFrequencyPicker(frequency, onFrequencyChange)
                 VerticalSpacer(24.dp)
+                PaykitAcceptedAssets(
+                    title = stringResource(R.string.subscriptions__accepted_payments),
+                    availableMethods = availableMethods,
+                    selectedMethods = acceptedMethods,
+                    testTagPrefix = "Subscription",
+                    onClickAsset = onClickAsset,
+                    modifier = Modifier.testTag("SubscriptionAcceptedMethods")
+                )
+                VerticalSpacer(24.dp)
                 Caption13Up(text = stringResource(R.string.subscriptions__name), color = Colors.White64)
                 VerticalSpacer(8.dp)
                 TextInput(
@@ -284,44 +341,45 @@ internal fun CreateSubscriptionDetails(
                     modifier = Modifier.fillMaxWidth().testTag("SubscriptionName")
                 )
                 VerticalSpacer(24.dp)
-                Caption13Up(text = stringResource(R.string.subscriptions__description), color = Colors.White64)
-                VerticalSpacer(8.dp)
-                TextInput(
-                    value = description,
-                    onValueChange = onDescriptionChange,
-                    placeholder = stringResource(R.string.subscriptions__description_placeholder),
-                    minLines = 3,
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth().testTag("SubscriptionDescription")
-                )
-                VerticalSpacer(24.dp)
-                Caption13Up(text = stringResource(R.string.subscriptions__custom_icon), color = Colors.White64)
-                VerticalSpacer(8.dp)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Colors.White10)
-                        .clickable(enabled = !isLoadingIcon, onClick = launchPhotoPicker)
-                        .padding(16.dp)
-                        .testTag("SubscriptionIconPicker")
-                ) {
-                    if (selectedIconUri == null) {
-                        SubscriptionDefaultIcon(size = 40.dp)
-                    } else {
-                        AsyncImage(
-                            model = selectedIconUri,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Caption13Up(text = stringResource(R.string.subscriptions__description), color = Colors.White64)
+                        VerticalSpacer(8.dp)
+                        TextInput(
+                            value = description,
+                            onValueChange = onDescriptionChange,
+                            placeholder = stringResource(R.string.subscriptions__description_placeholder),
+                            minLines = 4,
+                            maxLines = 4,
+                            modifier = Modifier.fillMaxWidth().testTag("SubscriptionDescription")
                         )
                     }
-                    CaptionB(
-                        text = stringResource(R.string.subscriptions__custom_icon_description),
-                        color = Colors.White64,
-                        modifier = Modifier.padding(start = 16.dp).weight(1f)
-                    )
+                    Column {
+                        Caption13Up(text = stringResource(R.string.subscriptions__custom_icon), color = Colors.White64)
+                        VerticalSpacer(8.dp)
+                        val iconDescription = stringResource(R.string.subscriptions__custom_icon_description)
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Colors.White10)
+                                .clickable(enabled = !isLoadingIcon, onClick = launchPhotoPicker)
+                                .semantics { contentDescription = iconDescription }
+                                .testTag("SubscriptionIconPicker")
+                        ) {
+                            if (selectedIconUri == null) {
+                                SubscriptionDefaultIcon(size = 40.dp)
+                            } else {
+                                AsyncImage(
+                                    model = selectedIconUri,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                                )
+                            }
+                        }
+                    }
                 }
                 VerticalSpacer(24.dp)
             }
@@ -329,7 +387,7 @@ internal fun CreateSubscriptionDetails(
         PrimaryButton(
             text = stringResource(R.string.subscriptions__choose_recipient),
             onClick = onChooseRecipient,
-            enabled = amountSats > 0uL && name.isNotBlank() && !isLoadingIcon,
+            enabled = amount.atomic > 0uL && name.isNotBlank() && !isLoadingIcon && acceptedMethods.isNotEmpty(),
             modifier = Modifier.testTag("SubscriptionChooseRecipient")
         )
         VerticalSpacer(16.dp)
@@ -535,19 +593,50 @@ private enum class SubscriptionFrequencyOption(val unit: PaykitRecurrenceUnit) :
 
 private val creationFrequencies = SubscriptionFrequencyOption.entries.toImmutableList()
 
+@Composable
+internal fun SubscriptionPaymentMethods(title: String, endpoints: ImmutableList<String>) {
+    Column(modifier = Modifier.testTag("SubscriptionAcceptedMethods")) {
+        Caption13Up(
+            text = title,
+            color = Colors.White64,
+        )
+        VerticalSpacer(8.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (MethodId.UsdtArbitrum.rawValue in endpoints) {
+                BodyMSB(text = "USDT", color = Colors.Usdt)
+            }
+            if (endpoints.any { MethodId.fromRawValue(it)?.isOnchain == true }) {
+                BodyMSB(text = stringResource(R.string.lightning__savings), color = Colors.Brand)
+            }
+            if (MethodId.Bolt11.rawValue in endpoints || MethodId.Lnurl.rawValue in endpoints) {
+                BodyMSB(text = stringResource(R.string.lightning__spending), color = Colors.Purple)
+            }
+            if (endpoints.isEmpty()) {
+                BodyM(
+                    text = stringResource(R.string.wallet__payment_request_status_unavailable),
+                    color = Colors.White64,
+                )
+            }
+        }
+    }
+}
+
 @Preview(showSystemUi = true)
 @Composable
 private fun CreateSubscriptionDetailsPreview() {
     AppThemeSurface {
         BottomSheetPreview {
             CreateSubscriptionDetails(
-                amountSats = 100_000uL,
+                amount = PaykitAmount(PaykitAsset.BTC, 100_000uL),
+                availableMethods = persistentListOf(MethodId.P2wpkh.rawValue, MethodId.UsdtArbitrum.rawValue),
+                acceptedMethods = persistentListOf(MethodId.P2wpkh.rawValue, MethodId.Bolt11.rawValue),
                 name = "Rent Support",
                 description = "Monthly support",
                 frequency = PaykitRecurrenceUnit.Month,
                 selectedIconUri = null,
                 isLoadingIcon = false,
                 onAmountClick = {},
+                onClickAsset = {},
                 onNameChange = {},
                 onDescriptionChange = {},
                 onFrequencyChange = {},

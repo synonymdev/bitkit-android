@@ -21,6 +21,7 @@ fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
 private fun Throwable.pubkyAuthMessageResource() = when (this) {
     is PubkyRingAuthTimeoutError -> R.string.profile__auth_error_timeout
     is PubkyAuthRequestError.InvalidUrl -> R.string.profile__auth_error_invalid_url
+    PubkyAuthRequestError.InvalidPaymentDetails -> R.string.profile__auth_approval_usdt_unavailable
     PubkyAuthRequestError.RequesterChanged -> R.string.profile__auth_error_invalid_url
     PubkyAuthRequestError.MissingBitkitClaim -> R.string.profile__auth_error_missing_claim
     PubkyAuthRequestError.DuplicateBitkitClaim -> R.string.profile__auth_error_duplicate_claim

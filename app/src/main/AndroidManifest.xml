@@ -116,6 +116,7 @@
                 <data android:scheme="slash" />
                 <data android:scheme="slashauth" />
                 <data android:scheme="bitcoin" />
+                <data android:scheme="ethereum" />
                 <data
                     android:scheme="BITCOIN"
                     tools:ignore="AppLinkUrlError" />
@@ -139,6 +140,7 @@
                 <data android:scheme="slash" />
                 <data android:scheme="slashauth" />
                 <data android:scheme="bitcoin" />
+                <data android:scheme="ethereum" />
                 <data
                     android:scheme="BITCOIN"
                     tools:ignore="AppLinkUrlError" />

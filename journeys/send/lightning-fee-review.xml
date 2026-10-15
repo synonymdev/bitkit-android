@@ -15,5 +15,9 @@
     <action>On the sending wallet, open the received payment request and tap Pay if it has not opened automatically</action>
     <action>Open Show Details and verify confirmation shows 1,000 sats, Spending, the receiving contact and a numeric estimated fee</action>
     <action>Dismiss the send review without swiping to pay and verify the request remains unpaid</action>
+    <action>On the receiving wallet, enable USDT sharing and publish a fresh 10,000-sat fixed Lightning invoice for the sending contact</action>
+    <action>On the sending wallet, pay that contact and select Spending. Verify the amount is 10,000 sats and keypad or Max cannot change it</action>
+    <action>Switch to Savings or USDT and enter a different amount, then switch back to Spending. Verify the invoice amount returns to 10,000 sats</action>
+    <action>Continue to review and verify the amount is 10,000 sats, then cancel without paying</action>
   </actions>
 </journey>

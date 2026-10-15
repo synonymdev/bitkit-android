@@ -12,6 +12,8 @@ data class NewTransactionSheetDetails(
     val activityId: String? = null,
     val activityWalletId: String? = null,
     val sats: Long = 0,
+    val usdtAmount: ULong? = null,
+    val usdtTransferId: String? = null,
     val isLoadingDetails: Boolean = false,
 ) {
     companion object {

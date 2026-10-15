@@ -61,8 +61,8 @@ class MnemonicInputFieldTest {
                     onPositionChange = {},
                     onBackspaceInEmpty = { backspaceInEmptyCount++ },
                     focusRequester = focusRequester,
-                    index = 0,
                     isFocused = true,
+                    index = 0,
                 )
             }
         }

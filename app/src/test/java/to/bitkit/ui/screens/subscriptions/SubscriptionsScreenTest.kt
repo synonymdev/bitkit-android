@@ -6,6 +6,10 @@ import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitExchangeRate
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
@@ -16,6 +20,7 @@ import to.bitkit.repositories.PaykitSubscriptionRole
 import to.bitkit.repositories.runsUntilPaidThrough
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -23,6 +28,19 @@ import kotlin.time.Instant
 class SubscriptionsScreenTest {
     private val now = Instant.parse("2027-01-15T08:00:00Z")
     private val paidThrough = Instant.parse("2027-02-01T08:00:00Z")
+
+    @Test
+    fun `monthly cost combines assets using the wallet rate`() {
+        val amounts = listOf(
+            PaykitAmount(PaykitAsset.BTC, 100_000UL),
+            PaykitAmount(PaykitAsset.USD, 200UL),
+            PaykitAmount(PaykitAsset.USDT, 3_000_000UL),
+        )
+        val rate = PaykitExchangeRate("100000", now.toEpochMilliseconds())
+        assertEquals(105_000L, subscriptionMonthlyCostSats(amounts, rate, now.toEpochMilliseconds()))
+        assertNull(subscriptionMonthlyCostSats(amounts, null, now.toEpochMilliseconds()))
+        assertEquals(100_000L, subscriptionMonthlyCostSats(amounts.take(1), null, now.toEpochMilliseconds()))
+    }
 
     @Test
     fun `next transition includes the next recurring period`() {
@@ -53,14 +71,14 @@ class SubscriptionsScreenTest {
         cases.forEach { (unit, every, expectedSats) ->
             assertEquals(
                 expectedSats,
-                subscriptionMonthlyCostSats(listOf(subscription(unit, every, 1_200u)), now),
+                subscriptionMonthlyCosts(listOf(subscription(unit, every, 1_200u)), now).single().atomic.toLong(),
                 "Unexpected monthly cost for every '$every' '$unit'",
             )
         }
         val lowCostYearlySubscriptions = List(3) { index ->
             subscription(PaykitRecurrenceUnit.Year, amountSats = 10u).copy(paymentRequestId = "low-cost-$index")
         }
-        assertEquals(3L, subscriptionMonthlyCostSats(lowCostYearlySubscriptions, now))
+        assertEquals(3L, subscriptionMonthlyCosts(lowCostYearlySubscriptions, now).single().atomic.toLong())
     }
 
     @Test
@@ -111,7 +129,7 @@ class SubscriptionsScreenTest {
 
         assertEquals(
             1_200L,
-            subscriptionMonthlyCostSats(listOf(paidActive, canceled, proposed), now),
+            subscriptionMonthlyCosts(listOf(paidActive, canceled, proposed), now).single().atomic.toLong(),
         )
     }
 
@@ -230,7 +248,7 @@ class SubscriptionsScreenTest {
         assertEquals(emptyList(), sections.active)
         assertEquals(emptyList(), sections.expired)
         assertEquals(paidThrough, nextSubscriptionTransition(listOf(created), now))
-        assertEquals(0L, subscriptionMonthlyCostSats(listOf(created), now))
+        assertEquals(0L, subscriptionMonthlyCosts(listOf(created), now).single().atomic.toLong())
     }
 
     @Test
@@ -319,10 +337,10 @@ class SubscriptionsScreenTest {
 
     @Test
     fun `monthly cost counts a canceled subscription until its paid period ends`() {
-        val canceled = canceledWithPaidThrough().copy(amountSats = 1_200u)
+        val canceled = canceledWithPaidThrough().copy(amount = PaykitAmount(PaykitAsset.BTC, 1_200u))
 
-        assertEquals(1_200L, subscriptionMonthlyCostSats(listOf(canceled), now))
-        assertEquals(0L, subscriptionMonthlyCostSats(listOf(canceled), paidThrough))
+        assertEquals(1_200L, subscriptionMonthlyCosts(listOf(canceled), now).single().atomic.toLong())
+        assertEquals(0L, subscriptionMonthlyCosts(listOf(canceled), paidThrough).single().atomic.toLong())
     }
 
     @Test
@@ -359,8 +377,9 @@ class SubscriptionsScreenTest {
     ) = PaykitSubscription(
         paymentRequestId = "subscription",
         counterparty = "pubkypayee",
-        amountValue = "0.001",
-        amountSats = amountSats,
+        amount = PaykitAmount(PaykitAsset.BTC, amountSats),
+        paymentReference = "fixture-reference",
+        pricing = PaykitRequestPricing(),
         note = "Subscription",
         createdAt = Instant.parse("2027-01-01T08:00:00Z"),
         proposalExpiresAt = null,
