@@ -35,6 +35,9 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.FeeRate
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitRecurrenceUnit
@@ -76,8 +79,8 @@ class SendConfirmScreenTest {
         val request = PaykitPaymentRequest(
             paymentRequestId = "preparing",
             counterparty = "requester",
-            amountValue = "5000",
-            amountSats = 5_000u,
+            amount = PaykitAmount(PaykitAsset.BTC, 5_000u),
+            paymentReference = "test-reference",
             note = "Dinner",
             expiresAt = null,
             acceptedPaymentEndpointIdentifiers = listOf("bitcoin"),
@@ -138,7 +141,7 @@ class SendConfirmScreenTest {
             assertEquals(SheetValue.Expanded, sheetState.currentValue)
             assertEquals(1, visibleCount)
             state.value = SendUiState(
-                amount = request.amountSats,
+                amount = request.amount.atomic,
                 isPaymentRequest = true,
                 isAmountInputValid = true,
                 contactPaymentProfile = contact,
@@ -167,8 +170,9 @@ class SendConfirmScreenTest {
         val subscription = PaykitSubscription(
             paymentRequestId = "subscription-id",
             counterparty = "payee",
-            amountValue = "0.00003",
-            amountSats = 3_000uL,
+            amount = PaykitAmount(PaykitAsset.BTC, 3_000uL),
+            paymentReference = "subscription",
+            pricing = PaykitRequestPricing(),
             note = "Journey Sub",
             createdAt = startsAt,
             proposalExpiresAt = null,

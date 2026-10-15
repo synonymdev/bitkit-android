@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -56,7 +57,9 @@ fun CameraPermissionView(
 @Composable
 fun DeniedContent(
     onClickRetry: () -> Unit = {},
-    onClickPaste: () -> Unit = {},
+    onClickPaste: (() -> Unit)? = {},
+    description: String = stringResource(R.string.other__camera_permission_description),
+    accentColor: Color = Colors.Brand,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -75,14 +78,14 @@ fun DeniedContent(
         ) {
             Display(
                 stringResource(R.string.other__camera_permission_title)
-                    .withAccent(accentColor = Colors.Brand),
+                    .withAccent(accentColor = accentColor),
                 color = Colors.White,
             )
 
             VerticalSpacer(8.dp)
 
             BodyM(
-                stringResource(R.string.other__camera_permission_description),
+                description,
                 color = Colors.White64,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -103,16 +106,18 @@ fun DeniedContent(
 
         FillHeight()
 
-        PrimaryButton(
-            text = stringResource(R.string.other__qr_paste),
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_clipboard_text_simple),
-                    contentDescription = null,
-                )
-            },
-            onClick = onClickPaste,
-        )
+        if (onClickPaste != null) {
+            PrimaryButton(
+                text = stringResource(R.string.other__qr_paste),
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_clipboard_text_simple),
+                        contentDescription = null,
+                    )
+                },
+                onClick = onClickPaste,
+            )
+        }
     }
 }
 

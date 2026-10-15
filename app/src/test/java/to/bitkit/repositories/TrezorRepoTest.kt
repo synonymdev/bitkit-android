@@ -45,6 +45,7 @@ import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.models.walletKey
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
@@ -163,18 +164,32 @@ class TrezorRepoTest : BaseUnitTest() {
         on { this.unlocked }.thenReturn(unlocked)
     }
 
+    /**
+     * A response shaped like bitkit-core 0.7.0 returns it for an account whose key Core 0.5.18 returned,
+     * and the store persisted, as [storedKey]: SegWit accounts carry it in `xpubSegwit` next to a
+     * normalized `xpub`, and Taproot adds a descriptor that must never be stored.
+     */
     private fun mockPublicKeyResponse(
-        xpub: String,
+        storedKey: String,
         path: String,
-    ) = TrezorPublicKeyResponse(
-        xpub = xpub,
-        path = path,
-        publicKey = "pubkey",
-        chainCode = "chaincode",
-        fingerprint = 0u,
-        depth = 3u,
-        rootFingerprint = 0u,
-    )
+    ): TrezorPublicKeyResponse {
+        val purpose = path.split("/").getOrNull(1)
+        val isSegwit = purpose == "49'" || purpose == "84'"
+        val descriptor = "tr([00000000/86'/1'/0']$storedKey/<0;1>/*)".takeIf { purpose == "86'" }
+        val xpubSegwit = if (isSegwit) storedKey else descriptor
+        return TrezorPublicKeyResponse(
+            xpub = if (isSegwit) "normalized-$storedKey" else storedKey,
+            xpubSegwit = xpubSegwit,
+            descriptor = descriptor,
+            displayablePublicKey = xpubSegwit ?: storedKey,
+            path = path,
+            publicKey = "pubkey",
+            chainCode = "chaincode",
+            fingerprint = 0u,
+            depth = 3u,
+            rootFingerprint = 0u,
+        )
+    }
 
     private fun stubAccountXpubFetch() {
         whenever {
@@ -185,7 +200,7 @@ class TrezorRepoTest : BaseUnitTest() {
             )
         }.thenAnswer {
             mockPublicKeyResponse(
-                xpub = "xpub-${it.getArgument<String>(0)}",
+                storedKey = "xpub-${it.getArgument<String>(0)}",
                 path = it.getArgument(0),
             )
         }
@@ -757,7 +772,7 @@ class TrezorRepoTest : BaseUnitTest() {
         ).thenAnswer {
             val path = it.getArgument<String>(0)
             if (path == nativeSegwitPath) {
-                mockPublicKeyResponse(xpub = "same-native-xpub", path = nativeSegwitPath)
+                mockPublicKeyResponse(storedKey = "same-native-xpub", path = nativeSegwitPath)
             } else {
                 throw AppError("xpub failed")
             }
@@ -822,7 +837,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
         whenever(
             trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
-        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        ).thenAnswer { mockPublicKeyResponse(storedKey = sharedKey, path = it.getArgument(0)) }
         sut = createSut()
 
         sut.scan()
@@ -853,7 +868,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
         whenever(
             trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
-        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        ).thenAnswer { mockPublicKeyResponse(storedKey = sharedKey, path = it.getArgument(0)) }
         sut = createSut()
 
         sut.scan()
@@ -887,7 +902,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
         whenever(
             trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
-        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        ).thenAnswer { mockPublicKeyResponse(storedKey = sharedKey, path = it.getArgument(0)) }
         sut = createSut()
 
         sut.scan()
@@ -921,7 +936,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
         whenever(
             trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
-        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        ).thenAnswer { mockPublicKeyResponse(storedKey = sharedKey, path = it.getArgument(0)) }
         sut = createSut()
 
         sut.scan()
@@ -1073,7 +1088,7 @@ class TrezorRepoTest : BaseUnitTest() {
         ).thenAnswer {
             val path = it.getArgument<String>(0)
             if (path == nativeSegwitPath) {
-                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
+                mockPublicKeyResponse(storedKey = "native-xpub", path = nativeSegwitPath)
             } else {
                 throw AppError("xpub failed")
             }
@@ -1093,6 +1108,61 @@ class TrezorRepoTest : BaseUnitTest() {
             ),
             captor.firstValue.single().xpubs,
         )
+    }
+
+    @Test
+    fun `connect stores the account keys in the form core 0_5_18 returned them`() = test {
+        // Core 0.7.0 normalizes `xpub`; storing it would change the wallet key and derived wallet id.
+        val features = mockFeatures()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull(), eq(HwWalletVendor.TREZOR))
+        assertEquals(
+            mapOf(
+                "legacy" to "xpub-m/44'/1'/0'",
+                "nestedSegwit" to "xpub-m/49'/1'/0'",
+                "nativeSegwit" to "xpub-m/84'/1'/0'",
+                "taproot" to "xpub-m/86'/1'/0'",
+            ),
+            captor.firstValue.single().xpubs,
+        )
+    }
+
+    @Test
+    fun `connect keeps the identity of a device paired before core 0_7_0`() = test {
+        val pairedBefore = mockKnownDevice(
+            xpubs = mapOf(
+                "legacy" to "xpub-m/44'/1'/0'",
+                "nestedSegwit" to "xpub-m/49'/1'/0'",
+                "nativeSegwit" to "xpub-m/84'/1'/0'",
+                "taproot" to "xpub-m/86'/1'/0'",
+            ),
+            customLabel = "Savings",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices(HwWalletVendor.TREZOR)).thenReturn(listOf(pairedBefore))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull(), eq(HwWalletVendor.TREZOR))
+        val saved = captor.firstValue.single()
+        assertEquals(pairedBefore.xpubs, saved.xpubs)
+        assertEquals(pairedBefore.walletKey, saved.walletKey)
+        assertEquals(pairedBefore.walletId, saved.walletId)
+        assertEquals("Savings", saved.customLabel)
     }
 
     @Test
@@ -1212,7 +1282,7 @@ class TrezorRepoTest : BaseUnitTest() {
                 if (nativeSegwitAttempts == 1) {
                     throw TrezorException.DeviceBusy()
                 }
-                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
+                mockPublicKeyResponse(storedKey = "native-xpub", path = nativeSegwitPath)
             } else {
                 throw AppError("unsupported")
             }
@@ -1282,7 +1352,7 @@ class TrezorRepoTest : BaseUnitTest() {
             )
         ).thenAnswer {
             if (it.getArgument<String>(0) == nativeSegwitPath) {
-                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
+                mockPublicKeyResponse(storedKey = "native-xpub", path = nativeSegwitPath)
             } else {
                 throw TrezorException.Timeout()
             }
@@ -2207,7 +2277,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
         whenever(
             trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
-        ).thenAnswer { mockPublicKeyResponse(xpub = keptKey, path = it.getArgument(0)) }
+        ).thenAnswer { mockPublicKeyResponse(storedKey = keptKey, path = it.getArgument(0)) }
         sut = createSut()
         sut.scan()
         sut.connect(DEVICE_ID)
@@ -2237,7 +2307,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
         whenever(
             trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
-        ).thenAnswer { mockPublicKeyResponse(xpub = forgottenKey, path = it.getArgument(0)) }
+        ).thenAnswer { mockPublicKeyResponse(storedKey = forgottenKey, path = it.getArgument(0)) }
         sut = createSut()
         sut.scan()
         sut.connect(DEVICE_ID)

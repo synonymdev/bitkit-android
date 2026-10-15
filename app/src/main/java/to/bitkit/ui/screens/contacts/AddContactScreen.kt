@@ -57,6 +57,7 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.repositories.Endpoint
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
@@ -240,7 +241,7 @@ fun AddContactScreen(
     viewModel: AddContactViewModel,
     onBackClick: () -> Unit,
     onContactSaved: (String) -> Unit,
-    onPayContact: (String, String) -> Unit,
+    onPayContact: (String, String, List<Endpoint>) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -248,7 +249,7 @@ fun AddContactScreen(
         viewModel.effects.collect {
             when (it) {
                 is AddContactEffect.ContactSaved -> onContactSaved(it.publicKey)
-                is AddContactEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
+                is AddContactEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey, it.endpoints)
             }
         }
     }

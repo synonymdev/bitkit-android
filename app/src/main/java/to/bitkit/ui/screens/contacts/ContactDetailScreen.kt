@@ -36,6 +36,7 @@ import kotlinx.coroutines.Job
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.ActionButton
@@ -70,7 +71,7 @@ import to.bitkit.ui.utils.withAccent
 fun ContactDetailScreen(
     viewModel: ContactDetailViewModel,
     onBackClick: () -> Unit,
-    onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Job?,
+    onPayContact: (String, String, PrivatePaykitPaymentContext?, List<Endpoint>) -> Job?,
     onActivityClick: (String) -> Unit,
     onRequestPayment: (PaykitPaymentRequestTarget) -> Unit = {},
     showDeleteAction: Boolean = false,
@@ -88,7 +89,7 @@ fun ContactDetailScreen(
         viewModel.effects.collect {
             when (it) {
                 is ContactDetailEffect.OpenPayment -> {
-                    val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext)
+                    val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
                     viewModel.onPaymentOpening(scanJob)
                 }
                 ContactDetailEffect.ContactDeleted -> onContactDeleted()

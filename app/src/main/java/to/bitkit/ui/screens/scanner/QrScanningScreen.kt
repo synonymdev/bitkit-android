@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -95,6 +96,8 @@ fun QrScanningScreen(
     isFullScreen: Boolean = false,
     acceptsBinaryPayload: Boolean = false,
     showsGradientBackground: Boolean = true,
+    permissionDescription: String = stringResource(R.string.other__camera_permission_description),
+    permissionAccentColor: Color = Colors.Brand,
 ) {
     val app = appViewModel ?: return
 
@@ -225,6 +228,8 @@ fun QrScanningScreen(
             permissionState = cameraPermissionState,
             deniedContent = {
                 DeniedContent(
+                    description = permissionDescription,
+                    accentColor = permissionAccentColor,
                     onClickRetry = { context.startActivityAppSettings() },
                     onClickPaste = handlePaste(context, app, setScanResult),
                 )

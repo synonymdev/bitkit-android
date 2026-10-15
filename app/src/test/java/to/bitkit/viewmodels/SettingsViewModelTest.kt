@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,7 @@ import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.BaseUnitTest
@@ -43,6 +45,12 @@ class SettingsViewModelTest : BaseUnitTest() {
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val widgetsStore = mock<WidgetsStore>()
     private val widgetsRepo = mock<WidgetsRepo>()
+    private val usdtEnabled = MutableStateFlow(false)
+    private val usdtCanDisable = MutableStateFlow(true)
+    private val usdtPreferences: UsdtPreferencesRepo = mock {
+        on { enabled }.thenReturn(usdtEnabled)
+        on { canDisable }.thenReturn(usdtCanDisable)
+    }
     private val contactPaymentSettingsRepo = mock<ContactPaymentSettingsRepo>()
 
     private val settingsData = MutableStateFlow(SettingsData())
@@ -266,6 +274,28 @@ class SettingsViewModelTest : BaseUnitTest() {
         assertTrue(settingsData.value.isDevModeEnabled)
     }
 
+    @Test
+    fun `enabling an empty wallet rechecks the disable switch in the same Settings screen`() = test {
+        whenever(usdtPreferences.setEnabled(true)).doSuspendableAnswer {
+            usdtEnabled.value = true
+            Result.success(Unit)
+        }
+        whenever(usdtPreferences.checkCanDisable()).thenReturn(Result.success(Unit))
+        sut.canDisableUsdt.test {
+            assertFalse(awaitItem())
+            sut.refreshUsdtAvailability()
+            advanceUntilIdle()
+            expectNoEvents()
+            sut.setUsdtEnabled(true)
+            advanceUntilIdle()
+            assertTrue(awaitItem())
+            usdtCanDisable.value = false
+            advanceUntilIdle()
+            assertFalse(awaitItem())
+        }
+        verify(usdtPreferences).checkCanDisable()
+    }
+
     private fun createViewModel() = SettingsViewModel(
         context = context,
         settingsStore = settingsStore,
@@ -273,6 +303,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         widgetsStore = widgetsStore,
         widgetsRepo = widgetsRepo,
+        usdtPreferences = usdtPreferences,
     )
 
     private class SettingsViewModelTestError(message: String) : AppError(message)

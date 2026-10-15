@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.profile
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,10 +16,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -33,9 +36,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -65,7 +71,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -80,7 +86,6 @@ fun PubkyAuthApprovalSheet(
     onDismiss: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
     DisposableEffect(viewModel, authUrl) {
         onDispose { viewModel.cancelLocalAuth(authUrl) }
     }
@@ -100,6 +105,8 @@ fun PubkyAuthApprovalSheet(
             onBackToWatchOnly = {
                 if (uiState.authUrl == authUrl) viewModel.returnToWatchOnlyConsent(authUrl)
             },
+            onRetryUsdt = { viewModel.loadUsdtAddress(authUrl) },
+            onShareUsdt = viewModel::setShareUsdt,
             onCancel = { viewModel.dismiss() },
             onDismiss = { viewModel.dismiss() },
         )
@@ -214,12 +221,14 @@ private fun Content(
     onBackToWatchOnly: () -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
+    onRetryUsdt: () -> Unit = {},
+    onShareUsdt: (Boolean) -> Unit = {},
 ) {
     val approvalState = if (isCurrentRequest) uiState.state else ApprovalState.Loading
     val headerTitle = approvalHeaderTitle(approvalState)
     val onBack = approvalBackAction(
         approvalState = approvalState,
-        bitkitClaim = uiState.bitkitClaim,
+        showsReceivingDetails = uiState.showsReceivingDetails,
         onBackToWatchOnly = onBackToWatchOnly,
         onCancel = onCancel,
         onDismiss = onDismiss,
@@ -228,7 +237,7 @@ private fun Content(
     Column(
         modifier = Modifier
             .sheetHeight(SheetSize.LARGE)
-            .gradientBackground()
+            .background(Colors.Gray7)
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
@@ -237,6 +246,9 @@ private fun Content(
         when (approvalState) {
             ApprovalState.Loading -> LoadingContent()
             ApprovalState.WatchOnlyConsent -> WatchOnlyConsentContent(
+                uiState = uiState,
+                onRetryUsdt = onRetryUsdt,
+                onShareUsdt = onShareUsdt,
                 onApprove = onApproveWatchOnly,
                 onCancel = onCancel,
             )
@@ -265,12 +277,12 @@ private fun approvalHeaderTitle(approvalState: ApprovalState): String = when (ap
 
 private fun approvalBackAction(
     approvalState: ApprovalState,
-    bitkitClaim: PubkyAuthClaim?,
+    showsReceivingDetails: Boolean,
     onBackToWatchOnly: () -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
 ): (() -> Unit)? = when (approvalState) {
-    ApprovalState.Authorize if bitkitClaim?.includesWatchOnlyAccount == true -> onBackToWatchOnly
+    ApprovalState.Authorize if showsReceivingDetails -> onBackToWatchOnly
     ApprovalState.Authorize, ApprovalState.Authenticating, ApprovalState.Authorizing -> onCancel
     ApprovalState.Success -> onDismiss
     else -> null
@@ -278,60 +290,123 @@ private fun approvalBackAction(
 
 @Composable
 private fun ColumnScope.WatchOnlyConsentContent(
+    uiState: PubkyAuthApprovalUiState,
     onApprove: () -> Unit,
     onCancel: () -> Unit,
+    onRetryUsdt: () -> Unit,
+    onShareUsdt: (Boolean) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .testTag("PubkyAuthWatchOnlyConsent")
-    ) {
-        FillHeight(min = 32.dp)
-
-        Image(
-            painter = painterResource(R.drawable.coin_stack_4),
-            contentDescription = null,
-            modifier = Modifier
-                .size(256.dp)
-                .align(Alignment.CenterHorizontally)
-                .graphicsLayer {
-                    scaleX = COIN_SCALE
-                    scaleY = COIN_SCALE
-                    translationY = COIN_OFFSET_Y.toPx()
-                },
-        )
-
-        VerticalSpacer(32.dp)
-
-        Display(
-            text = stringResource(R.string.profile__auth_approval_watch_only_intro_title)
-                .withAccent(accentColor = Colors.Blue),
-        )
-        VerticalSpacer(8.dp)
-        BodyM(
-            text = stringResource(R.string.profile__auth_approval_watch_only_intro_description),
-            color = Colors.White64,
-        )
-
-        VerticalSpacer(32.dp)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            SecondaryButton(
-                text = stringResource(R.string.common__cancel),
-                onClick = onCancel,
+    Column(modifier = Modifier.weight(1f).testTag("PubkyAuthWatchOnlyConsent")) {
+        Box(contentAlignment = Alignment.BottomCenter, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Image(
+                painter = painterResource(R.drawable.coin_stack_4),
+                contentDescription = null,
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("PubkyAuthWatchOnlyCancel"),
-            )
-            PrimaryButton(
-                text = stringResource(R.string.profile__auth_approval_watch_only_intro_approve),
-                onClick = onApprove,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("PubkyAuthWatchOnlyApprove"),
+                    .size(256.dp)
+                    .graphicsLayer {
+                        scaleX = COIN_SCALE
+                        scaleY = COIN_SCALE
+                        translationY = COIN_OFFSET_Y.toPx()
+                    },
             )
         }
-        VerticalSpacer(16.dp)
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            VerticalSpacer(32.dp)
+            Display(
+                text = stringResource(R.string.profile__auth_approval_watch_only_intro_title)
+                    .withAccent(accentColor = Colors.Blue),
+            )
+            VerticalSpacer(8.dp)
+            BodyM(
+                text = stringResource(
+                    if (uiState.bitkitClaim?.sharesBitcoin == true) {
+                        R.string.profile__auth_approval_watch_only_intro_description
+                    } else {
+                        R.string.profile__auth_approval_usdt_intro_description
+                    }
+                ),
+                color = Colors.White64,
+            )
+        }
+    }
+    if (uiState.showsUsdtDetails) {
+        VerticalSpacer(32.dp)
+        UsdtSharingChoice(uiState, onShareUsdt, onRetryUsdt)
+    }
+    VerticalSpacer(32.dp)
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        SecondaryButton(
+            text = stringResource(R.string.common__cancel),
+            onClick = onCancel,
+            modifier = Modifier.weight(1f).testTag("PubkyAuthWatchOnlyCancel")
+        )
+        PrimaryButton(
+            text = stringResource(R.string.profile__auth_approval_watch_only_intro_approve),
+            onClick = onApprove,
+            enabled = uiState.canAuthorize,
+            modifier = Modifier.weight(1f).testTag("PubkyAuthWatchOnlyApprove")
+        )
+    }
+    VerticalSpacer(16.dp)
+}
+
+@Composable
+private fun UsdtSharingChoice(
+    uiState: PubkyAuthApprovalUiState,
+    onShareUsdt: (Boolean) -> Unit,
+    onRetryUsdt: () -> Unit,
+) {
+    Column(modifier = Modifier.testTag("PubkyAuthUsdtDetails")) {
+        if (!uiState.usdtRequired) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .toggleable(value = uiState.shareUsdt, role = Role.Switch, onValueChange = onShareUsdt)
+                    .testTag("PubkyAuthShareUsdt")
+            ) {
+                BodyM(
+                    text = stringResource(R.string.profile__auth_approval_share_usdt_optional),
+                    color = Colors.White64,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = uiState.shareUsdt,
+                    onCheckedChange = null,
+                    colors = AppSwitchDefaults.colors.copy(
+                        checkedTrackColor = Colors.Blue,
+                        checkedBorderColor = Colors.Blue,
+                        checkedIconColor = Colors.Blue,
+                    ),
+                    modifier = Modifier.clearAndSetSemantics {}
+                )
+            }
+        }
+        if (uiState.shareUsdt || uiState.usdtRequired) {
+            if (!uiState.usdtRequired) VerticalSpacer(8.dp)
+            BodyS(text = stringResource(R.string.profile__auth_approval_usdt_privacy), color = Colors.White64)
+        }
+        if (uiState.usdtAddress == null) {
+            VerticalSpacer(8.dp)
+            BodyS(
+                text = stringResource(
+                    when {
+                        uiState.usdtUnavailable && uiState.usdtRequired -> R.string.usdt__error_configuration
+                        uiState.usdtUnavailable -> R.string.profile__auth_approval_usdt_unavailable
+                        else -> R.string.profile__auth_approval_usdt_loading
+                    }
+                ),
+                color = Colors.White64,
+            )
+            if (uiState.usdtUnavailable) {
+                VerticalSpacer(8.dp)
+                BodySSB(
+                    text = stringResource(R.string.common__retry),
+                    color = Colors.Blue,
+                    modifier = Modifier.clickable(onClick = onRetryUsdt).testTag("PubkyAuthRetryUsdt")
+                )
+            }
+        }
     }
 }
 
@@ -364,6 +439,7 @@ private fun ColumnScope.AuthorizeContent(
         PrimaryButton(
             text = stringResource(R.string.profile__auth_approval_authorize),
             onClick = onAuthorize,
+            enabled = uiState.canAuthorize,
             modifier = Modifier
                 .weight(1f)
                 .testTag("PubkyAuthAuthorize")
@@ -413,13 +489,18 @@ private fun ColumnScope.ApprovalDetails(
                 if (uiState.permissions.isNotEmpty()) {
                     DescriptionText(clientId = uiState.clientId, serviceName = uiState.serviceName)
                     VerticalSpacer(32.dp)
+                }
+                if (uiState.usdtRequired && !uiState.isUsdtEnabled) {
+                    BodyM(text = stringResource(R.string.profile__auth_approval_usdt_disabled), color = Colors.White64)
+                    VerticalSpacer(24.dp)
+                }
+                if (uiState.permissions.isNotEmpty()) {
                     PermissionsSection(permissions = uiState.permissions)
                 }
                 if (uiState.bitkitClaim?.includesPaykitAccess == true) {
                     VerticalSpacer(32.dp)
                     PaykitAccessSection()
                 }
-                VerticalSpacer(32.dp)
             }
 
             Column {
@@ -451,7 +532,7 @@ private fun PaykitAccessSection() {
         title = stringResource(R.string.profile__auth_approval_details),
         modifier = Modifier.testTag("PubkyAuthPaykitAccess")
     ) {
-        BodyS(text = stringResource(R.string.profile__auth_approval_paykit_access_description))
+        BodyS(text = stringResource(R.string.profile__auth_approval_paykit_access_description), letterSpacing = 0.sp)
     }
 }
 
@@ -468,13 +549,25 @@ private fun ColumnScope.SuccessContent(
                 .verticalScroll(rememberScrollState())
                 .heightIn(min = maxHeight)
         ) {
+            val sharedDetails = uiState.bitkitClaim?.takeIf {
+                it.sharesBitcoin || (it.sharesUsdt && uiState.shareUsdt)
+            }?.let { claim ->
+                stringResource(
+                    when {
+                        !claim.sharesBitcoin -> R.string.profile__auth_approval_shared_usdt
+                        claim.sharesUsdt && uiState.shareUsdt -> R.string.profile__auth_approval_shared_both
+                        else -> R.string.profile__auth_approval_shared_bitcoin
+                    }
+                )
+            }
             SuccessDescriptionText(
                 clientId = uiState.clientId,
                 serviceName = uiState.serviceName,
                 truncatedKey = uiState.profile?.authDisplayPublicKey.orEmpty(),
+                sharedDetails = sharedDetails,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+                    .then(if (sharedDetails != null) Modifier.testTag("PubkyAuthSharedDetails") else Modifier)
             )
-
             Image(
                 painter = painterResource(R.drawable.check),
                 contentDescription = null,
@@ -507,7 +600,7 @@ private fun DescriptionText(clientId: String, serviceName: String) {
     } else {
         stringResource(R.string.profile__auth_approval_service, service)
     }
-    BodyM(text = text.withAccentBoldBright(), color = Colors.White64)
+    BodyM(text = text.withAccentBoldBright(), color = Colors.White64, letterSpacing = 0.sp)
 }
 
 @Composable
@@ -516,6 +609,7 @@ private fun SuccessDescriptionText(
     serviceName: String,
     truncatedKey: String,
     modifier: Modifier = Modifier,
+    sharedDetails: String? = null,
 ) {
     val requester = clientId.asLiteralRequestText()
     val service = serviceName.asLiteralRequestText()
@@ -524,7 +618,12 @@ private fun SuccessDescriptionText(
     } else {
         stringResource(R.string.profile__auth_approval_success_detail, truncatedKey, service)
     }
-    BodyM(text = text.withAccentBoldBright(), color = Colors.White64, modifier = modifier)
+    BodyM(
+        text = (text + sharedDetails?.let { "\n\n$it" }.orEmpty()).withAccentBoldBright(),
+        color = Colors.White64,
+        letterSpacing = 0.sp,
+        modifier = modifier.fillMaxWidth()
+    )
 }
 
 @Composable
@@ -579,6 +678,7 @@ private fun TrustWarning() {
         BodyS(
             text = stringResource(R.string.profile__auth_approval_trust_warning),
             color = Colors.White64,
+            letterSpacing = 0.sp,
         )
     }
 }
@@ -592,6 +692,7 @@ private fun ProfileCard(profile: PubkyProfile) {
             .fillMaxWidth()
             .background(Colors.Gray6, RoundedCornerShape(16.dp))
             .padding(24.dp)
+            .testTag("PubkyAuthProfile")
     ) {
         if (profile.imageUrl != null) {
             PubkyImage(uri = profile.imageUrl, size = 48.dp)
@@ -620,6 +721,7 @@ private fun ProfileCard(profile: PubkyProfile) {
             )
             BodyMSB(
                 text = profile.name,
+                letterSpacing = 0.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

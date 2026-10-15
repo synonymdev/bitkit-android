@@ -30,6 +30,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.LocalSettingsViewModel
@@ -53,10 +54,16 @@ class SendConfirmNavigationTest {
     val composeTestRule = createComposeRule()
 
     @Inject lateinit var settingsStore: SettingsStore
+
     @Inject lateinit var widgetsStore: WidgetsStore
+
     @Inject lateinit var pubkyRepo: PubkyRepo
+
     @Inject lateinit var contactPaymentSettingsRepo: ContactPaymentSettingsRepo
+
     @Inject lateinit var widgetsRepo: WidgetsRepo
+
+    @Inject lateinit var usdtPreferences: UsdtPreferencesRepo
 
     @Before
     fun setup() {
@@ -74,7 +81,15 @@ class SendConfirmNavigationTest {
         composeTestRule.setContent {
             val context = LocalContext.current
             val settings = viewModel {
-                SettingsViewModel(context, settingsStore, pubkyRepo, contactPaymentSettingsRepo, widgetsStore, widgetsRepo)
+                SettingsViewModel(
+                    context,
+                    settingsStore,
+                    pubkyRepo,
+                    contactPaymentSettingsRepo,
+                    widgetsStore,
+                    widgetsRepo,
+                    usdtPreferences
+                )
             }
             AppThemeSurface {
                 CompositionLocalProvider(

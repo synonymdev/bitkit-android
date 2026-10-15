@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.trezor
 
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.AddressInfo
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.WatcherEvent
@@ -168,6 +169,32 @@ class TrezorViewModelTest : BaseUnitTest() {
         sut.setLookupInput(input)
 
         assertEquals(input, sut.uiState.value.lookupInput)
+    }
+
+    @Test
+    fun `populateWatcherFromXpub should copy the xpub and select the account type of its path`() {
+        // Core 0.7.0 returns a normalized xpub/tpub, which prefix detection would read as legacy.
+        val publicKey = TrezorPreviewData.samplePublicKeyResponse
+        trezorStateFlow.value = TrezorState(lastPublicKey = publicKey)
+
+        sut.populateWatcherFromXpub()
+
+        val watcher = sut.uiState.value.watcher
+        assertEquals(publicKey.xpub, watcher.extendedKey)
+        assertEquals(AccountType.NATIVE_SEGWIT, watcher.selectedAccountType)
+    }
+
+    @Test
+    fun `populateWatcherFromXpub should keep the selected account type for an unknown path`() {
+        val publicKey = TrezorPreviewData.samplePublicKeyResponse.copy(path = "m/45'/0'/0'")
+        trezorStateFlow.value = TrezorState(lastPublicKey = publicKey)
+        sut.setWatcherAccountType(AccountType.TAPROOT)
+
+        sut.populateWatcherFromXpub()
+
+        val watcher = sut.uiState.value.watcher
+        assertEquals(publicKey.xpub, watcher.extendedKey)
+        assertEquals(AccountType.TAPROOT, watcher.selectedAccountType)
     }
 
     // endregion

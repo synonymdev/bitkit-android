@@ -21,11 +21,13 @@ import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY
 import to.bitkit.ui.EXTRA_PAYKIT_PAYER_IDENTITY
@@ -283,19 +285,6 @@ class PaykitSubscriptionNotificationSchedulerTest {
     }
 
     @Test
-    fun `deadline subscriptions do not schedule payment reminders`() {
-        sut.synchronize(
-            subscriptions = listOf(subscription().copy(hasPaymentDeadline = true)),
-            acceptedAt = { NOW },
-            pendingRequestIds = emptySet(),
-            payerIdentity = PAYER_IDENTITY,
-            notificationsEnabled = true,
-        )
-
-        verify(workClient, never()).enqueueUniqueWork(any(), any(), any())
-    }
-
-    @Test
     fun `disabling and canceling clear tagged work`() {
         sut.synchronize(
             subscriptions = emptyList(),
@@ -322,8 +311,9 @@ class PaykitSubscriptionNotificationSchedulerTest {
     private fun subscription() = PaykitSubscription(
         paymentRequestId = PAYMENT_REQUEST_ID,
         counterparty = COUNTERPARTY,
-        amountValue = "0.00025",
-        amountSats = 25_000uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
+        paymentReference = "fixture-reference",
+        pricing = PaykitRequestPricing(),
         note = "Weekly coffee",
         createdAt = NOW,
         proposalExpiresAt = null,

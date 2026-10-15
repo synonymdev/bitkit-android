@@ -1,0 +1,24 @@
+<journey name="review Earn receiving details">
+  <description>Use an onboarded empty wallet with a Pubky identity and configured USDT. Enable USDT in Settings for the first checks. Use a local test auth request; cancel before Authorize so no receiving details or session are exported.</description>
+  <actions>
+    <action>Open the existing watch-only setup fixture with x-bitkit-claim=usdt-address-v1</action>
+    <action>Verify the Earn Money introduction describes sharing the existing USDT address on Arbitrum One, with the balance/history disclosure and no optional sharing switch. Tap Approve</action>
+    <action>Verify the authorization screen shows the requested permissions and trust warning without repeating the receiving-details controls</action>
+    <action>Cancel and verify no Bitcoin account was created</action>
+    <action>Repeat with x-bitkit-claim=watch-only-account-v1.usdt-address-v1; verify the Earn Money introduction describes the Bitcoin watch-only account and shows the blue "Also share my USDT address" switch (id "PubkyAuthShareUsdt"). Turn sharing off and verify its privacy disclosure disappears. Tap Approve, then Back; verify the choice remains off. Cancel</action>
+    <action>Repeat with x-bitkit-claim=watch-only-account-v1; verify only Bitcoin is requested, then cancel</action>
+    <action>With USDT enabled but its address temporarily unavailable, open a combined Bitcoin and USDT request. Verify sharing is off and Approve remains available; turn USDT sharing on and verify Approve is disabled until Retry loads the address</action>
+    <action>Open the setup fixture with x-bitkit-claim=paykit-access-v1.watch-only-account-v1.usdt-address-v1</action>
+    <action>Verify the introduction shows the optional USDT sharing switch and selected-address privacy disclosure. Continue to authorization; verify the named requester, exact requested permission paths and access, and Paykit Details explanation are shown without a second sharing switch or address panel</action>
+    <action>Verify Before You Continue explains trusting the service, browser, and device. Verify the compact horizontal profile card (id "PubkyAuthProfile") shows the correct identity and name, with Cancel and Authorize reachable without overlap.</action>
+    <action>Go back to the introduction and turn off PubkyAuthShareUsdt. Continue to authorization; verify Authorize remains enabled, then cancel</action>
+    <action>Open the auth fixture with only x-bitkit-claim=paykit-access-v1; verify Paykit permissions and Details are shown without an empty Payment Details to Share section, then cancel.</action>
+    <action>Turn USDT off in Settings, then open x-bitkit-claim=watch-only-account-v1.usdt-address-v1. Verify the introduction and authorization show Bitcoin only: no USDT sharing switch, address, privacy text or enable prompt. Cancel before Authorize.</action>
+    <action>With USDT still off, repeat with x-bitkit-claim=paykit-access-v1.watch-only-account-v1.usdt-address-v1. Verify Bitcoin and Paykit permissions remain available without any USDT content or enable prompt, then cancel.</action>
+    <action>With USDT still off, open x-bitkit-claim=paykit-access-v1.usdt-address-v1. Verify Paykit permissions appear without a receiving-details introduction or USDT content. Go back and verify the request closes without showing a Bitcoin introduction.</action>
+    <action>With USDT still off, open x-bitkit-claim=usdt-address-v1. Verify the request is unavailable and authorization cannot be submitted; no enable prompt or successful setup is shown. Cancel and verify Settings still shows USDT off.</action>
+    <action>Enable USDT in Settings and reopen the combined request. Verify the optional USDT switch and selected-address privacy disclosure return on the introduction. Turn sharing off and verify Bitcoin approval remains available, then cancel.</action>
+    <action>With an owned wallet restored before its funded USDT balance has loaded, open a combined Bitcoin and USDT authorization. Let the balance refresh finish while the sheet remains open. Verify the optional USDT sharing choice appears off, its address finishes loading and Bitcoin approval remains available. Turn sharing on, then off, and verify it stays off. Cancel before Authorize.</action>
+    <action>Repeat the delayed funded-balance refresh with a USDT-only authorization. Verify receiving-details consent becomes available once the address loads; continue to the permission review and cancel before Authorize.</action>
+  </actions>
+</journey>

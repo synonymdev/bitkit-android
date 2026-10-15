@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import androidx.annotation.VisibleForTesting
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.validateBitcoinAddress
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -16,6 +17,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
+import to.bitkit.models.PaykitUsdt
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
@@ -46,6 +48,7 @@ sealed interface PublicPaykitPaymentResult {
     data class Opened(
         val paymentRequest: String,
         val privatePaymentContext: PrivatePaykitPaymentContext? = null,
+        val endpoints: List<Endpoint> = emptyList(),
     ) : PublicPaykitPaymentResult
 
     data object NoEndpoint : PublicPaykitPaymentResult
@@ -102,8 +105,10 @@ class PublicPaykitRepo @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
     private val settingsStore: SettingsStore,
     private val clock: Clock,
+    private val usdtRepo: UsdtRepo,
 ) {
     companion object {
+        private const val TAG = "PublicPaykitRepo"
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
 
         internal val payablePreferenceOrder = listOf(
@@ -113,6 +118,7 @@ class PublicPaykitRepo @Inject constructor(
             MethodId.P2wpkh,
             MethodId.P2sh,
             MethodId.P2pkh,
+            MethodId.UsdtArbitrum,
         )
 
         private val publicBolt11Expiry = 24.hours
@@ -127,6 +133,9 @@ class PublicPaykitRepo @Inject constructor(
         fun isOnchainPaymentOptionEnabled(settings: SettingsData): Boolean =
             settings.publicPaykitOnchainEnabled
 
+        fun isUsdtPaymentOptionEnabled(settings: SettingsData, wallet: UsdtWalletState): Boolean =
+            settings.isUsdtEnabled(wallet) && settings.publicPaykitUsdtEnabled
+
         fun parseEndpoint(
             methodId: String,
             endpointData: String,
@@ -135,6 +144,11 @@ class PublicPaykitRepo @Inject constructor(
             if (!methodIdPattern.matches(methodId)) return null
 
             val knownMethodId = MethodId.fromRawValue(methodId, network) ?: return null
+            if (knownMethodId == MethodId.UsdtArbitrum) {
+                return PaykitUsdt.address(endpointData)?.let {
+                    Endpoint(methodId = knownMethodId, value = it, rawPayload = endpointData)
+                }
+            }
             val payload = PaykitIssuerInterop.parseEndpointPayload(endpointData) ?: return null
 
             return Endpoint(
@@ -196,7 +210,7 @@ class PublicPaykitRepo @Inject constructor(
             val payable = endpoints.filter { isPayable(it) }
             if (payable.isEmpty()) return@runSuspendCatching PublicPaykitPaymentResult.NotOpened
 
-            PublicPaykitPaymentResult.Opened(paymentRequest(payable))
+            PublicPaykitPaymentResult.Opened(paymentRequest(payable), endpoints = payable)
         }
     }
 
@@ -357,6 +371,15 @@ class PublicPaykitRepo @Inject constructor(
             )
         }
 
+        if (isUsdtPaymentOptionEnabled(settings, usdtRepo.state.value)) {
+            usdtRepo.paymentEndpoint()
+                .onSuccess { endpoints += it }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    Logger.warn("Failed to prepare public Paykit USDT endpoint", it, context = TAG)
+                }
+        }
+
         if (endpoints.isEmpty() && requireEndpoint) throw PublicPaykitError.NoSupportedEndpoint
 
         return endpoints
@@ -433,6 +456,7 @@ class PublicPaykitRepo @Inject constructor(
 
     private suspend fun isPayable(endpoint: Endpoint): Boolean = runSuspendCatching {
         when (endpoint.methodId) {
+            MethodId.UsdtArbitrum -> Env.isUsdtEnabled && PaykitUsdt.address(endpoint.rawPayload) != null
             MethodId.Bolt11 -> {
                 val scan = coreService.decode(endpoint.paymentRequest) as? Scanner.Lightning
                     ?: return@runSuspendCatching false
@@ -463,7 +487,7 @@ data class Endpoint(
     val appId: String? = null,
 ) {
     val paymentRequest: String
-        get() = value
+        get() = if (methodId == MethodId.UsdtArbitrum) PaykitUsdt.paymentUri(value) else value
 }
 
 enum class MethodId(
@@ -472,6 +496,7 @@ enum class MethodId(
     val isOnchain: Boolean = false,
     val isBitkitManaged: Boolean = false,
 ) {
+    UsdtArbitrum(fixedRawValue = "usdt-arbitrum-address", isBitkitManaged = true),
     Bolt11(fixedRawValue = "btc-lightning-bolt11", isBitkitManaged = true),
     Lnurl(fixedRawValue = "btc-lightning-lnurl"),
     P2tr(onchainEndpoint = "p2tr", isOnchain = true, isBitkitManaged = true),
