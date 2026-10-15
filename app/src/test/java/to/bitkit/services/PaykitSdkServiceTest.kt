@@ -748,7 +748,7 @@ class PaykitSdkServiceTest {
             assertFalse(backup.isCompleted)
             verify(sdk, never()).exportBackupString()
             service.linkedPeers(Priority.Interactive)
-            assertEquals("pending-write-backup", service.exportBackupState(Priority.Interactive))
+            assertEquals("pending-write-backup", service.exportBackupState(Priority.Interactive).state)
             assertFalse(backup.isCompleted)
             if (cancelBackup) {
                 backup.cancel()
@@ -756,9 +756,39 @@ class PaykitSdkServiceTest {
             }
             service.setPaymentSubmissionActive(false)
             runCurrent()
-            if (!cancelBackup) assertEquals("pending-write-backup", backup.await())
+            if (!cancelBackup) assertEquals("pending-write-backup", backup.await().state)
             verify(sdk, times(if (cancelBackup) 1 else 2)).exportBackupString()
         }
+    }
+
+    @Test
+    fun `backup export pairs its version after queued mutations and before later work`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        var revision = "before"
+        whenever(sdk.backupStateRevision()).thenAnswer { revision }
+        whenever(sdk.processPendingPrivateMessages()).doSuspendableAnswer {
+            release.await()
+            revision = "after"
+            emptyList()
+        }
+        whenever(sdk.exportBackupString()).thenAnswer { revision }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val mutation = async { service.processPendingPrivateMessages() }
+        runCurrent()
+        val backup = async { service.exportBackupState(Priority.Interactive) }
+        runCurrent()
+        assertFalse(backup.isCompleted)
+
+        release.complete(Unit)
+        mutation.await()
+        val exported = backup.await()
+
+        assertEquals("after", exported.state)
+        assertEquals(1L, exported.version)
+        assertEquals(service.backupStateVersion.value, exported.version)
+        service.clearState()
+        assertTrue(service.backupStateVersion.value > exported.version)
     }
 
     @Test
