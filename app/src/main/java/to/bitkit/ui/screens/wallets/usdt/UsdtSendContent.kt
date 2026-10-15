@@ -151,7 +151,7 @@ internal fun UsdtPaymentContent(
             showSuccess = true
         }
     }
-    val showSubmitted = state.submitted && !state.busy
+    val showSubmitted = state.submitted && !state.busy && !completed
     if (showSuccess && completed && quote != null) {
         NewTransactionSheetView(
             details = NewTransactionSheetDetails(

@@ -63,6 +63,7 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.HorizontalSpacer
@@ -316,7 +317,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            FillHeight(min = 12.dp)
+            if (uiState.paykitUsesUsdt) VerticalSpacer(32.dp) else FillHeight(min = 12.dp)
             if (uiState.paykitRateUnavailable) {
                 BodyS(
                     stringResource(R.string.wallet__payment_request_rate_unavailable),
@@ -344,11 +345,20 @@ private fun SendAmountNodeRunning(
                         ) { onClickMax(availableAmount) }
                         .testTag("AvailableAmount")
                 ) {
-                    Text13Up(
-                        text = stringResource(textAvailable),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("available_balance")
-                    )
+                    if (uiState.paykitUsesUsdt) {
+                        Caption13Up(
+                            text = stringResource(textAvailable),
+                            color = Colors.White64,
+                            style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                            modifier = Modifier.testTag("available_balance")
+                        )
+                    } else {
+                        Text13Up(
+                            text = stringResource(textAvailable),
+                            color = Colors.White64,
+                            modifier = Modifier.testTag("available_balance")
+                        )
+                    }
                     VerticalSpacer(4.dp)
                     if (uiState.paykitUsesUsdt) {
                         val balance = if (hideBalance) {
@@ -356,7 +366,10 @@ private fun SendAmountNodeRunning(
                         } else {
                             usdtWallet?.balance?.let { "<accent>$</accent> " + usdtOverviewAmount(it) } ?: "—"
                         }
-                        BodySSB(balance.withAccent(accentColor = Colors.White64))
+                        BodySSB(
+                            balance.withAccent(accentColor = Colors.White64),
+                            style = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+                        )
                     } else {
                         MoneySSB(sats = availableAmount, showSymbol = true)
                     }
@@ -385,8 +398,8 @@ private fun SendAmountNodeRunning(
                             .testTag("SendAmountMax")
                     )
                 }
-                HorizontalSpacer(8.dp)
                 if (!uiState.paykitUsesUsdt) {
+                    HorizontalSpacer(8.dp)
                     UnitButton(
                         onClick = { amountInputViewModel.switchUnit(currencies) },
                         modifier = Modifier
@@ -396,20 +409,25 @@ private fun SendAmountNodeRunning(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
+            HorizontalDivider(modifier = Modifier.padding(top = if (uiState.paykitUsesUsdt) 16.dp else 12.dp))
 
             if (uiState.paykitUsesUsdt) {
-                NumberPad(
-                    type = NumberPadType.DECIMAL,
-                    availableHeight = maxHeight,
-                    enabled = uiState.isAmountEditable,
-                    onPress = {
-                        app?.onUsdtAmountChange(
-                            NumberPadInputHandler.handleInput(it, uiState.paykitAmount, maxLength = 21, maxDecimals = 6)
-                        )
-                    },
-                    onDeleteLongPress = { app?.onUsdtAmountChange("") }
-                )
+                BoxWithConstraints(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    NumberPad(
+                        type = NumberPadType.DECIMAL,
+                        availableHeight = this.maxHeight,
+                        enabled = uiState.isAmountEditable,
+                        onPress = {
+                            app?.onUsdtAmountChange(
+                                NumberPadInputHandler.handleInput(it, uiState.paykitAmount, maxLength = 21, maxDecimals = 6)
+                            )
+                        },
+                        onDeleteLongPress = { app?.onUsdtAmountChange("") }
+                    )
+                }
             } else {
                 NumberPad(
                     enabled = uiState.isAmountEditable,
@@ -421,12 +439,13 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            if (uiState.paykitUsesUsdt) VerticalSpacer(24.dp)
+            if (uiState.paykitUsesUsdt) VerticalSpacer(16.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
                 isLoading = uiState.isLoading,
                 onClick = onContinue,
+                textStyle = if (uiState.paykitUsesUsdt) AppTextStyles.BodySSB.copy(letterSpacing = 0.sp) else null,
                 modifier = Modifier.testTag("ContinueAmount")
             )
 
@@ -458,6 +477,11 @@ private fun PaymentMethodButton(
                 else -> stringResource(R.string.wallet__spending__title)
             },
             color = paymentMethodColor(uiState),
+            textStyle = if (uiState.paykitUsesUsdt) {
+                AppTextStyles.CaptionM.copy(letterSpacing = 1.sp)
+            } else {
+                AppTextStyles.CaptionM
+            },
             icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
             onClick = { expanded = true },
             enabled = uiState.fundingOptions.isNotEmpty(),

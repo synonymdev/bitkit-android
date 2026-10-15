@@ -30,6 +30,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.LottieProperty
 import com.airbnb.lottie.compose.LottieAnimation
@@ -55,6 +56,7 @@ import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.localizedRandom
@@ -156,20 +158,7 @@ fun NewTransactionSheetView(
                 .testTag("transaction_content_column")
                 .padding(horizontal = 16.dp),
         ) {
-            val titleText = stringResource(
-                when {
-                    details.usdtAmount != null -> if (details.direction == NewTransactionSheetDirection.SENT) {
-                        R.string.usdt__payment_sent
-                    } else {
-                        R.string.usdt__payment_received
-                    }
-                    details.direction == NewTransactionSheetDirection.SENT -> R.string.wallet__send_sent
-                    details.type == NewTransactionSheetType.LIGHTNING -> R.string.wallet__instant_payment_received
-                    else -> R.string.wallet__payment_received
-                }
-            )
-
-            SheetTopBar(titleText)
+            TransactionHeader(details)
 
             Spacer(modifier = Modifier.height(if (details.usdtAmount != null) 8.dp else 24.dp))
 
@@ -198,6 +187,31 @@ fun NewTransactionSheetView(
             Spacer(modifier = Modifier.height(8.dp))
         }
     }
+}
+
+@Composable
+private fun TransactionHeader(details: NewTransactionSheetDetails) {
+    val titleText = stringResource(
+        when {
+            details.usdtAmount != null -> if (details.direction == NewTransactionSheetDirection.SENT) {
+                R.string.usdt__payment_sent
+            } else {
+                R.string.usdt__payment_received
+            }
+            details.direction == NewTransactionSheetDirection.SENT -> R.string.wallet__send_sent
+            details.type == NewTransactionSheetType.LIGHTNING -> R.string.wallet__instant_payment_received
+            else -> R.string.wallet__payment_received
+        }
+    )
+
+    SheetTopBar(
+        titleText,
+        titleStyle = if (details.usdtAmount != null && details.direction == NewTransactionSheetDirection.RECEIVED) {
+            AppTextStyles.Subtitle.copy(letterSpacing = 0.sp, lineHeight = 22.sp)
+        } else {
+            AppTextStyles.Subtitle
+        }
+    )
 }
 
 private val ConfettiShade = Color(0xFF8E8E93)
@@ -247,6 +261,11 @@ private fun TransactionButtons(
     onCloseClick: () -> Unit,
     onDetailClick: () -> Unit
 ) {
+    val buttonStyle = if (details.usdtAmount != null) {
+        AppTextStyles.BodySSB.copy(letterSpacing = 0.sp)
+    } else {
+        null
+    }
     if (details.direction == NewTransactionSheetDirection.SENT || details.usdtTransferId != null) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -257,6 +276,7 @@ private fun TransactionButtons(
             SecondaryButton(
                 text = stringResource(R.string.wallet__send_details),
                 onClick = onDetailClick,
+                textStyle = buttonStyle,
                 enabled = !details.isLoadingDetails && (
                     details.activityId != null || details.paymentHashOrTxId != null || details.usdtTransferId != null
                     ),
@@ -271,6 +291,7 @@ private fun TransactionButtons(
                     stringResource(R.string.common__close)
                 },
                 onClick = onCloseClick,
+                textStyle = buttonStyle,
                 modifier = Modifier
                     .weight(1f)
                     .testTag("Close")
@@ -280,6 +301,7 @@ private fun TransactionButtons(
         PrimaryButton(
             text = localizedRandom(R.string.common__ok_random),
             onClick = onCloseClick,
+            textStyle = buttonStyle,
             modifier = Modifier.testTag("ReceivedTransactionButton")
         )
     }

@@ -8,7 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -19,6 +21,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.synonym.bitkitcore.UsdtDeposit
 import com.synonym.bitkitcore.UsdtDepositDetail
@@ -152,7 +156,7 @@ class UsdtBridgeDetailsTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("USDT address on BSC").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag("UsdtDepositRefund").assertIsNotEnabled()
-        assertHeight("UsdtRefundAddress", 52f)
+        assertHeight("UsdtRefundAddress", 56f)
         screenshot("receiving-details")
         val refundField = composeTestRule.onNodeWithTag("UsdtRefundAddress")
         refundField.performTextInput(address.take(20))
@@ -165,17 +169,19 @@ class UsdtBridgeDetailsTest {
         composeTestRule.onNodeWithTag("UsdtDepositRefund").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("Confirm Refund").assertIsDisplayed()
-        composeTestRule.onNodeWithText("50,00 USDT", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("50,000001 USDT", substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("Refund address:\n" + address, substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("BNB Smart Chain (BSC)", substring = true).assertIsDisplayed()
         screenshot("refund")
         composeTestRule.onNodeWithTag("UsdtRefundCancel").performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("UsdtDepositDetails").performClick()
+        waitForClickDebounce()
+        composeTestRule.onNodeWithTag("UsdtDepositDetails").performScrollTo().performClick()
         composeTestRule.waitForIdle()
+        screenshot("receiving-summary-after-refund")
         composeTestRule.onNodeWithText("Needs attention").assertIsDisplayed()
         waitForClickDebounce()
-        composeTestRule.onNodeWithTag("UsdtDepositDetails").performClick()
+        composeTestRule.onNodeWithTag("UsdtDepositDetails").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText(address).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag("UsdtDepositHistory").performClick()
@@ -196,6 +202,29 @@ class UsdtBridgeDetailsTest {
             composeTestRule.onNodeWithTag("UsdtDepositRefund").assertDoesNotExist()
             composeTestRule.onNodeWithTag("UsdtRefundAddress").assertDoesNotExist()
         }
+    }
+
+    @Test
+    fun refundAddressExpandsForLargeText() {
+        val enteredAddress = mutableStateOf("")
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
+                Frame {
+                    UsdtDepositsContent(
+                        state = DepositUiState(detail = UsdtDepositDetail(deposit, null)),
+                        address = enteredAddress.value, hideBalance = false,
+                        onBack = {}, onAddress = { enteredAddress.value = it },
+                        onDetail = {}, onHistory = {}, onMore = {}, onRefresh = {}, onRefund = {},
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithTag("UsdtDepositDetails").performScrollTo().performClick()
+        val field = composeTestRule.onNodeWithTag("UsdtRefundAddress")
+        field.performScrollTo().performTextInput(address)
+        field.assertTextContains(address)
+        screenshot("refund-large-font")
+        field.assertHeightIsAtLeast(64.dp)
     }
 
     @Composable

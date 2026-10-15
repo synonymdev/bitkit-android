@@ -91,11 +91,12 @@ fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = h
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     WalletBalanceContent(
         title = "USDT",
+        titleStyle = UsdtDetailStyles.Caption,
         icon = {
             Image(
                 painterResource(R.drawable.tether_circle),
                 contentDescription = null,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.padding(end = 4.dp).size(24.dp)
             )
         },
         modifier = Modifier.clickableAlpha(onClick = onClick).padding(vertical = 4.dp)
@@ -108,7 +109,8 @@ fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = h
                 wallet.balance?.let {
                     usdtOverviewAmount(it)
                 } ?: "—"
-            }
+            },
+            style = UsdtDetailStyles.HistoryTitle
         )
     }
 }

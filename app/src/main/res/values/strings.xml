@@ -663,6 +663,7 @@
     <string name="profile__auth_approval_service_named">&lt;accent&gt;%1$s&lt;/accent&gt; is requesting permission to access and edit your &lt;accent&gt;%2$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_unknown">Unknown service</string>
     <string name="profile__auth_approval_services_separator">" and "</string>
+    <string name="profile__auth_approval_share_usdt">Share my USDT address</string>
     <string name="profile__auth_approval_share_usdt_optional">Also share my USDT address</string>
     <string name="profile__auth_approval_shared_bitcoin">Also, you shared a watch-only Bitcoin account with Paykit.</string>
     <string name="profile__auth_approval_shared_both">Also, you shared a watch-only Bitcoin account and USDT address with Paykit.</string>
@@ -674,6 +675,7 @@
     <string name="profile__auth_approval_trust_warning">Make sure you trust the service, browser, and device before authorizing with your pubky.</string>
     <string name="profile__auth_approval_usdt_disabled">USDT is turned off.</string>
     <string name="profile__auth_approval_usdt_intro_description">To earn, you need to share your USDT address with Paykit. It can view sales activity, but cannot spend funds.</string>
+    <string name="profile__auth_approval_usdt_intro_optional">You can share your USDT address with Paykit to receive earnings. It can view sales activity, but cannot spend funds.</string>
     <string name="profile__auth_approval_usdt_loading">Loading USDT address…</string>
     <string name="profile__auth_approval_usdt_unavailable">Your USDT address is unavailable. Please try again.</string>
     <string name="profile__auth_approval_watch_only_account_default_name">%1$s server</string>

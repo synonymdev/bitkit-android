@@ -37,8 +37,8 @@ import to.bitkit.models.PaykitAsset
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SendCell
@@ -197,7 +197,7 @@ private fun ColumnScope.Content(
         ReceivePage.FEES -> state.address?.let { address ->
             UsdtAmountHeader(usdtFormatAmount(address.amount), displayAmount = usdtOverviewAmount(address.amount))
             VerticalSpacer(24.dp)
-            BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64)
+            BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64, letterSpacing = 0.sp)
             VerticalSpacer(24.dp)
             EstimateRow(
                 stringResource(R.string.usdt__receive_fee),
@@ -211,7 +211,7 @@ private fun ColumnScope.Content(
             FillHeight()
             PrimaryButton(stringResource(R.string.common__continue), onClick = {
                 onPage(ReceivePage.ADDRESS)
-            }, modifier = Modifier.testTag("UsdtReceiveFeesContinue"))
+            }, textStyle = UsdtDetailStyles.Body, modifier = Modifier.testTag("UsdtReceiveFeesContinue"))
         }
         ReceivePage.ADDRESS -> {
             val atomic = runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount).atomic }.getOrNull()
@@ -266,10 +266,10 @@ private fun ColumnScope.NetworkSelector(
 
 @Composable
 private fun EstimateRow(title: String, value: String) {
-    SendCell(caption = title, dividerSpacing = 24.dp) {
+    SendCell(caption = title, captionStyle = UsdtDetailStyles.Caption, dividerSpacing = 24.dp) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            BodyMSB("± $", color = Colors.White64)
-            BodyMSB(value)
+            BodySSB("± $", color = Colors.White64, style = UsdtDetailStyles.Value)
+            BodySSB(value, style = UsdtDetailStyles.Body)
         }
     }
     VerticalSpacer(24.dp)

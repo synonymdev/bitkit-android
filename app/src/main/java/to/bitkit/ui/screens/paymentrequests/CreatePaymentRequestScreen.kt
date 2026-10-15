@@ -94,6 +94,8 @@ import to.bitkit.ui.utils.NumberPadInputHandler
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -148,6 +150,8 @@ internal fun PaymentRequestAmountContent(
 ) {
     val currencies = LocalCurrencies.current
     val amountState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
+    val locale = Locale.getDefault()
+    val decimalSeparator = remember(locale) { DecimalFormatSymbols.getInstance(locale).decimalSeparator }
 
     var asset by remember(initialDraft.amount.asset) { mutableStateOf(initialDraft.amount.asset) }
     var dollars by remember(initialDraft.amount) {
@@ -200,7 +204,7 @@ internal fun PaymentRequestAmountContent(
                     )
                 } else {
                     NumberPadAmountText(
-                        value = dollars.ifEmpty { "0" },
+                        value = dollars.ifEmpty { "0" }.replace('.', decimalSeparator),
                         symbol = "$",
                         modifier = Modifier.testTag("PaymentRequestAmountField")
                     )
@@ -257,6 +261,7 @@ internal fun PaymentRequestAmountContent(
                         },
                         type = NumberPadType.DECIMAL,
                         availableHeight = availableHeight,
+                        decimalSeparator = decimalSeparator.toString(),
                         modifier = Modifier.testTag("PaymentRequestNumberPad")
                     )
                 }

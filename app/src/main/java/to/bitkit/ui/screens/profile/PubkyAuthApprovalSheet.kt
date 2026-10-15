@@ -331,10 +331,10 @@ private fun ColumnScope.WatchOnlyConsentContent(
             VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(
-                    if (uiState.bitkitClaim?.sharesBitcoin == true) {
-                        R.string.profile__auth_approval_watch_only_intro_description
-                    } else {
-                        R.string.profile__auth_approval_usdt_intro_description
+                    when {
+                        uiState.bitkitClaim?.sharesBitcoin == true -> R.string.profile__auth_approval_watch_only_intro_description
+                        uiState.usdtRequired -> R.string.profile__auth_approval_usdt_intro_description
+                        else -> R.string.profile__auth_approval_usdt_intro_optional
                     }
                 ),
                 color = Colors.White64,
@@ -381,7 +381,13 @@ private fun UsdtSharingChoice(
                     .testTag("PubkyAuthShareUsdt")
             ) {
                 BodyM(
-                    text = stringResource(R.string.profile__auth_approval_share_usdt_optional),
+                    text = stringResource(
+                        if (uiState.bitkitClaim?.sharesBitcoin == true) {
+                            R.string.profile__auth_approval_share_usdt_optional
+                        } else {
+                            R.string.profile__auth_approval_share_usdt
+                        }
+                    ),
                     color = Colors.White64,
                     letterSpacing = 0.sp,
                     modifier = Modifier.weight(1f)

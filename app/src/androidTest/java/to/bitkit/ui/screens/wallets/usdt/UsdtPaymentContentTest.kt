@@ -4,8 +4,10 @@ import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -19,8 +21,11 @@ import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.UsdtBridgeProvider
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtQuote
+import com.synonym.bitkitcore.UsdtTransfer
+import com.synonym.bitkitcore.UsdtTransferStatus
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.collections.immutable.persistentListOf
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -121,27 +126,71 @@ class UsdtPaymentContentTest {
         composeTestRule.onNodeWithTag("UsdtPaste").assertDoesNotExist()
     }
 
+    @Test
+    fun directPaymentShowsCompletionBeforeSuccess() {
+        assertCompletionTransition(UsdtDestination.ARBITRUM, UsdtTransferStatus.PENDING)
+    }
+
+    @Test
+    fun bridgeShowsPendingUntilDeliveryThenCompletion() {
+        assertCompletionTransition(UsdtDestination.POLYGON, UsdtTransferStatus.BRIDGING)
+    }
+
+    private fun assertCompletionTransition(destination: UsdtDestination, pendingStatus: UsdtTransferStatus) {
+        val payment = quote.copy(destination = destination)
+        val transfer = UsdtTransfer(
+            id = payment.id, sender = null, txHash = null, userOperationHash = null,
+            bridgeGuid = null, orchestra = null, recipient = payment.recipient,
+            destination = destination, amount = payment.amount, receivedAmount = payment.receivedAmount,
+            fee = null, isIncoming = false, status = pendingStatus, timestamp = 1u,
+        )
+        val wallet = mutableStateOf(UsdtWalletState(transfers = persistentListOf(transfer)))
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            Content(UsdtSendState(quote = payment, submitted = true), UsdtPage.AMOUNT, wallet = wallet.value)
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
+        composeTestRule.runOnUiThread {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(transfer.copy(status = UsdtTransferStatus.CONFIRMED)))
+        }
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeBy(700)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
+    }
+
     @Composable
-    private fun Content(state: UsdtSendState, page: UsdtPage, onDetails: () -> Unit = {}) {
+    private fun Content(
+        state: UsdtSendState,
+        page: UsdtPage,
+        wallet: UsdtWalletState = UsdtWalletState(),
+        onDetails: () -> Unit = {},
+    ) {
         AppThemeSurface {
-            Box(modifier = Modifier.size(width = 360.dp, height = 600.dp)) {
-                UsdtPaymentContent(
-                    wallet = UsdtWalletState(),
-                    state = state,
-                    page = page,
-                    recipient = quote.recipient,
-                    amount = "3",
-                    destination = quote.destination,
-                    onRecipientChange = {},
-                    onAmountChange = {},
-                    onRecipientContinue = {},
-                    onPageChange = {},
-                    onBack = {},
-                    onReview = {},
-                    onConfirm = {},
-                    onDone = {},
-                    onDetails = onDetails,
-                )
+            CompositionLocalProvider(LocalInspectionMode provides true) {
+                Box(modifier = Modifier.size(width = 360.dp, height = 600.dp)) {
+                    UsdtPaymentContent(
+                        wallet = wallet,
+                        state = state,
+                        page = page,
+                        recipient = quote.recipient,
+                        amount = "3",
+                        destination = state.quote?.destination ?: quote.destination,
+                        onRecipientChange = {},
+                        onAmountChange = {},
+                        onRecipientContinue = {},
+                        onPageChange = {},
+                        onBack = {},
+                        onReview = {},
+                        onConfirm = {},
+                        onDone = {},
+                        onDetails = onDetails,
+                    )
+                }
             }
         }
     }
