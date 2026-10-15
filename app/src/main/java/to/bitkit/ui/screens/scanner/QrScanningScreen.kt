@@ -53,6 +53,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -63,6 +64,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.QrCodePayload
 import to.bitkit.models.Toast
@@ -195,12 +197,23 @@ fun QrScanningScreen(
     }
     var camera by remember { mutableStateOf<Camera?>(null) }
 
-    LaunchedEffect(lensFacing) {
-        val cameraProvider = withContext(Dispatchers.IO) {
-            ProcessCameraProvider.getInstance(context).get()
+    LaunchedEffect(lensFacing, cameraPermissionState.status) {
+        if (!cameraPermissionState.status.isGranted) return@LaunchedEffect
+        runSuspendCatching {
+            val cameraProvider = withContext(Dispatchers.IO) {
+                ProcessCameraProvider.getInstance(context).get()
+            }
+            camera = cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
+            preview.surfaceProvider = previewView.surfaceProvider
+        }.onFailure {
+            Logger.error("Failed to initialize camera", it, context = TAG)
+            app.toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__qr_error_header),
+                description = context.getString(R.string.other__camera_init_error)
+                    .replace("{message}", it.message.orEmpty())
+            )
         }
-        camera = cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
-        preview.surfaceProvider = previewView.surfaceProvider
     }
     DisposableEffect(Unit) {
         onDispose {

@@ -6,6 +6,15 @@ The drivable wallet navigation and request/subscription UI paths are in `journey
 
 Enable USDT through its introduction or Settings before starting payment checks. The opt-in, disable safeguards and disabled-link paths are covered by `journeys/usdt-opt-in.xml`.
 
+## Android camera availability
+
+Use a disposable unfunded wallet with USDT enabled. The no-camera case requires an emulator with both cameras disabled; this hardware configuration is outside the standard journey environment.
+
+- [ ] With camera permission denied, open USDT Send and verify Paste and Enter Manually remain available.
+- [ ] Grant camera permission on a device with no available camera. Verify a camera error is shown without closing the app. Enter Manually must still open recipient entry, and Paste must still process a supported address.
+- [ ] Leave and reopen Send. Verify camera initialization failure does not crash or prevent navigation.
+- [ ] Repeat with a working camera. Grant permission while the scanner is open, verify the preview starts, and scan an owned USDT address without submitting a payment.
+
 ## usdt bridge quotes
 
 A funded Arbitrum wallet uses the real gateway with USDT0 and Orchestra enabled. This journey obtains quotes only; do not swipe to pay or create any funded order.
