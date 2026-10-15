@@ -127,41 +127,96 @@ class UsdtPaymentContentTest {
     }
 
     @Test
-    fun directPaymentShowsCompletionBeforeSuccess() {
+    fun pendingDirectPaymentStaysSubmittedUntilSuccess() {
         assertCompletionTransition(UsdtDestination.ARBITRUM, UsdtTransferStatus.PENDING)
     }
 
     @Test
-    fun bridgeShowsPendingUntilDeliveryThenCompletion() {
+    fun bridgeStaysSubmittedUntilDeliverySuccess() {
         assertCompletionTransition(UsdtDestination.POLYGON, UsdtTransferStatus.BRIDGING)
+    }
+
+    @Test
+    fun immediateConfirmationShowsCompletionBeforeSuccess() {
+        val payment = quote.copy(destination = UsdtDestination.ARBITRUM)
+        val state = mutableStateOf(UsdtSendState(quote = payment, submitted = true, busy = true))
+        val wallet = UsdtWalletState(transfers = persistentListOf(transfer(payment, UsdtTransferStatus.CONFIRMED)))
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent { Content(state.value, UsdtPage.AMOUNT, wallet = wallet) }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
+        composeTestRule.runOnUiThread { state.value = state.value.copy(busy = false) }
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Payment submitted").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeBy(700)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
+    }
+
+    @Test
+    fun returningToConfirmedPaymentDoesNotReopenReview() {
+        val showDetails = mutableStateOf(false)
+        val payment = transfer(quote, UsdtTransferStatus.BRIDGING)
+        val wallet = mutableStateOf(UsdtWalletState(transfers = persistentListOf(payment)))
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            if (!showDetails.value) {
+                Content(UsdtSendState(quote = quote, submitted = true), UsdtPage.AMOUNT, wallet = wallet.value) {
+                    showDetails.value = true
+                }
+            }
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithText("Details").performClick()
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithText("Payment submitted").assertDoesNotExist()
+        composeTestRule.runOnUiThread {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(payment.copy(status = UsdtTransferStatus.CONFIRMED)))
+            showDetails.value = false
+        }
+        composeTestRule.mainClock.advanceTimeBy(500)
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
+        composeTestRule.mainClock.advanceTimeBy(700)
+        composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
     }
 
     private fun assertCompletionTransition(destination: UsdtDestination, pendingStatus: UsdtTransferStatus) {
         val payment = quote.copy(destination = destination)
-        val transfer = UsdtTransfer(
-            id = payment.id, sender = null, txHash = null, userOperationHash = null,
-            bridgeGuid = null, orchestra = null, recipient = payment.recipient,
-            destination = destination, amount = payment.amount, receivedAmount = payment.receivedAmount,
-            fee = null, isIncoming = false, status = pendingStatus, timestamp = 1u,
-        )
+        val transfer = transfer(payment, pendingStatus)
         val wallet = mutableStateOf(UsdtWalletState(transfers = persistentListOf(transfer)))
         composeTestRule.mainClock.autoAdvance = false
         composeTestRule.setContent {
             Content(UsdtSendState(quote = payment, submitted = true), UsdtPage.AMOUNT, wallet = wallet.value)
         }
         composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.onNodeWithText("Payment submitted").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
         composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
         composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
         composeTestRule.runOnUiThread {
             wallet.value = wallet.value.copy(transfers = persistentListOf(transfer.copy(status = UsdtTransferStatus.CONFIRMED)))
         }
         composeTestRule.mainClock.advanceTimeBy(500)
-        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Payment submitted").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
         composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
         composeTestRule.mainClock.advanceTimeBy(700)
         composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
         composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
     }
+
+    private fun transfer(payment: UsdtQuote, status: UsdtTransferStatus) = UsdtTransfer(
+        id = payment.id, sender = null, txHash = null, userOperationHash = null,
+        bridgeGuid = null, orchestra = null, recipient = payment.recipient,
+        destination = payment.destination, amount = payment.amount, receivedAmount = payment.receivedAmount,
+        fee = null, isIncoming = false, status = status, timestamp = 1u,
+    )
 
     @Composable
     private fun Content(

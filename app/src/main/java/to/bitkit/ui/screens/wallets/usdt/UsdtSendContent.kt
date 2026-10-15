@@ -146,14 +146,19 @@ internal fun UsdtPaymentContent(
     val quote = state.quote
     val status = wallet.transfers.firstOrNull { it.id == quote?.id }?.status
     val completed = state.submitted && !state.busy && status == UsdtTransferStatus.CONFIRMED
+    val pending = state.submitted && !state.busy && !completed
+    var hasShownSubmitted by rememberSaveable(quote?.id) { mutableStateOf(state.submitted && !state.busy) }
     var showSuccess by rememberSaveable(quote?.id) { mutableStateOf(false) }
-    LaunchedEffect(completed) {
+    LaunchedEffect(quote?.id, pending) {
+        if (pending) hasShownSubmitted = true
+    }
+    LaunchedEffect(quote?.id, completed) {
         if (completed) {
             delay(1.seconds)
             showSuccess = true
         }
     }
-    val showSubmitted = state.submitted && !state.busy && !completed
+    val showSubmitted = pending || (completed && hasShownSubmitted)
     if (showSuccess && completed && quote != null) {
         NewTransactionSheetView(
             details = NewTransactionSheetDetails(
@@ -184,7 +189,7 @@ internal fun UsdtPaymentContent(
         else -> R.string.usdt__send_title
     }
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        SheetTopBar(stringResource(title), onBack = onBack.takeUnless { showSubmitted || state.busy }, action = {
+        SheetTopBar(stringResource(title), onBack = onBack.takeUnless { state.submitted || state.busy }, action = {
             if (contact != null && !showSubmitted) { PubkyContactAvatar(profile = contact, size = 32.dp) }
         })
         VerticalSpacer(if (quote != null || page == UsdtPage.AMOUNT) 8.dp else 16.dp)
