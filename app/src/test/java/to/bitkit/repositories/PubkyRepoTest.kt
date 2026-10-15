@@ -3446,6 +3446,31 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cancelling one contact refresh does not cancel another waiter`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val added = createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Shop"))
+        val released = CompletableDeferred<Unit>()
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).doSuspendableAnswer {
+            released.await()
+            listOf(added)
+        }
+        clearInvocations(pubkyService)
+        val foreground = async { sut.refreshContacts() }
+        val checkout = async { sut.refreshContacts() }
+        runCurrent()
+
+        foreground.cancel()
+        foreground.join()
+        runCurrent()
+        assertFalse(checkout.isCompleted)
+        released.complete(Unit)
+
+        assertTrue(checkout.await())
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        verifyBlocking(pubkyService) { observedContactRecords(VALID_SELF_KEY) }
+    }
+
+    @Test
     fun `Shop import reads again after an older foreground refresh`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val released = CompletableDeferred<Unit>()

@@ -516,7 +516,12 @@ class AppViewModel @Inject constructor(
     private var isSubmittingPaymentRequest = false
         set(value) {
             field = value
-            paykitPaymentRequestRepo.setPaymentSubmissionActive(value)
+            paykitPaymentRequestRepo.setPaymentSubmissionActive(value || isSoftwarePaymentSubmissionActive)
+        }
+    private var isSoftwarePaymentSubmissionActive = false
+        set(value) {
+            field = value
+            paykitPaymentRequestRepo.setPaymentSubmissionActive(value || isSubmittingPaymentRequest)
         }
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
@@ -3286,8 +3291,10 @@ class AppViewModel @Inject constructor(
 
     suspend fun sendPaykitUsdt(quote: UsdtQuote) {
         val current = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-            ?.takeUnless { isSubmittingPaymentRequest } ?: throw PaykitPaymentRequestError.RequestUnavailable
+            ?.takeUnless { isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive }
+            ?: throw PaykitPaymentRequestError.RequestUnavailable
         isSubmittingPaymentRequest = true
+        isSoftwarePaymentSubmissionActive = true
         val reviewedAmount = paykitReviewedAmount
         val paymentTerms = paykitPaymentTerms
         try {
@@ -3304,6 +3311,7 @@ class AppViewModel @Inject constructor(
             ) { authorizeUsdtExecution(current, reviewedAmount, paymentTerms) }.getOrThrow()
         } finally {
             isSubmittingPaymentRequest = false
+            isSoftwarePaymentSubmissionActive = false
         }
     }
 
@@ -6809,7 +6817,7 @@ class AppViewModel @Inject constructor(
 
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
-        if (isSubmittingPaymentRequest) return
+        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) return
 
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
@@ -6823,12 +6831,14 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToHardwareSign)
             return
         }
-        viewModelScope.launch {
+        isSoftwarePaymentSubmissionActive = true
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 _sendUiState.update { it.copy(shouldConfirmPay = false) }
                 proceedWithPayment(contactPaymentContext)
             } finally {
                 isSubmittingPaymentRequest = false
+                isSoftwarePaymentSubmissionActive = false
             }
         }
     }
@@ -6839,7 +6849,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun onHardwarePaymentSubmissionChanged(active: Boolean) {
-        paykitPaymentRequestRepo.setPaymentSubmissionActive(active && activeIncomingPaymentRequest() != null)
+        paykitPaymentRequestRepo.setPaymentSubmissionActive(active || isSoftwarePaymentSubmissionActive)
     }
 
     fun hardwarePaymentIdentity(): String? = pubkyRepo.publicKey.value?.let(PubkyPublicKeyFormat::normalized)

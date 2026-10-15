@@ -8502,6 +8502,59 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `dismissing a software payment keeps background work paused until it ends`() = test {
+        for (kind in listOf("incoming", "contact", "plain")) {
+            val request = paymentRequest()
+            val release = CompletableDeferred<Unit>()
+            val entered = CompletableDeferred<Unit>()
+            val privateContext = privatePaymentContext(7uL)
+            val address = "bcrt1qpaymentrequest"
+            balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+            whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+                .thenReturn(Result.success(Unit))
+            whenever(
+                lightningRepo.sendOnChain(
+                    any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                    any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                    paymentDeadlineAt = anyOrNull(),
+                    contactPublicKey = anyOrNull(),
+                ),
+            ).doSuspendableAnswer {
+                entered.complete(Unit)
+                release.await()
+                Result.failure(AppError("Stopped before sending"))
+            }
+            sut.showSheet(Sheet.Send(SendRoute.Confirm))
+            runCurrent()
+            if (kind != "plain") {
+                setActiveContactPaymentContext(testPublicKey, privateContext, request.takeIf { kind == "incoming" })
+            }
+            setSendState(
+                SendUiState(
+                    address = address,
+                    amount = request.amount.atomic,
+                    payMethod = SendMethod.ONCHAIN,
+                    speed = TransactionSpeed.Medium,
+                    isPaymentRequest = kind == "incoming",
+                ),
+            )
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceTimeBy(TRANSITION_SCREEN_MS)
+            runCurrent()
+            entered.await()
+            assertTrue(paymentSubmissionActive.value)
+            sut.hideSheet()
+            runCurrent()
+            assertTrue(paymentSubmissionActive.value)
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            runCurrent()
+            release.complete(Unit)
+            runCurrent()
+            assertFalse(paymentSubmissionActive.value)
+        }
+    }
+
+    @Test
     fun `duplicate payment request confirmation submits only once`() = test {
         val address = "bcrt1qpaymentrequest"
         val request = paymentRequest()
@@ -9874,6 +9927,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(paymentSubmissionActive.value)
         sut.onHardwarePaymentSubmissionChanged(false)
         assertFalse(paymentSubmissionActive.value)
+        sut.hideSheet()
         sut.onHardwarePaymentSubmissionChanged(true)
         assertTrue(paymentSubmissionActive.value)
         sut.onHardwareSignCancelled()
@@ -12936,6 +12990,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         val send = launch { sut.sendPaykitUsdt(mock()) }
         preparing.await()
+        assertTrue(paymentSubmissionActive.value)
+        sut.hideSheet()
         assertTrue(paymentSubmissionActive.value)
         send.cancelAndJoin()
         assertFalse(paymentSubmissionActive.value)

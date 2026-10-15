@@ -53,7 +53,20 @@ The normal contact-change observer starts linking; importing never authorizes pa
    writes or stale UI results. An admitted SDK write retains normal recovery rules.
 8. Start payment submission while import is queued. Verify the background import
    waits and does not alter the payment's approval, request, winner or recovery
-   state. Cancel or change identity during that wait; no stale import may start.
+   state. Repeat with a plain send, a contact payment and a Payment Request. Hold
+   the payment operation before broadcast and dismiss its sheet; imports must stay
+   paused until the operation finishes or is actually cancelled, not merely until
+   the sheet closes. Cancel the importer by backgrounding or disabling contact
+   payments during that wait, then release payment activity; the cancelled import
+   must not start a write. Resume or re-enable to permit a fresh import. Change
+   identity during the wait and verify no old-identity import starts. A write that
+   was already admitted before cancellation must still finish safely.
+9. Hold a foreground contact refresh, then open a contact deep link that joins the
+   same read. Cancel only the foreground refresh with a connectivity change and
+   release the read. Verify the contact link opens using the fresh contacts without
+   another lifecycle trigger. Repeat cancelling the link instead; the foreground
+   refresh must finish. Cancel both or sign out before release; no stale contacts
+   may be published. Controlled read suspension/cancellation is not a journey capability.
 
 Record observed timing and failures separately from unit-test results. Passing
 these cases without a payment does not prove Shop order-paid or delivery acceptance.

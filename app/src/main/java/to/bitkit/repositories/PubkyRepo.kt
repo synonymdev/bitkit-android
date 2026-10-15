@@ -171,6 +171,7 @@ class PubkyRepo @Inject constructor(
     private var completedProfileWriteGeneration = -1L
     private val loadContactsMutex = Mutex()
     private var contactRefresh: Pair<PubkySignIn, Deferred<Boolean>>? = null
+    private var contactRefreshWaiters = 0
     private val contactsLock = Any()
     private var contactsRevision = 0L
     private val sessionContactProfiles = mutableMapOf<String, SessionContactProfile>()
@@ -1151,22 +1152,27 @@ class PubkyRepo @Inject constructor(
     suspend fun refreshContacts(): Boolean {
         val signIn = currentSignIn() ?: return false
         val refresh = synchronized(contactsLock) {
-            contactRefresh?.takeIf { isCurrent(it.first) && it.second.isActive }?.second
+            val pending = contactRefresh?.takeIf { isCurrent(it.first) && it.second.isActive }?.second
                 ?: scope.async(start = CoroutineStart.LAZY) {
                     if (!isCurrent(signIn)) return@async false
                     val loaded = loadContactRecords()
                     loaded && isCurrent(signIn)
                 }.also {
                     contactRefresh = signIn to it
+                    contactRefreshWaiters = 0
                     it.start()
                 }
+            contactRefreshWaiters++
+            pending
         }
         return try {
             refresh.await()
         } finally {
-            if (!currentCoroutineContext().isActive) refresh.cancel()
             synchronized(contactsLock) {
-                if (contactRefresh?.second === refresh && refresh.isCompleted) contactRefresh = null
+                if (contactRefresh?.second === refresh && --contactRefreshWaiters == 0) {
+                    refresh.cancel()
+                    contactRefresh = null
+                }
             }
         }
     }

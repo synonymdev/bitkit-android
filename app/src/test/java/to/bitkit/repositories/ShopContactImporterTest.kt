@@ -191,10 +191,10 @@ class ShopContactImporterTest {
     }
 
     private suspend fun stubSeller(service: PubkyService, key: String) {
-        whenever(service.fetchPublicFile("$root$key.json", ShopContactImporter.MARKER_MAX_BYTES))
+        whenever { service.fetchPublicFile("$root$key.json", ShopContactImporter.MARKER_MAX_BYTES) }
             .thenReturn("{\"seller\":\"$key\",\"completedAt\":1}".toByteArray())
-        whenever(
-            service.fetchPublicFile("pubky://$key${ShopContactImporter.SHOP_PATH}", ShopContactImporter.SHOP_MAX_BYTES),
-        ).thenReturn("{\"schemaVersion\":1,\"recordType\":\"shop\",\"ownerPubky\":\"$key\"}".toByteArray())
+        whenever {
+            service.fetchPublicFile("pubky://$key${ShopContactImporter.SHOP_PATH}", ShopContactImporter.SHOP_MAX_BYTES)
+        }.thenReturn("{\"schemaVersion\":1,\"recordType\":\"shop\",\"ownerPubky\":\"$key\"}".toByteArray())
     }
 }

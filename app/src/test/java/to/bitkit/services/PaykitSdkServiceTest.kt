@@ -47,6 +47,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
@@ -67,6 +68,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
+import to.bitkit.async.ServiceQueue
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
@@ -172,6 +174,47 @@ class PaykitSdkServiceTest {
             }
             verify(sdk, times(if (reset) 0 else 1)).importContacts(any(), any())
         }
+    }
+
+    @Test
+    fun `cancelled shop import wrapper cannot start a deferred SDK write`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.importContacts(any(), any())).thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val wrapper = PubkyService(service)
+        service.setPaymentSubmissionActive(true)
+        val caller = launch { wrapper.importShopContacts(listOf(RING_PUBKY), RING_PUBKY) { true } }
+        runCurrent()
+        ServiceQueue.CORE.background { }
+        caller.cancel()
+        service.setPaymentSubmissionActive(false)
+        caller.join()
+        verify(sdk, never()).importContacts(any(), any())
+    }
+
+    @Test
+    fun `cancelling shop import wrapper lets an admitted SDK write finish`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val finished = CompletableDeferred<Unit>()
+        whenever(sdk.importContacts(any(), any())).doSuspendableAnswer {
+            started.complete(Unit)
+            release.await()
+            finished.complete(Unit)
+            emptyList()
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val caller = launch { PubkyService(service).importShopContacts(listOf(RING_PUBKY), RING_PUBKY) { true } }
+        started.await()
+        caller.cancel()
+        runCurrent()
+        assertFalse(finished.isCompleted)
+        assertFalse(caller.isCompleted)
+        release.complete(Unit)
+        caller.join()
+        assertTrue(finished.isCompleted)
+        verify(sdk).importContacts(any(), any())
     }
 
     @Test

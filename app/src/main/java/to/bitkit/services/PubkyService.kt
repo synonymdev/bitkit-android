@@ -192,7 +192,7 @@ class PubkyService @Inject constructor(
         publicKeys: List<String>,
         expectedIdentity: String,
         isStillCurrent: () -> Boolean,
-    ): List<ContactRecord> = ServiceQueue.CORE.background {
+    ): List<ContactRecord> = ServiceQueue.CORE.background(ServiceQueue.CORE.queueContext.minusKey(Job)) {
         paykitSdkService.importShopContacts(publicKeys, expectedIdentity, isStillCurrent)
     }
 
