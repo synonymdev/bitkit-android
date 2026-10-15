@@ -43,7 +43,7 @@ import kotlin.test.assertTrue
 class UsdtViewModelTest : BaseUnitTest() {
     @Test
     fun `settled payment rejects replacement quotes until explicitly edited`() = test {
-        val viewModel = createViewModel()
+        val viewModel = createViewModel(walletState = UsdtWalletState(address = "sender"))
         settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
         viewModel.quote(quote.recipient, "1", quote.destination).join()
         viewModel.confirm().join()
@@ -58,6 +58,9 @@ class UsdtViewModelTest : BaseUnitTest() {
         verify(repo, times(1)).quote(any(), any(), any(), any())
         verify(repo, never()).quoteMaximum(any(), any())
         verify(repo, times(1)).send(any(), anyOrNull(), any())
+        viewModel.edit()
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        verify(repo, times(2)).quote(any(), any(), any(), any())
     }
 
     @Test
@@ -117,6 +120,7 @@ class UsdtViewModelTest : BaseUnitTest() {
 
     private val repo: UsdtRepo = mock()
     private val settingsStore: SettingsStore = mock()
+    private val walletState = MutableStateFlow(UsdtWalletState())
     private val settings = MutableStateFlow(SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true))
     private val quote = UsdtQuote(
         id = "payment",
@@ -126,7 +130,7 @@ class UsdtViewModelTest : BaseUnitTest() {
         amount = 1_000_000u,
         receivedAmount = 1_000_000u,
         maximumFee = 20u,
-        expiresAt = 100u,
+        expiresAt = nowTimestamp().epochSecond.toULong() + 120u,
     )
 
     @Test
@@ -154,6 +158,95 @@ class UsdtViewModelTest : BaseUnitTest() {
             verify(repo, never()).send(any(), anyOrNull(), any())
             assertNull(viewModel.state.value.error)
         } finally { parser.close() }
+    }
+
+    @Test
+    fun `returning to unchanged payment review reuses its approved quote`() = test {
+        val viewModel = createViewModel(walletState = UsdtWalletState(address = "sender"))
+        val fresh = quote.copy(expiresAt = nowTimestamp().epochSecond.toULong() + 120u)
+        whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(fresh))
+
+        viewModel.quote(fresh.recipient, "1", fresh.destination).join()
+        viewModel.edit()
+        viewModel.quote(fresh.recipient, "1", fresh.destination).join()
+
+        assertEquals(fresh, viewModel.state.value.quote)
+        verify(repo, times(1)).quote(any(), any(), any(), any())
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `closing send discards its quote before another payment flow`() = test {
+        val viewModel = createViewModel(walletState = UsdtWalletState(address = "sender"))
+        viewModel.isSendPresented = true
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.edit()
+        viewModel.isSendPresented = false
+        viewModel.isSendPresented = true
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+
+        verify(repo, times(2)).quote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `changed amount recipient or network requires another quote`() = test {
+        val viewModel = createViewModel(walletState = UsdtWalletState(address = "sender"))
+        val fresh = quote.copy(expiresAt = nowTimestamp().epochSecond.toULong() + 120u)
+        whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(fresh))
+        viewModel.quote(fresh.recipient, "1", fresh.destination).join()
+        viewModel.edit()
+        viewModel.quote(fresh.recipient, "2", fresh.destination).join()
+        viewModel.edit()
+        viewModel.quote("other recipient", "2", fresh.destination).join()
+        viewModel.edit()
+        viewModel.quote(fresh.recipient, "2", UsdtDestination.POLYGON).join()
+
+        verify(repo, times(4)).quote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `changing wallets prevents reuse for the same recipient amount and network`() = test {
+        val viewModel = createViewModel(walletState = UsdtWalletState(address = "sender"))
+        val fresh = quote.copy(expiresAt = nowTimestamp().epochSecond.toULong() + 120u)
+        whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(fresh))
+        viewModel.quote(fresh.recipient, "1", fresh.destination).join()
+        viewModel.edit()
+        walletState.value = UsdtWalletState(address = "another wallet")
+        viewModel.quote(fresh.recipient, "1", fresh.destination).join()
+
+        verify(repo, times(2)).quote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `expiring quote is replaced and a failed refresh never displays stale fees`() = test {
+        val viewModel = createViewModel(walletState = UsdtWalletState(address = "sender"))
+        val expiring = quote.copy(expiresAt = nowTimestamp().epochSecond.toULong() + 4u)
+        whenever(repo.quote(any(), any(), any(), any()))
+            .thenReturn(Result.success(expiring), Result.failure(UsdtException.RateLimited()), Result.success(quote))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.edit()
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        assertNull(viewModel.state.value.quote)
+        assertFalse(viewModel.state.value.busy)
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        assertEquals(quote, viewModel.state.value.quote)
+        verify(repo, times(3)).quote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `submission failure invalidates a reusable quote before retry`() = test {
+        val viewModel = createViewModel(walletState = UsdtWalletState(address = "sender"))
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        val fresh = quote.copy(expiresAt = nowTimestamp().epochSecond.toULong() + 120u)
+        whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(fresh))
+        whenever(repo.send(eq(fresh), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.SubmissionDeadlineExpired()))
+        viewModel.quote(fresh.recipient, "1", fresh.destination).join()
+        viewModel.confirm().join()
+        assertNull(viewModel.state.value.quote)
+        viewModel.quote(fresh.recipient, "1", fresh.destination).join()
+        verify(repo, times(2)).quote(any(), any(), any(), any())
+        verify(repo).send(eq(fresh), anyOrNull(), any())
     }
 
     @Test
@@ -364,7 +457,8 @@ class UsdtViewModelTest : BaseUnitTest() {
         settingsFlow: Flow<SettingsData> = settings,
         walletState: UsdtWalletState = UsdtWalletState(),
     ): UsdtViewModel {
-        whenever(repo.state).thenReturn(MutableStateFlow(walletState))
+        this.walletState.value = walletState
+        whenever(repo.state).thenReturn(this.walletState)
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(quote))
         whenever(repo.send(eq(quote), anyOrNull(), any())).thenReturn(Result.success(mock<UsdtTransfer>()))

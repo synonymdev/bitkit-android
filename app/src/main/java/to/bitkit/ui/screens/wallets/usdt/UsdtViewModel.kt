@@ -76,11 +76,15 @@ class UsdtViewModel @Inject constructor(
     private var requiresPaymentContext = false
     private val _state = MutableStateFlow(UsdtSendState())
     private var maximumQuote: UsdtQuote? = null
+    private var preparedQuote: PreparedQuote? = null
     val state = _state.asStateFlow()
 
     var isSendPresented: Boolean
         get() = repo.isSendPresented
-        set(value) { repo.isSendPresented = value }
+        set(value) {
+            repo.isSendPresented = value
+            if (!value) preparedQuote = null
+        }
 
     suspend fun refresh(history: Boolean = false) {
         repo.refresh(history)
@@ -128,8 +132,19 @@ class UsdtViewModel @Inject constructor(
         val maximum = maximumQuote?.takeIf {
             it.recipient == recipient && it.destination == destination && usdtFormatAmount(it.amount) == amount
         }
+        val sender = wallet.value.address
+        val reusable = preparedQuote?.takeIf {
+            sender.isNotEmpty() && it.sender == sender && it.amount == amount &&
+                it.quote.recipient == recipient && it.quote.destination == destination &&
+                it.quote.expiresAt > nowTimestamp().epochSecond.toULong() + 5u
+        }?.quote
+        preparedQuote = null
         val result = when {
-            maximum == null -> repo.quote(recipient, amount, destination)
+            maximum == null -> {
+                maximumQuote = null
+                (reusable?.let { Result.success(it) } ?: repo.quote(recipient, amount, destination))
+                    .onSuccess { preparedQuote = PreparedQuote(it, amount, sender) }
+            }
             maximum.expiresAt > nowTimestamp().epochSecond.toULong() + 5u -> Result.success(maximum)
             else -> repo.quoteMaximum(recipient, destination)
         }
@@ -147,6 +162,7 @@ class UsdtViewModel @Inject constructor(
     ) = viewModelScope.launch {
         if (!_state.value.canQuote) return@launch
         _state.update { UsdtSendState(busy = true, preparingMaximum = true, refreshError = it.refreshError) }
+        preparedQuote = null
         repo.quoteMaximum(recipient, destination)
             .onSuccess { quote ->
                 maximumQuote = quote
@@ -219,10 +235,13 @@ class UsdtViewModel @Inject constructor(
     fun cancelAuthentication() = _state.update { it.copy(authenticationRequired = false) }
     fun edit() = _state.update { UsdtSendState(refreshError = it.refreshError) }
 
+    private data class PreparedQuote(val quote: UsdtQuote, val amount: String, val sender: String)
+
     private fun send(quote: UsdtQuote) = viewModelScope.launch {
         if (_state.value.quote?.id != quote.id) return@launch
         if (_state.value.busy) return@launch
         maximumQuote = null
+        preparedQuote = null
         _state.update { it.copy(busy = true, error = null) }
         runSuspendCatching {
             val payment = sendPayment
