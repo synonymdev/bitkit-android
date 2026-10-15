@@ -187,6 +187,7 @@ fun ReceiveSheet(
                         hardwareReceiveState = hwReceiveState,
                         onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
                         onRetryHardwareAddress = hwReceiveViewModel::retryAddress,
+                        onRetryInvoice = { wallet.retryReceiveInvoice() },
                         onVerifyHardwareAddress = hwReceiveViewModel::verifyAddress,
                         showPaymentRequestContacts = paymentRequestTargets.isNotEmpty(),
                         onClickPaymentRequestContacts = {

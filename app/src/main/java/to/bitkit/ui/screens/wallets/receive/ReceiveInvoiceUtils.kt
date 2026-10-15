@@ -3,6 +3,20 @@ package to.bitkit.ui.screens.wallets.receive
 import to.bitkit.R
 import to.bitkit.utils.Bip21Utils
 
+internal fun getReceiveInvoiceDisplayMode(
+    tab: ReceiveTab,
+    cjitInvoice: String?,
+    hasInvoiceError: Boolean,
+    isUpdating: Boolean,
+    showDetails: Boolean,
+): ReceiveInvoiceDisplayMode {
+    if (tab.usesLightningInvoice() && cjitInvoice.isNullOrEmpty()) {
+        if (isUpdating) return ReceiveInvoiceDisplayMode.LOADING
+        if (hasInvoiceError) return ReceiveInvoiceDisplayMode.ERROR
+    }
+    return if (showDetails) ReceiveInvoiceDisplayMode.DETAILS else ReceiveInvoiceDisplayMode.QR
+}
+
 /**
  * Returns the appropriate invoice/address for the selected tab.
  *
@@ -25,7 +39,12 @@ fun getInvoiceForTab(
     hardwareAddress: String = "",
     hardwareAmountSats: ULong? = null,
     hardwareMessage: String = "",
+    isReceiveInvoiceUpdating: Boolean = false,
 ): String {
+    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() && tab.usesLightningInvoice()) {
+        return ""
+    }
+
     return when (tab) {
         ReceiveTab.SAVINGS -> {
             // Return BIP21 without lightning parameter to preserve amount and other parameters
@@ -33,8 +52,11 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.AUTO -> {
-            bip21.takeIf { isNodeRunning && canCreateLightningInvoice && containsLightningParameter(bip21) }
-                ?: removeLightningFromBip21(bip21, onchainAddress)
+            if (isNodeRunning && canCreateLightningInvoice) {
+                bip21.takeIf { containsLightningParameter(it) }.orEmpty()
+            } else {
+                removeLightningFromBip21(bip21, onchainAddress)
+            }
         }
 
         ReceiveTab.SPENDING -> {
@@ -112,3 +134,5 @@ fun getQrLogoResource(tab: ReceiveTab): Int {
         ReceiveTab.HARDWARE -> R.drawable.ic_btc_circle_blue
     }
 }
+
+private fun ReceiveTab.usesLightningInvoice(): Boolean = this == ReceiveTab.AUTO || this == ReceiveTab.SPENDING

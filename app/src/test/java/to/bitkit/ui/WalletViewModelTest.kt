@@ -78,6 +78,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun setUp() = runBlocking {
         whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.walletState).thenReturn(walletState)
+        whenever(walletRepo.refreshReceiveState()).thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
         whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
@@ -156,8 +157,7 @@ class WalletViewModelTest : BaseUnitTest() {
         sut.refreshReceiveState()
 
         verify(blocktankRepo).refreshInfo()
-        verify(lightningRepo).updateGeoBlockState()
-        verify(walletRepo).refreshBip21()
+        verify(walletRepo).refreshReceiveState()
     }
 
     @Test
