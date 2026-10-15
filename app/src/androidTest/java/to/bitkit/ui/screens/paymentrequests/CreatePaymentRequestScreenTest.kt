@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import android.os.SystemClock
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,8 @@ class CreatePaymentRequestScreenTest {
         assertEquals(listOf(MethodId.UsdtArbitrum.rawValue), submitted?.acceptedPaymentEndpointIdentifiers)
         composeTestRule.onNodeWithTag("PaymentRequestAccept-usdt").performClick().assertIsNotSelected()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsNotEnabled()
+        // Chip clicks use a 500 ms real-clock debounce, independent of the Compose test clock.
+        SystemClock.sleep(600)
         composeTestRule.onNodeWithTag("PaymentRequestAccept-bitcoin").performClick().assertIsSelected()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsEnabled().performClick()
         assertEquals(

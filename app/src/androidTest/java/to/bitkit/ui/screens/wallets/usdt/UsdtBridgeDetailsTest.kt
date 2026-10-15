@@ -165,7 +165,7 @@ class UsdtBridgeDetailsTest {
         composeTestRule.onNodeWithTag("UsdtDepositRefund").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("Confirm Refund").assertIsDisplayed()
-        composeTestRule.onNodeWithText("50,00 USDT", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("50,000001 USDT", substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("Refund address:\n" + address, substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("BNB Smart Chain (BSC)", substring = true).assertIsDisplayed()
         screenshot("refund")
