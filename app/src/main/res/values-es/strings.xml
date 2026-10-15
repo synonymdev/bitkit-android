@@ -659,7 +659,7 @@
     <string name="settings__quickpay__nav_title">Configuración de QuickPay</string>
     <string name="settings__quickpay__settings__label">QuickPay hasta</string>
     <string name="settings__quickpay__settings__note">*Se aplica a todas las facturas Lightning, incluyendo aquellas a tus contactos.</string>
-    <string name="settings__quickpay__settings__text">Ahorra tiempo pagando facturas Lightning automáticamente. Configura un límite de cantidad y paga sin confirmaciones.</string>
+    <string name="settings__quickpay__settings__text">Si está activado, las facturas escaneadas por debajo de ${amount} se pagarán automáticamente sin pedirte confirmación ni PIN*.</string>
     <string name="settings__quickpay__settings__toggle">QuickPay activado</string>
     <string name="settings__quickpay__sheet__description">QuickPay hace que pagar sea más rápido pagando automáticamente códigos QR escaneados.</string>
     <string name="settings__support__title">Soporte</string>
@@ -750,8 +750,8 @@
     <string name="settings__addr__addr_change">Cambiar direcciones</string>
     <string name="settings__addr__addr_receiving">Direcciones de recepción</string>
     <string name="settings__addr__gen_20">Generar 20 más</string>
-    <string name="settings__addr__no_addrs_str">Sin direcciones</string>
-    <string name="settings__addr__spend_number">Gastar ({count}) direcciones seleccionadas</string>
+    <string name="settings__addr__no_addrs_str">No se encontraron direcciones al buscar \"{searchTxt}\"</string>
+    <string name="settings__addr__spend_number">{count, plural, one {Gastar ₿ {fundsToSpend} de # dirección} other {Gastar ₿ {fundsToSpend} de # direcciones}}</string>
     <string name="settings__addr__check_balances">Consultar Saldos</string>
     <string name="settings__es__error_host_port">Especifique un servidor y un puerto al que conectarse.</string>
     <string name="settings__es__error_host">Por favor, especifique un host para conectarse.</string>
@@ -774,7 +774,7 @@
     <string name="settings__rgs__button_connect">Conectar</string>
     <string name="settings__rgs__update_success_description">Bitkit se ha conectado correctamente al servidor Rapid-Gossip-Sync especificado.</string>
     <string name="settings__rgs__update_success_title">Servidor Rapid-Gossip-Sync Actualizado</string>
-    <string name="sweep__balance_format">Saldo: {balance}</string>
+    <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Por favor espera mientras Bitkit comprueba si hay fondos en esta dirección.</string>
     <string name="sweep__checking_loading">Comprobando si hay fondos...</string>
     <string name="sweep__confirm_broadcasting">Emitiendo transacción...</string>
@@ -784,7 +784,7 @@
     <string name="sweep__confirm_swipe">Deslizar para barrer</string>
     <string name="sweep__confirm_to_address">A la dirección</string>
     <string name="sweep__custom_fee_nav_title">Comisión Personalizada</string>
-    <string name="sweep__custom_fee_total">₿ {feeSats} para esta transacción</string>
+    <string name="sweep__custom_fee_total">para esta transacción</string>
     <string name="sweep__error_title">Error de Barrido</string>
     <string name="sweep__fee_nav_title">Comisión de Barrido</string>
     <string name="sweep__found_description">Por favor, selecciona qué fondos quieres barrer a tu monedero Bitkit.</string>
@@ -804,8 +804,8 @@
     <string name="sweep__taproot_title">Taproot</string>
     <string name="sweep__to_wallet">A tu monedero</string>
     <string name="sweep__total">Total</string>
-    <string name="sweep__utxo_format">{count, plural, one {# UTXO} other {# UTXOs}}</string>
-    <string name="sweep__utxos_format">{count, plural, one {# UTXO seleccionado} other {# UTXOs seleccionados}}</string>
+    <string name="sweep__utxo_format">%1$s, %2$d UTXO</string>
+    <string name="sweep__utxos_format">%1$s, %2$d UTXOs</string>
     <string name="wallet__drawer__activity">Actividad</string>
     <string name="wallet__drawer__contacts">Contactos</string>
     <string name="wallet__drawer__profile">Perfil</string>

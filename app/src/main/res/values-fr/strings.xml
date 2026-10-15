@@ -920,7 +920,7 @@
     <string name="wallet__receive_note_placeholder">Note facultative à destination du payeur</string>
     <string name="wallet__receive_show_qr">Afficher le QR code</string>
     <string name="wallet__receive_connect_initial">Pour établir votre solde Dépenses, un &lt;accent&gt;{networkFee}&lt;/accent&gt; frais de réseau et &lt;accent&gt;{serviceFee}&lt;/accent&gt; frais de fournisseur de services seront déduits.</string>
-    <string name="wallet__receive_connect_additional">Pour recevoir plus de bitcoins instantanés, Bitkit doit augmenter vos liquidités. A &lt;accent&gt;{lspFee}&lt;/accent&gt; frais de fournisseur de services seront déduits du montant que vous avez spécifié.</string>
+    <string name="wallet__receive_connect_additional">Pour recevoir plus de bitcoins instantanés, Bitkit doit augmenter vos liquidités. Des frais de réseau de &lt;accent&gt;{networkFee}&lt;/accent&gt; et des frais de fournisseur de services de &lt;accent&gt;{serviceFee}&lt;/accent&gt; seront déduits du montant que vous avez spécifié.</string>
     <string name="wallet__receive_liquidity__nav_title">Configuration du solde compte Dépenses</string>
     <string name="wallet__receive_liquidity__nav_title_additional">Augmenter la capacité de réception</string>
     <string name="wallet__receive_liquidity__text">Votre solde Dépenses utilise le Lightning Network pour rendre vos paiements moins chers, plus rapides et plus confidentiels.\n\nCela fonctionne comme l\'accès à Internet, mais vous payez pour la liquidité et le routage au lieu de la bande passante.\n\nCette configuration implique des coûts uniques.</string>
