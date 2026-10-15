@@ -364,8 +364,9 @@ internal fun UsdtDetailCell(
     iconColor: Color = Colors.Usdt,
     minValueHeight: Dp = 0.dp,
     textStyle: TextStyle = UsdtDetailStyles.Value,
+    alignDividerToBottom: Boolean = false,
 ) {
-    UsdtDetailField(caption = title, modifier = modifier) {
+    UsdtDetailField(caption = title, alignDividerToBottom = alignDividerToBottom, modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),

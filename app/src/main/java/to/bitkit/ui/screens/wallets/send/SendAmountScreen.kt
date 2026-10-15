@@ -422,7 +422,12 @@ private fun SendAmountNodeRunning(
                         enabled = uiState.isAmountEditable,
                         onPress = {
                             app?.onUsdtAmountChange(
-                                NumberPadInputHandler.handleInput(it, uiState.paykitAmount, maxLength = 21, maxDecimals = 6)
+                                NumberPadInputHandler.handleInput(
+                                    it,
+                                    uiState.paykitAmount,
+                                    maxLength = 21,
+                                    maxDecimals = 6
+                                )
                             )
                         },
                         onDeleteLongPress = { app?.onUsdtAmountChange("") }

@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -703,8 +705,12 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
         }
         VerticalSpacer(16.dp)
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        UsdtDetailField(caption = stringResource(R.string.wallet__activity_address), modifier = Modifier.weight(1f)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
+        UsdtDetailField(
+            caption = stringResource(R.string.wallet__activity_address),
+            alignDividerToBottom = true,
+            modifier = Modifier.weight(1f).fillMaxHeight()
+        ) {
             SelectionContainer {
                 BodySSB(
                     quote.recipient,
@@ -722,7 +728,8 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
                 stringResource(R.string.usdt__recipient_network),
                 quote.destination.label,
                 R.drawable.usdt_network,
-                modifier = Modifier.weight(1f)
+                alignDividerToBottom = true,
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
     }

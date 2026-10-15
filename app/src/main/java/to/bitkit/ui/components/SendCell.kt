@@ -20,12 +20,14 @@ fun SendCell(
     modifier: Modifier = Modifier,
     dividerSpacing: Dp = 16.dp,
     captionStyle: TextStyle = AppTextStyles.CaptionM,
+    alignDividerToBottom: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Caption13Up(text = caption, color = Colors.White64, style = captionStyle)
         VerticalSpacer(8.dp)
         content()
+        if (alignDividerToBottom) FillHeight()
         VerticalSpacer(dividerSpacing)
         HorizontalDivider(modifier = Modifier.fillMaxWidth())
     }

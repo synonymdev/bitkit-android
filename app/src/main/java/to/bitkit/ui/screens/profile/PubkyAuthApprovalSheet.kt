@@ -332,7 +332,9 @@ private fun ColumnScope.WatchOnlyConsentContent(
             BodyM(
                 text = stringResource(
                     when {
-                        uiState.bitkitClaim?.sharesBitcoin == true -> R.string.profile__auth_approval_watch_only_intro_description
+                        uiState.bitkitClaim?.sharesBitcoin == true -> {
+                            R.string.profile__auth_approval_watch_only_intro_description
+                        }
                         uiState.usdtRequired -> R.string.profile__auth_approval_usdt_intro_description
                         else -> R.string.profile__auth_approval_usdt_intro_optional
                     }
