@@ -516,10 +516,17 @@ class AppViewModel @Inject constructor(
     private var isSubmittingPaymentRequest = false
         set(value) {
             field = value
-            paykitPaymentRequestRepo.setPaymentSubmissionActive(value)
+            paykitPaymentRequestRepo.setPaymentSubmissionActive(value || isSoftwarePaymentSubmissionActive)
+        }
+    private var isSoftwarePaymentSubmissionActive = false
+        set(value) {
+            field = value
+            paykitPaymentRequestRepo.setPaymentSubmissionActive(value || isSubmittingPaymentRequest)
         }
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
+    private var paykitContactsRefreshJob: Job? = null
+    private var shopContactImportJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
@@ -1129,6 +1136,7 @@ class AppViewModel @Inject constructor(
         if (paykitPaymentRequestPollingJob?.isActive == true) return
 
         startPaykitSessionRestoreRetries()
+        startPaykitContactsRefresh()
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
             refreshIncomingPaykitPaymentRequests(messagePriority = Priority.Background, onlyWhileActive = true)
@@ -1151,6 +1159,7 @@ class AppViewModel @Inject constructor(
                     )
                 }
                 val refreshIdentity = pubkyRepo.publicKey.value
+                startShopContactImport()
                 refreshIncomingPaykitPaymentRequests(
                     if (refreshMaintenance) {
                         PaykitPaymentRequestRefreshMode.FULL
@@ -1168,6 +1177,23 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun startPaykitContactsRefresh() {
+        if (paykitContactsRefreshJob?.isActive == true) return
+        paykitContactsRefreshJob = viewModelScope.launch {
+            pubkyRepo.awaitInitialization()
+            combine(isOnline, isPaykitEnabled, pubkyRepo.publicKey) { connectivity, enabled, publicKey ->
+                publicKey.takeIf { connectivity == ConnectivityState.CONNECTED && enabled }
+            }.distinctUntilChanged().collectLatest { publicKey ->
+                shopContactImportJob?.cancel()
+                shopContactImportJob = null
+                if (publicKey != null && walletRepo.walletExists()) {
+                    startShopContactImport()
+                    pubkyRepo.refreshContacts()
+                }
+            }
+        }
+    }
+
     private fun startPaykitSessionRestoreRetries() {
         if (paykitSessionRestoreRetryJob?.isActive == true) return
         paykitSessionRestoreRetryJob = viewModelScope.launch {
@@ -1176,6 +1202,15 @@ class AppViewModel @Inject constructor(
             }.distinctUntilChanged().collectLatest { shouldRetry ->
                 if (shouldRetry && walletRepo.walletExists()) pubkyRepo.retryDeferredSessionRestoration()
             }
+        }
+    }
+
+    private fun startShopContactImport() {
+        if (shopContactImportJob?.isActive == true || isPaymentRequestPollingStopped.value) return
+        if (!isPaykitEnabled.value || isOnline.value != ConnectivityState.CONNECTED) return
+        if (pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
+        shopContactImportJob = viewModelScope.launch {
+            pubkyRepo.importShopContacts()
         }
     }
 
@@ -1227,6 +1262,10 @@ class AppViewModel @Inject constructor(
     }
 
     fun stopPaykitPaymentRequestPolling() {
+        shopContactImportJob?.cancel()
+        shopContactImportJob = null
+        paykitContactsRefreshJob?.cancel()
+        paykitContactsRefreshJob = null
         privatePaykitRepo.setContactPreparationActive(false)
         isPaymentRequestPollingStopped.update { true }
         paykitSessionRestoreRetryJob?.cancel()
@@ -3104,14 +3143,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun awaitContactDataForDeeplink(isContactLink: Boolean): Boolean {
         if (!isContactLink || pubkyRepo.publicKey.value == null) return true
-
-        pubkyRepo.contactsLoadCompletionVersion.first { it > 0 }
-        if (pubkyRepo.contactsLoadVersion.value > 0L) return true
-
-        val completionVersion = pubkyRepo.contactsLoadCompletionVersion.value
-        pubkyRepo.loadContacts()
-        pubkyRepo.contactsLoadCompletionVersion.first { it > completionVersion }
-        return pubkyRepo.contactsLoadVersion.value > 0L
+        return pubkyRepo.refreshContacts()
     }
 
     private suspend fun isPaykitUiEnabledFromSettings() =
@@ -3259,8 +3291,10 @@ class AppViewModel @Inject constructor(
 
     suspend fun sendPaykitUsdt(quote: UsdtQuote) {
         val current = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-            ?.takeUnless { isSubmittingPaymentRequest } ?: throw PaykitPaymentRequestError.RequestUnavailable
+            ?.takeUnless { isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive }
+            ?: throw PaykitPaymentRequestError.RequestUnavailable
         isSubmittingPaymentRequest = true
+        isSoftwarePaymentSubmissionActive = true
         val reviewedAmount = paykitReviewedAmount
         val paymentTerms = paykitPaymentTerms
         try {
@@ -3277,6 +3311,7 @@ class AppViewModel @Inject constructor(
             ) { authorizeUsdtExecution(current, reviewedAmount, paymentTerms) }.getOrThrow()
         } finally {
             isSubmittingPaymentRequest = false
+            isSoftwarePaymentSubmissionActive = false
         }
     }
 
@@ -6782,7 +6817,7 @@ class AppViewModel @Inject constructor(
 
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
-        if (isSubmittingPaymentRequest) return
+        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) return
 
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
@@ -6796,12 +6831,14 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToHardwareSign)
             return
         }
-        viewModelScope.launch {
+        isSoftwarePaymentSubmissionActive = true
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 _sendUiState.update { it.copy(shouldConfirmPay = false) }
                 proceedWithPayment(contactPaymentContext)
             } finally {
                 isSubmittingPaymentRequest = false
+                isSoftwarePaymentSubmissionActive = false
             }
         }
     }
@@ -6812,7 +6849,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun onHardwarePaymentSubmissionChanged(active: Boolean) {
-        paykitPaymentRequestRepo.setPaymentSubmissionActive(active && activeIncomingPaymentRequest() != null)
+        paykitPaymentRequestRepo.setPaymentSubmissionActive(active || isSoftwarePaymentSubmissionActive)
     }
 
     fun hardwarePaymentIdentity(): String? = pubkyRepo.publicKey.value?.let(PubkyPublicKeyFormat::normalized)
