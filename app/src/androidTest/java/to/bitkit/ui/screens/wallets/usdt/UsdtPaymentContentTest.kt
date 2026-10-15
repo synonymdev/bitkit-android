@@ -71,7 +71,7 @@ class UsdtPaymentContentTest {
         composeTestRule.onNodeWithText("4.47 USDT").assertIsDisplayed()
         swipe.assertIsDisplayed()
         assertTrue(total.fetchSemanticsNode().boundsInRoot.bottom <= swipe.fetchSemanticsNode().boundsInRoot.top)
-        composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("UsdtReviewDetails").assertIsDisplayed().performClick()
         composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertIsDisplayed()
         total.assertIsDisplayed()
         swipe.assertIsDisplayed()

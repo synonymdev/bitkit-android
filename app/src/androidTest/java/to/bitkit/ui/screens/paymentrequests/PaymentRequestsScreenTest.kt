@@ -11,6 +11,9 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -188,7 +191,12 @@ class PaymentRequestsScreenTest {
 
         composeTestRule.onNodeWithTag("PaymentRequestRow-accepted").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRow-outgoing").assertIsDisplayed()
-        composeTestRule.onNodeWithText("pending").assertIsDisplayed()
+        composeTestRule.onNode(
+            hasText("pending") and hasAnyAncestor(hasTestTag("PaymentRequestRow-outgoing"))
+        ).assertIsDisplayed()
+        composeTestRule.onNode(
+            hasText("pending") and hasAnyAncestor(hasTestTag("PaymentRequestRow-accepted"))
+        ).assertIsDisplayed()
         composeTestRule.onNodeWithText("PAYMENT REQUESTS").assertIsDisplayed()
         composeTestRule.onNodeWithText("TODAY").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertIsDisplayed()
@@ -220,7 +228,9 @@ class PaymentRequestsScreenTest {
         }
 
         composeTestRule.onNodeWithTag("MoneyPrimary").assertTextContains("$", substring = true)
-        composeTestRule.onNodeWithText("Accepted").assertIsDisplayed()
+        composeTestRule.onNode(
+            hasText("pending") and hasAnyAncestor(hasTestTag("PaymentRequestRow-accepted"))
+        ).assertIsDisplayed()
     }
 
     @Test

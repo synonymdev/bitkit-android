@@ -23,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.collections.immutable.persistentListOf
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -38,6 +39,8 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.navigateToCoinSelection
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.SendFundingOption
+import to.bitkit.viewmodels.SendFundingSource
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.SettingsViewModel
@@ -73,7 +76,15 @@ class SendConfirmNavigationTest {
     @Test
     fun pickerBackReenablesSwipeButPendingPaymentKeepsFundingLocked() {
         val state = mutableStateOf(
-            SendUiState(amount = 1_000u, isAmountInputValid = true, canSwitchFundingSource = true),
+            SendUiState(
+                amount = 1_000u,
+                isAmountInputValid = true,
+                canSwitchFundingSource = true,
+                fundingOptions = persistentListOf(
+                    SendFundingOption(SendFundingSource.Savings, enabled = true),
+                    SendFundingOption(SendFundingSource.Spending, enabled = true),
+                ),
+            ),
         )
         var swipes = 0
         var fundingSwitches = 0
