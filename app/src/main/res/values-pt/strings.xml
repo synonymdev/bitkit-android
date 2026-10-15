@@ -1577,7 +1577,7 @@
     <string name="widgets__blocks__data_header">Dados (máx. 4)</string>
     <string name="widgets__enable_in_settings">Ativar nas Definições</string>
     <string name="widgets__onboarding__view_organize">Ver e organizar</string>
-    <string name="widgets__onboarding_swipe">Deslize para encontrar\n&lt;accent&gt;os seus widgets&lt;/accent&gt;</string>
+    <string name="widgets__onboarding_swipe">Arraste para ver\n&lt;accent&gt;os seus widgets&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Descubra tudo o que a Bitkit tem para oferecer.</string>
     <string name="widgets__suggestions__name">Sugestões da Bitkit</string>
     <string name="widgets__weather__condition__average__short_title">Média</string>

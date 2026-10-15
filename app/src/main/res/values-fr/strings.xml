@@ -1168,7 +1168,7 @@
     <string name="hardware__found_header_jade">&lt;accent&gt;Jade&lt;/accent&gt; trouvé</string>
     <string name="hardware__found_text">Voulez-vous associer ce %1$s à Bitkit en toute sécurité ?</string>
     <string name="hardware__found_title">Appareil trouvé</string>
-    <string name="hardware__intro_header">Ajoutez votre &lt;accent&gt;portefeuille matériel&lt;/accent&gt;</string>
+    <string name="hardware__intro_header">Ajoutez votre &lt;accent&gt;portefeuille&lt;/accent&gt;</string>
     <string name="hardware__intro_text">Connectez votre appareil matériel pour suivre ou gérer vos fonds à long terme.</string>
     <string name="hardware__intro_title">Portefeuille matériel</string>
     <string name="hardware__jade_device_busy">Votre Jade est occupé. Terminez l\'action affichée sur l\'appareil, puis réessayez.</string>
@@ -1578,8 +1578,8 @@
     <string name="watch_only_accounts__xpub">CLÉ PUBLIQUE ÉTENDUE</string>
     <string name="widgets__blocks__data_header">Données (max 4)</string>
     <string name="widgets__enable_in_settings">Activer dans les paramètres</string>
-    <string name="widgets__onboarding__view_organize">Afficher et organiser</string>
-    <string name="widgets__onboarding_swipe">Balayez pour trouver\n&lt;accent&gt;vos widgets&lt;/accent&gt;</string>
+    <string name="widgets__onboarding__view_organize">Organiser</string>
+    <string name="widgets__onboarding_swipe">Glissez pour voir\n&lt;accent&gt;vos widgets&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Découvrez tout ce que Bitkit a à offrir.</string>
     <string name="widgets__suggestions__name">Suggestions Bitkit</string>
     <string name="widgets__weather__condition__average__short_title">Moyennes</string>

@@ -1583,7 +1583,7 @@
     <string name="watch_only_accounts__xpub">ROZŠÍŘENÝ VEŘEJNÝ KLÍČ</string>
     <string name="widgets__blocks__data_header">Data (max. 4)</string>
     <string name="widgets__enable_in_settings">Povolit v Nastavení</string>
-    <string name="widgets__onboarding__view_organize">Zobrazit a uspořádat</string>
+    <string name="widgets__onboarding__view_organize">Uspořádat</string>
     <string name="widgets__onboarding_swipe">Přejetím najdete\n&lt;accent&gt;své widgety&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Objevte vše, co Bitkit nabízí.</string>
     <string name="widgets__suggestions__name">Návrhy Bitkit</string>

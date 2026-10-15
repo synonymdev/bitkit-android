@@ -1578,7 +1578,7 @@
     <string name="watch_only_accounts__xpub">ROZSZERZONY KLUCZ PUBLICZNY</string>
     <string name="widgets__blocks__data_header">Dane (maks. 4)</string>
     <string name="widgets__enable_in_settings">Włącz w Ustawieniach</string>
-    <string name="widgets__onboarding__view_organize">Przeglądaj i organizuj</string>
+    <string name="widgets__onboarding__view_organize">Zarządzaj</string>
     <string name="widgets__onboarding_swipe">Przesuń, aby znaleźć\n&lt;accent&gt;swoje widgety&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Odkryj wszystko, co oferuje Bitkit.</string>
     <string name="widgets__suggestions__name">Sugestie Bitkit</string>

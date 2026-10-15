@@ -1580,7 +1580,7 @@
     <string name="watch_only_accounts__xpub">ΕΚΤΕΤΑΜΕΝΟ ΔΗΜΟΣΙΟ ΚΛΕΙΔΙ</string>
     <string name="widgets__blocks__data_header">Δεδομένα (έως 4)</string>
     <string name="widgets__enable_in_settings">Ενεργοποίηση στις ρυθμίσεις</string>
-    <string name="widgets__onboarding__view_organize">Προβολή και οργάνωση</string>
+    <string name="widgets__onboarding__view_organize">Οργάνωση</string>
     <string name="widgets__onboarding_swipe">Σύρε για να βρεις\n&lt;accent&gt;τα widgets σου&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Ανακάλυψε όλα όσα προσφέρει το Bitkit.</string>
     <string name="widgets__suggestions__name">Προτάσεις Bitkit</string>

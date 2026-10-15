@@ -1582,7 +1582,7 @@
     <string name="watch_only_accounts__xpub">CHIAVE PUBBLICA ESTESA</string>
     <string name="widgets__blocks__data_header">Dati (max 4)</string>
     <string name="widgets__enable_in_settings">Attiva nelle Impostazioni</string>
-    <string name="widgets__onboarding__view_organize">Visualizza e Organizza</string>
+    <string name="widgets__onboarding__view_organize">Organizza</string>
     <string name="widgets__onboarding_swipe">Scorri per trovare\n&lt;accent&gt;i tuoi widget&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Scopri tutto ciò che Bitkit ha da offrire.</string>
     <string name="widgets__suggestions__name">Suggerimenti Bitkit</string>

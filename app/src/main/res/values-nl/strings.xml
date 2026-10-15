@@ -1168,7 +1168,7 @@
     <string name="hardware__found_header_jade">&lt;accent&gt;Jade&lt;/accent&gt; gevonden</string>
     <string name="hardware__found_text">Wilt u deze %1$s veilig koppelen met Bitkit?</string>
     <string name="hardware__found_title">Apparaat gevonden</string>
-    <string name="hardware__intro_header">Voeg uw &lt;accent&gt;hardwarewallet&lt;/accent&gt; toe</string>
+    <string name="hardware__intro_header">Voeg uw &lt;accent&gt;hardware wallet&lt;/accent&gt; toe</string>
     <string name="hardware__intro_text">Verbind uw hardwareapparaat om uw geld voor de lange termijn te volgen of te beheren.</string>
     <string name="hardware__intro_title">Hardwarewallet</string>
     <string name="hardware__jade_device_busy">Uw Jade is bezet. Rond af wat op het apparaat wordt getoond en probeer het opnieuw.</string>
@@ -1581,8 +1581,8 @@
     <string name="watch_only_accounts__xpub">UITGEBREIDE PUBLIEKE SLEUTEL</string>
     <string name="widgets__blocks__data_header">Gegevens (max. 4)</string>
     <string name="widgets__enable_in_settings">Inschakelen in Instellingen</string>
-    <string name="widgets__onboarding__view_organize">Bekijken &amp; ordenen</string>
-    <string name="widgets__onboarding_swipe">Veeg om\n&lt;accent&gt;uw widgets&lt;/accent&gt; te vinden</string>
+    <string name="widgets__onboarding__view_organize">Beheren</string>
+    <string name="widgets__onboarding_swipe">Veeg om\n&lt;accent&gt;widgets te vinden&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Ontdek alles wat Bitkit te bieden heeft.</string>
     <string name="widgets__suggestions__name">Bitkit-suggesties</string>
     <string name="widgets__weather__condition__average__short_title">Gemiddeld</string>

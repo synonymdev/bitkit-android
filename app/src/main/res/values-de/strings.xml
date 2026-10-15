@@ -1168,7 +1168,7 @@
     <string name="hardware__found_header_jade">&lt;accent&gt;Jade&lt;/accent&gt; gefunden</string>
     <string name="hardware__found_text">Möchtest du deinen %1$s sicher mit Bitkit koppeln?</string>
     <string name="hardware__found_title">Gerät gefunden</string>
-    <string name="hardware__intro_header">Füge dein &lt;accent&gt;Hardware-Wallet&lt;/accent&gt; hinzu</string>
+    <string name="hardware__intro_header">Füge dein\n&lt;accent&gt;Hardware-\nWallet&lt;/accent&gt; hinzu</string>
     <string name="hardware__intro_text">Verbinde dein Hardware-Gerät, um dein langfristiges Guthaben zu beobachten oder zu verwalten.</string>
     <string name="hardware__intro_title">Hardware-Wallet</string>
     <string name="hardware__jade_device_busy">Dein Jade ist beschäftigt. Schließe ab, was auf dem Gerät angezeigt wird, und versuche es dann erneut.</string>
@@ -1576,7 +1576,7 @@
     <string name="watch_only_accounts__xpub">ERWEITERTER ÖFFENTLICHER SCHLÜSSEL</string>
     <string name="widgets__blocks__data_header">Daten (max. 4)</string>
     <string name="widgets__enable_in_settings">In Einstellungen aktivieren</string>
-    <string name="widgets__onboarding__view_organize">Ansehen &amp; organisieren</string>
+    <string name="widgets__onboarding__view_organize">Verwalten</string>
     <string name="widgets__onboarding_swipe">Wische, um deine\n&lt;accent&gt;Widgets zu finden&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Entdecke alles, was Bitkit zu bieten hat.</string>
     <string name="widgets__suggestions__name">Bitkit-Vorschläge</string>

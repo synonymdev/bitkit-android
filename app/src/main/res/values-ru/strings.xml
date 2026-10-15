@@ -84,7 +84,7 @@
     <string name="contacts__detail_title">Контакт</string>
     <string name="contacts__edit_contact_title">Изменить Контакт</string>
     <string name="contacts__intro_add_contact">Добавить Контакт</string>
-    <string name="contacts__intro_title">Динамические\n&lt;accent&gt;контакты&lt;/accent&gt;</string>
+    <string name="contacts__intro_title">Динамичные\n&lt;accent&gt;контакты&lt;/accent&gt;</string>
     <string name="contacts__nav_title">Контакты</string>
     <string name="fee__custom__description">Зависит от комиссии</string>
     <string name="fee__custom__duration">Зависит от комиссии</string>
@@ -1206,7 +1206,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="hardware__found_header_jade">Найден &lt;accent&gt;Jade&lt;/accent&gt;</string>
     <string name="hardware__found_text">Хотите безопасно сопрячь этот %1$s с Bitkit?</string>
     <string name="hardware__found_title">Устройство Найдено</string>
-    <string name="hardware__intro_header">Добавьте &lt;accent&gt;аппаратный кошелёк&lt;/accent&gt;</string>
+    <string name="hardware__intro_header">Добавьте &lt;accent&gt;кошелёк&lt;/accent&gt;</string>
     <string name="hardware__intro_text">Подключите аппаратное устройство, чтобы отслеживать или управлять долгосрочными средствами.</string>
     <string name="hardware__intro_title">Аппаратный Кошелёк</string>
     <string name="hardware__jade_device_busy">Ваш Jade занят. Завершите действие, показанное на устройстве, и попробуйте снова.</string>
@@ -1611,8 +1611,8 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="watch_only_accounts__xpub">РАСШИРЕННЫЙ ПУБЛИЧНЫЙ КЛЮЧ</string>
     <string name="widgets__blocks__data_header">Данные (макс. 4)</string>
     <string name="widgets__enable_in_settings">Включить в Настройках</string>
-    <string name="widgets__onboarding__view_organize">Просмотр и Порядок</string>
-    <string name="widgets__onboarding_swipe">Проведите, чтобы найти\n&lt;accent&gt;ваши виджеты&lt;/accent&gt;</string>
+    <string name="widgets__onboarding__view_organize">Упорядочить</string>
+    <string name="widgets__onboarding_swipe">Проведите, чтобы\n&lt;accent&gt;найти виджеты&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Откройте для себя всё, что предлагает Bitkit.</string>
     <string name="widgets__suggestions__name">Рекомендации Bitkit</string>
     <string name="widgets__weather__condition__average__short_title">Средние</string>
