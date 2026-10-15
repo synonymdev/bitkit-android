@@ -15,10 +15,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -42,7 +45,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -300,6 +305,9 @@ internal fun CreateSubscriptionDetails(
         }
     }
 
+    val density = LocalDensity.current
+    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
+    var footerHeight by remember { mutableStateOf(0.dp) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -310,114 +318,127 @@ internal fun CreateSubscriptionDetails(
             .testTag("CreateSubscription")
     ) {
         SheetTopBar(titleText = stringResource(R.string.subscriptions__create_subscription))
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            item {
-                VerticalSpacer(8.dp)
-                Caption13Up(text = stringResource(R.string.wallet__payment_request_amount), color = Colors.White64)
-                VerticalSpacer(16.dp)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.clickableAlpha(onClick = onAmountClick).testTag("SubscriptionEditAmount")
-                ) {
-                    PaykitAmountDisplay(
-                        amount = amount,
-                        modifier = Modifier.weight(1f, fill = false).width(IntrinsicSize.Max)
-                    )
-                    Icon(
-                        painter = painterResource(R.drawable.ic_pencil_simple),
-                        contentDescription = stringResource(R.string.common__edit),
-                        tint = Colors.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                VerticalSpacer(24.dp)
-                Caption13Up(text = stringResource(R.string.subscriptions__frequency), color = Colors.White64)
-                VerticalSpacer(8.dp)
-                SubscriptionFrequencyPicker(frequency, onFrequencyChange)
-                VerticalSpacer(24.dp)
-                PaykitAcceptedMethods(
-                    title = stringResource(R.string.subscriptions__accepted_payments),
-                    availableMethods = availableMethods,
-                    selectedMethods = acceptedMethods,
-                    testTagPrefix = "Subscription",
-                    onClickMethod = onClickMethod,
-                    modifier = Modifier.testTag("SubscriptionAcceptedMethods")
-                )
-                VerticalSpacer(24.dp)
-                Caption13Up(
-                    text = stringResource(R.string.subscriptions__name),
-                    color = Colors.White64,
-                    style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
-                )
-                VerticalSpacer(8.dp)
-                TextInput(
-                    value = name,
-                    onValueChange = onNameChange,
-                    placeholder = stringResource(R.string.subscriptions__name_placeholder),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("SubscriptionName")
-                )
-                VerticalSpacer(24.dp)
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Caption13Up(
-                            text = stringResource(R.string.subscriptions__description),
-                            color = Colors.White64,
-                            style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+        Box(modifier = Modifier.weight(1f)) {
+            LazyColumn(
+                contentPadding = PaddingValues(bottom = if (isKeyboardVisible) 0.dp else footerHeight),
+                modifier = Modifier.fillMaxSize().padding(bottom = if (isKeyboardVisible) footerHeight else 0.dp)
+            ) {
+                item {
+                    VerticalSpacer(8.dp)
+                    Caption13Up(text = stringResource(R.string.wallet__payment_request_amount), color = Colors.White64)
+                    VerticalSpacer(16.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .clickableAlpha(onClick = onAmountClick)
+                            .testTag("SubscriptionEditAmount")
+                    ) {
+                        PaykitAmountDisplay(
+                            amount = amount,
+                            modifier = Modifier.weight(1f, fill = false).width(IntrinsicSize.Max)
                         )
-                        VerticalSpacer(8.dp)
-                        TextInput(
-                            value = description,
-                            onValueChange = onDescriptionChange,
-                            placeholder = stringResource(R.string.subscriptions__description_placeholder),
-                            minLines = 4,
-                            maxLines = 4,
-                            modifier = Modifier.fillMaxWidth().testTag("SubscriptionDescription")
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pencil_simple),
+                            contentDescription = stringResource(R.string.common__edit),
+                            tint = Colors.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
-                    Column {
-                        Caption13Up(
-                            text = stringResource(R.string.subscriptions__custom_icon),
-                            color = Colors.White64,
-                            style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
-                        )
-                        VerticalSpacer(8.dp)
-                        val iconDescription = stringResource(R.string.subscriptions__custom_icon_description)
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Colors.White10)
-                                .clickable(enabled = !isLoadingIcon, onClick = launchPhotoPicker)
-                                .semantics { contentDescription = iconDescription }
-                                .testTag("SubscriptionIconPicker")
-                        ) {
-                            if (selectedIconUri == null) {
-                                SubscriptionDefaultIcon(size = 40.dp)
-                            } else {
-                                AsyncImage(
-                                    model = selectedIconUri,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
-                                )
+                    VerticalSpacer(24.dp)
+                    Caption13Up(text = stringResource(R.string.subscriptions__frequency), color = Colors.White64)
+                    VerticalSpacer(8.dp)
+                    SubscriptionFrequencyPicker(frequency, onFrequencyChange)
+                    VerticalSpacer(24.dp)
+                    PaykitAcceptedMethods(
+                        title = stringResource(R.string.subscriptions__accepted_payments),
+                        availableMethods = availableMethods,
+                        selectedMethods = acceptedMethods,
+                        testTagPrefix = "Subscription",
+                        onClickMethod = onClickMethod,
+                        modifier = Modifier.testTag("SubscriptionAcceptedMethods")
+                    )
+                    VerticalSpacer(24.dp)
+                    Caption13Up(
+                        text = stringResource(R.string.subscriptions__name),
+                        color = Colors.White64,
+                        style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                    )
+                    VerticalSpacer(8.dp)
+                    TextInput(
+                        value = name,
+                        onValueChange = onNameChange,
+                        placeholder = stringResource(R.string.subscriptions__name_placeholder),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("SubscriptionName")
+                    )
+                    VerticalSpacer(24.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Caption13Up(
+                                text = stringResource(R.string.subscriptions__description),
+                                color = Colors.White64,
+                                style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                            )
+                            VerticalSpacer(8.dp)
+                            TextInput(
+                                value = description,
+                                onValueChange = onDescriptionChange,
+                                placeholder = stringResource(R.string.subscriptions__description_placeholder),
+                                minLines = 4,
+                                maxLines = 4,
+                                modifier = Modifier.fillMaxWidth().testTag("SubscriptionDescription")
+                            )
+                        }
+                        Column {
+                            Caption13Up(
+                                text = stringResource(R.string.subscriptions__custom_icon),
+                                color = Colors.White64,
+                                style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                            )
+                            VerticalSpacer(8.dp)
+                            val iconDescription = stringResource(R.string.subscriptions__custom_icon_description)
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Colors.White10)
+                                    .clickable(enabled = !isLoadingIcon, onClick = launchPhotoPicker)
+                                    .semantics { contentDescription = iconDescription }
+                                    .testTag("SubscriptionIconPicker")
+                            ) {
+                                if (selectedIconUri == null) {
+                                    SubscriptionDefaultIcon(size = 40.dp)
+                                } else {
+                                    AsyncImage(
+                                        model = selectedIconUri,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                                    )
+                                }
                             }
                         }
                     }
+                    VerticalSpacer(24.dp)
                 }
-                VerticalSpacer(24.dp)
+            }
+            Column(
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
+            ) {
+                PrimaryButton(
+                    text = stringResource(R.string.subscriptions__choose_recipient),
+                    textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+                    onClick = onChooseRecipient,
+                    enabled = amount.atomic > 0uL && name.isNotBlank() &&
+                        !isLoadingIcon && acceptedMethods.isNotEmpty(),
+                    modifier = Modifier.testTag("SubscriptionChooseRecipient")
+                )
+                VerticalSpacer(16.dp)
             }
         }
-        PrimaryButton(
-            text = stringResource(R.string.subscriptions__choose_recipient),
-            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
-            onClick = onChooseRecipient,
-            enabled = amount.atomic > 0uL && name.isNotBlank() && !isLoadingIcon && acceptedMethods.isNotEmpty(),
-            modifier = Modifier.testTag("SubscriptionChooseRecipient")
-        )
-        VerticalSpacer(16.dp)
     }
 }
 
