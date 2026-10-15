@@ -5,8 +5,10 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 [`app/src/test/resources/paykit-issuer-interoperability.json`](../../app/src/test/resources/paykit-issuer-interoperability.json).
 
 `fixed-price-bitcoin.xml` verifies a USD-denominated request settled in BTC and an explicit
-same-asset rail price. The confirmation amount uses the issuer's fixed rate; the displayed fiat
-estimate uses Bitkit's own market rate. The flow stops before broadcasting. Differing rail prices,
+same-asset rail price. After preparation, the Amount screen shows the fixed, uneditable payment
+amount with Savings selected. Continue opens confirmation with the same amount. The amount uses
+the issuer's fixed rate; the displayed fiat estimate uses Bitkit's own market rate. The flow stops
+before broadcasting. Differing rail prices,
 fractional-satoshi Lightning payments, and dynamic quotes remain unsupported.
 
 ## Setup

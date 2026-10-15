@@ -1,23 +1,24 @@
 package to.bitkit.repositories
 
+import com.synonym.paykit.PaymentConversion
+import com.synonym.paykit.PaymentDeadline
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
+import to.bitkit.services.PaykitSdkService
 
 internal object PaykitSubscriptionProposal {
-    /** Maximum plaintext size accepted by Paykit's pubky-noise transport. */
-    const val MAX_MESSAGE_BYTES = 1000
-
     /** Longest JPEG avatar URI produced by Bitkit's staging profile namespace. */
     val reservedIconUri = "pubky://" + "x".repeat(122)
 
     fun validate(terms: PaykitPaymentRequestProposalTerms) {
-        if (encodedSize(terms) > MAX_MESSAGE_BYTES) throw PaykitPaymentRequestError.SubscriptionTooLong
+        if (encodedSize(terms) > PaykitSdkService.MAX_MESSAGE_BYTES) throw PaykitPaymentRequestError.SubscriptionTooLong
     }
 
     fun encodedSize(terms: PaykitPaymentRequestProposalTerms): Int {
@@ -32,7 +33,7 @@ internal object PaykitSubscriptionProposal {
             putJsonObject("request") {
                 putJsonObject("amount") {
                     put("value", terms.amountValue)
-                    put("asset", "btc")
+                    put("asset", terms.amountAsset)
                 }
                 put("payment_reference", terms.paymentReference)
                 put("proposal_expires_at", terms.proposalExpiresAt)
@@ -47,9 +48,46 @@ internal object PaykitSubscriptionProposal {
                     terms.acceptedPaymentEndpointIdentifiers.forEach { add(JsonPrimitive(it)) }
                 }
                 put("required_app_id", "bitkit")
+                putConversion(terms.conversion)
+                terms.paymentDeadline?.let { deadline ->
+                    putJsonObject("payment_deadline") {
+                        when (deadline) {
+                            is PaymentDeadline.At -> {
+                                put("type", "at")
+                                put("timestamp", deadline.timestamp)
+                            }
+                            is PaymentDeadline.PeriodStart -> {
+                                put("type", "period_start")
+                                put("seconds", Json.parseToJsonElement(deadline.seconds.toString()))
+                            }
+                        }
+                    }
+                }
                 put("metadata", Json.parseToJsonElement(terms.metadataJson))
             }
         }
         return wire.toString().encodeToByteArray().size
+    }
+    private fun JsonObjectBuilder.putConversion(conversion: PaymentConversion?) {
+        conversion?.let { conversion ->
+            putJsonObject("conversion") {
+                when (conversion) {
+                    is PaymentConversion.Fixed -> {
+                        put("type", "fixed")
+                        putJsonArray("rates") {
+                            conversion.rates.forEach { rate ->
+                                add(
+                                    buildJsonObject {
+                                        put("asset", rate.asset)
+                                        put("value", rate.value)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    PaymentConversion.PerPeriod -> put("type", "per_period")
+                }
+            }
+        }
     }
 }

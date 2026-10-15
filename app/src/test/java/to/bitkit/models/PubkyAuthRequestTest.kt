@@ -1,5 +1,6 @@
 package to.bitkit.models
 
+import kotlinx.serialization.json.Json
 import to.bitkit.models.PubkyAuthClaim.Item
 import java.net.URLEncoder
 import kotlin.test.Test
@@ -11,6 +12,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PubkyAuthRequestTest {
+
+    @Test
+    fun `optional USDT omission preserves delegated Paykit authority`() {
+        val claim = requireNotNull(PubkyAuthClaim.fromWireValue("paykit-access-v1.usdt-address-v1"))
+        val payload = PubkyAuthClaimCodec.encode(claim, "{}".encodeToByteArray(), 3uL, ByteArray(32) { 11 })
+        val actual = Json.parseToJsonElement(payload.decodeToString())
+        val expected = Json.parseToJsonElement(
+            """{"paykit_access":{"key_generation":3,"secret":"CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws"}}"""
+        )
+        assertEquals(expected, actual)
+        assertTrue(claim.sharesUsdt)
+        assertFalse(claim.sharesBitcoin)
+    }
 
     @Test
     fun `parse preserves each companion selection and received item order`() {

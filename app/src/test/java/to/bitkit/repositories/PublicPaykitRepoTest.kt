@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PublicationStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,13 +26,16 @@ import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.UsdtPreference
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPublicContactPaymentResolution
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -54,6 +58,9 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
     private val clock = mock<Clock>()
+    private val usdtRepo = mock<UsdtRepo> {
+        on { state }.thenReturn(MutableStateFlow(UsdtWalletState()))
+    }
 
     private val publicKey = MutableStateFlow<String?>("pubkyself")
     private val isRestoringSession = MutableStateFlow(false)
@@ -65,7 +72,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Before
     fun setUp() = test {
         sut = createRepo()
-        settingsFlow.value = SettingsData()
+        settingsFlow.value = SettingsData(publicPaykitUsdtEnabled = false)
         publicKey.value = "pubkyself"
         isRestoringSession.value = false
         walletState.value = WalletState()
@@ -87,6 +94,25 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @After
     fun tearDown() {
         PublicPaykitRepo.lightningRouteHintsValidator = null
+    }
+
+    @Test
+    fun `optional USDT endpoint failure preserves bitcoin publication and propagates cancellation`() = test {
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        settingsFlow.value = SettingsData(
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+            publicPaykitUsdtEnabled = true,
+            usdtPreference = UsdtPreference.ENABLED,
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        val endpoints = argumentCaptor<List<Endpoint>>()
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture()) }
+        assertEquals(listOf(MethodId.P2tr), endpoints.firstValue.map { it.methodId })
+
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
+        assertFailsWith<CancellationException> { sut.syncCurrentPublishedEndpoints() }
     }
 
     @Test
@@ -149,6 +175,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `syncPublishedEndpoints creates reusable onchain endpoint when cached address is blank`() = test {
         settingsFlow.value = SettingsData(
+            publicPaykitUsdtEnabled = false,
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
@@ -171,6 +198,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `syncPublishedEndpoints does not publish endpoints when app registration fails`() = test {
         settingsFlow.value = SettingsData(
+            publicPaykitUsdtEnabled = false,
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
@@ -190,6 +218,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         for (priority in listOf(Priority.Ordered, Priority.Interactive)) {
             clearInvocations(paykitSdkService)
             settingsFlow.value = SettingsData(
+                publicPaykitUsdtEnabled = false,
                 publicPaykitBolt11 = "lnbc1old",
                 publicPaykitBolt11PaymentHash = "010203",
                 publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
@@ -269,7 +298,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
     @Test
     fun `syncCurrentPublishedEndpoints returns NoSupportedEndpoint when endpoint is required`() = test {
-        settingsFlow.value = SettingsData(publicPaykitOnchainEnabled = false)
+        settingsFlow.value = SettingsData(publicPaykitUsdtEnabled = false, publicPaykitOnchainEnabled = false)
         whenever(lightningRepo.canReceive()).thenReturn(false)
 
         val error = sut.syncCurrentPublishedEndpoints(requireEndpoint = true).exceptionOrNull()
@@ -295,7 +324,20 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         val result = sut.beginPayment("pubkycontact").getOrThrow()
 
-        assertEquals(PublicPaykitPaymentResult.Opened(PUBLIC_BOLT11), result)
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                PUBLIC_BOLT11,
+                endpoints = listOf(
+                    Endpoint(
+                        MethodId.Bolt11,
+                        PUBLIC_BOLT11,
+                        rawPayload = PublicPaykitRepo.serializePayload(PUBLIC_BOLT11),
+                        appId = "bitkit"
+                    )
+                )
+            ),
+            result
+        )
     }
 
     @Test
@@ -315,7 +357,20 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
             val result = sut.beginPayment("pubkycontact").getOrThrow()
 
-            assertEquals(PublicPaykitPaymentResult.Opened(PUBLIC_BOLT11), result)
+            assertEquals(
+                PublicPaykitPaymentResult.Opened(
+                    PUBLIC_BOLT11,
+                    endpoints = listOf(
+                        Endpoint(
+                            MethodId.Bolt11,
+                            PUBLIC_BOLT11,
+                            rawPayload = PublicPaykitRepo.serializePayload(PUBLIC_BOLT11),
+                            appId = "another-wallet"
+                        )
+                    )
+                ),
+                result
+            )
         }
     }
 
@@ -356,6 +411,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         walletRepo = walletRepo,
         lightningRepo = lightningRepo,
         coreService = coreService,
+        usdtRepo = usdtRepo,
         paykitSdkService = paykitSdkService,
         settingsStore = settingsStore,
         clock = clock,

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.LocalBottomSheetOverlayState
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -59,6 +60,8 @@ class BottomSheetOverlayState {
 internal data class BottomSheetOverlayEntry(
     val key: Any,
     val modifier: Modifier,
+    val containerColor: Color?,
+    val dragHandleTopPadding: Dp,
     val sheetState: SheetState,
     val onDismissRequest: () -> Unit,
     val content: @Composable ColumnScope.() -> Unit,
@@ -70,6 +73,8 @@ fun BottomSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    containerColor: Color? = null,
+    dragHandleTopPadding: Dp = 12.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val overlayState = checkNotNull(LocalBottomSheetOverlayState.current) {
@@ -79,6 +84,8 @@ fun BottomSheet(
     val entry = BottomSheetOverlayEntry(
         key = sheetKey,
         modifier = modifier.semantics { testTagsAsResourceId = true },
+        containerColor = containerColor,
+        dragHandleTopPadding = dragHandleTopPadding,
         sheetState = sheetState,
         onDismissRequest = onDismissRequest,
         content = content,
@@ -103,8 +110,10 @@ fun BottomSheetOverlayHost(
                     shouldExpand = true,
                     onDismiss = entry.onDismissRequest,
                     scaffoldContainerColor = Color.Transparent,
-                    sheetDragHandle = { ModalSheetDragHandle() },
-                    sheetContainerColor = Colors.Black,
+                    sheetDragHandle = {
+                        ModalSheetDragHandle(entry.containerColor ?: Colors.White08, entry.dragHandleTopPadding)
+                    },
+                    sheetContainerColor = entry.containerColor ?: Colors.Black,
                     sheetState = entry.sheetState,
                     sheets = {
                         entry.content(this)
@@ -118,14 +127,14 @@ fun BottomSheetOverlayHost(
 }
 
 @Composable
-private fun ModalSheetDragHandle() {
+private fun ModalSheetDragHandle(color: Color = Colors.White08, topPadding: Dp = 12.dp) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .background(color = Colors.White08)
+            .background(color = color)
     ) {
-        SheetDragHandle()
+        SheetDragHandle(topPadding = topPadding)
     }
 }
 

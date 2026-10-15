@@ -88,6 +88,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
                     sharesPrivatePaykitEndpoints = canUsePrivateContactPayments,
                     publicPaykitLightningEnabled = true,
                     publicPaykitOnchainEnabled = true,
+                    publicPaykitUsdtEnabled = true,
                 )
             }
             publicPaykitRepo.syncPublishedEndpoints(publish = true).getOrThrow()
@@ -120,6 +121,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
                     sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints,
                     publicPaykitLightningEnabled = previous.publicPaykitLightningEnabled,
                     publicPaykitOnchainEnabled = previous.publicPaykitOnchainEnabled,
+                    publicPaykitUsdtEnabled = previous.publicPaykitUsdtEnabled,
                 )
             }
         }.onFailure(error::addSuppressed)
@@ -149,6 +151,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
                     sharesPrivatePaykitEndpoints = false,
                     publicPaykitLightningEnabled = true,
                     publicPaykitOnchainEnabled = true,
+                    publicPaykitUsdtEnabled = true,
                 )
             }
         }.onFailure {

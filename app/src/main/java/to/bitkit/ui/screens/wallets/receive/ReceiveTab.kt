@@ -11,6 +11,7 @@ enum class ReceiveTab : TabItem {
     SAVINGS,
     AUTO,
     SPENDING,
+    USDT,
 
     /** The paired hardware wallet; its label carries the vendor name (see [ReceiveQrScreen]). */
     HARDWARE;
@@ -21,6 +22,7 @@ enum class ReceiveTab : TabItem {
             SAVINGS -> stringResource(R.string.wallet__receive_tab_savings)
             AUTO -> stringResource(R.string.wallet__receive_tab_auto)
             SPENDING -> stringResource(R.string.wallet__receive_tab_spending)
+            USDT -> "USDT"
             HARDWARE -> stringResource(R.string.hardware__receive_tab_hardware)
         }
 
@@ -29,6 +31,7 @@ enum class ReceiveTab : TabItem {
             SAVINGS -> Colors.Brand
             AUTO -> Colors.Brand
             SPENDING -> Colors.Purple
+            USDT -> Colors.Usdt
             HARDWARE -> Colors.Blue
         }
 }

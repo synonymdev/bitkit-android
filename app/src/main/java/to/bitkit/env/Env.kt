@@ -1,6 +1,7 @@
 package to.bitkit.env
 
 import android.os.Build
+import com.synonym.bitkitcore.UsdtDestination
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PeerDetails
@@ -17,6 +18,23 @@ import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("ConstPropertyName", "KotlinConstantConditions", "SimplifyBooleanWithConstants")
 internal object Env {
+    val isUsdtEnabled: Boolean get() = (network == Network.BITCOIN || isDebug) &&
+        usdtRpcUrl != null && usdtBundlerUrl.isNotBlank()
+    val usdtBundlerUrl: String get() = BuildConfig.USDT_BUNDLER_URL
+    val usdtDepositsUrl: String? get() = BuildConfig.USDT_DEPOSITS_URL.takeIf { it.isNotBlank() }
+    val usdtBridgesUrl: String? get() = BuildConfig.USDT_BRIDGES_URL.takeIf { it.isNotBlank() }
+    val usdtRpcUrl: String? get() = BuildConfig.USDT_RPC_URL.takeIf { it.isNotBlank() }
+
+    val usdtDestinations: List<UsdtDestination> get() {
+        val enabled = BuildConfig.USDT_BRIDGE_NETWORKS.split(',').map { it.trim() }.toSet()
+        return listOf(UsdtDestination.ARBITRUM) + listOf(
+            "ethereum" to UsdtDestination.ETHEREUM,
+            "polygon" to UsdtDestination.POLYGON,
+            "plasma" to UsdtDestination.PLASMA,
+            "stable" to UsdtDestination.STABLE,
+        ).filter { it.first in enabled }.map { it.second }
+    }
+
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO

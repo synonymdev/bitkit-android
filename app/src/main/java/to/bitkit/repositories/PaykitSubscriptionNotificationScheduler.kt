@@ -88,7 +88,6 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
         val scheduledWork = subscriptions
             .filter {
                 it.isPayer &&
-                    !it.hasPaymentDeadline &&
                     it.recurrence.unit.isSupported &&
                     acceptedAt(it) != null
             }
