@@ -1037,6 +1037,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `receipt is consumed only when the transaction sheet can be presented`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.ONCHAIN,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            usdtAmount = 1_000_000u,
+            usdtTransferId = "receipt",
+        )
+        var consumed = 0
+        sut.enabledTransactionSheet(false)
+        sut.showTransactionSheet(details) {
+            consumed++
+            true
+        }.join()
+        assertEquals(0, consumed)
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+        sut.enabledTransactionSheet(true)
+        sut.showTransactionSheet(details) { false }.join()
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+        sut.showTransactionSheet(details) {
+            consumed++
+            true
+        }.join()
+        assertEquals(1, consumed)
+        assertEquals(details, sut.transactionSheet.value)
+    }
+
+    @Test
     fun `critical update check is skipped in debug builds`() = test {
         whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
         clearInvocations(appUpdaterService)
@@ -9923,15 +9950,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `hardware submission pauses background work only during the attempt`() = test {
         setActiveContactPaymentContext(testPublicKey, privatePaymentContext(7uL), paymentRequest())
-        sut.onHardwarePaymentSubmissionChanged(true)
-        assertTrue(paymentSubmissionActive.value)
-        sut.onHardwarePaymentSubmissionChanged(false)
-        assertFalse(paymentSubmissionActive.value)
-        sut.hideSheet()
-        sut.onHardwarePaymentSubmissionChanged(true)
+        val first = sut.beginHardwarePaymentSubmission()
+        val second = sut.beginHardwarePaymentSubmission()
         assertTrue(paymentSubmissionActive.value)
         sut.onHardwareSignCancelled()
         runCurrent()
+        assertTrue(paymentSubmissionActive.value)
+        first()
+        assertTrue(paymentSubmissionActive.value)
+        second()
+        assertFalse(paymentSubmissionActive.value)
+        sut.hideSheet()
+        val ordinaryPayment = sut.beginHardwarePaymentSubmission()
+        assertTrue(paymentSubmissionActive.value)
+        ordinaryPayment()
         assertFalse(paymentSubmissionActive.value)
         verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
     }
@@ -12973,6 +13005,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         send.join()
         assertFalse(paymentSubmissionActive.value)
         verify(paykitUsdtPayments).send(eq(quote), eq(null), any())
+    }
+
+    @Test
+    fun `profile and sheet dismissal keep USDT background work paused until submission ends`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        sut.showSheet(Sheet.Send())
+        runCurrent()
+        setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = paymentRequest())
+        val preparing = CompletableDeferred<Unit>()
+        whenever(paykitUsdtPayments.prepare(any(), any(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            preparing.complete(Unit)
+            awaitCancellation()
+        }
+        val send = launch { sut.sendPaykitUsdt(mock()) }
+        preparing.await()
+        pubkyPublicKey.value = null
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        assertTrue(paymentSubmissionActive.value)
+        sut.hideSheet()
+        assertTrue(paymentSubmissionActive.value)
+        send.cancelAndJoin()
+        assertFalse(paymentSubmissionActive.value)
+        verify(paykitUsdtPayments, never()).send(any(), anyOrNull(), any())
     }
 
     @Test

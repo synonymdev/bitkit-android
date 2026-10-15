@@ -53,7 +53,7 @@ fun HwSendSignScreen(
     prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean,
     authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean,
     onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit,
-    onPaymentSubmissionChange: (Boolean) -> Unit,
+    beginPaymentSubmission: () -> (() -> Unit),
     paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
 ) {
@@ -78,17 +78,23 @@ fun HwSendSignScreen(
     LaunchedEffect(walletId) {
         viewModel.warmUp(walletId)
     }
-    LaunchedEffect(uiState.isSigning) {
-        onPaymentSubmissionChange(uiState.isSigning)
-    }
     DisposableEffect(viewModel) {
         onDispose {
             viewModel.cancel()
-            onPaymentSubmissionChange(false)
         }
     }
     // Without this the sheet's NavHost pops the route itself, ignoring the guard and skipping onBack
     BackHandler(onBack = onBackRequest)
+
+    val signAndBroadcast = {
+        viewModel.signAndBroadcast(
+            request,
+            prepareContactPayment,
+            authorizeContactPayment,
+            onPaymentDeadlineExpired,
+            beginPaymentSubmission,
+        )
+    }
 
     HwSendSignContent(
         amountSats = sendUiState.amount,
@@ -97,14 +103,7 @@ fun HwSendSignScreen(
         hasPendingBroadcast = uiState.hasPendingBroadcast,
         vendor = vendor,
         onBack = onBackRequest,
-        onOpenConnect = {
-            viewModel.signAndBroadcast(
-                request,
-                prepareContactPayment,
-                authorizeContactPayment,
-                onPaymentDeadlineExpired
-            )
-        },
+        onOpenConnect = signAndBroadcast,
     )
 
     if (uiState.isPassphraseRequired) {
@@ -112,11 +111,9 @@ fun HwSendSignScreen(
             isVerifying = uiState.isVerifyingPassphrase,
             onSubmit = { passphrase ->
                 viewModel.submitPassphrase(
-                    request,
+                    walletId,
                     passphrase,
-                    prepareContactPayment,
-                    authorizeContactPayment,
-                    onPaymentDeadlineExpired,
+                    onReady = signAndBroadcast,
                 )
             },
             onDismiss = viewModel::dismissPassphrase,

@@ -514,15 +514,8 @@ class AppViewModel @Inject constructor(
     private var paymentRequestIdentity: String? = null
     private var isPaymentRequestIdentityActivating = false
     private var isSubmittingPaymentRequest = false
-        set(value) {
-            field = value
-            paykitPaymentRequestRepo.setPaymentSubmissionActive(value || isSoftwarePaymentSubmissionActive)
-        }
     private var isSoftwarePaymentSubmissionActive = false
-        set(value) {
-            field = value
-            paykitPaymentRequestRepo.setPaymentSubmissionActive(value || isSubmittingPaymentRequest)
-        }
+    private val activePaymentSubmissions = mutableSetOf<Any>()
     private var paykitPaymentRequestPollingJob: Job? = null
     private var paykitSessionRestoreRetryJob: Job? = null
     private var paykitContactsRefreshJob: Job? = null
@@ -3295,6 +3288,7 @@ class AppViewModel @Inject constructor(
             ?: throw PaykitPaymentRequestError.RequestUnavailable
         isSubmittingPaymentRequest = true
         isSoftwarePaymentSubmissionActive = true
+        val finishSubmission = beginPaymentSubmission()
         val reviewedAmount = paykitReviewedAmount
         val paymentTerms = paykitPaymentTerms
         try {
@@ -3310,6 +3304,7 @@ class AppViewModel @Inject constructor(
                 submissionDeadline = current.incomingPaymentRequest?.submissionDeadline(paymentTerms),
             ) { authorizeUsdtExecution(current, reviewedAmount, paymentTerms) }.getOrThrow()
         } finally {
+            finishSubmission()
             isSubmittingPaymentRequest = false
             isSoftwarePaymentSubmissionActive = false
         }
@@ -6441,6 +6436,7 @@ class AppViewModel @Inject constructor(
 
     fun showTransactionSheet(
         details: NewTransactionSheetDetails,
+        shouldShow: () -> Boolean = { true },
     ) = viewModelScope.launch {
         if (backupRepo.isRestoring.value) return@launch
 
@@ -6454,7 +6450,7 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        _transactionSheet.update { details }
+        if (shouldShow()) _transactionSheet.update { details }
     }
 
     fun hideNewTransactionSheet() {
@@ -6833,10 +6829,12 @@ class AppViewModel @Inject constructor(
         }
         isSoftwarePaymentSubmissionActive = true
         viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val finishSubmission = beginPaymentSubmission()
             try {
                 _sendUiState.update { it.copy(shouldConfirmPay = false) }
                 proceedWithPayment(contactPaymentContext)
             } finally {
+                finishSubmission()
                 isSubmittingPaymentRequest = false
                 isSoftwarePaymentSubmissionActive = false
             }
@@ -6848,8 +6846,20 @@ class AppViewModel @Inject constructor(
         super.onCleared()
     }
 
-    fun onHardwarePaymentSubmissionChanged(active: Boolean) {
-        paykitPaymentRequestRepo.setPaymentSubmissionActive(active || isSoftwarePaymentSubmissionActive)
+    fun beginHardwarePaymentSubmission(): () -> Unit = beginPaymentSubmission()
+
+    private fun beginPaymentSubmission(): () -> Unit {
+        val submission = Any()
+        synchronized(activePaymentSubmissions) {
+            activePaymentSubmissions.add(submission)
+            paykitPaymentRequestRepo.setPaymentSubmissionActive(true)
+        }
+        return {
+            synchronized(activePaymentSubmissions) {
+                activePaymentSubmissions.remove(submission)
+                paykitPaymentRequestRepo.setPaymentSubmissionActive(activePaymentSubmissions.isNotEmpty())
+            }
+        }
     }
 
     fun hardwarePaymentIdentity(): String? = pubkyRepo.publicKey.value?.let(PubkyPublicKeyFormat::normalized)

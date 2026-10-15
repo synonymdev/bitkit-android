@@ -37,6 +37,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -1337,7 +1338,23 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         runCurrent()
 
         verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any(), anyOrNull())
-        assertFalse(paymentSubmissionActive.value)
+        assertTrue(paymentSubmissionActive.value)
+        sut.setPaymentSubmissionActive(false)
+        runCurrent()
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `clearing requests keeps background work waiting until the payment ends`() = test {
+        sut.setPaymentSubmissionActive(true)
+        val backgroundWork = async { paymentSubmissionActive.first { !it } }
+        runCurrent()
+        sut.clear()
+        runCurrent()
+        assertTrue(paymentSubmissionActive.value)
+        assertFalse(backgroundWork.isCompleted)
+        sut.setPaymentSubmissionActive(false)
+        backgroundWork.await()
     }
 
     @Test

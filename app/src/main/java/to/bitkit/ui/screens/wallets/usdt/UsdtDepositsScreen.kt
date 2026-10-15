@@ -273,7 +273,10 @@ internal fun UsdtDepositsContent(
                             BodyS(stringResource(R.string.usdt__deposit_tron_refund_note), color = Colors.White64)
                         }
                         DepositSettlement(detail, hideBalance)
-                        UsdtSupportActions(detail.supportDetails, enabled = !state.busy)
+                        UsdtSupportActions(
+                            detail.supportDetails(stringResource(detail.statusResource())),
+                            enabled = !state.busy,
+                        )
                     }
                 }
                 state.error?.let { BodyS(stringResource(it), color = Colors.Brand) }
@@ -477,7 +480,9 @@ private fun UsdtDepositTechnicalDetails(
     } else {
         UsdtDepositSummary(detail)
     }
-    detail.statusCode?.let { BodyS(it, color = Colors.White64) }
+    if (detail.statusResource() == R.string.usdt__deposit_needs_attention) {
+        BodyS(stringResource(R.string.usdt__deposit_attention), color = Colors.White64)
+    }
 }
 
 @Composable

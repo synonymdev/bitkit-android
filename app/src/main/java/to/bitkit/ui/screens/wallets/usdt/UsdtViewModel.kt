@@ -59,7 +59,7 @@ class UsdtViewModel @Inject constructor(
     )
 
     val wallet = repo.state
-    val receivedTxs = repo.receivedTxs
+    fun consumeReceipt(id: String) = repo.consumeReceipt(id)
     val settings = settingsStore.data.catch {
         if (it is CancellationException) throw it
         settingsReadFailed(it)

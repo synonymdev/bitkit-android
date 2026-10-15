@@ -205,6 +205,13 @@ Two mechanics differ from the Android runner, both hit while checking this corpu
   *with a usable ref*. Use that to reach an element the snapshot does not list, rather than
   concluding it is gone.
 
+### USDT full-balance errors
+
+`usdt-payment-links-and-scans.xml` accepts either the insufficient-balance message or the paymaster
+fee-collection message when the entire balance is entered manually. iOS has reached fee collection
+first while Android has reported insufficient balance; the failing validation determines the message.
+Both must keep payment review closed and allow the user to reduce the amount.
+
 ### Identifiers
 
 The vocabulary is deliberately shared, and mostly matches: the whole number pad (`N0`–`N9`, `N000`,

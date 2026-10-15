@@ -483,7 +483,7 @@ fun SendSheet(
                                 walletId,
                             )
                         },
-                        onPaymentSubmissionChange = appViewModel::onHardwarePaymentSubmissionChanged,
+                        beginPaymentSubmission = appViewModel::beginHardwarePaymentSubmission,
                         onPaymentDeadlineExpired = { attempted ->
                             appViewModel.onHardwarePaymentDeadlineExpired(attempted, uiState.incomingPaymentRequestId, paymentIdentity, walletId)
                         },

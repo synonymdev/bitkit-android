@@ -22,6 +22,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -320,38 +321,31 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.history()).thenAnswer { history }
         whenever(wallet.refreshTransfers()).thenAnswer { history }
         val repo = UsdtRepo(service, testDispatcher)
-        val events = mutableListOf<UsdtTransfer>()
-        val collector = launch { repo.receivedTxs.collect { events.add(it) } }
-        runCurrent()
-        try {
-            repo.refresh(true, force = true).getOrThrow()
-            runCurrent()
-            assertTrue(events.isEmpty())
-            val received = incoming("new")
-            val pending = incoming("pending").copy(status = UsdtTransferStatus.PENDING, txHash = null)
-            history = listOf(
-                old, received, pending, incoming("sent").copy(isIncoming = false),
-                incoming("failed").copy(status = UsdtTransferStatus.FAILED), incoming("zero").copy(amount = 0uL)
-            )
-            repo.refresh(true, force = true).getOrThrow()
-            runCurrent()
-            assertEquals(listOf(received), events)
-            repo.refresh(true, force = true).getOrThrow()
-            runCurrent()
-            assertEquals(listOf(received), events)
-            val confirmed = pending.copy(status = UsdtTransferStatus.CONFIRMED, txHash = "pending")
-            history = history.map { if (it.id == confirmed.id) confirmed else it }
-            repo.refresh(true, force = true).getOrThrow()
-            runCurrent()
-            assertEquals(listOf(received, confirmed), events)
-            whenever(wallet.receiveAddress()).thenReturn("another wallet")
-            history = listOf(incoming("restored"))
-            repo.refresh(true, force = true).getOrThrow()
-            runCurrent()
-            assertEquals(listOf(received, confirmed), events)
-        } finally {
-            collector.cancel()
-        }
+        repo.refresh(true, force = true).getOrThrow()
+        assertTrue(repo.state.value.pendingReceipts.isEmpty())
+        val received = incoming("new")
+        val pending = incoming("pending").copy(status = UsdtTransferStatus.PENDING, txHash = null)
+        history = listOf(
+            old, received, pending, incoming("sent").copy(isIncoming = false),
+            incoming("failed").copy(status = UsdtTransferStatus.FAILED), incoming("zero").copy(amount = 0uL)
+        )
+        repo.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(received), repo.state.value.pendingReceipts)
+        repo.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(received), repo.state.value.pendingReceipts)
+        val confirmed = pending.copy(status = UsdtTransferStatus.CONFIRMED, txHash = "pending")
+        history = history.map { if (it.id == confirmed.id) confirmed else it }
+        repo.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(received, confirmed), repo.state.value.pendingReceipts)
+        assertTrue(repo.consumeReceipt(received.id))
+        assertFalse(repo.consumeReceipt(received.id))
+        repo.refresh(true, force = true).getOrThrow()
+        assertEquals(listOf(confirmed), repo.state.value.pendingReceipts)
+        whenever(wallet.receiveAddress()).thenReturn("another wallet")
+        history = listOf(incoming("restored"))
+        repo.refresh(true, force = true).getOrThrow()
+        assertTrue(repo.state.value.pendingReceipts.isEmpty())
+        assertFalse(repo.consumeReceipt(confirmed.id))
     }
 
     @Test
