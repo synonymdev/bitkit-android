@@ -72,7 +72,7 @@ class CreateSubscriptionScreenTest {
                     selectedIconUri = null,
                     isLoadingIcon = isLoadingIcon,
                     onAmountClick = {},
-                    onClickAsset = {},
+                    onClickMethod = {},
                     onNameChange = { name = it },
                     onDescriptionChange = {},
                     onFrequencyChange = { frequency = it },

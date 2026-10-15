@@ -263,6 +263,7 @@ data class PaykitPaymentRequestCreation(
     val wasPublishedToActiveState: Boolean,
 )
 
+@Suppress("LongParameterList")
 class PaykitSubscriptionDraft(
     val amount: PaykitAmount,
     val name: String,
@@ -270,6 +271,7 @@ class PaykitSubscriptionDraft(
     val frequency: PaykitRecurrenceUnit,
     val expiresAt: Instant,
     val iconBytes: ByteArray? = null,
+    val acceptedPaymentEndpointIdentifiers: List<String>? = null,
 )
 
 data class PaykitSubscriptionCreation(
@@ -827,7 +829,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val description = draft.description.trim()
         validateSubscriptionDraft(draft, name, validationDate)
 
-        val endpoints = subscriptionProposalEndpoints(draft.amount.asset, target, savedPublicKeys, expectedIdentity)
+        val endpoints = subscriptionProposalEndpoints(draft, target, savedPublicKeys, expectedIdentity)
         val reservedIconUri = PaykitSubscriptionProposal.reservedIconUri.takeIf { draft.iconBytes != null }
         val preflight = buildSubscriptionProposal(draft, name, description, reservedIconUri, endpoints, clock.now())
         PaykitSubscriptionProposal.validate(preflight)
@@ -878,7 +880,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private suspend fun subscriptionProposalEndpoints(
-        asset: PaykitAsset,
+        draft: PaykitSubscriptionDraft,
         target: PaykitPaymentRequestTarget,
         savedPublicKeys: List<String>,
         expectedIdentity: String,
@@ -891,7 +893,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
             .orEmpty()
         val settings = settingsStore.data.first()
-        val endpoints = PaykitRequestPricing.subscriptionEndpoints(asset, acceptedPaymentEndpointIdentifiers(settings))
+        val endpoints = PaykitRequestPricing.subscriptionEndpoints(
+            draft.amount.asset,
+            acceptedPaymentEndpointIdentifiers(settings),
+            draft.acceptedPaymentEndpointIdentifiers,
+        )
         if (target !in targets || !settings.sharesPrivatePaykitEndpoints || endpoints.isEmpty()) {
             throw PaykitPaymentRequestError.RequestUnavailable
         }

@@ -225,7 +225,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| UsdtDepositReceiveScreen.kt | Receive USDT › HW QR / Recipient / Specify Amount (populated) / Fee To Add Liquidity |
+| UsdtDepositReceiveScreen.kt | Receive USDT › [Network selection and Cross-Network Deposits](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49893-663424) / HW QR / Recipient / Specify Amount (populated) / Fee To Add Liquidity |
 | UsdtDepositsScreen.kt | Activity › Transaction Cross Network USDT / Transaction Receiving USDT Tech details |
 | UsdtWalletScreen.kt | Savings, Spending, Hardware, USDT Balances › Wallet USDT (funds & activity) / Wallet USDT (empty) |
 

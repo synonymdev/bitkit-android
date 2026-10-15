@@ -83,8 +83,9 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.PaykitAcceptedAssets
+import to.bitkit.ui.components.PaykitAcceptedMethods
 import to.bitkit.ui.components.PaykitAmountDisplay
+import to.bitkit.ui.components.PaykitPaymentOption
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactRow
 import to.bitkit.ui.components.TextInput
@@ -124,6 +125,8 @@ fun CreateSubscriptionSheet(
     var step by remember { mutableStateOf(SubscriptionCreationStep.Details) }
     var amount by remember { mutableStateOf(PaykitAmount(PaykitAsset.BTC, 0uL)) }
     val amountConversion = remember { PaykitAmountConversion() }
+    var restrictedMethods by remember { mutableStateOf<List<String>?>(null) }
+    val acceptedMethods = PaykitRequestPricing.subscriptionEndpoints(amount.asset, receivingMethods, restrictedMethods)
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var frequency by remember { mutableStateOf(PaykitRecurrenceUnit.Month) }
@@ -138,31 +141,38 @@ fun CreateSubscriptionSheet(
         SubscriptionCreationStep.Details -> CreateSubscriptionDetails(
             amount = amount,
             availableMethods = receivingMethods.toImmutableList(),
-            acceptedMethods = PaykitRequestPricing.subscriptionEndpoints(
-                amount.asset,
-                receivingMethods,
-            ).toImmutableList(),
+            acceptedMethods = acceptedMethods.toImmutableList(),
             name = name,
             description = description,
             frequency = frequency,
             selectedIconUri = selectedIconUri,
             isLoadingIcon = isLoadingIcon,
             onAmountClick = { step = SubscriptionCreationStep.Amount },
-            onClickAsset = { asset ->
-                if (asset != amount.asset) {
+            onClickMethod = { option ->
+                val endpoints = option.endpoints(receivingMethods)
+                if (option.asset != amount.asset) {
                     runCatching {
                         amountConversion.convert(
                             amount,
-                            asset,
+                            option.asset,
                             currencies.paykitRate,
                             Clock.System.now().toEpochMilliseconds()
                         )
-                    }.onSuccess { amount = it }.onFailure {
+                    }.onSuccess {
+                        amount = it
+                        restrictedMethods = endpoints
+                    }.onFailure {
                         appViewModel.toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.common__error),
                             description = context.getString(R.string.wallet__payment_request_rate_unavailable),
                         )
+                    }
+                } else {
+                    restrictedMethods = if (endpoints.any { it in acceptedMethods }) {
+                        acceptedMethods - endpoints.toSet()
+                    } else {
+                        acceptedMethods + endpoints.filter { it !in acceptedMethods }
                     }
                 }
             },
@@ -205,6 +215,7 @@ fun CreateSubscriptionSheet(
             contact = null,
             onBack = { step = SubscriptionCreationStep.Details },
             onContinue = {
+                if (amount.asset != it.amount.asset) restrictedMethods = null
                 amount = it.amount
                 step = SubscriptionCreationStep.Details
             },
@@ -231,6 +242,7 @@ fun CreateSubscriptionSheet(
                             frequency = frequency,
                             expiresAt = SubscriptionClockOffset.subscriptionNow() + expiration.duration,
                             iconBytes = iconBytes,
+                            acceptedPaymentEndpointIdentifiers = acceptedMethods,
                         ),
                         target = target,
                     ) {
@@ -264,7 +276,7 @@ internal fun CreateSubscriptionDetails(
     selectedIconUri: Uri?,
     isLoadingIcon: Boolean,
     onAmountClick: () -> Unit,
-    onClickAsset: (PaykitAsset) -> Unit,
+    onClickMethod: (PaykitPaymentOption) -> Unit,
     onNameChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onFrequencyChange: (PaykitRecurrenceUnit) -> Unit,
@@ -322,12 +334,12 @@ internal fun CreateSubscriptionDetails(
                 VerticalSpacer(8.dp)
                 SubscriptionFrequencyPicker(frequency, onFrequencyChange)
                 VerticalSpacer(24.dp)
-                PaykitAcceptedAssets(
+                PaykitAcceptedMethods(
                     title = stringResource(R.string.subscriptions__accepted_payments),
                     availableMethods = availableMethods,
                     selectedMethods = acceptedMethods,
                     testTagPrefix = "Subscription",
-                    onClickAsset = onClickAsset,
+                    onClickMethod = onClickMethod,
                     modifier = Modifier.testTag("SubscriptionAcceptedMethods")
                 )
                 VerticalSpacer(24.dp)
@@ -636,7 +648,7 @@ private fun CreateSubscriptionDetailsPreview() {
                 selectedIconUri = null,
                 isLoadingIcon = false,
                 onAmountClick = {},
-                onClickAsset = {},
+                onClickMethod = {},
                 onNameChange = {},
                 onDescriptionChange = {},
                 onFrequencyChange = {},

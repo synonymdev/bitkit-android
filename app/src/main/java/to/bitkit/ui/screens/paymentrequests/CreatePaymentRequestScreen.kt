@@ -52,7 +52,6 @@ import to.bitkit.models.PaykitAmountConversion
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDirection
@@ -74,7 +73,7 @@ import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadAmountText
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.NumberPadType
-import to.bitkit.ui.components.PaykitAcceptedAssets
+import to.bitkit.ui.components.PaykitAcceptedMethods
 import to.bitkit.ui.components.PaykitAmountCell
 import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
@@ -349,7 +348,7 @@ internal fun PaymentRequestDetailsContent(
     var acceptedMethods by remember(initialDraft.acceptedPaymentEndpointIdentifiers) {
         mutableStateOf(initialDraft.acceptedPaymentEndpointIdentifiers)
     }
-    val selectedMethods = acceptedMethods ?: availableMethods
+    val selectedMethods = availableMethods.filter { acceptedMethods?.contains(it) != false }
     var note by remember(initialDraft.note) { mutableStateOf(initialDraft.note) }
     var expiration by remember(initialDraft.expiresAt) {
         mutableStateOf(PaymentRequestExpiration.from(initialDraft.expiresAt, Clock.System.now()))
@@ -449,15 +448,13 @@ internal fun PaymentRequestDetailsContent(
                 }
             }
             VerticalSpacer(32.dp)
-            PaykitAcceptedAssets(
+            PaykitAcceptedMethods(
                 title = stringResource(R.string.wallet__payment_request_accepted_methods),
                 availableMethods = availableMethods,
                 selectedMethods = selectedMethods.toImmutableList(),
                 testTagPrefix = "PaymentRequest",
-                onClickAsset = { asset ->
-                    val endpoints = availableMethods.filter {
-                        (it == MethodId.UsdtArbitrum.rawValue) == (asset == PaykitAsset.USD)
-                    }
+                onClickMethod = { option ->
+                    val endpoints = option.endpoints(availableMethods)
                     acceptedMethods = if (endpoints.any { it in selectedMethods }) {
                         selectedMethods - endpoints.toSet()
                     } else {

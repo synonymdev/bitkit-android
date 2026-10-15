@@ -42,7 +42,6 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SendCell
-import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.usdtOverviewAmount
@@ -251,14 +250,15 @@ private fun ColumnScope.NetworkSelector(
             modifier = Modifier.padding(vertical = 16.dp)
         )
         UsdtCoinIllustration(modifier = Modifier.align(Alignment.CenterHorizontally))
-        if (Env.usdtDepositsUrl != null) {
-            TertiaryButton(
-                stringResource(R.string.usdt__deposit_history),
-                onClick = onHistory,
-                modifier = Modifier.testTag("UsdtDepositHistory")
-            )
-        }
         state.error?.let { BodyS(stringResource(it), color = Colors.White64) }
+    }
+    if (Env.usdtDepositsUrl != null) {
+        VerticalSpacer(16.dp)
+        PrimaryButton(
+            stringResource(R.string.usdt__deposit_history),
+            onClick = onHistory,
+            modifier = Modifier.testTag("UsdtDepositHistory")
+        )
     }
 }
 

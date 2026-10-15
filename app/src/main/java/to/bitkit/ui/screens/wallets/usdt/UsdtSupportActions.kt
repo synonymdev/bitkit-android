@@ -1,7 +1,7 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -14,27 +14,32 @@ import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.PrimaryButton
 
 @Composable
 internal fun UsdtSupportActions(details: String, enabled: Boolean = true) {
     val app = appViewModel ?: return
     val context = LocalContext.current
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SecondaryButton(
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        PrimaryButton(
             text = stringResource(R.string.wallet__send_error_support),
             onClick = { app.navigateToReportIssue(details) },
             enabled = enabled,
-            modifier = Modifier.testTag("UsdtContactSupport")
+            size = ButtonSize.Small,
+            textStyle = UsdtDetailStyles.SmallButton,
+            modifier = Modifier.weight(1f).testTag("UsdtContactSupport")
         )
-        SecondaryButton(
+        PrimaryButton(
             text = stringResource(R.string.usdt__copy_details),
             onClick = {
                 context.setClipboardText(details)
                 app.toast(type = Toast.ToastType.SUCCESS, title = context.getString(R.string.common__copied))
             },
             enabled = enabled,
-            modifier = Modifier.testTag("UsdtCopyDetails")
+            size = ButtonSize.Small,
+            textStyle = UsdtDetailStyles.SmallButton,
+            modifier = Modifier.weight(1f).testTag("UsdtCopyDetails")
         )
     }
 }

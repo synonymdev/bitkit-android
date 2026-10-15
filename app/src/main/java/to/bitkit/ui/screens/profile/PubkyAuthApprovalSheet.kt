@@ -314,7 +314,9 @@ private fun ColumnScope.WatchOnlyConsentContent(
             VerticalSpacer(32.dp)
             Display(
                 text = stringResource(R.string.profile__auth_approval_watch_only_intro_title)
-                    .withAccent(accentColor = Colors.Blue),
+                    .withAccent(
+                        accentColor = if (uiState.bitkitClaim?.sharesBitcoin == true) Colors.Blue else Colors.Usdt
+                    ),
             )
             VerticalSpacer(8.dp)
             BodyM(
@@ -326,10 +328,11 @@ private fun ColumnScope.WatchOnlyConsentContent(
                     }
                 ),
                 color = Colors.White64,
+                letterSpacing = 0.sp,
             )
         }
     }
-    if (uiState.showsUsdtDetails) {
+    if (uiState.showsUsdtDetails && (!uiState.usdtRequired || uiState.usdtAddress == null)) {
         VerticalSpacer(32.dp)
         UsdtSharingChoice(uiState, onShareUsdt, onRetryUsdt)
     }
@@ -381,10 +384,6 @@ private fun UsdtSharingChoice(
                     modifier = Modifier.clearAndSetSemantics {}
                 )
             }
-        }
-        if (uiState.shareUsdt || uiState.usdtRequired) {
-            if (!uiState.usdtRequired) VerticalSpacer(8.dp)
-            BodyS(text = stringResource(R.string.profile__auth_approval_usdt_privacy), color = Colors.White64)
         }
         if (uiState.usdtAddress == null) {
             VerticalSpacer(8.dp)

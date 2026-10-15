@@ -673,9 +673,8 @@
     <string name="profile__auth_approval_title">Authorize</string>
     <string name="profile__auth_approval_trust_warning">Make sure you trust the service, browser, and device before authorizing with your pubky.</string>
     <string name="profile__auth_approval_usdt_disabled">USDT is turned off.</string>
-    <string name="profile__auth_approval_usdt_intro_description">Share your existing USDT address on Arbitrum One to receive earnings directly in Bitkit. The service cannot spend your funds.</string>
+    <string name="profile__auth_approval_usdt_intro_description">To earn, you need to share your USDT address with Paykit. It can view sales activity, but cannot spend funds.</string>
     <string name="profile__auth_approval_usdt_loading">Loading USDT address…</string>
-    <string name="profile__auth_approval_usdt_privacy">This is your existing USDT account. The service can see its balance and transaction history, but cannot spend your funds.</string>
     <string name="profile__auth_approval_usdt_unavailable">Your USDT address is unavailable. Please try again.</string>
     <string name="profile__auth_approval_watch_only_account_default_name">%1$s server</string>
     <string name="profile__auth_approval_watch_only_intro_approve">Approve</string>
@@ -1222,8 +1221,6 @@
     <string name="usdt__amount">Amount</string>
     <string name="usdt__balance">Balance</string>
     <string name="usdt__bridge_attention">Bridge needs attention</string>
-    <string name="usdt__bridge_deducted_fee">Estimated bridge cost (included)</string>
-    <string name="usdt__bridge_estimate_note">Delivery is estimated. Bridge costs are deducted from the amount; the network fee is additional.</string>
     <string name="usdt__bridge_provider">Bridge</string>
     <string name="usdt__bridge_reference">Bridge reference</string>
     <string name="usdt__bridge_refunded_description">USDT was returned to your wallet. See details for the refunded amount.</string>
@@ -1308,7 +1305,7 @@
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nYOUR CALL</string>
     <string name="usdt__intro_title">New: USDT</string>
     <string name="usdt__maximum_fee">Maximum fee</string>
-    <string name="usdt__maximum_total">Maximum total debit</string>
+    <string name="usdt__maximum_total">Max total debit</string>
     <string name="usdt__network">Network</string>
     <string name="usdt__network_warning">Select the network used by the recipient. Sending to an address on the wrong network can lose funds.</string>
     <string name="usdt__pay_from">Pay from</string>
@@ -1329,6 +1326,7 @@
     <string name="usdt__receiving_network">Receiving network</string>
     <string name="usdt__receiving_title">Receiving USDT</string>
     <string name="usdt__recipient_gets">Recipient gets</string>
+    <string name="usdt__recipient_network">Recipient network</string>
     <string name="usdt__refund_tx">Refund transaction</string>
     <string name="usdt__replaced">Replaced by another payment</string>
     <string name="usdt__send">Send</string>
@@ -1345,7 +1343,6 @@
     <string name="usdt__to_address">To address</string>
     <string name="usdt__to_network">To network {network}</string>
     <string name="usdt__track_bridge">Track cross-network delivery</string>
-    <string name="usdt__you_send">You send</string>
     <string name="wallet__activity">Activity</string>
     <string name="wallet__activity_address">Address</string>
     <string name="wallet__activity_all">All Activity</string>

@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.usdt
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -25,7 +26,6 @@ import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import java.util.Locale
-import kotlin.test.assertTrue
 
 @HiltAndroidTest
 @ComposeUi
@@ -60,29 +60,27 @@ class UsdtPaymentContentTest {
     }
 
     @Test
-    fun bridgeMaximumDebitRemainsVisibleWithoutScrolling() {
+    fun bridgeAmountsAndNetworksAreInExpandedDetails() {
         composeTestRule.setContent { Content(UsdtSendState(quote = quote), UsdtPage.AMOUNT) }
         val total = composeTestRule.onNodeWithTag("UsdtMaximumTotal")
         val swipe = composeTestRule.onNodeWithTag("UsdtConfirm")
-        composeTestRule.onNodeWithText("YOU SEND").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertIsDisplayed()
-        composeTestRule.onNodeWithText("≈ 2.99 USDT").assertIsDisplayed()
-        total.assertIsDisplayed()
-        composeTestRule.onNodeWithText("4.47 USDT").assertIsDisplayed()
+        composeTestRule.onNodeWithText("YOU SEND").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertDoesNotExist()
+        total.assertDoesNotExist()
         swipe.assertIsDisplayed()
-        assertTrue(total.fetchSemanticsNode().boundsInRoot.bottom <= swipe.fetchSemanticsNode().boundsInRoot.top)
         composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
-        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Arbitrum One").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("UsdtRecipientAmount").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("±2.99").assertIsDisplayed()
         total.assertIsDisplayed()
+        composeTestRule.onNodeWithText("4.47").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Polygon").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("All fees are paid in USDT. Final fee may be lower.").assertIsDisplayed()
         swipe.assertIsDisplayed()
-        val cost = composeTestRule.onNodeWithText("0.01 USDT")
-        cost.performScrollTo().assertIsDisplayed()
-        assertTrue(cost.fetchSemanticsNode().boundsInRoot.bottom <= total.fetchSemanticsNode().boundsInRoot.top)
-        composeTestRule.onNodeWithText(
-            "Delivery is estimated. Bridge costs are deducted from the amount; the network fee is additional."
-        ).performScrollTo().assertIsDisplayed()
-        total.assertIsDisplayed()
-        swipe.assertIsDisplayed()
+        SystemClock.sleep(600)
+        composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
+        total.assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtRecipientAmount").assertDoesNotExist()
     }
 
     @Test

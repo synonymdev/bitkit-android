@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import android.os.SystemClock
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,7 +75,7 @@ class CreatePaymentRequestScreenTest {
     }
 
     @Test
-    fun acceptedAssetsGroupsBitcoinRailsAndRequiresASelection() {
+    fun acceptedMethodsCanBeRemovedIndependentlyAndRequireASelection() {
         var submitted: PaykitPaymentRequestDraft? = null
         composeTestRule.setContent {
             AppThemeSurface {
@@ -93,18 +94,27 @@ class CreatePaymentRequestScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithTag("PaymentRequestAccept-bitcoin")
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-savings")
             .performScrollTo().assertIsSelected().performClick()
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-spending").assertIsSelected()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").performClick()
+        assertEquals(
+            listOf(MethodId.Bolt11.rawValue, MethodId.UsdtArbitrum.rawValue),
+            submitted?.acceptedPaymentEndpointIdentifiers
+        )
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-spending").performClick().assertIsNotSelected()
         composeTestRule.onNodeWithTag("PaymentRequestAccept-usdt").assertIsSelected()
+        SystemClock.sleep(600)
         composeTestRule.onNodeWithTag("PaymentRequestSend").performClick()
         assertEquals(listOf(MethodId.UsdtArbitrum.rawValue), submitted?.acceptedPaymentEndpointIdentifiers)
         composeTestRule.onNodeWithTag("PaymentRequestAccept-usdt").performClick().assertIsNotSelected()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsNotEnabled()
-        composeTestRule.onNodeWithTag("PaymentRequestAccept-bitcoin").performClick().assertIsSelected()
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-savings").performClick().assertIsSelected()
+        SystemClock.sleep(600)
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsEnabled().performClick()
         assertEquals(
-            setOf(MethodId.P2wpkh.rawValue, MethodId.Bolt11.rawValue),
-            submitted?.acceptedPaymentEndpointIdentifiers?.toSet()
+            listOf(MethodId.P2wpkh.rawValue),
+            submitted?.acceptedPaymentEndpointIdentifiers
         )
     }
 

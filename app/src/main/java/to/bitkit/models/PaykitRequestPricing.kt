@@ -22,7 +22,12 @@ data class PaykitRequestPricing(
     val quotes: List<PaymentConversionQuoteRecord> = emptyList(),
 ) {
     companion object {
-        fun subscriptionEndpoints(requested: PaykitAsset, available: List<String>): List<String> = available.filter {
+        fun subscriptionEndpoints(
+            requested: PaykitAsset,
+            available: List<String>,
+            selected: List<String>? = null,
+        ): List<String> = available.filter {
+            if (selected != null && it !in selected) return@filter false
             val method = MethodId.fromRawValue(it) ?: return@filter false
             when (requested) {
                 PaykitAsset.BTC -> method != MethodId.UsdtArbitrum
