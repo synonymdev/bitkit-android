@@ -146,6 +146,32 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deferred paid invoice replacement clears the cache before publication resumes`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitOnchainEnabled = false,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitBolt11 = "lnbc1paid",
+            publicPaykitBolt11PaymentHash = "010203",
+            publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+        )
+        stubPublicInvoice("lnbc1replacement", byteArrayOf(4, 5, 6))
+
+        sut.refreshPublishedBolt11ForPayment("unrelated", publish = false).getOrThrow()
+        assertEquals("lnbc1paid", settingsFlow.value.publicPaykitBolt11)
+        sut.refreshPublishedBolt11ForPayment("010203", publish = false).getOrThrow()
+        assertEquals("", settingsFlow.value.publicPaykitBolt11)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        verifyNoInteractions(paykitSdkService)
+
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        val endpoints = argumentCaptor<List<Endpoint>>()
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture()) }
+        assertEquals("lnbc1replacement", endpoints.firstValue.single().value)
+        assertEquals("040506", settingsFlow.value.publicPaykitBolt11PaymentHash)
+    }
+
+    @Test
     fun `syncCurrentPublishedEndpoints waits only for session restoration and remains cancellable`() = test {
         isRestoringSession.value = true
         publicKey.value = null

@@ -127,7 +127,10 @@ class PrivatePaykitRepo @Inject constructor(
     private val activeLinkPreparations = mutableMapOf<String, CompletableDeferred<LinkedPeerState?>>()
     private var preparationJob: Job? = null
     private var preparationGeneration = 0
-    private var isDeletingProfile = false
+    private val _isProfileDeletionInProgress = MutableStateFlow(false)
+    val isProfileDeletionInProgress = _isProfileDeletionInProgress.asStateFlow()
+    private val isDeletingProfile: Boolean
+        get() = _isProfileDeletionInProgress.value
     private var pendingForceRefreshLightning = false
     private val unavailableLinkRetryAt = mutableMapOf<String, KotlinInstant>()
     private var state: PrivatePaykitState? = null
@@ -351,12 +354,12 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     suspend fun beginProfileDeletion() = withContext(serializedDispatcher) {
-        isDeletingProfile = true
+        _isProfileDeletionInProgress.update { true }
         invalidateContactPreparation()
     }
 
     suspend fun endProfileDeletion() = withContext(serializedDispatcher) {
-        isDeletingProfile = false
+        _isProfileDeletionInProgress.update { false }
     }
 
     suspend fun refreshSavedContactEndpoints(

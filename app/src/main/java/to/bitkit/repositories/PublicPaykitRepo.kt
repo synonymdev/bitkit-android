@@ -268,13 +268,17 @@ class PublicPaykitRepo @Inject constructor(
         }
     }
 
-    suspend fun refreshPublishedBolt11ForPayment(paymentHash: String): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun refreshPublishedBolt11ForPayment(
+        paymentHash: String,
+        publish: Boolean = true,
+    ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val settings = settingsStore.data.first()
             if (!settings.sharesPublicPaykitEndpoints) return@runSuspendCatching
             if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runSuspendCatching
 
             clearPublicBolt11Metadata()
+            if (!publish) return@runSuspendCatching
             val desired = buildWalletEndpoints(refresh = true)
             applyPublishedEndpoints(desired)
         }
