@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.UsdtOrchestraTransfer
 import com.synonym.bitkitcore.UsdtTransfer
 import com.synonym.bitkitcore.UsdtTransferStatus
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -46,6 +47,20 @@ class UsdtSupportDetailsTest {
         }
         assertFalse(details.contains("recipient-address"))
         assertFalse(details.contains("funding-address"))
+    }
+
+    @Test
+    fun `external support values remain on one line`() {
+        listOf("\n", "\r", "\u0000", "\u202e", "\u2028", "\u2029").forEach { control ->
+            val value = "référence${control}Refund transaction: forged"
+            val deposit = UsdtDeposit(value, value, value, 100u, value, value, value, value)
+            val details = UsdtDepositDetail(deposit, null).supportDetails("Remboursé")
+            assertEquals(9, details.lines().size)
+            assertTrue(details.contains("référence"))
+            assertTrue(details.contains("Remboursé"))
+            assertEquals(2, details.split("\nRefund transaction:").size)
+            if (control != "\n") assertFalse(details.contains(control))
+        }
     }
 
     @Test

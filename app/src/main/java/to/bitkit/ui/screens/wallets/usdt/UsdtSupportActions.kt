@@ -55,7 +55,7 @@ internal fun UsdtTransfer.supportDetails(statusText: String): String = buildList
     bridgeGuid?.let { add("LayerZero message: $it") }
     orchestra?.destinationTx?.let { add("Destination transaction: $it") }
     orchestra?.refundTx?.let { add("Refund transaction: $it") }
-}.joinToString("\n")
+}.joinToString("\n", transform = ::supportLine)
 
 internal fun UsdtDepositDetail.supportDetails(statusText: String): String = buildList {
     add("Asset: ${deposit.asset}")
@@ -68,4 +68,16 @@ internal fun UsdtDepositDetail.supportDetails(statusText: String): String = buil
     statusCode?.let { add("Status code: $it") }
     order?.destinationTx?.let { add("Destination transaction: $it") }
     (order?.refundTx ?: deposit.refundTx)?.let { add("Refund transaction: $it") }
-}.joinToString("\n")
+}.joinToString("\n", transform = ::supportLine)
+
+private fun supportLine(value: String): String = buildString {
+    value.codePoints().forEach { codePoint ->
+        when (Character.getType(codePoint)) {
+            Character.CONTROL.toInt(), Character.FORMAT.toInt(),
+            Character.LINE_SEPARATOR.toInt(), Character.PARAGRAPH_SEPARATOR.toInt() -> {
+                append("\\u{").append(codePoint.toString(16)).append('}')
+            }
+            else -> appendCodePoint(codePoint)
+        }
+    }
+}
