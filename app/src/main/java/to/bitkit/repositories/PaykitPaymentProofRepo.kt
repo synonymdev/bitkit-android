@@ -421,6 +421,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         val record = attempt.takeIf { it.canBeAbandoned && identity != null }?.let { payerRecord(it) }
         val periodStartsAt = attempt.requestId?.billingPeriodStartsAt
         when {
+            identity != null && attempt.canBeAbandoned && attempt.releaseApproved -> true
             identity == null || record == null -> false
             periodStartsAt != null -> recurringPeriodHasEnded(record, attempt, periodStartsAt)
             record.paymentProofs.isNotEmpty() -> false
@@ -477,7 +478,32 @@ class PaykitPaymentProofRepo @Inject constructor(
             }?.billingPeriod
         }
         val deadline = period?.let { runCatching { subscription.pricing.paymentDeadline(it) }.getOrNull() }
-        return subscription.isExpired(now) || deadline?.let { now > it } == true
+        val request = period?.let {
+            runCatching { subscription.requestsThrough(now, it.startsAt) }.getOrNull()
+                ?.firstOrNull { request -> request.billingPeriod?.startsAt == it.startsAt }
+        }
+        val identity = requireNotNull(attempt.payerIdentity)
+        return subscription.isExpired(now) || deadline?.let { now > it } == true ||
+            (request != null && quoteDeadlinePassed(request, identity, now))
+    }
+
+    private suspend fun removeOriginalShopProofs(attempt: OnchainSendAttempt): Boolean = operationMutex.withLock {
+        val proofs = loadProofs()
+        val original = proofs.filter {
+            it.kind == PaykitPaymentProofKind.Onchain && it.requestId == attempt.requestId &&
+                PubkyPublicKeyFormat.matches(it.identity, requireNotNull(attempt.payerIdentity))
+        }
+        val safe = original.all { proof ->
+            val identifier = proof.paymentIdentifier
+            val isCandidate = identifier == null ||
+                attempt.candidateTxids.any { it.equals(identifier, ignoreCase = true) }
+            proof.onchainWalletId == attempt.walletId && proof.proofData == null &&
+                !proof.onchainAcceptanceVerified && isCandidate
+        }
+        if (!safe) return@withLock false
+        for (proof in original) releaseDeniedPrivateConsumption(proof)
+        if (original.isNotEmpty()) persist(proofs - original.toSet())
+        true
     }
 
     private suspend fun quoteDeadlinePassed(request: PaykitPaymentRequest, identity: String, now: Instant): Boolean {
@@ -505,26 +531,9 @@ class PaykitPaymentProofRepo @Inject constructor(
         runSuspendCatching {
             if (!onchainRequestHasEnded(attempt)) throw OnchainSendAbandonRefusedError(requestOpen = true)
             if (!neverReachedNetwork(attempt)) throw OnchainSendAbandonRefusedError(requestOpen = false)
-            val released = lightningRepo.abandonUnbroadcastOnchainSend(attempt) { current ->
-                operationMutex.withLock {
-                    val proofs = loadProofs()
-                    val original = proofs.filter {
-                        it.kind == PaykitPaymentProofKind.Onchain && it.requestId == current.requestId &&
-                            PubkyPublicKeyFormat.matches(it.identity, requireNotNull(current.payerIdentity))
-                    }
-                    val safe = original.all { proof ->
-                        val identifier = proof.paymentIdentifier
-                        val isCandidate = identifier == null ||
-                            current.candidateTxids.any { it.equals(identifier, ignoreCase = true) }
-                        proof.onchainWalletId == current.walletId && proof.proofData == null &&
-                            !proof.onchainAcceptanceVerified && isCandidate
-                    }
-                    if (!safe) return@withLock false
-                    for (proof in original) releaseDeniedPrivateConsumption(proof)
-                    if (original.isNotEmpty()) persist(proofs - original.toSet())
-                    true
-                }
-            }
+            val approved = if (attempt.releaseApproved) attempt else lightningRepo.approveOnchainRelease(attempt)
+            val released = approved != null &&
+                lightningRepo.abandonUnbroadcastOnchainSend(approved) { removeOriginalShopProofs(it) }
             if (!released) throw OnchainSendBlockedError(attempt)
             Logger.info(
                 "Released on-chain payment '${attempt.txid}' after its request ended without it reaching the network",

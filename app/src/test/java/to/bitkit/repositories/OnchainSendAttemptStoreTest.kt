@@ -769,9 +769,13 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
 
         assertFalse(store.abandonUnbroadcast(unknown) { false })
         assertEquals(unknown, store.current())
-        assertFalse(store.abandonUnbroadcast(unknown.copy(amountSats = 999uL)) { true })
-        assertEquals(unknown, store.current())
-        assertTrue(store.abandonUnbroadcast(unknown) { true })
+        val approved = requireNotNull(store.approveRelease(unknown))
+        assertTrue(approved.releaseApproved)
+        assertEquals(approved, store.approveRelease(unknown))
+        assertFalse(store.abandonUnbroadcast(unknown) { true })
+        assertFalse(store.abandonUnbroadcast(approved.copy(amountSats = 999uL)) { true })
+        assertEquals(approved, store.current())
+        assertTrue(store.abandonUnbroadcast(approved) { true })
         assertNull(store.current())
         assertTrue(store.admitForTest(walletId = WalletScope.default).attemptId != attempt.attemptId)
     }
