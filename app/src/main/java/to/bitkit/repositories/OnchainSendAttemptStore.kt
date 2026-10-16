@@ -117,7 +117,7 @@ data class OnchainSendAttempt(
 
     /** A Shop payment from the node wallet that dispatched but never had its acceptance confirmed. */
     val canBeAbandoned: Boolean
-        get() = isUnresolved && requestId != null && !isTransfer && !restoredFromBackup &&
+        get() = isUnresolved && requestId != null && !isTransfer && (!restoredFromBackup || releaseApproved) &&
             walletId == WalletScope.default && !payerIdentity.isNullOrBlank() && initialDispatchAttempted &&
             txid != null && !originalInputs.isNullOrEmpty() && candidateTxids.isNotEmpty()
 }
@@ -561,6 +561,8 @@ class OnchainSendAttemptStore @Inject constructor(
                     preparationPending = attempt.preparationPending,
                     verifiedWinningFeeSats = attempt.verifiedWinningFeeSats,
                     initialDispatchAttempted = attempt.initialDispatchAttempted,
+                    // A local release approval is not part of the shared backup record.
+                    releaseApproved = attempt.releaseApproved,
                 ) == attempt
                 check(sameOperation && existing.candidateTxids.containsAll(attempt.candidateTxids)) {
                     "Cannot change a restored on-chain operation's original context"

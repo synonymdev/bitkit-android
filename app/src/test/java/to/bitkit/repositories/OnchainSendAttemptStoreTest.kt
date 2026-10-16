@@ -772,10 +772,14 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val approved = requireNotNull(store.approveRelease(unknown))
         assertTrue(approved.releaseApproved)
         assertEquals(approved, store.approveRelease(unknown))
+        // A restore of the same operation keeps the local approval and its release.
+        store.restoreActive(unknown.copy(restoredFromBackup = true))
+        val restored = requireNotNull(store.current())
+        assertTrue(restored.releaseApproved && restored.canBeAbandoned)
         assertFalse(store.abandonUnbroadcast(unknown) { true })
-        assertFalse(store.abandonUnbroadcast(approved.copy(amountSats = 999uL)) { true })
-        assertEquals(approved, store.current())
-        assertTrue(store.abandonUnbroadcast(approved) { true })
+        assertFalse(store.abandonUnbroadcast(restored.copy(amountSats = 999uL)) { true })
+        assertEquals(restored, store.current())
+        assertTrue(store.abandonUnbroadcast(restored) { true })
         assertNull(store.current())
         assertTrue(store.admitForTest(walletId = WalletScope.default).attemptId != attempt.attemptId)
     }
