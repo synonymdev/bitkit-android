@@ -1476,6 +1476,8 @@
     <string name="pubky_auth__homeserver">Homeserver</string>
     <string name="pubky_auth__identity_unavailable">Δεν ήταν δυνατή η φόρτωση του προφίλ Pubky σου</string>
     <string name="pubky_auth__identity_unavailable_desc">Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
+    <string name="pubky_auth__loading_identity">Φόρτωση του προφίλ Pubky σου</string>
+    <string name="pubky_auth__loading_identity_desc">Το αίτημα σύνδεσης θα ανοίξει μόλις το προφίλ σου είναι έτοιμο.</string>
     <string name="pubky_auth__no_identity">Απαιτείται ταυτότητα Pubky</string>
     <string name="pubky_auth__no_identity_desc">Δημιούργησε μια ταυτότητα Pubky στο προφίλ σου για να εγκρίνεις αιτήματα εξουσιοδότησης.</string>
     <string name="pubky_auth__signup_description">Δημιούργησε μια νέα ταυτότητα Pubky σε αυτόν τον homeserver. Συνέχισε μόνο αν τον εμπιστεύεσαι.</string>
