@@ -74,7 +74,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Before
     fun setUp() = test {
         sut = createRepo()
-        settingsFlow.value = SettingsData(publicPaykitUsdtEnabled = false)
+        settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = true, publicPaykitUsdtEnabled = false)
         publicKey.value = "pubkyself"
         isRestoringSession.value = false
         walletState.value = WalletState()
@@ -102,6 +102,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     fun `optional USDT endpoint failure preserves bitcoin publication and propagates cancellation`() = test {
         walletState.value = WalletState(onchainAddress = "bc1ptest")
         settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
             publicPaykitUsdtEnabled = true,
@@ -211,7 +212,11 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
     @Test
     fun `public publication rechecks admission after identity lookup without cancelling admitted writes`() = test {
-        settingsFlow.value = SettingsData(publicPaykitLightningEnabled = false, publicPaykitUsdtEnabled = false)
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
         walletState.value = WalletState(onchainAddress = "bc1ptest")
         publicKey.value = null
         val identityStarted = CompletableDeferred<Unit>()
@@ -282,16 +287,19 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             publicPaykitCleanupPending = true,
         )
         walletState.value = WalletState(onchainAddress = "bc1ptest")
-        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).thenReturn(null)
+        lateinit var admission: suspend () -> Boolean
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).thenAnswer {
+            admission = it.getArgument(1)
+            null
+        }
         var canPublish = true
         sut.syncCurrentPublishedEndpoints(canPublish = { canPublish }).getOrThrow()
 
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
-        val admission = argumentCaptor<() -> Boolean>()
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), admission.capture()) }
-        assertTrue(admission.firstValue())
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), any()) }
+        assertTrue(admission())
         canPublish = false
-        assertFalse(admission.firstValue())
+        assertFalse(admission())
     }
 
     @Test
@@ -327,7 +335,11 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         isRestoringSession.value = true
         publicKey.value = null
         walletState.value = WalletState(onchainAddress = "bc1ptest")
-        settingsFlow.value = SettingsData(publicPaykitLightningEnabled = false, publicPaykitOnchainEnabled = true)
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
 
         val cancelledPublication = async { sut.syncCurrentPublishedEndpoints() }
         assertFalse(cancelledPublication.isCompleted)
@@ -475,7 +487,11 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
     @Test
     fun `syncCurrentPublishedEndpoints returns NoSupportedEndpoint when endpoint is required`() = test {
-        settingsFlow.value = SettingsData(publicPaykitUsdtEnabled = false, publicPaykitOnchainEnabled = false)
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitOnchainEnabled = false,
+        )
         whenever(lightningRepo.canReceive()).thenReturn(false)
 
         val error = sut.syncCurrentPublishedEndpoints(requireEndpoint = true).exceptionOrNull()

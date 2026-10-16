@@ -258,15 +258,15 @@ class PublicPaykitRepo @Inject constructor(
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             pubkyRepo.isRestoringSession.first { !it }
-            if (!canPublish()) return@runSuspendCatching
+            if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
             val desired = buildWalletEndpoints(
                 refresh = false,
                 forceRefreshLightning = forceRefreshLightning,
                 requireEndpoint = requireEndpoint,
             )
-            if (!canPublish()) return@runSuspendCatching
+            if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
             syncPaykitApp().getOrThrow()
-            if (applyPublishedEndpoints(desired, canPublish)) {
+            if (applyPublishedEndpoints(desired) { isAutomaticPublicationAllowed(canPublish) }) {
                 acknowledgePublishedEndpoints(desired, canPublish)
             }
         }
@@ -282,9 +282,9 @@ class PublicPaykitRepo @Inject constructor(
             if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runSuspendCatching
 
             clearPublicBolt11Metadata(publicationPending = true)
-            if (!canPublish()) return@runSuspendCatching
+            if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
             val desired = buildWalletEndpoints(refresh = true)
-            if (applyPublishedEndpoints(desired, canPublish)) {
+            if (applyPublishedEndpoints(desired) { isAutomaticPublicationAllowed(canPublish) }) {
                 acknowledgePublishedEndpoints(desired, canPublish)
             }
         }
@@ -321,9 +321,12 @@ class PublicPaykitRepo @Inject constructor(
         clearPublicBolt11Metadata()
     }
 
+    private suspend fun isAutomaticPublicationAllowed(canPublish: () -> Boolean): Boolean =
+        settingsStore.data.first().sharesPublicPaykitEndpoints && canPublish()
+
     private suspend fun applyPublishedEndpoints(
         desiredEndpoints: List<Endpoint>,
-        canPublish: () -> Boolean = { true },
+        canPublish: suspend () -> Boolean = { true },
     ): Boolean =
         publishMutex.withLock {
             if (!canPublish()) return@withLock false
@@ -354,7 +357,7 @@ class PublicPaykitRepo @Inject constructor(
     ) {
         val publishedInvoice = endpoints.firstOrNull { it.methodId == MethodId.Bolt11 }?.value.orEmpty()
         settingsStore.update {
-            if (canPublish() && it.publicPaykitBolt11 == publishedInvoice) {
+            if (it.sharesPublicPaykitEndpoints && canPublish() && it.publicPaykitBolt11 == publishedInvoice) {
                 it.copy(publicPaykitCleanupPending = false)
             } else {
                 it

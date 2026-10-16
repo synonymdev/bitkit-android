@@ -822,7 +822,7 @@ class PaykitSdkService @Inject constructor(
 
     internal suspend fun syncPublicEndpoints(
         endpoints: List<Endpoint>,
-        canPublish: () -> Boolean,
+        canPublish: suspend () -> Boolean,
     ): EndpointSyncReport? {
         isSetup.await()
         val priority = if (endpoints.isEmpty()) {
