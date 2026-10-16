@@ -2626,7 +2626,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         for ((expiresAt, ended) in cases) {
             val (record, period) = recurringShopRecord(expiresAt)
             val attempt = recurringAttempt(period)
-            storedProofs = listOf(startedOnchainProof(attempt).copy(billingPeriod = period, conversionQuoteId = "quote-1"))
+            storedProofs = listOf(
+                startedOnchainProof(attempt).copy(billingPeriod = period, conversionQuoteId = "quote-1"),
+            )
             whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
 
             assertEquals(ended, paymentProofRepo().onchainRequestHasEnded(attempt))
