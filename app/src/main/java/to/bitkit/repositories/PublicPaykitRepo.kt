@@ -28,6 +28,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.encodeToUrl
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -201,6 +202,16 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     private val publishMutex = Mutex()
+    private class LightningRefresh(val signIn: PubkySignIn)
+
+    private val pendingLightningRefresh = AtomicReference<LightningRefresh?>(null)
+
+    internal fun requestLightningRefresh(signIn: PubkySignIn) {
+        if (pubkyRepo.isCurrent(signIn)) pendingLightningRefresh.set(LightningRefresh(signIn))
+    }
+
+    internal val hasPendingLightningRefresh: Boolean
+        get() = pendingLightningRefresh.get()?.let { pubkyRepo.isCurrent(it.signIn) } == true
 
     suspend fun beginPayment(publicKey: String): Result<PublicPaykitPaymentResult> = withContext(ioDispatcher) {
         runSuspendCatching {
@@ -259,15 +270,23 @@ class PublicPaykitRepo @Inject constructor(
         runSuspendCatching {
             pubkyRepo.isRestoringSession.first { !it }
             if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
+            val requestedRefresh = pendingLightningRefresh.get()?.takeIf { request ->
+                pubkyRepo.isCurrent(request.signIn).also { current ->
+                    if (!current) pendingLightningRefresh.compareAndSet(request, null)
+                }
+            }
             val desired = buildWalletEndpoints(
                 refresh = false,
-                forceRefreshLightning = forceRefreshLightning,
+                forceRefreshLightning = forceRefreshLightning || requestedRefresh != null,
                 requireEndpoint = requireEndpoint,
             )
             if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
             syncPaykitApp().getOrThrow()
             if (applyPublishedEndpoints(desired) { isAutomaticPublicationAllowed(canPublish) }) {
                 acknowledgePublishedEndpoints(desired, canPublish)
+                if (requestedRefresh != null && pubkyRepo.isCurrent(requestedRefresh.signIn)) {
+                    pendingLightningRefresh.compareAndSet(requestedRefresh, null)
+                }
             }
         }
     }
@@ -357,8 +376,8 @@ class PublicPaykitRepo @Inject constructor(
     ) {
         val publishedInvoice = endpoints.firstOrNull { it.methodId == MethodId.Bolt11 }?.value.orEmpty()
         settingsStore.update {
-            if (it.sharesPublicPaykitEndpoints && canPublish() && it.publicPaykitBolt11 == publishedInvoice) {
-                it.copy(publicPaykitCleanupPending = false)
+            if (it.sharesPublicPaykitEndpoints && canPublish()) {
+                it.copy(publicPaykitCleanupPending = it.publicPaykitBolt11 != publishedInvoice)
             } else {
                 it
             }

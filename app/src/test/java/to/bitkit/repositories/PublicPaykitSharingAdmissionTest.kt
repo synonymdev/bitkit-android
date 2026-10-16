@@ -1,11 +1,15 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.NetworkType
+import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncReport
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -13,11 +17,13 @@ import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -32,6 +38,8 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     private val walletRepo = mock<WalletRepo>()
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
+    private val lightningRepo = mock<LightningRepo>()
+    private val coreService = mock<CoreService>()
     private val isRestoringSession = MutableStateFlow(false)
     private val settingsFlow = MutableStateFlow(SettingsData())
     private lateinit var sut: PublicPaykitRepo
@@ -42,8 +50,8 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             ioDispatcher = testDispatcher,
             pubkyRepo = pubkyRepo,
             walletRepo = walletRepo,
-            lightningRepo = mock(),
-            coreService = mock(),
+            lightningRepo = lightningRepo,
+            coreService = coreService,
             paykitSdkService = paykitSdkService,
             settingsStore = settingsStore,
             clock = Clock.System,
@@ -60,6 +68,95 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             settingsFlow.value = transform(settingsFlow.value)
         }
     }
+
+    @After
+    fun tearDown() {
+        PublicPaykitRepo.lightningRouteHintsValidator = null
+    }
+
+    @Test
+    fun `deferred public lightning refresh survives skipped failed and superseded publication`() = test {
+        val signIn = PubkySignIn("pubkyself", 0L)
+        whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        PublicPaykitRepo.lightningRouteHintsValidator = { true }
+        for (outcome in listOf("skipped", "failed", "superseded")) {
+            clearInvocations(lightningRepo)
+            settingsFlow.value = SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                publicPaykitOnchainEnabled = false,
+                publicPaykitUsdtEnabled = false,
+                publicPaykitBolt11 = "ln-cached",
+                publicPaykitBolt11PaymentHash = "01",
+                publicPaykitBolt11ExpiresAtMillis = Long.MAX_VALUE,
+            )
+            whenever(lightningRepo.createInvoice(null, "", 86_400u))
+                .thenReturn(Result.success("ln-first"), Result.success("ln-second"))
+            for (bolt11 in listOf("ln-first", "ln-second")) {
+                whenever(coreService.decode(bolt11)).thenReturn(Scanner.Lightning(invoice(bolt11)))
+            }
+            var calls = 0
+            val published = mutableListOf<List<String>>()
+            whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+                calls += 1
+                if (calls == 1) {
+                    if (outcome == "skipped") return@doSuspendableAnswer null
+                    if (outcome == "failed") throw PublicPaykitError.PublicationFailed
+                    sut.requestLightningRefresh(signIn)
+                }
+                published.add(it.getArgument<List<Endpoint>>(0).map { endpoint -> endpoint.value })
+                EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList())
+            }
+            sut.requestLightningRefresh(signIn)
+            assertTrue(sut.hasPendingLightningRefresh)
+            val first = sut.syncCurrentPublishedEndpoints()
+            assertEquals(outcome == "failed", first.isFailure, outcome)
+            assertTrue(sut.hasPendingLightningRefresh, outcome)
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            assertFalse(sut.hasPendingLightningRefresh, outcome)
+            assertEquals(listOf("ln-second"), published.last(), outcome)
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            assertEquals(listOf("ln-second"), published.last(), outcome)
+            verifyBlocking(lightningRepo, times(2)) { createInvoice(null, "", 86_400u) }
+        }
+    }
+
+    @Test
+    fun `deferred public lightning refresh does not transfer to a replacement session`() = test {
+        val original = PubkySignIn("pubkyself", 0L)
+        var generation = 0L
+        whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0).generation == generation }
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        PublicPaykitRepo.lightningRouteHintsValidator = { true }
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitOnchainEnabled = false,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitBolt11 = "ln-replacement-session",
+            publicPaykitBolt11PaymentHash = "01",
+            publicPaykitBolt11ExpiresAtMillis = Long.MAX_VALUE,
+        )
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
+            .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
+        sut.requestLightningRefresh(original)
+        generation += 1
+        assertFalse(sut.hasPendingLightningRefresh)
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        verifyBlocking(lightningRepo, never()) { createInvoice(any(), any(), any()) }
+        assertEquals("ln-replacement-session", settingsFlow.value.publicPaykitBolt11)
+    }
+
+    private fun invoice(bolt11: String) = LightningInvoice(
+        bolt11 = bolt11,
+        paymentHash = byteArrayOf(1),
+        amountSatoshis = 0uL,
+        timestampSeconds = 0uL,
+        expirySeconds = 86_400uL,
+        isExpired = false,
+        description = "",
+        networkType = NetworkType.REGTEST,
+        payeeNodeId = null,
+    )
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)

@@ -2696,6 +2696,134 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `deferred private Lightning refresh survives cleanup and failed publication`() = test {
+        preparePrivateLightningContact()
+        sut.beginProfileDeletion()
+        clearInvocations(paykitSdkService, pubkyService)
+        sut.refreshKnownSavedContactEndpoints("channel ready", forceRefreshLightning = true).getOrThrow()
+        verifyNoInteractions(paykitSdkService, pubkyService)
+
+        whenever(paykitSdkService.clearPrivatePaymentLists(any(), anyOrNull()))
+            .thenAnswer { throw AppError("cleanup unavailable") }
+        assertTrue(sut.removePublishedEndpointsForCleanup("profile deletion").isFailure)
+        sut.endProfileDeletion()
+        settingsData.update { it.copy(sharesPrivatePaykitEndpoints = false) }
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+        verify(lightningRepo).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+
+        settingsData.update { it.copy(sharesPrivatePaykitEndpoints = true) }
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).thenReturn(
+            privateListDeliveryReport(failedToQueue = listOf(privateListSyncChange(CONTACT_KEY))),
+        )
+        sut.enableSharingAndPrepareSavedContacts({ listOf(CONTACT_KEY) }).getOrThrow()
+        runCurrent()
+        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).thenReturn(
+            privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY)),
+        )
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        val publications = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService, times(3)).syncPrivatePaymentListsWithReservations(publications.capture(), eq(false))
+        assertEquals(CONTACT_KEY, publications.secondValue.single().counterparty)
+        assertEquals(MethodId.Bolt11.rawValue, publications.secondValue.single().reservations.single().identifier)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `deferred private Lightning refresh cannot consume a newer request during publication`() = test {
+        preparePrivateLightningContact()
+        val publicationStarted = CompletableDeferred<Unit>()
+        val resumePublication = CompletableDeferred<Unit>()
+        var holdPublication = true
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).doSuspendableAnswer {
+            if (holdPublication) {
+                holdPublication = false
+                publicationStarted.complete(Unit)
+                resumePublication.await()
+            }
+            privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY))
+        }
+        sut.refreshKnownSavedContactEndpoints("channel ready", forceRefreshLightning = true).getOrThrow()
+        runCurrent()
+        assertTrue(publicationStarted.isCompleted)
+        sut.refreshKnownSavedContactEndpoints("channel usable", forceRefreshLightning = true).getOrThrow()
+        resumePublication.complete(Unit)
+        runCurrent()
+        sut.awaitContactPreparation()
+
+        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+        verify(lightningRepo, times(3)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `deferred private Lightning refresh does not follow a replaced sign in`() = test {
+        preparePrivateLightningContact()
+        var isCurrent = true
+        sut.beginProfileDeletion()
+        sut.refreshKnownSavedContactEndpoints(
+            "channel ready",
+            forceRefreshLightning = true,
+            isStillCurrent = { isCurrent },
+        ).getOrThrow()
+        isCurrent = false
+        sut.endProfileDeletion()
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+
+        verify(lightningRepo).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `deferred private Lightning refresh only retries peers that failed to queue`() = test {
+        val keys = listOf(CONTACT_KEY, OTHER_CONTACT_KEY)
+        preparePrivateLightningContact(keys)
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).thenReturn(
+            privateListDeliveryReport(
+                queuedCounterparties = listOf(CONTACT_KEY),
+                failedToQueue = listOf(privateListSyncChange(OTHER_CONTACT_KEY)),
+            ),
+        )
+        sut.refreshKnownSavedContactEndpoints("channel ready", forceRefreshLightning = true).getOrThrow()
+        runCurrent()
+        verify(lightningRepo, times(4)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+
+        val refreshedInvoice = "lnbcrt1refreshed"
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+            .thenReturn(Result.success(refreshedInvoice))
+        whenever(coreService.decode(refreshedInvoice))
+            .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).thenReturn(
+            privateListDeliveryReport(queuedCounterparties = keys),
+        )
+        clearInvocations(paykitSdkService)
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+        verify(lightningRepo, times(5)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        val publication = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(publication.capture(), eq(false))
+        assertEquals(
+            mapOf(CONTACT_KEY to PRIVATE_BOLT11, OTHER_CONTACT_KEY to refreshedInvoice)
+                .mapValues { PublicPaykitRepo.serializePayload(it.value) },
+            publication.firstValue.associate { it.counterparty to it.reservations.single().payload },
+        )
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+        verify(lightningRepo, times(5)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `profile deletion records received invoices without rotating private endpoints`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,
@@ -3711,6 +3839,24 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 .doSuspendableAnswer { paykitSdkService.ensureLinkWithPeer(it.getArgument(0)) }
         }
         whenever { paykitSdkService.identityStatus(any()) }.doSuspendableAnswer { paykitSdkService.identityStatus() }
+    }
+
+    private suspend fun preparePrivateLightningContact(keys: List<String> = listOf(CONTACT_KEY)) {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitOnchainEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+            .thenReturn(Result.success(PRIVATE_BOLT11))
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(keys.map { linkedPeer(it, LinkedPeerState.LINKED) })
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any())).thenReturn(
+            privateListDeliveryReport(queuedCounterparties = keys),
+        )
+        sut.prepareSavedContacts(keys, requireImmediatePublication = true).getOrThrow()
     }
 
     private fun createSut(publicPaykitRepo: PublicPaykitRepo = this.publicPaykitRepo) = PrivatePaykitRepo(

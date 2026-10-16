@@ -331,6 +331,41 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `older publication after an acknowledged replacement keeps the replacement pending`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitOnchainEnabled = false,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitBolt11 = "lnbc1paid",
+            publicPaykitBolt11PaymentHash = "010203",
+            publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+        )
+        stubPublicInvoice("lnbc1replacement", byteArrayOf(4, 5, 6))
+        val appSyncStarted = CompletableDeferred<Unit>()
+        val resumeAppSync = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.syncPaykitApp(any(), any())).doSuspendableAnswer {
+            appSyncStarted.complete(Unit)
+            resumeAppSync.await()
+        }
+        val older = async { sut.syncCurrentPublishedEndpoints() }
+        appSyncStarted.await()
+        sut.refreshPublishedBolt11ForPayment("010203").getOrThrow()
+        assertEquals("lnbc1replacement", settingsFlow.value.publicPaykitBolt11)
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+        resumeAppSync.complete(Unit)
+        older.await().getOrThrow()
+
+        val endpoints = argumentCaptor<List<Endpoint>>()
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(endpoints.capture(), any()) }
+        assertEquals(listOf("lnbc1replacement", "lnbc1paid"), endpoints.allValues.map { it.single().value })
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        verifyBlocking(paykitSdkService, times(3)) { syncPublicEndpoints(endpoints.capture(), any()) }
+        assertEquals("lnbc1replacement", endpoints.lastValue.single().value)
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
     fun `syncCurrentPublishedEndpoints waits only for session restoration and remains cancellable`() = test {
         isRestoringSession.value = true
         publicKey.value = null

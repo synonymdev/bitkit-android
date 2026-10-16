@@ -852,11 +852,9 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
         val signIn = pubkyRepo.currentSignIn()
         val settings = settingsStore.data.first()
-        if (!isPaykitEnabled.value || !settings.sharesPublicPaykitEndpoints ||
-            privatePaykitRepo.isProfileDeletionInProgress.value
-        ) {
-            return
-        }
+        if (!isPaykitEnabled.value || !settings.sharesPublicPaykitEndpoints) return
+        if (forceRefreshLightning && signIn != null) publicPaykitRepo.requestLightningRefresh(signIn)
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
 
         pubkyRepo.isRestoringSession.first { !it }
         val admission = publicPaykitPublicationAdmission(signIn ?: pubkyRepo.currentSignIn())
@@ -977,11 +975,32 @@ class AppViewModel @Inject constructor(
         forceRefreshLightning: Boolean = false,
         requeueActive: Boolean = false,
     ) {
-        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
+        val signIn = if (forceRefreshLightning) pubkyRepo.currentSignIn() else null
+        val isStillCurrent = signIn?.let { { pubkyRepo.isCurrent(it) } }
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) {
+            if (forceRefreshLightning && isPaykitEnabled.value && signIn != null) {
+                privatePaykitRepo.refreshKnownSavedContactEndpoints(
+                    reason,
+                    forceRefreshLightning = true,
+                    isStillCurrent = isStillCurrent,
+                )
+            }
+            return
+        }
         val contactKeys = pubkyRepo.contacts.value.map { it.publicKey }
         retryPendingPaykitEndpointRemoval(contactKeys, reason)
 
-        if (!isPaykitEnabled.value || privatePaykitRepo.isProfileDeletionInProgress.value) return
+        if (!isPaykitEnabled.value) return
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) {
+            if (forceRefreshLightning && signIn != null) {
+                privatePaykitRepo.refreshKnownSavedContactEndpoints(
+                    reason,
+                    forceRefreshLightning = true,
+                    isStillCurrent = isStillCurrent,
+                )
+            }
+            return
+        }
 
         refreshPrivateOnlyPaykitApp(reason)
         privatePaykitRepo.reconcileReservedReceiveIndexes()
@@ -992,6 +1011,7 @@ class AppViewModel @Inject constructor(
             reason,
             forceRefreshLightning = forceRefreshLightning,
             requeueActive = requeueActive,
+            isStillCurrent = isStillCurrent,
         )
         if (isPaymentRequestPollingStopped.value) return
         refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
@@ -1994,7 +2014,9 @@ class AppViewModel @Inject constructor(
 
             val settings = settingsStore.data.first()
             if (privatePaykitRepo.isProfileDeletionInProgress.value) return@reconcilePendingEndpoints
-            if (settings.publicPaykitCleanupPending) {
+            if (settings.publicPaykitCleanupPending ||
+                settings.sharesPublicPaykitEndpoints && publicPaykitRepo.hasPendingLightningRefresh
+            ) {
                 val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
                     publicPaykitRepo.syncCurrentPublishedEndpoints(canPublish = publicPaykitPublicationAdmission())
                 } else {

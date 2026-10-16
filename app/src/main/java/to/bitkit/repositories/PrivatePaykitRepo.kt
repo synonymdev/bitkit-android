@@ -131,11 +131,17 @@ class PrivatePaykitRepo @Inject constructor(
     val isProfileDeletionInProgress = _isProfileDeletionInProgress.asStateFlow()
     private val isDeletingProfile: Boolean
         get() = _isProfileDeletionInProgress.value
-    private var pendingForceRefreshLightning = false
+    private var pendingLightningRefresh: LightningRefresh? = null
     private val unavailableLinkRetryAt = mutableMapOf<String, KotlinInstant>()
     private var state: PrivatePaykitState? = null
     private val pendingMessageDrainRetries = mutableMapOf<String, PrivateMessageDrainRetry>()
     private var pendingMessageDrainRead: PrivateMessageDrainRead? = null
+
+    private class LightningRefresh(
+        val owner: PrivatePaykitState,
+        val remainingKeys: MutableSet<String>,
+        val isStillCurrent: (() -> Boolean)?,
+    )
 
     private class PrivateMessageDrainRead(val identity: String, val generation: Int) {
         val retries = mutableSetOf<PrivateMessageDrainRetry>()
@@ -306,7 +312,6 @@ class PrivatePaykitRepo @Inject constructor(
         pendingPreparationKeys.addAll(
             publicKeys.filter { requeueActive || forceRefreshLightning || it !in activePreparationKeys }
         )
-        pendingForceRefreshLightning = pendingForceRefreshLightning || forceRefreshLightning
         if (preparationJob?.isActive == true || pendingPreparationKeys.isEmpty()) return
         preparationJob = retryScope.launch {
             try {
@@ -314,9 +319,7 @@ class PrivatePaykitRepo @Inject constructor(
                     awaitContactPreparationActive(Priority.Background)
                     if (pendingPreparationKeys.isEmpty()) break
                     val keys = pendingPreparationKeys.intersect(knownSavedContactKeys)
-                    val forceRefresh = pendingForceRefreshLightning
                     pendingPreparationKeys.clear()
-                    pendingForceRefreshLightning = false
                     activePreparationKeys = keys
                     val generation = preparationGeneration
                     runSuspendCatching {
@@ -327,7 +330,6 @@ class PrivatePaykitRepo @Inject constructor(
                             publishLocalEndpoints(
                                 keys,
                                 "contact preparation",
-                                forceRefresh,
                                 priority = Priority.Background,
                             ).getOrThrow()
                         } else {
@@ -354,7 +356,6 @@ class PrivatePaykitRepo @Inject constructor(
         preparationGeneration += 1
         pendingPreparationKeys.clear()
         activePreparationKeys = emptySet()
-        pendingForceRefreshLightning = false
         activeLinkPreparations.clear()
         clearPendingMessageDrainRetries()
     }
@@ -393,8 +394,15 @@ class PrivatePaykitRepo @Inject constructor(
         reason: String,
         forceRefreshLightning: Boolean = false,
         requeueActive: Boolean = false,
+        isStillCurrent: (() -> Boolean)? = null,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
+            if (isStillCurrent?.invoke() == false) return@runSuspendCatching
+            if (forceRefreshLightning) {
+                val owner = ensureState()
+                if (isStillCurrent?.invoke() == false) return@runSuspendCatching
+                pendingLightningRefresh = LightningRefresh(owner, knownSavedContactKeys.toMutableSet(), isStillCurrent)
+            }
             scheduleContactPreparation(knownSavedContactKeys.toList(), forceRefreshLightning, requeueActive)
         }.onFailure {
             Logger.warn("Failed to refresh private Paykit endpoints for '$reason'", it, context = TAG)
@@ -504,6 +512,7 @@ class PrivatePaykitRepo @Inject constructor(
 
     suspend fun closeAndClear(): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
+            pendingLightningRefresh = null
             invalidateContactPreparation()
             publicationMutex.withLock {
                 clearPendingMessageDrainRetries()
@@ -728,6 +737,7 @@ class PrivatePaykitRepo @Inject constructor(
             runSuspendCatching {
                 val decoded = backup?.let { json.decodeFromString<PrivatePaykitBackup>(it) }
                 decoded?.let { paykitSdkService.retainRecoveryBackup(it.sdkState) }
+                pendingLightningRefresh = null
                 invalidateContactPreparation()
                 state = PrivatePaykitState()
                 knownSavedContactKeys.clear()
@@ -973,7 +983,6 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun publishLocalEndpoints(
         publicKeys: Collection<String>,
         reason: String,
-        forceRefreshLightning: Boolean = false,
         requireImmediatePublication: Boolean = false,
         priority: Priority = Priority.Ordered,
     ): Result<Unit> = withContext(serializedDispatcher) {
@@ -1005,13 +1014,15 @@ class PrivatePaykitRepo @Inject constructor(
                         return@withLock
                     }
 
+                    val lightningRefresh = currentLightningRefresh()
                     val publication = preparePrivatePaymentListReservations(
                         links.publicKeys,
                         reason,
-                        forceRefreshLightning,
-                        generation,
+                        forceRefreshLightningKeys = lightningRefresh?.remainingKeys.orEmpty(),
+                        generation = generation,
                     )
                     if (!isCurrentPublication(generation, identity, requireImmediatePublication)) return@withLock
+                    if (lightningRefresh?.isStillCurrent?.invoke() == false) return@withLock
                     if (publication.updates.isEmpty()) {
                         schedulePendingPrivateMessageDrainRetries(reason, links.linkRetryKeys, identity = identity)
                         if (requireImmediatePublication) publication.firstError?.let { throw it }
@@ -1027,14 +1038,40 @@ class PrivatePaykitRepo @Inject constructor(
                     val retryKeys = (links.linkRetryKeys + privatePaymentListDeliveryRetryKeys(report)).distinct()
                     schedulePendingPrivateMessageDrainRetries(reason, retryKeys, identity = identity)
 
-                    if (firstError != null) {
-                        if (requireImmediatePublication) throw firstError
-                        Logger.warn("Deferred private endpoint publication during '$reason'", firstError, context = TAG)
-                    }
+                    acknowledgeLightningRefresh(lightningRefresh, publication.updates, report, generation)
+                    handlePrivatePublicationError(firstError, reason, requireImmediatePublication)
                 }
             }.onFailure {
                 schedulePreparedLinkRetries(links.linkRetryKeys, reason, generation, identity)
             }.getOrThrow()
+        }
+    }
+
+    private fun handlePrivatePublicationError(error: Throwable?, reason: String, requireImmediatePublication: Boolean) {
+        if (error == null) return
+        if (requireImmediatePublication) throw error
+        Logger.warn("Deferred private endpoint publication during '$reason'", error, context = TAG)
+    }
+
+    private fun currentLightningRefresh(): LightningRefresh? = pendingLightningRefresh?.takeIf {
+        it.owner === state && it.isStillCurrent?.invoke() != false
+    }
+
+    private fun acknowledgeLightningRefresh(
+        refresh: LightningRefresh?,
+        updates: List<PrivatePaymentListReservationUpdateInput>,
+        report: PrivatePaymentListDeliveryReport,
+        generation: Int,
+    ) {
+        if (generation != preparationGeneration || refresh == null || pendingLightningRefresh !== refresh) return
+        if (refresh.owner !== state || refresh.isStillCurrent?.invoke() == false) return
+        val refreshedKeys = updates.filter { update ->
+            update.reservations.any { it.identifier == MethodId.Bolt11.rawValue }
+        }.map { it.counterparty }.toSet()
+        val queuedKeys = report.queued.mapNotNull { normalizedPublicKey(it.counterparty) }.toSet()
+        refresh.remainingKeys.removeAll(refreshedKeys.intersect(queuedKeys))
+        if (refresh.remainingKeys.isEmpty()) {
+            pendingLightningRefresh = null
         }
     }
 
@@ -1072,7 +1109,7 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun preparePrivatePaymentListReservations(
         publicKeys: Collection<String>,
         reason: String,
-        forceRefreshLightning: Boolean,
+        forceRefreshLightningKeys: Set<String>,
         generation: Int,
     ): PrivatePublicationPreparation {
         var firstError: Throwable? = null
@@ -1080,7 +1117,7 @@ class PrivatePaykitRepo @Inject constructor(
         for (publicKey in publicKeys) {
             if (generation != preparationGeneration) break
             if (publicKey in knownSavedContactKeys) {
-                runSuspendCatching { privatePaymentListUpdate(publicKey, forceRefreshLightning) }
+                runSuspendCatching { privatePaymentListUpdate(publicKey, publicKey in forceRefreshLightningKeys) }
                     .onSuccess { updates += it }
                     .onFailure {
                         firstError = firstError ?: it
