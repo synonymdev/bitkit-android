@@ -37,13 +37,14 @@ class ToastQueueManager(private val scope: CoroutineScope) {
     private var isPaused = false
 
     /**
-     * Add toast to queue. If queue is full, drops oldest. A shown loading toast returns after the new one.
+     * Add toast to queue. If queue is full, drops oldest. A shown or queued loading toast returns after the new one.
      */
     fun enqueue(toast: Toast) {
         val interruptedLoading = _currentToast.value?.takeIf { it.isLoading }
         _queue.update { current ->
+            val (loading, others) = current.partition { it.isLoading }
             // Drop oldest when queue full
-            (current + toast + listOfNotNull(interruptedLoading)).takeLast(MAX_QUEUE_SIZE)
+            (others + toast + loading + listOfNotNull(interruptedLoading)).takeLast(MAX_QUEUE_SIZE)
         }
         dismissCurrentToast()
     }

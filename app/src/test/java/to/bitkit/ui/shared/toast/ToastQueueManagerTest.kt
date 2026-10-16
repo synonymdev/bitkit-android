@@ -48,4 +48,19 @@ class ToastQueueManagerTest : BaseUnitTest() {
 
         assertEquals(waitToast, sut.currentToast.value)
     }
+
+    @Test
+    fun `loading toast stays behind a second toast that interrupts it`() = test {
+        val sut = ToastQueueManager(backgroundScope)
+        val firstToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
+        val secondToast = Toast(type = Toast.ToastType.INFO, title = "Payment received", autoHide = true)
+        sut.enqueue(waitToast)
+        sut.enqueue(firstToast)
+        sut.enqueue(secondToast)
+        assertEquals(secondToast, sut.currentToast.value)
+
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
+
+        assertEquals(waitToast, sut.currentToast.value)
+    }
 }
