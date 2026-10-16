@@ -5,7 +5,7 @@
     payment link opened on the PIN screen in both orders, and one opened while the authorization
     sheet is open. Precondition: a wallet with the PIN on, Paykit enabled and a locally managed
     Pubky identity, and a requesting app that supplies a fresh pubkyauth://signin_grant URL for each
-    case. The iOS counterpart is not ported yet; see the cross-platform table in journeys/README.md.
+    case. Not ported to iOS yet: iOS still drops the pending sign-in link (synonymdev/bitkit-ios#985).
   </description>
   <actions>
     <action>Run adb shell am force-stop to.bitkit.dev</action>
