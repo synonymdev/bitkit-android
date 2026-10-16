@@ -412,6 +412,7 @@ class AppViewModel @Inject constructor(
     val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
+    private var transitionSheet: Sheet? = null
     private var paymentRequestSheetTransitionJob: Job? = null
     private var queuedPairingCodeRequestId: Long? = null
     private var receiveSheetContext: ReceiveSheetContext? = null
@@ -3058,7 +3059,7 @@ class AppViewModel @Inject constructor(
             return null
         }
 
-        if (_currentSheet.value is Sheet.PubkyAuth && !deferrable.isPubkyAuth) {
+        if (isPubkyAuthSheetShownOrPending() && !deferrable.isPubkyAuth) {
             enqueueDeferredScan(deferrable)
             return null
         }
@@ -3197,7 +3198,7 @@ class AppViewModel @Inject constructor(
         if (_isAuthenticated.value) return false
 
         synchronized(deferredScanLock) {
-            if (deferredScan == null || scan.isPubkyAuth) {
+            if (deferredScan == null || (scan.isPubkyAuth && deferredScan?.isPubkyAuth == false)) {
                 enqueueDeferredScan(scan)
             } else {
                 Logger.info(
@@ -3235,7 +3236,7 @@ class AppViewModel @Inject constructor(
                 Logger.info("Skipping duplicate queued scan from '${scan.source.label}': '$scanId'", context = TAG)
                 return
             }
-            if (queued?.isPubkyAuth == true && !scan.isPubkyAuth) {
+            if (!scan.isPubkyAuth && (queued?.isPubkyAuth == true || scanAfterPubkyAuth != null)) {
                 scanAfterPubkyAuth = scan
                 Logger.info("Queuing '${scan.source.label}' scan after a sign-in link: '$scanId'", context = TAG)
                 return
@@ -6622,6 +6623,7 @@ class AppViewModel @Inject constructor(
     fun showSheet(sheetType: Sheet) {
         if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
         val previousJob = sheetTransitionJob
+        transitionSheet = sheetType
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
             if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
@@ -6641,11 +6643,17 @@ class AppViewModel @Inject constructor(
         }
         sheetTransitionJob = nextJob
         nextJob.invokeOnCompletion {
-            if (sheetTransitionJob === nextJob) sheetTransitionJob = null
+            if (sheetTransitionJob === nextJob) {
+                sheetTransitionJob = null
+                transitionSheet = null
+            }
         }
         previousJob?.cancel()
         nextJob.start()
     }
+
+    private fun isPubkyAuthSheetShownOrPending() = _currentSheet.value is Sheet.PubkyAuth ||
+        (sheetTransitionJob?.isActive == true && transitionSheet is Sheet.PubkyAuth)
 
     private fun replacesSubscriptionReview(sheet: Sheet): Boolean {
         if (sheet !is Sheet.Send || !_sendUiState.value.isInitialSubscriptionPayment) return false
