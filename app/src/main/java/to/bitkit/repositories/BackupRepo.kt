@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -69,6 +70,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
@@ -583,7 +585,7 @@ class BackupRepo @Inject constructor(
     private suspend fun markBackupFailed(category: BackupCategory, backupRequired: Long, e: Throwable) {
         withContext(NonCancellable) {
             cacheStore.updateBackupStatus(category) {
-                if (it.required == backupRequired) {
+                if (it.required == backupRequired && e !is WalletBackupSnapshotChanged) {
                     failedBackupRequired[category] = backupRequired
                 } else {
                     failedBackupRequired -= category
@@ -592,7 +594,11 @@ class BackupRepo @Inject constructor(
             }
             runningBackups -= category
         }
-        Logger.error("Backup failed for: '$category'", e, context = TAG)
+        if (e is WalletBackupSnapshotChanged) {
+            Logger.debug("Deferred changing backup snapshot for: '$category'", context = TAG)
+        } else {
+            Logger.error("Backup failed for: '$category'", e, context = TAG)
+        }
     }
 
     private suspend fun getBackupDataBytes(category: BackupCategory): ByteArray = when (category) {
@@ -679,15 +685,32 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun getWalletBackupDataBytes(usdt: String? = null): ByteArray {
+        val sdkGeneration = paykitSdkService.runtimeGeneration
+        var attemptsRemaining = WALLET_SNAPSHOT_ATTEMPTS
+        while (true) {
+            check(paykitSdkService.runtimeGeneration == sdkGeneration) {
+                "Paykit identity changed during wallet snapshot"
+            }
+            val snapshot = runSuspendCatching { captureWalletBackupDataBytes(usdt, sdkGeneration) }
+            attemptsRemaining--
+            if (snapshot.exceptionOrNull() !is WalletBackupSnapshotChanged || attemptsRemaining == 0) {
+                return snapshot.getOrThrow()
+            }
+            yield()
+        }
+    }
+
+    private suspend fun captureWalletBackupDataBytes(usdt: String?, sdkGeneration: Long): ByteArray {
         check(!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
             "Wallet backup restore is incomplete"
         }
         lateinit var transfers: List<TransferEntity>
-        val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot().getOrThrow()
         val privateRepo = privatePaykitRepo.get()
         val privateVersion = privateRepo.backupStateVersion.value
-        val sdkVersion = paykitSdkService.backupStateVersion.value
         val paykitSdkBackupState = privateRepo.backupSnapshot().getOrThrow()
+        val reservationRepo = privatePaykitAddressReservationRepo.get()
+        val reservationVersion = reservationRepo.backupStateVersion.value
+        val privateReservations = reservationRepo.backupSnapshot().getOrThrow()
 
         val watchOnlyAccountSnapshot = watchOnlyAccountStore.backupSnapshot()
         val walletIndex = backupWalletIndex()
@@ -705,37 +728,41 @@ class BackupRepo @Inject constructor(
                     it.originalInputs == null && it.candidateTxids.isEmpty()
             } != true
         ) { "Waiting for signed receipt before wallet backup" }
-        check(
-            privateRepo.backupStateVersion.value == privateVersion &&
-                paykitSdkService.backupStateVersion.value == sdkVersion
-        ) { "Private payment state changed during wallet snapshot" }
-        val proofs = snapshotProofs
         val active = snapshotAttempt?.let { attempt ->
             val wire = ActiveOnchainAttemptBackup.from(
                 attempt,
                 Env.network.name.lowercase(),
                 vssStoreIdProvider.getBackupWalletBinding(walletIndex),
             )
-            validateActiveProof(wire, proofs)
+            validateActiveProof(wire, snapshotProofs)
             wire
         }
         val payload = WalletBackupV1(
             createdAt = currentTimeMillis(),
             transfers = transfers,
             privatePaykitHighestReservedReceiveIndexByAddressType = privateReservations,
-            paykitSdkBackupState = paykitSdkBackupState,
+            paykitSdkBackupState = paykitSdkBackupState.state,
             watchOnlyAccounts = watchOnlyAccountSnapshot.accounts,
             watchOnlyAccountAllocationState = watchOnlyAccountSnapshot.allocationState,
             usdtWallet = usdt ?: usdtRepo.get().backupSnapshot(),
             paykitPaymentState = PaykitPaymentStateBackup(
                 subscriptions = paykitPresentationStore.backupSnapshot(),
-                pendingProofs = proofs,
+                pendingProofs = snapshotProofs,
                 activeOnchainAttempt = active,
                 usdt = paykitUsdtPaymentRepo.get().backupSnapshot(),
                 acceptedOneTimeRequests = paykitPresentationStore.acceptedOneTimeBackupSnapshot(),
             ),
         )
 
+        check(paykitSdkService.runtimeGeneration == sdkGeneration) {
+            "Paykit identity changed during wallet snapshot"
+        }
+        if (privateRepo.backupStateVersion.value != privateVersion ||
+            paykitSdkService.backupStateVersion.value != paykitSdkBackupState.sdkVersion ||
+            reservationRepo.backupStateVersion.value != reservationVersion
+        ) {
+            throw WalletBackupSnapshotChanged()
+        }
         return json.encodeToString(payload).toByteArray()
     }
 
@@ -1080,6 +1107,10 @@ class BackupRepo @Inject constructor(
 
         private const val MINUTE_IN_MS = 60_000
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds
+
+        /** Maximum captures before deferring a changing wallet to the next scheduled backup. */
+        private const val WALLET_SNAPSHOT_ATTEMPTS = 3
+
         private const val BACKUP_CHECK_INTERVAL = 60 * 1000L // 1 minute
         private const val FAILED_BACKUP_CHECK_TIME = 30 * 60 * 1000L // 30 minutes
         private const val FAILED_BACKUP_NOTIFICATION_INTERVAL = 10 * 60 * 1000L // 10 minutes
@@ -1093,6 +1124,8 @@ class BackupRepo @Inject constructor(
         private val RESTORE_PENDING_TIMEOUT_MS = 10.minutes.inWholeMilliseconds
     }
 }
+
+internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
 
 /**
  * Result of handing a backup envelope's Core-owned fields to Core for migration.

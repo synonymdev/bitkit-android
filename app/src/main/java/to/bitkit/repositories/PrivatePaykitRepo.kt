@@ -697,20 +697,24 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
 
-    suspend fun backupSnapshot(): Result<String?> =
+    internal suspend fun backupSnapshot(): Result<PrivatePaykitBackupSnapshot> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                pubkyService.currentPublicKey() ?: return@runSuspendCatching null
-                json.encodeToString(
+                val sdkVersion = paykitSdkService.backupStateVersion.value
+                pubkyService.currentPublicKey()
+                    ?: return@runSuspendCatching PrivatePaykitBackupSnapshot(null, sdkVersion)
+                // This snapshot can be required before broadcast; it must not wait for payment to finish.
+                val exported = paykitSdkService.exportBackupState(Priority.Interactive)
+                val state = json.encodeToString(
                     PrivatePaykitBackup(
-                        // This snapshot can be required before broadcast; it must not wait for payment to finish.
-                        sdkState = paykitSdkService.exportBackupState(Priority.Interactive),
+                        sdkState = exported.state,
                         consumedPrivatePaymentListVersions = ensureState().contacts
                             .mapNotNull { (publicKey, contactState) ->
                                 contactState.consumedPrivatePaymentListVersion?.let { publicKey to it }
                             }.toMap(),
                     )
                 )
+                PrivatePaykitBackupSnapshot(state, exported.version)
             }
         }
 
@@ -2262,3 +2266,5 @@ class PrivatePaykitRepo @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 }
+
+internal data class PrivatePaykitBackupSnapshot(val state: String?, val sdkVersion: Long)
