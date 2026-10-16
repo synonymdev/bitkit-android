@@ -473,12 +473,12 @@ class PaykitPaymentProofRepo @Inject constructor(
                         it.kind == PaykitPaymentProofKind.Onchain && it.requestId == current.requestId &&
                             PubkyPublicKeyFormat.matches(it.identity, requireNotNull(current.payerIdentity))
                     }
-                    val safe = original.all {
-                        it.onchainWalletId == current.walletId && it.proofData == null &&
-                            !it.onchainAcceptanceVerified &&
-                            (it.paymentIdentifier == null || current.candidateTxids.any { txid ->
-                                txid.equals(it.paymentIdentifier, ignoreCase = true)
-                            })
+                    val safe = original.all { proof ->
+                        val identifier = proof.paymentIdentifier
+                        val isCandidate = identifier == null ||
+                            current.candidateTxids.any { it.equals(identifier, ignoreCase = true) }
+                        proof.onchainWalletId == current.walletId && proof.proofData == null &&
+                            !proof.onchainAcceptanceVerified && isCandidate
                     }
                     if (!safe) return@withLock false
                     for (proof in original) releaseDeniedPrivateConsumption(proof)

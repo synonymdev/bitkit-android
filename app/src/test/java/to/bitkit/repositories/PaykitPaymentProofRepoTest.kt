@@ -2638,7 +2638,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     )
 
     private fun unknownShopAttempt(txid: String) = acceptedAttempt(
-        paymentRequest(MethodId.entries.first { it.isOnchain }.rawValue), txid,
+        request = paymentRequest(MethodId.entries.first { it.isOnchain }.rawValue),
+        txid = txid,
     ).copy(
         evidence = OnchainSendEvidence.Unknown,
         payerIdentity = LOCAL_IDENTITY,
