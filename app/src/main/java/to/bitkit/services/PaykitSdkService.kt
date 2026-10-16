@@ -817,7 +817,13 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun syncPublicEndpoints(endpoints: List<Endpoint>): EndpointSyncReport {
+    suspend fun syncPublicEndpoints(endpoints: List<Endpoint>): EndpointSyncReport =
+        checkNotNull(syncPublicEndpoints(endpoints) { true })
+
+    internal suspend fun syncPublicEndpoints(
+        endpoints: List<Endpoint>,
+        canPublish: () -> Boolean,
+    ): EndpointSyncReport? {
         isSetup.await()
         val priority = if (endpoints.isEmpty()) {
             PaykitSdkOperationLock.Priority.Ordered
@@ -826,6 +832,7 @@ class PaykitSdkService @Inject constructor(
         }
         return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
+                if (!canPublish()) return@withStateRevisionTracking null
                 completeSdkCall {
                     handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
                 }

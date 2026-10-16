@@ -84,7 +84,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MILLIS))
-        whenever(paykitSdkService.syncPublicEndpoints(any())).thenReturn(syncReport())
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).thenReturn(syncReport())
         whenever { walletRepo.refreshReusableReceiveAddress() }.thenReturn(Result.success(Unit))
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
@@ -110,7 +110,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         val endpoints = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture(), any()) }
         assertEquals(listOf(MethodId.P2tr), endpoints.firstValue.map { it.methodId })
 
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
@@ -140,7 +140,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         assertEquals("010203", settingsFlow.value.publicPaykitBolt11PaymentHash)
 
         val captor = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(captor.capture()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(captor.capture(), any()) }
         assertEquals(
             listOf(MethodId.Bolt11, MethodId.P2tr),
             captor.firstValue.map { it.methodId },
@@ -168,7 +168,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         val endpoints = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture(), any()) }
         assertEquals("lnbc1replacement", endpoints.firstValue.single().value)
         assertEquals("040506", settingsFlow.value.publicPaykitBolt11PaymentHash)
     }
@@ -201,11 +201,11 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         resumeInvoice.complete(Unit)
         replacement.await()
 
-        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any(), any()) }
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
         deleting = false
         sut.syncCurrentPublishedEndpoints().getOrThrow()
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), any()) }
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
     }
 
@@ -227,13 +227,13 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         deleting = true
         resumeIdentity.complete(Unit)
         preparation.await().getOrThrow()
-        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any(), any()) }
 
         publicKey.value = "pubkyself"
         deleting = false
         val writeStarted = CompletableDeferred<Unit>()
         val resumeWrite = CompletableDeferred<Unit>()
-        whenever(paykitSdkService.syncPublicEndpoints(any())).doSuspendableAnswer {
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
             writeStarted.complete(Unit)
             resumeWrite.await()
             syncReport()
@@ -243,7 +243,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         deleting = true
         resumeWrite.complete(Unit)
         admittedWrite.await().getOrThrow()
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), any()) }
     }
 
     @Test
@@ -256,7 +256,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         )
         walletState.value = WalletState(onchainAddress = "bc1ptest")
         var offline = true
-        whenever(paykitSdkService.syncPublicEndpoints(any())).thenAnswer {
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).thenAnswer {
             if (offline) throw AppError("offline")
             syncReport()
         }
@@ -266,11 +266,32 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         sut.syncCurrentPublishedEndpoints(canPublish = { false }).getOrThrow()
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), any()) }
         offline = false
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
-        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(any(), any()) }
+    }
+
+    @Test
+    fun `SDK admission skip keeps public invoice replacement pending`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitCleanupPending = true,
+        )
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).thenReturn(null)
+        var canPublish = true
+        sut.syncCurrentPublishedEndpoints(canPublish = { canPublish }).getOrThrow()
+
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        val admission = argumentCaptor<() -> Boolean>()
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), admission.capture()) }
+        assertTrue(admission.firstValue())
+        canPublish = false
+        assertFalse(admission.firstValue())
     }
 
     @Test
@@ -286,7 +307,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         stubPublicInvoice("lnbc1paid", byteArrayOf(1, 2, 3))
         val writeStarted = CompletableDeferred<Unit>()
         val resumeWrite = CompletableDeferred<Unit>()
-        whenever(paykitSdkService.syncPublicEndpoints(any())).doSuspendableAnswer {
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
             writeStarted.complete(Unit)
             resumeWrite.await()
             syncReport()
@@ -322,7 +343,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         publication.await().getOrThrow()
         verifyBlocking(paykitSdkService) { syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Ordered) }
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), any()) }
         verifyBlocking(pubkyRepo, never()) { currentPublicKey() }
         verifyBlocking(pubkyRepo, never()) { awaitInitialization() }
         verifyBlocking(pubkyRepo, never()) { initialize() }
@@ -346,7 +367,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<Endpoint>>()
         verifyBlocking(walletRepo) { refreshReusableReceiveAddress() }
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(captor.capture()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(captor.capture(), any()) }
         assertEquals(listOf(MethodId.P2wpkh), captor.firstValue.map { it.methodId })
         assertEquals("bc1qfresh", captor.firstValue.single().value)
     }
@@ -366,7 +387,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         val error = sut.syncPublishedEndpoints(publish = true).exceptionOrNull()
 
         assertEquals(appError, error)
-        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any(), any()) }
     }
 
     @Test
@@ -391,7 +412,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             assertEquals("", settingsFlow.value.publicPaykitBolt11)
             assertEquals(false, settingsFlow.value.publicPaykitCleanupPending)
             inOrder(paykitSdkService) {
-                verify(paykitSdkService).syncPublicEndpoints(emptyList())
+                verify(paykitSdkService).syncPublicEndpoints(eq(emptyList()), any())
                 verify(paykitSdkService).syncPaykitApp(privatePaymentsEnabled = false, priority = priority)
             }
         }
@@ -408,14 +429,14 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         assertEquals(appError, error)
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(emptyList()) }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(eq(emptyList()), any()) }
     }
 
     @Test
     fun `syncPublishedEndpoints remove preserves both cleanup failures`() = test {
         val endpointError = RuntimeException("endpoint failed")
         val appError = RuntimeException("app registration failed")
-        whenever { paykitSdkService.syncPublicEndpoints(emptyList()) }.thenThrow(endpointError)
+        whenever { paykitSdkService.syncPublicEndpoints(eq(emptyList()), any()) }.thenThrow(endpointError)
         whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Interactive) }
             .thenThrow(appError)
 
@@ -427,7 +448,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         assertEquals(endpointError, error)
         assertEquals(listOf(appError), error?.suppressedExceptions)
         inOrder(paykitSdkService) {
-            verify(paykitSdkService).syncPublicEndpoints(emptyList())
+            verify(paykitSdkService).syncPublicEndpoints(eq(emptyList()), any())
             verify(paykitSdkService).syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Interactive)
         }
     }
@@ -435,7 +456,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `syncCurrentPublishedEndpoints returns publication failed when SDK sync fails`() = test {
         walletState.value = WalletState(onchainAddress = "bc1ptest")
-        whenever(paykitSdkService.syncPublicEndpoints(any())).thenReturn(
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).thenReturn(
             syncReport(
                 failed = listOf(
                     EndpointSyncChange(
@@ -460,7 +481,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         val error = sut.syncCurrentPublishedEndpoints(requireEndpoint = true).exceptionOrNull()
 
         assertEquals(PublicPaykitError.NoSupportedEndpoint, error)
-        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any(), any()) }
     }
 
     @Test

@@ -329,7 +329,7 @@ class PublicPaykitRepo @Inject constructor(
             if (!canPublish()) return@withLock false
             requireCurrentPublicKey()
             if (!canPublish()) return@withLock false
-            val report = paykitSdkService.syncPublicEndpoints(desiredEndpoints)
+            val report = paykitSdkService.syncPublicEndpoints(desiredEndpoints, canPublish) ?: return@withLock false
             report.failed.forEach { failure ->
                 Logger.warn(
                     "Failed to sync public Paykit endpoint '${failure.identifier}': ${failure.error}",
