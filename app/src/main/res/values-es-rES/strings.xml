@@ -1480,6 +1480,8 @@
     <string name="pubky_auth__homeserver">Servidor principal</string>
     <string name="pubky_auth__identity_unavailable">No se pudo cargar tu perfil de Pubky</string>
     <string name="pubky_auth__identity_unavailable_desc">Comprueba tu conexión e inténtalo de nuevo.</string>
+    <string name="pubky_auth__loading_identity">Cargando tu perfil de Pubky</string>
+    <string name="pubky_auth__loading_identity_desc">Tu solicitud de inicio de sesión se abrirá cuando tu perfil esté listo.</string>
     <string name="pubky_auth__no_identity">Se requiere una identidad Pubky</string>
     <string name="pubky_auth__no_identity_desc">Crea una identidad Pubky en tu perfil para aprobar solicitudes de autenticación.</string>
     <string name="pubky_auth__signup_description">Crea una nueva identidad Pubky en este servidor principal. Continúa solo si confías en él.</string>

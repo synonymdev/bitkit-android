@@ -1482,6 +1482,8 @@
     <string name="pubky_auth__homeserver">Homeserver</string>
     <string name="pubky_auth__identity_unavailable">Kon uw Pubky-profiel niet laden</string>
     <string name="pubky_auth__identity_unavailable_desc">Controleer uw verbinding en probeer het opnieuw.</string>
+    <string name="pubky_auth__loading_identity">Uw Pubky-profiel wordt geladen</string>
+    <string name="pubky_auth__loading_identity_desc">Uw inlogverzoek wordt geopend zodra uw profiel klaar is.</string>
     <string name="pubky_auth__no_identity">Pubky-identiteit vereist</string>
     <string name="pubky_auth__no_identity_desc">Maak een Pubky-identiteit aan in uw profiel om autorisatieverzoeken goed te keuren.</string>
     <string name="pubky_auth__signup_description">Maak een nieuwe Pubky-identiteit aan op deze homeserver. Ga alleen verder als u deze vertrouwt.</string>

@@ -1483,6 +1483,8 @@
     <string name="pubky_auth__homeserver">Homeserver</string>
     <string name="pubky_auth__identity_unavailable">No s\'ha pogut carregar el teu perfil de Pubky</string>
     <string name="pubky_auth__identity_unavailable_desc">Comprova la connexió i torna-ho a provar.</string>
+    <string name="pubky_auth__loading_identity">S\'està carregant el teu perfil de Pubky</string>
+    <string name="pubky_auth__loading_identity_desc">La teva sol·licitud d\'inici de sessió s\'obrirà quan el teu perfil estigui a punt.</string>
     <string name="pubky_auth__no_identity">Cal una identitat Pubky</string>
     <string name="pubky_auth__no_identity_desc">Crea una identitat Pubky al teu perfil per aprovar sol·licituds d\'autenticació.</string>
     <string name="pubky_auth__signup_description">Crea una nova identitat Pubky en aquest homeserver. Continua només si hi confies.</string>

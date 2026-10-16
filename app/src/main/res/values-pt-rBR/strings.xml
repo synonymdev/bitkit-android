@@ -1485,6 +1485,8 @@
     <string name="pubky_auth__homeserver">Homeserver</string>
     <string name="pubky_auth__identity_unavailable">Não Foi Possível Carregar Seu Perfil Pubky</string>
     <string name="pubky_auth__identity_unavailable_desc">Verifique sua conexão e tente novamente.</string>
+    <string name="pubky_auth__loading_identity">Carregando Seu Perfil Pubky</string>
+    <string name="pubky_auth__loading_identity_desc">Sua solicitação de login será aberta quando seu perfil estiver pronto.</string>
     <string name="pubky_auth__no_identity">Identidade Pubky Necessária</string>
     <string name="pubky_auth__no_identity_desc">Crie uma identidade Pubky no seu perfil para aprovar solicitações de autenticação.</string>
     <string name="pubky_auth__signup_description">Crie uma nova identidade Pubky neste homeserver. Só continue se você confiar nele.</string>
