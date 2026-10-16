@@ -11852,7 +11852,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         advanceTimeBy(1_000)
         runCurrent()
-        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
 
         sut.stopPaykitPaymentRequestPolling()
         runCurrent()
@@ -11860,13 +11860,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         settingsData.update { it.copy(publicPaykitBolt11ExpiresAtMillis = 1L) }
         advanceTimeBy(1_000)
         runCurrent()
-        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
 
         sut.startPaykitPaymentRequestPolling()
         runCurrent()
         advanceTimeBy(1_000)
         runCurrent()
-        verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
         sut.stopPaykitPaymentRequestPolling()
     }
 
@@ -11883,12 +11883,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         settingsData.update { it.copy(publicPaykitBolt11ExpiresAtMillis = 1L) }
         advanceTimeBy(1_000)
         runCurrent()
-        verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any())
+        verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
 
         isProfileDeletionInProgress.update { false }
         advanceTimeBy(1_000)
         runCurrent()
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
     }
 
     @Test
@@ -11907,8 +11907,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = true)
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(true), eq(false), any())
     }
 
     @Test
@@ -11927,7 +11927,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
     }
 
     @Test
@@ -12420,8 +12420,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(activityRepo).notifyPaymentActivityChanged()
         verify(privatePaykitRepo).handleReceivedPayment("received-hash")
         verify(paykitPaymentRequestRepo, never()).refresh(any(), any())
-        verify(publicPaykitRepo).refreshPublishedBolt11ForPayment("received-hash", publish = false)
-        verify(publicPaykitRepo, never()).refreshPublishedBolt11ForPayment(any(), eq(true))
+        val publicationAdmission = argumentCaptor<() -> Boolean>()
+        verify(publicPaykitRepo).refreshPublishedBolt11ForPayment(eq("received-hash"), publicationAdmission.capture())
+        assertFalse(publicationAdmission.firstValue())
+        isProfileDeletionInProgress.value = false
+        assertTrue(publicationAdmission.firstValue())
+        pubkyPublicKey.value = null
+        assertFalse(publicationAdmission.firstValue())
     }
 
     @Test
@@ -12563,19 +12568,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private Paykit refresh reconciles pending public state when sharing is enabled`() = test {
+    fun `private Paykit refresh leaves pending public state for the publisher to acknowledge`() = test {
         isPaykitEnabled.value = true
         settingsData.value = SettingsData(
             sharesPublicPaykitEndpoints = true,
             publicPaykitCleanupPending = true,
         )
-        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints()).thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).thenReturn(Result.success(Unit))
 
         sut.refreshPrivatePaykitEndpoints()
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints()
-        assertFalse(settingsData.value.publicPaykitCleanupPending)
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
         verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
     }
 
@@ -12783,7 +12788,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     )
 
     private suspend fun enablePublicPaykitSharing() {
-        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any())).thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).thenReturn(Result.success(Unit))
         walletState.value = WalletState(onchainAddress = "bc1qtest")
         isPaykitEnabled.value = true
         settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)

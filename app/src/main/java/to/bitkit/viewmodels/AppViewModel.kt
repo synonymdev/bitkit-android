@@ -860,8 +860,18 @@ class AppViewModel @Inject constructor(
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
 
-        publicPaykitRepo.syncCurrentPublishedEndpoints(forceRefreshLightning = forceRefreshLightning)
+        publicPaykitRepo.syncCurrentPublishedEndpoints(
+            forceRefreshLightning = forceRefreshLightning,
+            canPublish = publicPaykitPublicationAdmission(),
+        )
             .onFailure { Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG) }
+    }
+
+    private fun publicPaykitPublicationAdmission(): () -> Boolean {
+        val signIn = pubkyRepo.currentSignIn()
+        return {
+            signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
     }
 
     private fun observePrivatePaykitContacts() {
@@ -1984,13 +1994,15 @@ class AppViewModel @Inject constructor(
             if (privatePaykitRepo.isProfileDeletionInProgress.value) return@reconcilePendingEndpoints
             if (settings.publicPaykitCleanupPending) {
                 val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
-                    publicPaykitRepo.syncCurrentPublishedEndpoints()
+                    publicPaykitRepo.syncCurrentPublishedEndpoints(canPublish = publicPaykitPublicationAdmission())
                 } else {
                     publicPaykitRepo.syncPublishedEndpoints(publish = false)
                 }
                 reconciliationResult
                     .onSuccess {
-                        settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                        if (!settings.sharesPublicPaykitEndpoints) {
+                            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                        }
                     }
                     .onFailure {
                         Logger.warn("Failed to reconcile public Paykit state for '$reason'", it, context = TAG)
@@ -2461,7 +2473,7 @@ class AppViewModel @Inject constructor(
             }
             publicPaykitRepo.refreshPublishedBolt11ForPayment(
                 paymentHash,
-                publish = !privatePaykitRepo.isProfileDeletionInProgress.value,
+                canPublish = publicPaykitPublicationAdmission(),
             ).onFailure {
                 Logger.warn(
                     "Failed to refresh public Paykit invoice for '$paymentHash'",

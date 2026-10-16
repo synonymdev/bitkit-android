@@ -7,7 +7,8 @@
     Measure confirmation to onboarding and check logs for any uncertain-write safety wait.
     During deletion, check the indicator on Delete Profile. Save stays disabled with its label visible.
     Cleanup may still wait for admitted operations and remote safety checks; no fixed duration is expected.
-    See the suite README for controlled automatic-admission and deletion-failure checks.
+    See the suite README for controlled automatic-admission, contact-link cancellation,
+    deletion-failure ordering and public-publication retry checks.
   </description>
   <actions>
     <action>Open the existing profile from the Home header</action>

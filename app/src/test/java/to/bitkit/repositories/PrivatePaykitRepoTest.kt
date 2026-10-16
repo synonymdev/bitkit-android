@@ -2696,6 +2696,129 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `profile deletion records received invoices without rotating private endpoints`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = true,
+            publicPaykitOnchainEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+            .thenReturn(Result.success(PRIVATE_BOLT11))
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+        sut.beginProfileDeletion()
+        clearInvocations(paykitSdkService)
+
+        sut.handleReceivedPayment("090909").getOrThrow()
+
+        assertEquals(CONTACT_KEY, sut.contactPublicKeyForPrivateInvoicePaymentHash("090909"))
+        assertEquals(listOf("090909"), cacheData.value.contacts.getValue(CONTACT_KEY).receivedInvoicePaymentHashes)
+        verifyNoInteractions(paykitSdkService)
+        sut.endProfileDeletion()
+        sut.refreshKnownSavedContactEndpoints("deletion ended").getOrThrow()
+        runCurrent()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false))
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `profile deletion defers onchain rotation until the retained contacts resume`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+        whenever(addressReservationRepo.contactsWithUsedReservedAddresses()).thenReturn(listOf(CONTACT_KEY))
+        whenever(addressReservationRepo.currentContactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+            .thenReturn(CONTACT_KEY)
+        sut.beginProfileDeletion()
+        clearInvocations(paykitSdkService)
+
+        sut.handleOnchainActivity().getOrThrow()
+        sut.handleOnchainActivity(listOf(PRIVATE_ADDRESS)).getOrThrow()
+
+        verifyNoInteractions(paykitSdkService)
+        sut.endProfileDeletion()
+        sut.refreshKnownSavedContactEndpoints("deletion ended").getOrThrow()
+        runCurrent()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false))
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `private publication rechecks deletion generation after final identity lookup`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+        whenever(addressReservationRepo.contactsWithUsedReservedAddresses()).thenReturn(listOf(CONTACT_KEY))
+        var prepared = false
+        whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)).thenAnswer {
+            prepared = true
+            Result.success(PRIVATE_ADDRESS)
+        }
+        val identityStarted = CompletableDeferred<Unit>()
+        val resumeIdentity = CompletableDeferred<Unit>()
+        whenever(pubkyService.currentPublicKey()).doSuspendableAnswer {
+            if (prepared) {
+                identityStarted.complete(Unit)
+                resumeIdentity.await()
+            }
+            OWN_KEY
+        }
+        clearInvocations(paykitSdkService)
+        val rotation = async { sut.handleOnchainActivity() }
+        runCurrent()
+        assertTrue(identityStarted.isCompleted)
+        sut.beginProfileDeletion()
+        sut.endProfileDeletion()
+        resumeIdentity.complete(Unit)
+        rotation.await().getOrThrow()
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `invalidated publication eligibility cannot fall back to new link preparation`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        val settingsStarted = CompletableDeferred<Unit>()
+        val resumeSettings = CompletableDeferred<Unit>()
+        whenever(settingsStore.data).thenReturn(
+            flow {
+                if (!settingsStarted.isCompleted) {
+                    settingsStarted.complete(Unit)
+                    resumeSettings.await()
+                }
+                emit(settingsData.value)
+            }
+        )
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        assertTrue(settingsStarted.isCompleted)
+        sut.beginProfileDeletion()
+        sut.removePublishedEndpointsForCleanup("profile deletion").getOrThrow()
+        assertFalse(cacheData.value.cleanupPending)
+        clearInvocations(paykitSdkService)
+        resumeSettings.complete(Unit)
+        runCurrent()
+        sut.awaitContactPreparation()
+
+        verifyNoInteractions(paykitSdkService)
+        sut.endProfileDeletion()
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `cleanup stops a stalled preparation before later contacts are visited`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,

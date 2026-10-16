@@ -225,9 +225,10 @@ class PrivatePaykitRepo @Inject constructor(
         requireImmediatePublication: Boolean = false,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
+            val generation = preparationGeneration
             val keys = rememberSavedContacts(publicKeys, replacing = true)
             if (!canPublishPrivateEndpoints()) {
-                prepareRelevantPrivateLinksIfAvailable(keys, "prepare")
+                prepareRelevantPrivateLinksIfAvailable(keys, "prepare", generation)
                 if (requireImmediatePublication && keys.isNotEmpty()) throw PrivatePaykitError.PrivateUnavailable
                 return@runSuspendCatching
             }
@@ -330,7 +331,12 @@ class PrivatePaykitRepo @Inject constructor(
                                 priority = Priority.Background,
                             ).getOrThrow()
                         } else {
-                            prepareRelevantPrivateLinksIfAvailable(keys, "contact preparation", Priority.Background)
+                            prepareRelevantPrivateLinksIfAvailable(
+                                keys,
+                                "contact preparation",
+                                generation,
+                                Priority.Background,
+                            )
                         }
                     }.onFailure {
                         Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG)
@@ -1057,8 +1063,8 @@ class PrivatePaykitRepo @Inject constructor(
         requireImmediatePublication: Boolean,
         status: IdentityStatus? = null,
     ): Boolean {
-        val isCurrent = generation == preparationGeneration &&
-            (status?.publicKey ?: pubkyService.currentPublicKey()) == identity
+        val currentIdentity = status?.publicKey ?: pubkyService.currentPublicKey()
+        val isCurrent = !isDeletingProfile && generation == preparationGeneration && currentIdentity == identity
         if (!isCurrent && requireImmediatePublication) throw PrivatePaykitError.PrivateUnavailable
         return isCurrent
     }
@@ -1185,24 +1191,29 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun prepareRelevantPrivateLinksIfAvailable(
         publicKeys: Collection<String>,
         reason: String,
+        generation: Int,
         priority: Priority = Priority.Ordered,
     ) {
+        if (isDeletingProfile || generation != preparationGeneration) return
         if (isContactSharingCleanupPending() || !hasPrivatePaymentAccessForCurrentProfile()) return
-        drainAndSchedulePrivateLinkRetries(reason, publicKeys.distinct(), priority)
+        if (isDeletingProfile || generation != preparationGeneration) return
+        drainAndSchedulePrivateLinkRetries(reason, publicKeys.distinct(), generation, priority)
     }
 
     private suspend fun drainAndSchedulePrivateLinkRetries(
         reason: String,
         retryKeys: Collection<String>,
+        generation: Int,
         priority: Priority = Priority.Ordered,
     ) {
         val newKeys = retryKeys.toSet() - pendingMessageDrainRetries.keys
         val pendingKeys = pendingPrivateMessageDrainKeys(newKeys, retryMissingPeers = true, priority = priority)
-        if (pendingKeys.isEmpty()) return
+        if (pendingKeys.isEmpty() || isDeletingProfile || generation != preparationGeneration) return
 
         drainPendingPrivateMessages(reason, retryKeys = pendingKeys, priority = priority)
+        if (isDeletingProfile || generation != preparationGeneration) return
         val pendingRetryKeys = pendingPrivateMessageDrainKeys(pendingKeys, priority = priority)
-        if (pendingRetryKeys.isNotEmpty()) {
+        if (pendingRetryKeys.isNotEmpty() && !isDeletingProfile && generation == preparationGeneration) {
             schedulePendingPrivateMessageDrainRetries(reason, retryKeys = pendingRetryKeys)
         }
     }
@@ -2076,18 +2087,20 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun canPublishPrivateEndpoints(status: IdentityStatus? = null): Boolean {
+        if (isDeletingProfile) return false
         val settings = settingsStore.data.first()
         val locallyEligible = settings.sharesPrivatePaykitEndpoints &&
             !isContactSharingCleanupPending() &&
             App.currentActivity?.value != null &&
             walletRepo.walletExists() &&
             lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
-        if (!locallyEligible) return false
-        return if (status?.publicKey != null) {
+        if (!locallyEligible || isDeletingProfile) return false
+        val hasAccess = if (status?.publicKey != null) {
             status.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
         } else {
             hasPrivatePaymentAccessForCurrentProfile()
         }
+        return hasAccess && !isDeletingProfile
     }
 
     private suspend fun hasPrivatePaymentAccessForCurrentProfile(): Boolean = runSuspendCatching {

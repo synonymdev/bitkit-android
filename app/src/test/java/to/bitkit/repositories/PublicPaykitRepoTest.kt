@@ -7,6 +7,7 @@ import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -157,9 +159,9 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         )
         stubPublicInvoice("lnbc1replacement", byteArrayOf(4, 5, 6))
 
-        sut.refreshPublishedBolt11ForPayment("unrelated", publish = false).getOrThrow()
+        sut.refreshPublishedBolt11ForPayment("unrelated", canPublish = { false }).getOrThrow()
         assertEquals("lnbc1paid", settingsFlow.value.publicPaykitBolt11)
-        sut.refreshPublishedBolt11ForPayment("010203", publish = false).getOrThrow()
+        sut.refreshPublishedBolt11ForPayment("010203", canPublish = { false }).getOrThrow()
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
         assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
         verifyNoInteractions(paykitSdkService)
@@ -169,6 +171,134 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture()) }
         assertEquals("lnbc1replacement", endpoints.firstValue.single().value)
         assertEquals("040506", settingsFlow.value.publicPaykitBolt11PaymentHash)
+    }
+
+    @Test
+    fun `paid public invoice replacement checks deletion after invoice preparation`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitOnchainEnabled = false,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitBolt11 = "lnbc1paid",
+            publicPaykitBolt11PaymentHash = "010203",
+            publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+        )
+        stubPublicInvoice("lnbc1replacement", byteArrayOf(4, 5, 6))
+        val invoiceStarted = CompletableDeferred<Unit>()
+        val resumeInvoice = CompletableDeferred<Unit>()
+        whenever(lightningRepo.createInvoice(null, "", PUBLIC_BOLT11_EXPIRY_SECONDS)).doSuspendableAnswer {
+            invoiceStarted.complete(Unit)
+            resumeInvoice.await()
+            Result.success("lnbc1replacement")
+        }
+        var deleting = false
+        val replacement = async {
+            sut.refreshPublishedBolt11ForPayment("010203", canPublish = { !deleting }).getOrThrow()
+        }
+        invoiceStarted.await()
+        assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        deleting = true
+        resumeInvoice.complete(Unit)
+        replacement.await()
+
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        deleting = false
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `public publication rechecks admission after identity lookup without cancelling admitted writes`() = test {
+        settingsFlow.value = SettingsData(publicPaykitLightningEnabled = false, publicPaykitUsdtEnabled = false)
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        publicKey.value = null
+        val identityStarted = CompletableDeferred<Unit>()
+        val resumeIdentity = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.currentPublicKey()).doSuspendableAnswer {
+            identityStarted.complete(Unit)
+            resumeIdentity.await()
+            Result.success("pubkyself")
+        }
+        var deleting = false
+        val preparation = async { sut.syncCurrentPublishedEndpoints(canPublish = { !deleting }) }
+        identityStarted.await()
+        deleting = true
+        resumeIdentity.complete(Unit)
+        preparation.await().getOrThrow()
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
+
+        publicKey.value = "pubkyself"
+        deleting = false
+        val writeStarted = CompletableDeferred<Unit>()
+        val resumeWrite = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.syncPublicEndpoints(any())).doSuspendableAnswer {
+            writeStarted.complete(Unit)
+            resumeWrite.await()
+            syncReport()
+        }
+        val admittedWrite = async { sut.syncCurrentPublishedEndpoints(canPublish = { !deleting }) }
+        writeStarted.await()
+        deleting = true
+        resumeWrite.complete(Unit)
+        admittedWrite.await().getOrThrow()
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+    }
+
+    @Test
+    fun `paid public invoice replacement stays pending after failure until an admitted retry succeeds`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitBolt11PaymentHash = "paid",
+        )
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        var offline = true
+        whenever(paykitSdkService.syncPublicEndpoints(any())).thenAnswer {
+            if (offline) throw AppError("offline")
+            syncReport()
+        }
+        assertTrue(sut.refreshPublishedBolt11ForPayment("paid").isFailure)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+
+        sut.syncCurrentPublishedEndpoints(canPublish = { false }).getOrThrow()
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any()) }
+        offline = false
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(any()) }
+    }
+
+    @Test
+    fun `admitted public publication cannot acknowledge a later paid invoice invalidation`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitOnchainEnabled = false,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitBolt11 = "lnbc1paid",
+            publicPaykitBolt11PaymentHash = "010203",
+            publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+        )
+        stubPublicInvoice("lnbc1paid", byteArrayOf(1, 2, 3))
+        val writeStarted = CompletableDeferred<Unit>()
+        val resumeWrite = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.syncPublicEndpoints(any())).doSuspendableAnswer {
+            writeStarted.complete(Unit)
+            resumeWrite.await()
+            syncReport()
+        }
+        val publication = async { sut.syncCurrentPublishedEndpoints() }
+        writeStarted.await()
+        sut.refreshPublishedBolt11ForPayment("010203", canPublish = { false }).getOrThrow()
+        resumeWrite.complete(Unit)
+        publication.await().getOrThrow()
+
+        assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
     }
 
     @Test
