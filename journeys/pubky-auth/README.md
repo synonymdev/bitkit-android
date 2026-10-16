@@ -10,6 +10,9 @@
   `PubkyAuthOK`. A restore that fails while
   the device is offline needs the device network toggled, which the journey environment does not
   provide, so that case is a manual test.
+- `signin-with-second-link.xml` checks that a payment link opened while a sign-in link is pending,
+  on the PIN screen in either order or over the open authorization sheet, opens only after the
+  authorization sheet closes, and never drops the sign-in.
 
 ## Grant signup
 

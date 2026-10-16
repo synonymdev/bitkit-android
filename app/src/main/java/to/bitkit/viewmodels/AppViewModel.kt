@@ -341,6 +341,7 @@ class AppViewModel @Inject constructor(
 
     private val deferredScanLock = Any()
     private var deferredScan: DeferredScan? = null
+    private var scanAfterPubkyAuth: DeferredScan? = null
 
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
@@ -411,6 +412,7 @@ class AppViewModel @Inject constructor(
     val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
+    private var transitionSheet: Sheet? = null
     private var paymentRequestSheetTransitionJob: Job? = null
     private var queuedPairingCodeRequestId: Long? = null
     private var receiveSheetContext: ReceiveSheetContext? = null
@@ -568,9 +570,8 @@ class AppViewModel @Inject constructor(
 
     private fun markDeferredScanUnlocked() {
         synchronized(deferredScanLock) {
-            val queued = deferredScan ?: return
-            if (queued.suppressQuickPay) return
-            deferredScan = queued.copy(suppressQuickPay = true)
+            deferredScan = deferredScan?.copy(suppressQuickPay = true)
+            scanAfterPubkyAuth = scanAfterPubkyAuth?.copy(suppressQuickPay = true)
         }
     }
 
@@ -1894,6 +1895,9 @@ class AppViewModel @Inject constructor(
             if (targetsRequest(deferredScan?.contactPaymentContext)) {
                 deferredScan = null
             }
+            if (targetsRequest(scanAfterPubkyAuth?.contactPaymentContext)) {
+                scanAfterPubkyAuth = null
+            }
         }
         val shouldHideRequestSendSheet = if (requestId != null) {
             synchronized(contactPaymentContextLock) {
@@ -3055,6 +3059,11 @@ class AppViewModel @Inject constructor(
             return null
         }
 
+        if (isPubkyAuthSheetShownOrPending() && !deferrable.isPubkyAuth) {
+            enqueueDeferredScan(deferrable)
+            return null
+        }
+
         val previousJob = scheduled?.job
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             clearPaymentRequestPreparation(previousPreparation)
@@ -3193,7 +3202,7 @@ class AppViewModel @Inject constructor(
         if (_isAuthenticated.value) return false
 
         synchronized(deferredScanLock) {
-            if (deferredScan == null) {
+            if (deferredScan == null || (scan.isPubkyAuth && deferredScan?.isPubkyAuth == false)) {
                 enqueueDeferredScan(scan)
             } else {
                 Logger.info(
@@ -3222,13 +3231,23 @@ class AppViewModel @Inject constructor(
         synchronized(deferredScanLock) {
             val queued = deferredScan
             if (queued?.data?.removeLightningSchemes() == normalized) {
-                val suppressQuickPay = scan.suppressQuickPay || queued.suppressQuickPay
-                if (scan.contactPaymentContext != null) {
-                    deferredScan = scan.copy(suppressQuickPay = suppressQuickPay)
+                deferredScan = queued.mergeDuplicate(scan, scanId)
+                return
+            }
+            if (!scan.isPubkyAuth && (queued?.isPubkyAuth == true || scanAfterPubkyAuth != null)) {
+                val followUp = scanAfterPubkyAuth
+                if (followUp?.data?.removeLightningSchemes() == normalized) {
+                    scanAfterPubkyAuth = followUp.mergeDuplicate(scan, scanId)
                     return
                 }
-                deferredScan = queued.copy(suppressQuickPay = suppressQuickPay)
-                Logger.info("Skipping duplicate queued scan from '${scan.source.label}': '$scanId'", context = TAG)
+                scanAfterPubkyAuth = scan
+                Logger.info("Queuing '${scan.source.label}' scan after a sign-in link: '$scanId'", context = TAG)
+                return
+            }
+            if (queued != null && scan.isPubkyAuth && !queued.isPubkyAuth) {
+                scanAfterPubkyAuth = queued
+                deferredScan = scan
+                Logger.info("Queuing '${scan.source.label}' sign-in link first: '$scanId'", context = TAG)
                 return
             }
             if (queued != null) {
@@ -3243,7 +3262,16 @@ class AppViewModel @Inject constructor(
         Logger.info("Queuing '${scan.source.label}' scan for deferred handling: '$scanId'", context = TAG)
     }
 
-    private fun hasDeferredScan() = synchronized(deferredScanLock) { deferredScan != null }
+    private fun DeferredScan.mergeDuplicate(scan: DeferredScan, scanId: String): DeferredScan {
+        val suppressQuickPay = scan.suppressQuickPay || this.suppressQuickPay
+        if (scan.contactPaymentContext != null) return scan.copy(suppressQuickPay = suppressQuickPay)
+        Logger.info("Skipping duplicate queued scan from '${scan.source.label}': '$scanId'", context = TAG)
+        return copy(suppressQuickPay = suppressQuickPay)
+    }
+
+    private fun hasDeferredScan() = synchronized(deferredScanLock) {
+        deferredScan != null || scanAfterPubkyAuth != null
+    }
 
     private fun isScanPendingOrActive(): Boolean {
         if (scheduledScan?.job?.isActive == true) return true
@@ -3266,7 +3294,7 @@ class AppViewModel @Inject constructor(
         if (_currentSheet.value != null) return
 
         val pending = synchronized(deferredScanLock) {
-            deferredScan.also { deferredScan = null }
+            deferredScan?.also { deferredScan = null } ?: scanAfterPubkyAuth.also { scanAfterPubkyAuth = null }
         } ?: run {
             viewModelScope.launch { presentNextIncomingPaykitPaymentRequest() }
             return
@@ -6605,6 +6633,7 @@ class AppViewModel @Inject constructor(
     fun showSheet(sheetType: Sheet) {
         if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
         val previousJob = sheetTransitionJob
+        transitionSheet = sheetType
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
             if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
@@ -6624,11 +6653,17 @@ class AppViewModel @Inject constructor(
         }
         sheetTransitionJob = nextJob
         nextJob.invokeOnCompletion {
-            if (sheetTransitionJob === nextJob) sheetTransitionJob = null
+            if (sheetTransitionJob === nextJob) {
+                sheetTransitionJob = null
+                transitionSheet = null
+            }
         }
         previousJob?.cancel()
         nextJob.start()
     }
+
+    private fun isPubkyAuthSheetShownOrPending() = _currentSheet.value is Sheet.PubkyAuth ||
+        (sheetTransitionJob?.isActive == true && transitionSheet is Sheet.PubkyAuth)
 
     private fun replacesSubscriptionReview(sheet: Sheet): Boolean {
         if (sheet !is Sheet.Send || !_sendUiState.value.isInitialSubscriptionPayment) return false
@@ -7833,7 +7868,9 @@ private data class DeferredScan(
     val contactPaymentContext: ContactPaymentContext?,
     val allowPubkyAuth: Boolean,
     val suppressQuickPay: Boolean,
-)
+) {
+    val isPubkyAuth: Boolean get() = allowPubkyAuth && PubkyAuthRequest.isProtocolUrl(data)
+}
 
 // region send contract
 @Stable

@@ -4814,7 +4814,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `new locked payment scan supersedes a pubky auth deeplink waiting for identity`() = test {
+    fun `locked payment scan runs after a pubky auth deeplink waiting for identity`() = test {
         enablePaykitUi()
         advanceUntilIdle()
         sut.setIsAuthenticated(true)
@@ -4840,10 +4840,135 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         advanceUntilIdle()
 
+        assertEquals(Sheet.PubkyAuth("pubkyauth://signin_grant"), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(bolt11, sut.sendUiState.value.addressInput)
-        verify(pubkyRepo, never()).hasSecretKey()
-        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `links opened on the PIN screen open the sign-in first and the payment once after it`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val bolt11 = "lnbcrt1pinscreenscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        val authUrl = "pubkyauth://signin_grant"
+        listOf(listOf(authUrl, "lightning:$bolt11"), listOf("lightning:$bolt11", authUrl)).forEach { links ->
+            sut.setIsAuthenticated(true)
+            settingsData.value = SettingsData(isPinEnabled = true)
+            sut.resetIsAuthenticatedState()
+            advanceUntilIdle()
+
+            links.forEach { sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, it.toUri())) }
+            advanceUntilIdle()
+            assertNull(sut.currentSheet.value)
+            sut.setIsAuthenticated(true)
+            advanceUntilIdle()
+
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            sut.hideSheet()
+            advanceUntilIdle()
+            assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+            assertEquals(bolt11, sut.sendUiState.value.addressInput)
+            sut.hideSheet()
+            advanceUntilIdle()
+            assertNull(sut.currentSheet.value)
+        }
+    }
+
+    @Test
+    fun `newer sign-in link opened on the PIN screen wins over an older waiting one`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val older = "pubkyauth://signin_grant?caps=/pub/older/:rw"
+        val newer = "pubkyauth://signin_grant?caps=/pub/newer/:rw"
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, older.toUri()))
+        runCurrent()
+        settingsData.value = SettingsData(isPinEnabled = true)
+        sut.resetIsAuthenticatedState()
+        runCurrent()
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, newer.toUri()))
+        runCurrent()
+        pubkyPublicKey.value = testPublicKey
+        initialized.complete(Unit)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkyAuth(newer), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `newer payment link replaces the one queued behind a pending sign-in`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val older = "lnbcrt1olderscan"
+        val newer = "lnbcrt1newerscan"
+        stubLightningScan(bolt11 = older, amountSats = 500u)
+        stubLightningScan(bolt11 = newer, amountSats = 600u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        val authUrl = "pubkyauth://signin_grant"
+        sut.setIsAuthenticated(true)
+        settingsData.value = SettingsData(isPinEnabled = true)
+        sut.resetIsAuthenticatedState()
+        advanceUntilIdle()
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$older".toUri()))
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$newer".toUri()))
+        advanceUntilIdle()
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(newer, sut.sendUiState.value.addressInput)
+        sut.hideSheet()
+        advanceUntilIdle()
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `payment deeplink waits until the open pubky auth sheet closes`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val bolt11 = "lnbcrt1authsheetscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceUntilIdle()
+        assertEquals(Sheet.PubkyAuth("pubkyauth://signin_grant"), sut.currentSheet.value)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+        assertEquals(Sheet.PubkyAuth("pubkyauth://signin_grant"), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(bolt11, sut.sendUiState.value.addressInput)
     }
 
     @Test
@@ -7822,6 +7947,36 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `payment deferred by the lock and reopened over the pubky auth sheet skips QuickPay`() = test {
+        val bolt11 = "lnbcrt1authsheetquickpay"
+        enableQuickPay()
+        enablePaykitUi()
+        settingsData.value = settingsData.value.copy(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        sut.lockOnBackground()
+        advanceUntilIdle()
+        val authUrl = "pubkyauth://signin_grant"
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+        sut.hideSheet()
         advanceUntilIdle()
 
         assertNull(sut.quickPayData.value)
