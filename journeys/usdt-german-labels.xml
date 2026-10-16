@@ -16,7 +16,7 @@
     <action>Open Receive, select the USDT tab and verify the title reads "Dollar empfangen" and the network control reads "Netzwerk: Arbitrum One"</action>
     <action>Tap the network control and verify the network list is titled "USDT-Netzwerk" and its note starts "Hinweis: Unabhängig vom Empfangsnetzwerk"</action>
     <action>On that list, tap "Einzahlungen anderer Netze" and verify the screen is titled "Einzahlungen anderer Netze" and the empty state reads "Noch keine Einzahlungen."; go back and close Receive</action>
-    <action>Open the USDT wallet, then Send, and verify the screen is titled "USDT senden" and the network row is captioned "Netzwerk"; go back without paying</action>
+    <action>Open the USDT wallet, then Send, and verify the screen is titled "USDT senden" and the network row is captioned "NETZWERK"; go back without paying</action>
     <action>Verify from screenshots of each screen above that no German label is truncated or overlaps its neighbour</action>
     <action>Open Settings, Language (id "LanguageSettings"), select the language recorded at the start, then terminate and relaunch Bitkit</action>
   </actions>
