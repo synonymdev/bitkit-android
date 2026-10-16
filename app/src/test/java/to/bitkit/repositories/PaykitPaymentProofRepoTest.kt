@@ -15,6 +15,7 @@ import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PubkyIdentityCapability
@@ -81,6 +82,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -2586,6 +2589,58 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(repo.onchainRequestHasEnded(attempt))
     }
 
+    private fun recurringShopRecord(quoteExpiresAt: Instant): Pair<PaymentRequestRecord, PaykitBillingPeriod> {
+        val start = Instant.fromEpochSeconds((Clock.System.now() - 10.days).epochSeconds)
+        val end = java.time.Instant.ofEpochSecond(start.epochSeconds).atZone(java.time.ZoneOffset.UTC).plusMonths(1)
+            .toEpochSecond().let(Instant::fromEpochSeconds)
+        val period = PaykitBillingPeriod(start, end)
+        val sdkPeriod = BillingPeriod(period.startsAt.toString(), period.endsAt.toString())
+        val base = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        val onchain = MethodId.entries.first { it.isOnchain }.rawValue
+        return base.copy(
+            terms = requireNotNull(base.terms).copy(
+                paymentReference = mock<PaymentReference> { on { exportText() }.thenReturn("payment-reference") },
+                recurrence = PaymentRequestRecurrence(1u, "month", sdkPeriod.startsAt, sdkPeriod.startsAt, null),
+                conversion = PaymentConversion.PerPeriod,
+                acceptedPaymentEndpointIdentifiers = listOf(onchain),
+            ),
+            conversionQuotes = listOf(
+                PaymentConversionQuoteRecord(
+                    "quote-1", sdkPeriod, listOf(ConversionRate("btc", "1")), sdkPeriod.startsAt,
+                    quoteExpiresAt.toString(), null,
+                )
+            ),
+        ) to period
+    }
+
+    private fun recurringAttempt(period: PaykitBillingPeriod) = unknownShopAttempt("ab".repeat(32)).let {
+        it.copy(requestId = requireNotNull(it.requestId).copy(billingPeriodStartsAt = period.startsAt.toString()))
+    }
+
+    @Test
+    fun `expired quote ends an active subscription period`() = test {
+        for ((expiresAt, ended) in listOf(Clock.System.now() + 1.days to false, Clock.System.now() - 1.minutes to true)) {
+            val (record, period) = recurringShopRecord(expiresAt)
+            val attempt = recurringAttempt(period)
+            storedProofs = listOf(startedOnchainProof(attempt).copy(billingPeriod = period, conversionQuoteId = "quote-1"))
+            whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+
+            assertEquals(ended, paymentProofRepo().onchainRequestHasEnded(attempt))
+        }
+    }
+
+    @Test
+    fun `approved release finishes after its proof was removed`() = test {
+        val (record, period) = recurringShopRecord(Clock.System.now() + 1.days)
+        val approved = recurringAttempt(period).copy(releaseApproved = true)
+        storedProofs = emptyList()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        stubAbandon(approved)
+
+        assertTrue(paymentProofRepo().onchainRequestHasEnded(approved))
+        assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(approved) { true }.isSuccess)
+    }
+
     private fun TestScope.observeRequestStateChanges() {
         paymentProofRepo(projectionStore).paymentRequestStateChanges(projectionIdentity)
             .onEach { requestStateChanges++ }
@@ -2685,6 +2740,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     )
 
     private suspend fun stubAbandon(attempt: OnchainSendAttempt) {
+        whenever(lightningRepo.approveOnchainRelease(any())).doSuspendableAnswer {
+            it.getArgument<OnchainSendAttempt>(0).copy(releaseApproved = true)
+        }
         whenever(lightningRepo.abandonUnbroadcastOnchainSend(any(), any())).doSuspendableAnswer {
             it.getArgument<suspend (OnchainSendAttempt) -> Boolean>(1).invoke(attempt)
         }

@@ -1866,15 +1866,19 @@ class LightningRepo @Inject constructor(
         attempt: OnchainSendAttempt,
         timeout: Duration = ABANDON_SYNC_TIMEOUT,
     ): Boolean {
-        val requestedAt = (nowMillis() / 1000).toULong()
+        // Only an on-chain sync that finishes after this call moves the timestamp past the one read here.
+        val previousSync = lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL
         withTimeoutOrNull(timeout) {
             sync()
-            while ((lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL) < requestedAt) {
+            while (!isOnchainSyncAfter(lightningService.status?.latestOnchainWalletSyncTimestamp, previousSync)) {
                 delay(1.seconds)
             }
         } ?: throw OnchainSendAbandonSyncError()
         return lightningService.walletKnowsNoCandidate(attempt)
     }
+
+    suspend fun approveOnchainRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
+        onchainSendAttemptStore.approveRelease(expected)
 
     suspend fun abandonUnbroadcastOnchainSend(
         expected: OnchainSendAttempt,
@@ -2789,3 +2793,6 @@ sealed interface ProbeOutcome {
         val routeFeeMsat: ULong?,
     ) : ProbeOutcome
 }
+
+/** A sync finished in the same second as the one read before a request is not a new sync. */
+internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong): Boolean = (latest ?: 0uL) > previous

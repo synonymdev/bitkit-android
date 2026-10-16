@@ -96,6 +96,8 @@ data class OnchainSendAttempt(
     val verifiedWinningFeeSats: ULong? = null,
     // Write-ahead boundary: false is proof that this original prepared payment never dispatched.
     val initialDispatchAttempted: Boolean = true,
+    // Set once its request was found ended, so a release cut short after its proof was removed can finish.
+    val releaseApproved: Boolean = false,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -260,6 +262,20 @@ class OnchainSendAttemptStore @Inject constructor(
             true
         }
     }
+
+    /** Records that the payment's request has ended before its original proof is removed. */
+    suspend fun approveRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
+        withContext(ioDispatcher + NonCancellable) {
+            mutex.withLock {
+                val current = loadWithRetainedAccepted(expected.walletIndex)
+                val approved = expected.copy(releaseApproved = true)
+                when {
+                    current == approved -> current
+                    current != expected || !current.canBeAbandoned || current.attemptId in inFlightPreparations -> null
+                    else -> approved.also { persist(it) }
+                }
+            }
+        }
 
     /**
      * Releases a Shop payment whose request has ended once the caller has shown that none of its candidates
