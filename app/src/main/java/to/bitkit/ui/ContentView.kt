@@ -569,14 +569,16 @@ fun ContentView(
                     when (val sheet = currentSheet) {
                         null -> Unit
                         is Sheet.Send -> {
-                            SendSheet(
-                                appViewModel = appViewModel,
-                                walletViewModel = walletViewModel,
-                                startDestination = sheet.route,
-                                hardwareWalletId = sheet.hardwareWalletId,
-                                preparingRequest = sheet.preparingRequest,
-                                hwSendViewModel = hwSendViewModel,
-                            )
+                            key(sheet.route) {
+                                SendSheet(
+                                    appViewModel = appViewModel,
+                                    walletViewModel = walletViewModel,
+                                    startDestination = sheet.route,
+                                    hardwareWalletId = sheet.hardwareWalletId,
+                                    preparingRequest = sheet.preparingRequest,
+                                    hwSendViewModel = hwSendViewModel,
+                                )
+                            }
                         }
 
                         is Sheet.Receive -> {

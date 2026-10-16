@@ -216,8 +216,8 @@ subscription payment-method switches: preserve the originally entered denominati
 ### USDT full-balance errors
 
 `usdt-payment-links-and-scans.xml` accepts either the insufficient-balance message or the paymaster
-fee-collection message when the entire balance is entered manually. iOS has reached fee collection
-first while Android has reported insufficient balance; the failing validation determines the message.
+fee-collection message when the entire balance is entered manually. Either error can occur on
+either platform; the failing validation determines the message.
 Both must keep payment review closed and allow the user to reduce the amount.
 
 ### Identifiers

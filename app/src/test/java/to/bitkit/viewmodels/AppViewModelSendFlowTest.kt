@@ -12936,22 +12936,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `automatic USDT request finishes preparation and admits amount continue`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
         val endpoint = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", null, null, "")
         val request = paymentRequest().copy(
             amount = PaykitAmount(PaykitAsset.USDT, 50_000u),
             acceptedPaymentEndpointIdentifiers = listOf(endpoint.methodId.rawValue),
         )
-        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
-            Result.success(PublicPaykitPaymentResult.Opened(endpoint.value, endpoints = listOf(endpoint)))
-        )
-        sut.setIsAuthenticated(true)
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
         pendingPaykitPaymentRequests.value = listOf(request)
-        enablePaykitUi()
-        pubkyPublicKey.value = testPublicKey
         sut.sendEffect.test {
             runCurrent()
-            assertEquals(SendEffect.NavigateToAmount, awaitItem())
-            assertNull((sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+            assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+            assertEquals(SendRoute.Confirm, (sut.currentSheet.value as? Sheet.Send)?.route)
+            expectNoEvents()
+            sut.currentSheet.test {
+                awaitItem()
+                resolution.complete(
+                    Result.success(PublicPaykitPaymentResult.Opened(endpoint.value, endpoints = listOf(endpoint)))
+                )
+                runCurrent()
+                assertEquals(Sheet.Send(SendRoute.Amount), awaitItem())
+                expectNoEvents()
+            }
+            expectNoEvents()
             assertTrue(sut.sendUiState.value.paykitUsesUsdt)
             sut.setSendEvent(SendEvent.AmountContinue)
             assertEquals(SendEffect.NavigateToUsdtReview, awaitItem())

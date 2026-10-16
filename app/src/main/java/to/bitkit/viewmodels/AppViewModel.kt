@@ -4962,9 +4962,8 @@ class AppViewModel @Inject constructor(
             if (activeIncomingPaymentRequest()?.id != preparation.request.id) return
             if (!paymentRequestPreparation.compareAndSet(preparation, null)) return
             _currentSheet.update {
-                if (it === preparation.sheet) preparation.sheet.copy(preparingRequest = null) else it
+                if (it === preparation.sheet) preparation.sheet.copy(route = route, preparingRequest = null) else it
             }
-            if (route != SendRoute.Confirm) setSendEffect(effect)
             return
         }
         if (fromMainScanner) {
