@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import android.content.Context
 import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.PreActivityMetadata
+import com.synonym.paykit.PaykitException
 import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -1048,6 +1049,43 @@ class BackupRepoTest : BaseUnitTest() {
             // still one attempt: the failed timestamp suppresses a retry until data changes again
             verify(privatePaykitRepo, times(1)).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `wallet backup retries after a busy Paykit shared state`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
+        whenever { privatePaykitRepo.backupSnapshot() }
+            .thenReturn(Result.failure(PaykitException.SharedStateBusy("shared_state_busy", "locked")))
+            .thenReturn(Result.success(PrivatePaykitBackupSnapshot(null, 0)))
+        val backupStatuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.WALLET to BackupItemStatus(
+                    synced = 1_000,
+                    required = 2_000,
+                ),
+            )
+        )
+        val allowWalletClear = CompletableDeferred<Unit>().apply { complete(Unit) }
+        stubBackupStatuses(backupStatuses, allowWalletClear) {}
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(privatePaykitRepo, times(1)).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+            advanceTimeBy(20_000)
+            runCurrent()
+
+            verify(privatePaykitRepo, times(2)).backupSnapshot()
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
+            assertFalse(backupStatuses.value.getValue(BackupCategory.WALLET).isRequired)
         } finally {
             sut.stopObservingBackups()
         }

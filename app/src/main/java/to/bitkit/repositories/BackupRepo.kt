@@ -51,6 +51,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
 import to.bitkit.env.Env
 import to.bitkit.ext.formatPlural
+import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActiveOnchainAttemptBackup
@@ -144,6 +145,7 @@ class BackupRepo @Inject constructor(
 
     private val runningBackups = ConcurrentHashMap.newKeySet<BackupCategory>() // Tracks active jobs since app start
     private val failedBackupRequired = ConcurrentHashMap<BackupCategory, Long>()
+    private val temporaryFailureRetries = ConcurrentHashMap<BackupCategory, Int>()
 
     private var isObserving = false
     private var lastNotificationTime = 0L
@@ -554,6 +556,7 @@ class BackupRepo @Inject constructor(
                         }
                         runningBackups -= category
                         failedBackupRequired -= category
+                        temporaryFailureRetries -= category
                     }
                     Logger.info("Backup succeeded for: '$category'", context = TAG)
                 }
@@ -594,10 +597,24 @@ class BackupRepo @Inject constructor(
             }
             runningBackups -= category
         }
-        if (e is WalletBackupSnapshotChanged) {
-            Logger.debug("Deferred changing backup snapshot for: '$category'", context = TAG)
-        } else {
-            Logger.error("Backup failed for: '$category'", e, context = TAG)
+        when {
+            e is WalletBackupSnapshotChanged ->
+                Logger.debug("Deferred changing backup snapshot for: '$category'", context = TAG)
+            e.isPaykitTemporarilyUnavailable() -> retryAfterTemporaryFailure(category, backupRequired, e)
+            else -> Logger.error("Backup failed for: '$category'", e, context = TAG)
+        }
+    }
+
+    private fun retryAfterTemporaryFailure(category: BackupCategory, backupRequired: Long, e: Throwable) {
+        val attempt = temporaryFailureRetries.merge(category, 1, Int::plus) ?: 1
+        val retryDelay = (TEMPORARY_FAILURE_RETRY_DELAY * (1 shl (attempt - 1).coerceAtMost(MAX_RETRY_SHIFT)))
+            .coerceAtMost(TEMPORARY_FAILURE_RETRY_MAX_DELAY)
+        Logger.warn("Retrying backup for: '$category' in '$retryDelay'", e, context = TAG)
+        scope.launch {
+            delay(retryDelay)
+            if (!isObserving || !failedBackupRequired.remove(category, backupRequired)) return@launch
+            val status = cacheStore.backupStatuses.first()[category] ?: return@launch
+            if (status.shouldBackup(category)) scheduleBackup(category)
         }
     }
 
@@ -1116,6 +1133,15 @@ class BackupRepo @Inject constructor(
         private const val FAILED_BACKUP_NOTIFICATION_INTERVAL = 10 * 60 * 1000L // 10 minutes
         private const val SYNC_STATUS_DEBOUNCE = 500L // 500ms debounce for sync status updates
         private val VSS_TIMESTAMP_TIMEOUT = 60.seconds
+
+        /** First wait before retrying a backup that failed on a temporary Paykit error, doubled per retry. */
+        private val TEMPORARY_FAILURE_RETRY_DELAY = 10.seconds
+
+        /** Longest wait between retries, past the Paykit shared-state lock's write cooldown. */
+        private val TEMPORARY_FAILURE_RETRY_MAX_DELAY = 5.minutes
+
+        /** Caps the doubling so the shift cannot overflow before the max delay applies. */
+        private const val MAX_RETRY_SHIFT = 6
 
         /**
          * How long a pending restore gates ordinary uploads for. Longer than any restore in practice,
