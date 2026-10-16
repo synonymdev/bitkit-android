@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -39,13 +40,13 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
+import to.bitkit.models.Toast
 import to.bitkit.models.WalletScope
-import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PendingPaymentResolution
-import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
@@ -54,9 +55,11 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -108,6 +111,18 @@ fun SendPendingScreen(
         }
     }
 
+    var showAbandonConfirmation by remember { mutableStateOf(false) }
+    AbandonExpiredPayment(
+        isAbandoned = uiState.abandoned,
+        showConfirmation = showAbandonConfirmation,
+        onConfirm = {
+            showAbandonConfirmation = false
+            viewModel.abandonExpired()
+        },
+        onDismiss = { showAbandonConfirmation = false },
+        onClose = onClose,
+    )
+
     uiState.recoveredTxid?.let { winner ->
         LaunchedEffect(winner) { onRecovered(winner, uiState.amount) }
     }
@@ -131,10 +146,50 @@ fun SendPendingScreen(
             onViewDetails = onViewDetails,
             canRetry = uiState.recoveryAttempt != null,
             isRecovering = uiState.isRecovering,
-            recoveryError = uiState.recoveryErrorMessage(),
+            recoveryError = uiState.abandonErrorMessage() ?: uiState.recoveryErrorMessage(),
             onRetry = onRetry,
+            canAbandon = uiState.abandonableAttempt != null,
+            isAbandoning = uiState.isAbandoning,
+            onAbandon = { showAbandonConfirmation = true },
         )
     }
+}
+
+@Composable
+private fun AbandonExpiredPayment(
+    isAbandoned: Boolean,
+    showConfirmation: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val abandonedToast = stringResource(R.string.wallet__send_pending__abandon_done)
+    LaunchedEffect(isAbandoned) {
+        if (isAbandoned) {
+            ToastEventBus.send(type = Toast.ToastType.SUCCESS, title = abandonedToast)
+            onClose()
+        }
+    }
+    if (showConfirmation) {
+        AppAlertDialog(
+            title = stringResource(R.string.wallet__send_pending__abandon),
+            text = stringResource(R.string.wallet__send_pending__abandon_note),
+            confirmText = stringResource(R.string.common__continue),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = onConfirm,
+            onDismiss = onDismiss,
+        )
+    }
+}
+
+@Composable
+private fun SendPendingUiState.abandonErrorMessage(): String? = abandonError?.let {
+    stringResource(
+        when (it) {
+            AbandonError.MayStillConfirm -> R.string.wallet__send_pending__abandon_refused
+            AbandonError.SyncUnavailable -> R.string.wallet__send_pending__abandon_sync
+        }
+    )
 }
 
 @Composable
@@ -295,6 +350,9 @@ internal fun SendPendingContent(
     isRecovering: Boolean = false,
     recoveryError: String? = null,
     onRetry: () -> Unit = {},
+    canAbandon: Boolean = false,
+    isAbandoning: Boolean = false,
+    onAbandon: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -358,6 +416,17 @@ internal fun SendPendingContent(
                     enabled = !isRecovering,
                     onClick = onRetry,
                     modifier = Modifier.fillMaxWidth(),
+                )
+                VerticalSpacer(16.dp)
+            }
+            if (canAbandon) {
+                SecondaryButton(
+                    text = stringResource(R.string.wallet__send_pending__abandon),
+                    enabled = !isAbandoning,
+                    onClick = onAbandon,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("AbandonExpiredOnchainPayment"),
                 )
                 VerticalSpacer(16.dp)
             }

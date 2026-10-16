@@ -22,8 +22,10 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendAbandonSyncError
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.utils.Logger
@@ -35,6 +37,7 @@ class SendPendingViewModel @Inject constructor(
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val activityRepo: ActivityRepo,
     private val lightningRepo: LightningRepo,
+    private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
 ) : ViewModel() {
 
     companion object {
@@ -78,6 +81,7 @@ class SendPendingViewModel @Inject constructor(
                 if (matchesOriginalWallet && hasOriginalReceipt && attempt != null) {
                     if (attempt.isUnresolved) _uiState.update { it.copy(recoveryAttempt = attempt) }
                     observeOriginalCompletion(attempt)
+                    offerAbandonIfRequestEnded(attempt)
                 }
             }
         }
@@ -163,6 +167,40 @@ class SendPendingViewModel @Inject constructor(
                 }
             } finally {
                 _uiState.update { it.copy(isRecovering = false) }
+            }
+        }
+    }
+
+    private suspend fun offerAbandonIfRequestEnded(attempt: OnchainSendAttempt) {
+        if (!attempt.canBeAbandoned) return
+        if (runSuspendCatching { paykitPaymentProofRepo.onchainRequestHasEnded(attempt) }.getOrDefault(false)) {
+            _uiState.update { it.copy(abandonableAttempt = attempt) }
+        }
+    }
+
+    fun abandonExpired() {
+        val attempt = _uiState.value.abandonableAttempt ?: return
+        if (_uiState.value.isAbandoning) return
+        _uiState.update { it.copy(isAbandoning = true, abandonError = null) }
+        viewModelScope.launch {
+            paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(attempt) {
+                lightningRepo.onchainCandidatesNeverReachedNetwork(it)
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(isAbandoning = false, abandoned = true, abandonableAttempt = null, recoveryAttempt = null)
+                }
+            }.onFailure { error ->
+                Logger.warn("Could not release on-chain payment ${attempt.txid}", error, context = TAG)
+                _uiState.update {
+                    it.copy(
+                        isAbandoning = false,
+                        abandonError = if (error is OnchainSendAbandonSyncError) {
+                            AbandonError.SyncUnavailable
+                        } else {
+                            AbandonError.MayStillConfirm
+                        },
+                    )
+                }
             }
         }
     }
@@ -264,7 +302,13 @@ data class SendPendingUiState(
     val currentTxid: String? = null,
     val recoveredTxid: String? = null,
     val recoveredTransfer: OnchainSendAttempt? = null,
+    val abandonableAttempt: OnchainSendAttempt? = null,
+    val isAbandoning: Boolean = false,
+    val abandoned: Boolean = false,
+    val abandonError: AbandonError? = null,
 )
+
+enum class AbandonError { MayStillConfirm, SyncUnavailable }
 
 sealed interface RecoveryApproval {
     data class Fee(val receipt: OnchainPreparedReceipt) : RecoveryApproval

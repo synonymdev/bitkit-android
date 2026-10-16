@@ -737,6 +737,57 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertEquals(txid, durable.txid)
     }
 
+    @Test
+    fun `abandon releases an unresolved Shop payment only after its proof is removed`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val attempt = store.admit(
+            walletId = WalletScope.default, requestId = PaykitPaymentRequestId("request", "payer"),
+            orderId = "order", address = "bcrt1qrecipient", amountSats = 1000uL,
+            isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), beforeSendAttempt = {}, payerIdentity = "payer",
+        )
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+        )
+        store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
+        val outcome = store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) { beforeDispatch ->
+            beforeDispatch()
+            OnchainSendOutcome.Unknown(receipt.txid)
+        }
+        store.recordOutcome(attempt.attemptId, outcome, 0)
+        val unknown = requireNotNull(store.current())
+        assertTrue(unknown.canBeAbandoned)
+
+        assertFalse(store.abandonUnbroadcast(unknown) { false })
+        assertEquals(unknown, store.current())
+        assertFalse(store.abandonUnbroadcast(unknown.copy(amountSats = 999uL)) { true })
+        assertEquals(unknown, store.current())
+        assertTrue(store.abandonUnbroadcast(unknown) { true })
+        assertNull(store.current())
+        assertTrue(store.admitForTest(walletId = WalletScope.default).attemptId != attempt.attemptId)
+    }
+
+    @Test
+    fun `ordinary payment is never abandoned`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val attempt = store.admitForTest(walletId = WalletScope.default)
+        store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Unknown("ab".repeat(32)), attempt.walletIndex)
+        val unknown = requireNotNull(store.current())
+
+        assertFalse(unknown.canBeAbandoned)
+        assertFalse(store.abandonUnbroadcast(unknown) { true })
+        assertEquals(unknown, store.current())
+    }
+
     private suspend fun OnchainSendAttemptStore.admitForTest(
         walletId: String = "wallet-1",
         contactPublicKey: String? = null,

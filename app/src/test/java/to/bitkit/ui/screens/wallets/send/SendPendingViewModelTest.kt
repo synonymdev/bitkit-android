@@ -20,10 +20,13 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendAbandonSyncError
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.PaykitPaymentProofRepo
+import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.test.BaseUnitTest
@@ -38,6 +41,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
     private val pendingPaymentRepo = PendingPaymentRepo()
     private val activityRepo: ActivityRepo = mock()
     private val lightningRepo: LightningRepo = mock()
+    private val paykitPaymentProofRepo: PaykitPaymentProofRepo = mock()
 
     private val attemptUpdates = MutableStateFlow(0L)
 
@@ -268,6 +272,40 @@ class SendPendingViewModelTest : BaseUnitTest() {
         org.mockito.kotlin.verify(activityRepo, org.mockito.kotlin.never()).syncActivities()
     }
 
+    @Test
+    fun `expired Shop payment can be cancelled once the network never saw it`() = test {
+        val original = pendingOriginal().copy(
+            requestId = PaykitPaymentRequestId("request", "payee"), orderId = "order", payerIdentity = "payer",
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(true)
+        whenever(paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(any(), any()))
+            .thenReturn(Result.failure(OnchainSendAbandonSyncError()), Result.success(Unit))
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        assertEquals(original, sut.uiState.value.abandonableAttempt)
+
+        sut.abandonExpired()
+        advanceUntilIdle()
+        assertEquals(AbandonError.SyncUnavailable, sut.uiState.value.abandonError)
+        assertEquals(false, sut.uiState.value.abandoned)
+
+        sut.abandonExpired()
+        advanceUntilIdle()
+        assertEquals(true, sut.uiState.value.abandoned)
+        assertNull(sut.uiState.value.abandonableAttempt)
+        assertNull(sut.uiState.value.recoveryAttempt)
+    }
+
+    @Test
+    fun `ordinary unknown payment offers no cancel`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        assertNull(sut.uiState.value.abandonableAttempt)
+    }
+
     private fun pendingOriginal() = OnchainSendAttempt(
         walletId = WalletScope.default, attemptId = "original", requestId = null,
         orderId = null, address = "original-address", amountSats = 1_000uL, isMaxAmount = false,
@@ -430,5 +468,6 @@ class SendPendingViewModelTest : BaseUnitTest() {
         pendingPaymentRepo = pendingPaymentRepo,
         activityRepo = activityRepo,
         lightningRepo = lightningRepo,
+        paykitPaymentProofRepo = paykitPaymentProofRepo,
     )
 }
