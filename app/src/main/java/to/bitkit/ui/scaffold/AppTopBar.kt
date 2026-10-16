@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -62,7 +63,7 @@ fun AppTopBar(
                                 .size(32.dp)
                         )
                     }
-                    Title(text = text, maxLines = 1, style = titleStyle)
+                    Title(text = text, textAlign = TextAlign.Center, style = titleStyle)
                 }
             }
         },

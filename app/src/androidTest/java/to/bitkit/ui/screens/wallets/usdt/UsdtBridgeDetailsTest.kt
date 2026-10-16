@@ -250,7 +250,10 @@ class UsdtBridgeDetailsTest {
             val layout = layouts.single()
             assertFalse("Ellipsized $label", layout.isLineEllipsized(0))
             assertFalse("Clipped height for $label", layout.didOverflowHeight)
-            assertTrue("Clipped width for $label", layout.getLineRight(0) <= layout.size.width + 1f)
+            assertTrue(
+                "Clipped width for $label",
+                layout.getLineRight(0) - layout.getLineLeft(0) <= layout.size.width + 1f
+            )
         }
         val refund = composeTestRule.onNodeWithTag("UsdtDepositRefund").fetchSemanticsNode().boundsInRoot
         val details = composeTestRule.onNodeWithTag("UsdtDepositDetails").fetchSemanticsNode().boundsInRoot

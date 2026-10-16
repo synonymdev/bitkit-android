@@ -312,13 +312,15 @@ internal fun UsdtNetworkButton(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.height(28.dp).background(Colors.White.copy(alpha = 0.01f), RoundedCornerShape(12.dp))
+        modifier = Modifier.heightIn(
+            min = 28.dp
+        ).background(Colors.White.copy(alpha = 0.01f), RoundedCornerShape(12.dp))
             .border(1.dp, Colors.White16, RoundedCornerShape(12.dp))
             .clickable(enabled = onChange != null && destinations.size > 1) { onChange?.invoke() }
             .padding(horizontal = 12.dp, vertical = 6.dp).testTag("UsdtNetwork")
     ) {
         Icon(painterResource(R.drawable.usdt_network), null, tint = Colors.Usdt, modifier = Modifier.size(16.dp))
-        CaptionB(destination.label, color = Colors.White64, maxLines = 1, letterSpacing = 0.sp, lineHeight = 13.sp)
+        CaptionB(destination.label, color = Colors.White64, letterSpacing = 0.sp, lineHeight = 13.sp)
     }
 }
 

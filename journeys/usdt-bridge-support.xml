@@ -14,5 +14,6 @@
     <action>Verify Contact Support and Copy Details use the same small side-by-side buttons in deposit details. Tap Copy Details (id "UsdtCopyDetails"). Verify the clipboard includes the deposit reference, source network and source transaction, plus the readable current status, its technical value, any provider error code and any destination or refund transaction.</action>
     <action>Tap Contact Support (id "UsdtContactSupport"). Verify the report form opens with the deposit details prefilled. Return without submitting or requesting a refund.</action>
     <action>Copy details for known source networks and verify their readable names are used, including Tron, Polygon and BNB Smart Chain. For an unknown network fixture, verify the original network value is retained rather than omitted.</action>
+    <action>At the largest system text size, open Cross-Network Deposits and a deposit detail. Verify each header and the Cross-Network Deposits footer show their full text, wrapping as needed without covering Back or Menu. Return to the default text size and verify the usual compact layout.</action>
   </actions>
 </journey>
