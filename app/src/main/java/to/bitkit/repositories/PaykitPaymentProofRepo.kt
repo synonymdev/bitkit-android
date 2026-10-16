@@ -4,6 +4,7 @@ import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PubkyIdentityCapability
 import dagger.Lazy
 import kotlinx.coroutines.CoroutineDispatcher
@@ -416,29 +417,67 @@ class PaykitPaymentProofRepo @Inject constructor(
      * deadline passed. A record that is missing, carries a proof or needs recovery never counts as ended.
      */
     suspend fun onchainRequestHasEnded(attempt: OnchainSendAttempt): Boolean = withContext(ioDispatcher) {
-        val requestId = attempt.requestId ?: return@withContext false
-        if (!attempt.canBeAbandoned) return@withContext false
-        val identity = currentIdentity() ?: return@withContext false
-        if (!PubkyPublicKeyFormat.matches(identity, attempt.payerIdentity)) return@withContext false
-        val record = paykitSdkService.paymentRequests().firstOrNull {
+        val identity = currentIdentity()?.takeIf { PubkyPublicKeyFormat.matches(it, attempt.payerIdentity) }
+        val record = attempt.takeIf { it.canBeAbandoned && identity != null }?.let { payerRecord(it) }
+        val periodStartsAt = attempt.requestId?.billingPeriodStartsAt
+        when {
+            identity == null || record == null -> false
+            periodStartsAt != null -> recurringPeriodHasEnded(record, attempt, periodStartsAt)
+            record.paymentProofs.isNotEmpty() -> false
+            else -> oneTimeRequestHasEnded(record, identity)
+        }
+    }
+
+    private suspend fun payerRecord(attempt: OnchainSendAttempt): PaymentRequestRecord? {
+        val requestId = attempt.requestId ?: return null
+        return paykitSdkService.paymentRequests().firstOrNull {
             it.localRole == PaymentRequestLocalRole.PAYER && it.paymentRequestId == requestId.paymentRequestId &&
                 PubkyPublicKeyFormat.matches(it.counterparty, requestId.counterparty)
-        } ?: return@withContext false
-        if (record.paymentProofs.isNotEmpty()) return@withContext false
+        }
+    }
+
+    private suspend fun oneTimeRequestHasEnded(record: PaymentRequestRecord, identity: String): Boolean =
         when (record.state) {
             PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
             PaymentRequestLifecycleState.REJECTED,
             PaymentRequestLifecycleState.CANCELED -> true
             PaymentRequestLifecycleState.PROPOSED,
-            PaymentRequestLifecycleState.ACCEPTED,
-            PaymentRequestLifecycleState.ACTIVE_RECURRING -> {
+            PaymentRequestLifecycleState.ACCEPTED -> {
                 val now = Clock.System.now()
                 val request = runCatching { record.toPaykitPaymentRequestHistory(now) }.getOrNull()
-                    ?: return@withContext false
-                request.isExpired(now) || quoteDeadlinePassed(request, identity, now)
+                request != null && (request.isExpired(now) || quoteDeadlinePassed(request, identity, now))
             }
             else -> false
         }
+
+    private suspend fun recurringPeriodHasEnded(
+        record: PaymentRequestRecord,
+        attempt: OnchainSendAttempt,
+        periodStartsAt: String,
+    ): Boolean {
+        if (record.paymentProofs.any { it.billingPeriod?.startsAt == periodStartsAt }) return false
+        return when (record.state) {
+            PaymentRequestLifecycleState.CANCELED,
+            PaymentRequestLifecycleState.REJECTED -> true
+            PaymentRequestLifecycleState.ACTIVE_RECURRING -> activeRecurringPeriodPassed(record, attempt)
+            else -> false
+        }
+    }
+
+    private suspend fun activeRecurringPeriodPassed(
+        record: PaymentRequestRecord,
+        attempt: OnchainSendAttempt,
+    ): Boolean {
+        val now = Clock.System.now()
+        val subscription = runCatching { record.toPaykitSubscription() }.getOrNull() ?: return false
+        val period = operationMutex.withLock {
+            loadProofs().lastOrNull {
+                it.kind == PaykitPaymentProofKind.Onchain && it.requestId == attempt.requestId &&
+                    PubkyPublicKeyFormat.matches(it.identity, attempt.payerIdentity)
+            }?.billingPeriod
+        }
+        val deadline = period?.let { runCatching { subscription.pricing.paymentDeadline(it) }.getOrNull() }
+        return subscription.isExpired(now) || deadline?.let { now > it } == true
     }
 
     private suspend fun quoteDeadlinePassed(request: PaykitPaymentRequest, identity: String, now: Instant): Boolean {
@@ -488,7 +527,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             }
             if (!released) throw OnchainSendBlockedError(attempt)
             Logger.info(
-                "Released on-chain payment ${attempt.txid} after its request ended without it reaching the network",
+                "Released on-chain payment '${attempt.txid}' after its request ended without it reaching the network",
                 context = TAG,
             )
         }
