@@ -4814,7 +4814,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `new locked payment scan supersedes a pubky auth deeplink waiting for identity`() = test {
+    fun `locked payment scan runs after a pubky auth deeplink waiting for identity`() = test {
         enablePaykitUi()
         advanceUntilIdle()
         sut.setIsAuthenticated(true)
@@ -4840,10 +4840,39 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         advanceUntilIdle()
 
+        assertEquals(Sheet.PubkyAuth("pubkyauth://signin_grant"), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(bolt11, sut.sendUiState.value.addressInput)
-        verify(pubkyRepo, never()).hasSecretKey()
-        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `payment deeplink waits until the open pubky auth sheet closes`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val bolt11 = "lnbcrt1authsheetscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceUntilIdle()
+        assertEquals(Sheet.PubkyAuth("pubkyauth://signin_grant"), sut.currentSheet.value)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+        assertEquals(Sheet.PubkyAuth("pubkyauth://signin_grant"), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(bolt11, sut.sendUiState.value.addressInput)
     }
 
     @Test
