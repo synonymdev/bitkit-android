@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
@@ -31,6 +32,7 @@ import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.SanityWarning
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class SendPendingViewModel @Inject constructor(
@@ -42,6 +44,7 @@ class SendPendingViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "SendPendingViewModel"
+        private val ABANDON_CHECK_INTERVAL = 30.seconds
     }
 
     private val _uiState = MutableStateFlow(SendPendingUiState())
@@ -171,10 +174,17 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
-    private suspend fun offerAbandonIfRequestEnded(attempt: OnchainSendAttempt) {
+    // The request can end, or a failed check recover, while Payment Pending stays open.
+    private fun offerAbandonIfRequestEnded(attempt: OnchainSendAttempt) {
         if (!attempt.canBeAbandoned) return
-        if (runSuspendCatching { paykitPaymentProofRepo.onchainRequestHasEnded(attempt) }.getOrDefault(false)) {
-            _uiState.update { it.copy(abandonableAttempt = attempt) }
+        viewModelScope.launch {
+            while (_uiState.value.recoveryAttempt == attempt && _uiState.value.abandonableAttempt == null) {
+                if (runSuspendCatching { paykitPaymentProofRepo.onchainRequestHasEnded(attempt) }.getOrDefault(false)) {
+                    _uiState.update { it.copy(abandonableAttempt = attempt) }
+                    return@launch
+                }
+                delay(ABANDON_CHECK_INTERVAL)
+            }
         }
     }
 

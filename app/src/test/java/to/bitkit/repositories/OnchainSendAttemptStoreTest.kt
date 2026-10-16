@@ -752,7 +752,10 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             channelId = null, tags = emptyList(), beforeSendAttempt = {}, payerIdentity = "payer",
         )
         val receipt = OnchainPreparedReceipt(
-            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+            txid = "ab".repeat(32),
+            inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+            address = attempt.address,
+            amountSats = attempt.amountSats,
         )
         store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
         val outcome = store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) { beforeDispatch ->

@@ -33,6 +33,7 @@ import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendAttemptStore
 import to.bitkit.repositories.OnchainSendEvidence
+import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
@@ -65,6 +66,8 @@ class SendPendingObservationDeviceTest {
     @Inject lateinit var lightningRepo: LightningRepo
 
     @Inject lateinit var activityRepo: ActivityRepo
+
+    @Inject lateinit var paykitPaymentProofRepo: PaykitPaymentProofRepo
 
     @Inject lateinit var settingsStore: SettingsStore
 
@@ -119,7 +122,7 @@ class SendPendingObservationDeviceTest {
             assertEquals(original.attemptId, pending.attemptId)
             assertEquals(original.originalInputs, store.current()?.originalInputs)
             assertEquals(original.candidateTxids, store.current()?.candidateTxids)
-            val vm = SendPendingViewModel(PendingPaymentRepo(), activityRepo, lightningRepo)
+            val vm = SendPendingViewModel(PendingPaymentRepo(), activityRepo, lightningRepo, paykitPaymentProofRepo)
             val settings = SettingsViewModel(
                 context,
                 settingsStore,

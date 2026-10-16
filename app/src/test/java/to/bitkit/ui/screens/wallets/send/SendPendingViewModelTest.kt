@@ -9,7 +9,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -34,6 +36,7 @@ import to.bitkit.viewmodels.SanityWarning
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SendPendingViewModelTest : BaseUnitTest() {
@@ -275,7 +278,9 @@ class SendPendingViewModelTest : BaseUnitTest() {
     @Test
     fun `expired Shop payment can be cancelled once the network never saw it`() = test {
         val original = pendingOriginal().copy(
-            requestId = PaykitPaymentRequestId("request", "payee"), orderId = "order", payerIdentity = "payer",
+            requestId = PaykitPaymentRequestId("request", "payee"),
+            orderId = "order",
+            payerIdentity = "payer",
         )
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
         whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(true)
@@ -295,6 +300,23 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertEquals(true, sut.uiState.value.abandoned)
         assertNull(sut.uiState.value.abandonableAttempt)
         assertNull(sut.uiState.value.recoveryAttempt)
+    }
+
+    @Test
+    fun `cancel appears once the request ends while Payment Pending stays open`() = test {
+        val original = pendingOriginal().copy(
+            requestId = PaykitPaymentRequestId("request", "payee"),
+            orderId = "order",
+            payerIdentity = "payer",
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(false, true)
+        sut.initOnchain(original.txid, amount)
+        runCurrent()
+        assertNull(sut.uiState.value.abandonableAttempt)
+        advanceTimeBy(31.seconds)
+        runCurrent()
+        assertEquals(original, sut.uiState.value.abandonableAttempt)
     }
 
     @Test

@@ -1861,7 +1861,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
 
-    /** Syncs the on-chain wallet, then checks that none of the attempt's candidates reached the mempool or the chain. */
+    /** Syncs the on-chain wallet, then checks that none of the attempt's candidates reached the mempool or chain. */
     suspend fun onchainCandidatesNeverReachedNetwork(
         attempt: OnchainSendAttempt,
         timeout: Duration = ABANDON_SYNC_TIMEOUT,
