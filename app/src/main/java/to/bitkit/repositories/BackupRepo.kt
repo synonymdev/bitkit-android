@@ -146,6 +146,7 @@ class BackupRepo @Inject constructor(
     private val runningBackups = ConcurrentHashMap.newKeySet<BackupCategory>() // Tracks active jobs since app start
     private val failedBackupRequired = ConcurrentHashMap<BackupCategory, Long>()
     private val temporaryFailureRetries = ConcurrentHashMap<BackupCategory, Int>()
+    private val temporaryFailureSince = ConcurrentHashMap<BackupCategory, Long>()
 
     private var isObserving = false
     private var lastNotificationTime = 0L
@@ -501,8 +502,9 @@ class BackupRepo @Inject constructor(
             val hasFailedBackups = BackupCategory.entries.any { category ->
                 val status = backupStatuses[category] ?: BackupItemStatus()
 
+                val pendingSince = temporaryFailureSince[category]?.coerceAtMost(status.required) ?: status.required
                 val isPendingAndOverdue = status.isRequired &&
-                    currentTime - status.required > FAILED_BACKUP_CHECK_TIME
+                    currentTime - pendingSince > FAILED_BACKUP_CHECK_TIME
                 return@any isPendingAndOverdue
             }
 
@@ -557,6 +559,7 @@ class BackupRepo @Inject constructor(
                         runningBackups -= category
                         failedBackupRequired -= category
                         temporaryFailureRetries -= category
+                        temporaryFailureSince -= category
                     }
                     Logger.info("Backup succeeded for: '$category'", context = TAG)
                 }
@@ -607,12 +610,13 @@ class BackupRepo @Inject constructor(
 
     private fun retryAfterTemporaryFailure(category: BackupCategory, backupRequired: Long, e: Throwable) {
         val attempt = temporaryFailureRetries.merge(category, 1, Int::plus) ?: 1
+        temporaryFailureSince.putIfAbsent(category, backupRequired)
         val retryDelay = (TEMPORARY_FAILURE_RETRY_DELAY * (1 shl (attempt - 1).coerceAtMost(MAX_RETRY_SHIFT)))
             .coerceAtMost(TEMPORARY_FAILURE_RETRY_MAX_DELAY)
         Logger.warn("Retrying backup for: '$category' in '$retryDelay'", e, context = TAG)
         scope.launch {
             delay(retryDelay)
-            if (!isObserving || !failedBackupRequired.remove(category, backupRequired)) return@launch
+            if (!failedBackupRequired.remove(category, backupRequired) || !isObserving) return@launch
             val status = cacheStore.backupStatuses.first()[category] ?: return@launch
             if (status.shouldBackup(category)) scheduleBackup(category)
         }

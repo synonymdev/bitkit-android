@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.paykit.PaykitException
 import com.synonym.vssclient.VssItem
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -23,6 +25,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -31,6 +34,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
 import to.bitkit.data.BlocktankRefundAddress
@@ -1086,6 +1090,67 @@ class BackupRepoTest : BaseUnitTest() {
             verify(privatePaykitRepo, times(2)).backupSnapshot()
             verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
             assertFalse(backupStatuses.value.getValue(BackupCategory.WALLET).isRequired)
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `busy wallet backup retries after observation pauses and resumes`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
+        whenever { privatePaykitRepo.backupSnapshot() }
+            .thenReturn(Result.failure(PaykitException.SharedStateBusy("shared_state_busy", "locked")))
+            .thenReturn(Result.success(PrivatePaykitBackupSnapshot(null, 0)))
+        val backupStatuses = MutableStateFlow(
+            mapOf(BackupCategory.WALLET to BackupItemStatus(synced = 1_000, required = 2_000))
+        )
+        val allowWalletClear = CompletableDeferred<Unit>().apply { complete(Unit) }
+        stubBackupStatuses(backupStatuses, allowWalletClear) {}
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            sut.stopObservingBackups()
+            advanceTimeBy(20_000)
+            runCurrent()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `busy wallet backup still warns once it stays pending past the failure window`() = test {
+        val startedAt = currentTime
+        whenever(clock.now()).thenAnswer { Instant.fromEpochMilliseconds(3_000 + currentTime - startedAt) }
+        whenever { privatePaykitRepo.backupSnapshot() }
+            .thenReturn(Result.failure(PaykitException.SharedStateBusy("shared_state_busy", "locked")))
+        whenever(context.getString(R.string.settings__backup__failed_title)).thenReturn("Backup failed")
+        whenever(context.getString(R.string.settings__backup__failed_message)).thenReturn("Retrying")
+        val backupStatuses = MutableStateFlow(
+            mapOf(BackupCategory.WALLET to BackupItemStatus(synced = 1_000, required = 2_000))
+        )
+        val allowWalletClear = CompletableDeferred<Unit>().apply { complete(Unit) }
+        stubBackupStatuses(backupStatuses, allowWalletClear) {}
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(31.minutes.inWholeMilliseconds)
+            runCurrent()
+
+            verify(context, atLeastOnce()).getString(R.string.settings__backup__failed_title)
         } finally {
             sut.stopObservingBackups()
         }
