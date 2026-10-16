@@ -138,6 +138,66 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
         )
 
     @Test
+    fun `restored attempts all protect the same request regardless of order`() = test {
+        val terms = request.payment(MethodId.UsdtArbitrum, clock.now())
+        for (status in listOf(
+            UsdtTransferStatus.PENDING,
+            UsdtTransferStatus.CONFIRMED,
+            UsdtTransferStatus.FAILED,
+            UsdtTransferStatus.REPLACED
+        )) {
+            for (startedFirst in listOf(false, true)) {
+                stored = null
+                val repo = repo()
+                repo.prepare(context(), quote, amount, terms).getOrThrow()
+                val unstarted = repo.backupSnapshot().attempts.single()
+                val started = unstarted.copy(quoteId = "started", paymentStarted = true)
+                stored = null
+                val attempts = if (startedFirst) listOf(started, unstarted) else listOf(unstarted, started)
+                val backup = PaykitUsdtStateBackup(attempts, emptyList())
+                repo.restoreBackup(backup)
+                repo.restoreBackup(backup)
+                val transfer = mock<UsdtTransfer> {
+                    on { id }.thenReturn(started.quoteId)
+                    on { this.status }.thenReturn(status)
+                }
+                whenever(wallet.history()).thenReturn(listOf(transfer))
+                repo.reconcile().getOrThrow()
+                val canReplace = status == UsdtTransferStatus.FAILED || status == UsdtTransferStatus.REPLACED
+                assertEquals(!canReplace, repo.resumableRequests.value.isEmpty())
+                val result = repo.prepare(context(), quote.copy(id = "replacement"), amount, terms)
+                assertEquals(canReplace, result.isSuccess)
+                if (canReplace) {
+                    val expected = listOf(started, unstarted.copy(quoteId = "replacement"))
+                    assertEquals(expected, repo.backupSnapshot().attempts)
+                } else {
+                    assertEquals(PaykitPaymentRequestError.OperationInProgress, result.exceptionOrNull())
+                    assertEquals(attempts, repo.backupSnapshot().attempts)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `preparing the same quote preserves proof and restored progress`() = test {
+        val repo = repo()
+        val terms = request.payment(MethodId.UsdtArbitrum, clock.now())
+        repo.prepare(context(), quote, amount, terms).getOrThrow()
+        val funded = repo.backupSnapshot().attempts.single().copy(
+            paymentStarted = true,
+            proof = PaykitUsdtProof(UsdtPaymentProof("42161", "transaction", "0", "signature")),
+        )
+        repo.restoreBackup(PaykitUsdtStateBackup(listOf(funded), emptyList()))
+        repo.prepare(context(), quote, amount, terms).getOrThrow()
+        assertEquals(listOf(funded), repo.backupSnapshot().attempts)
+        assertEquals(
+            PaykitPaymentRequestError.OperationInProgress,
+            repo.prepare(context(), quote.copy(id = "replacement"), amount, terms).exceptionOrNull(),
+        )
+        assertEquals(listOf(funded), repo.backupSnapshot().attempts)
+    }
+
+    @Test
     fun `unsubmitted binding requires current journal evidence after restart`() = test {
         val repo = repo()
         repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
