@@ -3,9 +3,10 @@
 ## Sign-in from a link
 
 - `signin-cold-start.xml` checks a `pubkyauth://signin_grant` link opened while Bitkit is not running:
-  the loading toast while the saved session restores, the authorization sheet, and a restore that
-  fails while offline, which keeps Bitkit open and the link handler enabled. Android only; iOS does
-  not register the raw `pubkyauth` scheme for OS link delivery.
+  the loading toast while the saved session restores, then the authorization sheet. Android only;
+  iOS does not register the raw `pubkyauth` scheme for OS link delivery. A restore that fails while
+  the device is offline needs the device network toggled, which the journey environment does not
+  provide, so that case is a manual test.
 
 ## Grant signup
 
