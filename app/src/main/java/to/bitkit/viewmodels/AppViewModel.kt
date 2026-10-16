@@ -3565,7 +3565,11 @@ class AppViewModel @Inject constructor(
                 paykitUsesUsdt = target == PaykitAsset.USDT,
                 paykitRateUnavailable = false,
                 amount = if (target == PaykitAsset.BTC) converted?.atomic ?: 0u else it.amount,
-                paykitAmount = if (target == PaykitAsset.USDT) converted?.inputValue.orEmpty() else it.paykitAmount
+                paykitAmount = if (target == PaykitAsset.USDT) {
+                    converted?.takeIf { amount -> amount.atomic > 0uL }?.inputValue.orEmpty()
+                } else {
+                    it.paykitAmount
+                }
             )
         }
         selectFundingSource(nextSource, current)

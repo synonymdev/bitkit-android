@@ -216,6 +216,7 @@ import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.ui.utils.NumberPadInputHandler
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
@@ -12889,6 +12890,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.sendUiState.value.paykitUsesUsdt)
         assertEquals("5", sut.sendUiState.value.paykitAmount)
         assertTrue(sut.sendUiState.value.paykitRateUnavailable)
+    }
+
+    @Test
+    fun `selecting USDT with an empty amount preserves whole unit entry`() = test {
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                usdtRecipient = "0x1111111111111111111111111111111111111111",
+                amount = 0u,
+                payMethod = SendMethod.ONCHAIN,
+            )
+        )
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt))
+        runCurrent()
+        assertTrue(sut.sendUiState.value.paykitUsesUsdt)
+        val typed = NumberPadInputHandler.handleInput("5", sut.sendUiState.value.paykitAmount, 21, 6)
+        assertEquals("5", typed)
     }
 
     @Test
