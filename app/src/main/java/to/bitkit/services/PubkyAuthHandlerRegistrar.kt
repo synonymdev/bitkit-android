@@ -23,8 +23,8 @@ import javax.inject.Singleton
 
 /**
  * Advertises Pubky signup and authorization handlers when their required identity state is available.
- * While a saved session is not restored yet, a stored secret key keeps the authorization handler on, so a sign-in link
- * can wait for the restore instead of being dropped. Approval still checks the restored identity's key.
+ * While a saved session is not restored yet, a secret key Bitkit stores itself keeps the authorization handler on, so a
+ * sign-in link can wait for the restore instead of being dropped. Approval still checks the restored identity's key.
  */
 @Singleton
 internal class PubkyAuthHandlerRegistrar @Inject constructor(
@@ -77,7 +77,7 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
 
     private suspend fun hasLocalSecretKey(publicKey: String?): Boolean {
         if (publicKey != null) return pubkyRepo.hasSecretKey()
-        return runSuspendCatching { pubkyRepo.hasStoredSecretKey() }
+        return runSuspendCatching { pubkyRepo.hasLocalSecretKey() }
             .onFailure { Logger.warn("Failed to read saved Pubky secret key", it, context = TAG) }
             .getOrDefault(false)
     }

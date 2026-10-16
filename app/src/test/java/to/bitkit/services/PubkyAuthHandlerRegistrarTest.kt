@@ -55,7 +55,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         whenever(pubkyRepo.backupStateVersion).thenReturn(backupStateVersion)
         whenever(pubkyRepo.identityRefreshVersion).thenReturn(identityRefreshVersion)
         whenever(pubkyRepo.hasIdentity()).thenAnswer { publicKey.value != null }
-        whenever(pubkyRepo.hasStoredSecretKey()).thenReturn(false)
+        whenever(pubkyRepo.hasLocalSecretKey()).thenReturn(false)
     }
 
     @Test
@@ -155,7 +155,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     fun `failed restore keeps the handler on for a saved locally managed identity`() = test {
         isPaykitEnabled.value = true
         whenever(pubkyRepo.hasIdentity()).thenReturn(true)
-        whenever(pubkyRepo.hasStoredSecretKey()).thenReturn(true)
+        whenever(pubkyRepo.hasLocalSecretKey()).thenReturn(true)
 
         createSut().start(backgroundScope)
         runCurrent()
