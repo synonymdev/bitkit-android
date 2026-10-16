@@ -2619,7 +2619,11 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `expired quote ends an active subscription period`() = test {
-        for ((expiresAt, ended) in listOf(Clock.System.now() + 1.days to false, Clock.System.now() - 1.minutes to true)) {
+        val cases = listOf(
+            Clock.System.now() + 1.days to false,
+            Clock.System.now() - 1.minutes to true,
+        )
+        for ((expiresAt, ended) in cases) {
             val (record, period) = recurringShopRecord(expiresAt)
             val attempt = recurringAttempt(period)
             storedProofs = listOf(startedOnchainProof(attempt).copy(billingPeriod = period, conversionQuoteId = "quote-1"))
