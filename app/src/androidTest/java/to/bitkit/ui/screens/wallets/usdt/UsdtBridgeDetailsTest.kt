@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -20,9 +21,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.platform.app.InstrumentationRegistry
 import com.synonym.bitkitcore.UsdtDeposit
 import com.synonym.bitkitcore.UsdtDepositDetail
@@ -34,11 +38,14 @@ import com.synonym.bitkitcore.UsdtTransferStatus
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.collections.immutable.persistentListOf
-import org.junit.Assert.assertEquals
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.R
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import java.io.File
@@ -213,7 +220,10 @@ class UsdtBridgeDetailsTest {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
                 Frame {
                     UsdtDepositsContent(
-                        state = DepositUiState(detail = UsdtDepositDetail(deposit, null)),
+                        state = DepositUiState(
+                            detail = UsdtDepositDetail(deposit, null),
+                            refundError = R.string.usdt__error_address
+                        ),
                         address = enteredAddress.value, hideBalance = false,
                         onBack = {}, onAddress = { enteredAddress.value = it },
                         onDetail = {}, onHistory = {}, onMore = {}, onRefresh = {}, onRefund = {},
@@ -225,8 +235,26 @@ class UsdtBridgeDetailsTest {
         val field = composeTestRule.onNodeWithTag("UsdtRefundAddress")
         field.performScrollTo().performTextInput(address)
         field.assertTextContains(address)
+        closeSoftKeyboard()
+        field.performScrollTo().assertIsDisplayed()
         screenshot("refund-large-font")
         field.assertHeightIsAtLeast(64.dp)
+        composeTestRule.onNodeWithTag("UsdtRefundError").performScrollTo().assertIsDisplayed()
+        for (label in listOf("Request refund", "Hide details")) {
+            val node = composeTestRule.onNodeWithText(label, useUnmergedTree = true)
+            node.performScrollTo().assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue("Missing text layout for $label", layouts.isNotEmpty())
+            screenshot("refund-action-" + label.replace(" ", "-"))
+            val layout = layouts.single()
+            assertFalse("Ellipsized $label", layout.isLineEllipsized(0))
+            assertFalse("Clipped height for $label", layout.didOverflowHeight)
+            assertTrue("Clipped width for $label", layout.getLineRight(0) <= layout.size.width + 1f)
+        }
+        val refund = composeTestRule.onNodeWithTag("UsdtDepositRefund").fetchSemanticsNode().boundsInRoot
+        val details = composeTestRule.onNodeWithTag("UsdtDepositDetails").fetchSemanticsNode().boundsInRoot
+        assertTrue("Large-text actions must stack", details.top >= refund.bottom)
     }
 
     @Composable

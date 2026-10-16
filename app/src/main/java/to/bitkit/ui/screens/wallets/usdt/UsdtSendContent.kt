@@ -333,46 +333,53 @@ private fun UsdtRecipientContent(
 ) {
     val context = LocalContext.current
     var emptyClipboard by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
-        UsdtNetwork(destination, onNetworkClick, destinations)
-        if (!LocalInspectionMode.current) {
-            QrScanningScreen(
-                showsGradientBackground = false,
-                permissionDescription = stringResource(R.string.usdt__camera_permission_description),
-                permissionAccentColor = Colors.Usdt,
-                onScanSuccess = { it.text?.trim()?.let(onRecipientContinue) },
-                modifier = Modifier.weight(1f)
-            )
-        } else { FillHeight() }
-        RectangleButton(
-            label = stringResource(R.string.wallet__payment_request_paste),
-            icon = R.drawable.ic_clipboard_text,
-            iconTint = Colors.Usdt,
-            modifier = Modifier.testTag("UsdtPaste")
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val contentHeight = maxHeight
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).heightIn(min = contentHeight)
         ) {
-            val value = context.getClipboardText()?.trim()
-            if (value.isNullOrBlank()) {
-                emptyClipboard = true
-            } else {
-                emptyClipboard = false
-                onRecipientContinue(value)
+            UsdtNetwork(destination, onNetworkClick, destinations)
+            if (!LocalInspectionMode.current) {
+                QrScanningScreen(
+                    showsGradientBackground = false,
+                    isEmbedded = true,
+                    permissionDescription = stringResource(R.string.usdt__camera_permission_description),
+                    permissionAccentColor = Colors.Usdt,
+                    onScanSuccess = { it.text?.trim()?.let(onRecipientContinue) },
+                    modifier = Modifier.testTag("UsdtScanner")
+                )
+            } else { FillHeight() }
+            RectangleButton(
+                label = stringResource(R.string.wallet__payment_request_paste),
+                icon = R.drawable.ic_clipboard_text,
+                iconTint = Colors.Usdt,
+                modifier = Modifier.testTag("UsdtPaste")
+            ) {
+                val value = context.getClipboardText()?.trim()
+                if (value.isNullOrBlank()) {
+                    emptyClipboard = true
+                } else {
+                    emptyClipboard = false
+                    onRecipientContinue(value)
+                }
             }
+            RectangleButton(
+                label = stringResource(R.string.wallet__recipient_manual),
+                icon = R.drawable.ic_pencil_simple,
+                iconTint = Colors.Usdt,
+                modifier = Modifier.testTag("UsdtManual")
+            ) { onPageChange(UsdtPage.MANUAL) }
+            error?.let {
+                BodyS(
+                    stringResource(it),
+                    color = Colors.Brand,
+                    modifier = Modifier.testTag("UsdtRecipientError")
+                )
+            }
+            if (emptyClipboard) BodyS(stringResource(R.string.wallet__send_clipboard_empty_text), color = Colors.Brand)
+            BodyS(stringResource(R.string.usdt__network_warning), color = Colors.White64)
         }
-        RectangleButton(
-            label = stringResource(R.string.wallet__recipient_manual),
-            icon = R.drawable.ic_pencil_simple,
-            iconTint = Colors.Usdt,
-            modifier = Modifier.testTag("UsdtManual")
-        ) { onPageChange(UsdtPage.MANUAL) }
-        error?.let {
-            BodyS(
-                stringResource(it),
-                color = Colors.Brand,
-                modifier = Modifier.testTag("UsdtRecipientError")
-            )
-        }
-        if (emptyClipboard) BodyS(stringResource(R.string.wallet__send_clipboard_empty_text), color = Colors.Brand)
-        BodyS(stringResource(R.string.usdt__network_warning), color = Colors.White64)
     }
 }
 
@@ -431,7 +438,11 @@ private fun UsdtAmountContent(
         UsdtAmountHeader(amount.ifEmpty { "0" }, modifier = Modifier.testTag("UsdtAmount"))
         VerticalSpacer(32.dp)
         state.error?.let {
-            BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
+            BodyS(
+                state.errorMessage(it),
+                color = Colors.Brand,
+                modifier = Modifier.testTag("UsdtError")
+            )
             VerticalSpacer(16.dp)
         }
         FlowRow(
@@ -555,7 +566,11 @@ private fun UsdtConfirmation(
                         )
                     }
                     state.error?.let {
-                        BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
+                        BodyS(
+                            state.errorMessage(it),
+                            color = Colors.Brand,
+                            modifier = Modifier.testTag("UsdtError")
+                        )
                     }
                     UsdtReviewDetailsButton(showDetails) { showDetails = !showDetails }
                 }
@@ -754,3 +769,7 @@ private fun Preview2() {
         }
     }
 }
+
+@Composable
+private fun UsdtSendState.errorMessage(resource: Int): String =
+    errorAmount?.let { stringResource(resource, it) } ?: stringResource(resource)

@@ -58,10 +58,14 @@ class UsdtSupportDetailsTest {
             order = UsdtDepositOrder("refunded", 100u, null, null, "order-refund", null),
         ).supportDetails("Refunded")
         assertTrue(details.contains("Status: Refunded (refunded)"))
-        listOf("Orchestra", "tron", "Arbitrum One", "deposit-id", "source-tx", "refunded", "order-refund").forEach {
+        listOf("Orchestra", "Tron", "Arbitrum One", "deposit-id", "source-tx", "refunded", "order-refund").forEach {
             assertTrue(details.contains(it), it)
         }
         assertFalse(details.contains("old-code"))
         assertFalse(details.contains("deposit-refund"))
+        assertTrue(
+            detail.copy(deposit = deposit.copy(network = "unknown")).supportDetails("Needs attention")
+                .contains("Source network: unknown")
+        )
     }
 }
