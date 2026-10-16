@@ -1786,7 +1786,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `localIdentityPublicKey derives the stored key's identity only with a saved session and no Ring source`() = test {
+    fun `localIdentityPublicKey needs a saved session and a stored key without a Ring source`() = test {
         whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
         whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
