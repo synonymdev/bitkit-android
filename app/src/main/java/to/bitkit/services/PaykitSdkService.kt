@@ -535,7 +535,7 @@ class PaykitSdkService @Inject constructor(
         approvedClientId: String,
         secretKeyHex: String,
     ) {
-        isSetup.await()
+        ensurePlatformSetup()
         return operationLock.withLock {
             approvalBootstrap(authUrl, approvedClientId).approveAuth(
                 authUrl = authUrl,
@@ -552,10 +552,10 @@ class PaykitSdkService @Inject constructor(
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
     ) {
-        isSetup.await()
+        val requestedClaim = PubkyAuthRequest.parseBitkitClaim(authUrl, expectedCapabilities).getOrThrow()
+            ?: throw PubkyAuthRequestError.MissingBitkitClaim
+        if (requestedClaim.includesPaykitAccess) isSetup.await() else ensurePlatformSetup()
         return operationLock.withLock {
-            val requestedClaim = PubkyAuthRequest.parseBitkitClaim(authUrl, expectedCapabilities).getOrThrow()
-                ?: throw PubkyAuthRequestError.MissingBitkitClaim
             require(
                 claim.queryParameter == PubkyAuthClaim.QUERY_PARAMETER && claim.claimType == requestedClaim.wireValue
             ) {
@@ -1556,6 +1556,10 @@ class PaykitSdkService @Inject constructor(
     }
 
     private fun bootstrap() = cachedBootstrap
+
+    private fun ensurePlatformSetup() {
+        if (!isSetup.isCompleted || setupFailed) platformInitializer()
+    }
 
     private fun approvalBootstrap(authUrl: String, approvedClientId: String): PubkySessionBootstrap {
         val requestClientId = parsePubkyAuthUrl(authUrl).clientId.orEmpty()

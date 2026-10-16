@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -1388,6 +1389,55 @@ class PaykitSdkServiceTest {
             )
             verifyNoInteractions(keychain, sdk)
         }
+    }
+
+    @Test
+    fun `approval waits only for platform setup unless its claim grants Paykit access`() = runTest {
+        var platformSetups = 0
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            platformInitializer = { platformSetups++ },
+            settingsStore = mock(),
+        ) { mock() }
+        val paykitAccess = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1)
+        val watchOnly = PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1)
+        fun companion(claim: PubkyAuthClaim) = PubkyAuthCompanionClaim(
+            queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
+            claimType = claim.wireValue,
+            unsignedPayload = ByteArray(84).apply { this[0] = 1 },
+        )
+
+        val approvals = listOf(
+            async { runSuspendCatching { service.approveAuth("pubkyauth://signin", "/pub/a/:rw", "test", "00") } },
+            async {
+                runSuspendCatching {
+                    service.approveAuthWithCompanionClaim(
+                        "pubkyauth://signin?x-bitkit-claim=${watchOnly.wireValue}",
+                        PubkyAuthClaim.REQUIRED_CAPABILITIES,
+                        "test",
+                        "00",
+                        companion(watchOnly),
+                    )
+                }
+            },
+        )
+        val paykitAccessApproval = async {
+            service.approveAuthWithCompanionClaim(
+                "pubkyauth://signin?x-bitkit-claim=${paykitAccess.wireValue}",
+                PubkyAuthClaim.REQUIRED_CAPABILITIES,
+                "test",
+                "00",
+                companion(paykitAccess),
+            )
+        }
+        advanceUntilIdle()
+
+        assertTrue(approvals.all { it.isCompleted })
+        assertEquals(2, platformSetups)
+        assertFalse(paykitAccessApproval.isCompleted)
+        paykitAccessApproval.cancel()
     }
 
     @Test

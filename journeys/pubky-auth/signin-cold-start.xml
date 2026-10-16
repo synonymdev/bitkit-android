@@ -1,7 +1,8 @@
 <journey name="signin cold start">
   <description>
-    Verifies that a sign-in link opened while Bitkit is not running waits visibly for the saved Pubky
-    session and then opens the authorization sheet. Precondition: an unlocked wallet with Paykit
+    Verifies that a sign-in link opened while Bitkit is not running shows a loading toast while the
+    saved Pubky session restores, then opens the authorization sheet; when the restore is deferred
+    while the device is online, the sheet opens with the stored key's identity. Precondition: an unlocked wallet with Paykit
     enabled and a locally managed Pubky identity, and a requesting app that supplies a fresh
     pubkyauth://signin_grant URL with a reachable homeserver and relay. The iOS counterpart is
     pubky-auth/open-signin-link.xml (bitkit://pubky-auth/signin); only Android has the raw pubkyauth

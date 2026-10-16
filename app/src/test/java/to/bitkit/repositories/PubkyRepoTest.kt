@@ -1786,6 +1786,20 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `localIdentityPublicKey needs a saved session and a stored key without a Ring source`() = test {
+        whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        assertNull(sut.localIdentityPublicKey())
+
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        assertEquals(VALID_SELF_KEY, sut.localIdentityPublicKey())
+
+        whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(true)
+        assertNull(sut.localIdentityPublicKey())
+    }
+
+    @Test
     fun `adoptRingIdentity should reject a mismatching credential without changing the source`() = test {
         val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
         whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("ring_secret"))
