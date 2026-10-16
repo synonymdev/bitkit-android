@@ -850,6 +850,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
+        val signIn = pubkyRepo.currentSignIn()
         val settings = settingsStore.data.first()
         if (!isPaykitEnabled.value || !settings.sharesPublicPaykitEndpoints ||
             privatePaykitRepo.isProfileDeletionInProgress.value
@@ -857,18 +858,19 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        pubkyRepo.isRestoringSession.first { !it }
+        val admission = publicPaykitPublicationAdmission(signIn ?: pubkyRepo.currentSignIn())
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
 
         publicPaykitRepo.syncCurrentPublishedEndpoints(
             forceRefreshLightning = forceRefreshLightning,
-            canPublish = publicPaykitPublicationAdmission(),
+            canPublish = admission,
         )
             .onFailure { Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG) }
     }
 
-    private fun publicPaykitPublicationAdmission(): () -> Boolean {
-        val signIn = pubkyRepo.currentSignIn()
+    private fun publicPaykitPublicationAdmission(signIn: PubkySignIn? = pubkyRepo.currentSignIn()): () -> Boolean {
         return {
             signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
         }

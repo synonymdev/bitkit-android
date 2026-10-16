@@ -303,6 +303,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
     private val pubkyPublicKey = MutableStateFlow<String?>(null)
+    private val isRestoringPubkySession = MutableStateFlow(false)
     private val pubkyContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     private val isProfileDeletionInProgress = MutableStateFlow(false)
     private val pubkyContactsLoadVersion = MutableStateFlow(0L)
@@ -627,6 +628,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
+        whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringPubkySession)
         whenever(pubkyRepo.currentSignIn()).thenAnswer { pubkyPublicKey.value?.let { PubkySignIn(it, 0L) } }
         whenever(pubkyRepo.isCurrent(any())).thenAnswer {
             pubkyPublicKey.value == it.getArgument<PubkySignIn>(0).publicKey
@@ -11868,6 +11870,52 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
         sut.stopPaykitPaymentRequestPolling()
+    }
+
+    @Test
+    fun `public refresh publishes the initially restored identity without another wallet event`() = test {
+        enablePublicPaykitSharing()
+        isRestoringPubkySession.value = true
+        val admitted = mutableListOf<Boolean>()
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).doSuspendableAnswer {
+            isRestoringPubkySession.first { restoring -> !restoring }
+            admitted.add(it.getArgument<() -> Boolean>(2)())
+            Result.success(Unit)
+        }
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(admitted.isEmpty())
+
+        pubkyPublicKey.value = testPublicKey
+        isRestoringPubkySession.value = false
+        runCurrent()
+        assertEquals(listOf(true), admitted)
+    }
+
+    @Test
+    fun `public refresh rejects an existing sign in replaced during restoration`() = test {
+        enablePublicPaykitSharing()
+        pubkyPublicKey.value = testPublicKey
+        isRestoringPubkySession.value = true
+        var signIn = PubkySignIn(testPublicKey, 0L)
+        whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+        whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0) == signIn }
+        val admitted = mutableListOf<Boolean>()
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).doSuspendableAnswer {
+            isRestoringPubkySession.first { restoring -> !restoring }
+            admitted.add(it.getArgument<() -> Boolean>(2)())
+            Result.success(Unit)
+        }
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(admitted.isEmpty())
+
+        signIn = PubkySignIn(testPublicKey, 1L)
+        isRestoringPubkySession.value = false
+        runCurrent()
+        assertEquals(listOf(false), admitted)
     }
 
     @Test
