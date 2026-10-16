@@ -62,6 +62,7 @@ import to.bitkit.models.FeeRate
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.BalanceHeaderView
@@ -358,7 +359,13 @@ private fun ContentRunning(
     val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
     val accentColor = when {
-        isPreparing -> Colors.Brand
+        preparingRequest != null -> if (preparingRequest.acceptedPaymentEndpointIdentifiers.toSet() ==
+            setOf(MethodId.UsdtArbitrum.rawValue)
+        ) {
+            Colors.Usdt
+        } else {
+            Colors.White64
+        }
         uiState.payMethod == SendMethod.LIGHTNING -> Colors.Purple
         else -> Colors.Brand
     }

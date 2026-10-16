@@ -52,7 +52,7 @@ class UsdtBridgeDetailsTest {
     private val sourceTx = "0x" + "ab".repeat(32)
     private val deposit = UsdtDeposit(
         "xit_4cfc646b-3657-4144-a644-b7880f184686", "bsc", "USDT", 50_000_001u,
-        sourceTx, "held", null, null,
+        sourceTx, "held", "standing_route_unavailable", null,
     )
     private val transfer = UsdtTransfer(
         id = "transfer", sender = address, txHash = sourceTx, userOperationHash = null,
@@ -154,6 +154,8 @@ class UsdtBridgeDetailsTest {
         composeTestRule.onNodeWithTag("UsdtRefundAddress").assertDoesNotExist()
         composeTestRule.onNodeWithTag("UsdtDepositDetails").performScrollTo().performClick()
         composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("standing_route_unavailable").assertDoesNotExist()
+        composeTestRule.onNodeWithText("This deposit needs provider assistance.", substring = true).assertExists()
         composeTestRule.onNodeWithText("USDT address on BSC").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag("UsdtDepositRefund").assertIsNotEnabled()
         assertHeight("UsdtRefundAddress", 56f)

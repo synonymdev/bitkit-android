@@ -172,7 +172,7 @@ internal fun UsdtActivityDetail(
                     )
                     )
             ) {
-                UsdtSupportActions(transfer.supportDetails)
+                UsdtSupportActions(transfer.supportDetails(stringResource(transfer.status.labelResource)))
             }
         }
         if (showDetails && (transfer.txHash != null || canOpenDeposits)) {

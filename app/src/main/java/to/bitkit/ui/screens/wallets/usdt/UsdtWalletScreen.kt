@@ -52,7 +52,6 @@ import com.synonym.bitkitcore.UsdtTransfer
 import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -176,7 +175,7 @@ fun UsdtWalletScreen(
         viewModel,
         pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING },
     ) {
-        page == UsdtPage.WALLET
+        page == UsdtPage.WALLET && selectedTransferId == null
     }
     val selectedTransfer = wallet.transfers.firstOrNull { it.id == selectedTransferId }
     if (selectedTransfer != null) {
@@ -422,25 +421,36 @@ internal fun UsdtRefreshEffect(
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val app = appViewModel
-    val handleReceived by rememberUpdatedState(onReceived)
     val isPending by rememberUpdatedState(pending)
     val isReceiving by rememberUpdatedState(receiving)
+    val wallet by viewModel.wallet.collectAsStateWithLifecycle()
+    val receipt = wallet.pendingReceipts.firstOrNull()
+    val sheet = app?.currentSheet?.collectAsStateWithLifecycle()?.value
+    val transactionSheet = app?.transactionSheet?.collectAsStateWithLifecycle()?.value
+    val canReceive = onReceived() && (receiving || sheet == null) &&
+        transactionSheet == NewTransactionSheetDetails.EMPTY
+    val canPresent by rememberUpdatedState(canReceive)
+    LaunchedEffect(receipt?.id, canReceive, lifecycle) {
+        if (receipt != null && canReceive) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                app.showTransactionSheet(
+                    NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.ONCHAIN,
+                        direction = NewTransactionSheetDirection.RECEIVED,
+                        usdtAmount = receipt.amount,
+                        usdtTransferId = receipt.id,
+                    ),
+                    shouldShow = {
+                        canPresent && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                            app.transactionSheet.value == NewTransactionSheetDetails.EMPTY &&
+                            viewModel.consumeReceipt(receipt.id)
+                    },
+                )
+            }
+        }
+    }
     LaunchedEffect(lifecycle, viewModel, app) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            launch {
-                viewModel.receivedTxs.collect { transfer ->
-                    if ((isReceiving || app?.currentSheet?.value == null) && handleReceived()) {
-                        app?.showTransactionSheet(
-                            NewTransactionSheetDetails(
-                                type = NewTransactionSheetType.ONCHAIN,
-                                direction = NewTransactionSheetDirection.RECEIVED,
-                                usdtAmount = transfer.amount,
-                                usdtTransferId = transfer.id,
-                            )
-                        )
-                    }
-                }
-            }
             while (true) {
                 viewModel.refresh(history = true)
                 delay(if (isReceiving || isPending) 10.seconds else 30.seconds)
