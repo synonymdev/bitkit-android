@@ -2737,6 +2737,38 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `forced private Lightning refresh includes contacts loaded later`() = test {
+        preparePrivateLightningContact()
+        sut.scheduleSavedContactPreparation(emptyList()).getOrThrow()
+        runCurrent()
+        sut.refreshKnownSavedContactEndpoints("channel usable", forceRefreshLightning = true).getOrThrow()
+        runCurrent()
+
+        val refreshedInvoice = "lnbcrt1refreshed"
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+            .thenReturn(Result.success(refreshedInvoice))
+        whenever(coreService.decode(refreshedInvoice))
+            .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
+        clearInvocations(paykitSdkService)
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        sut.awaitContactPreparation()
+
+        val publication = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(publication.capture(), eq(false))
+        assertEquals(
+            PublicPaykitRepo.serializePayload(refreshedInvoice),
+            publication.firstValue.single().reservations.single().payload,
+        )
+        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        sut.awaitContactPreparation()
+        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `deferred private Lightning refresh cannot consume a newer request during publication`() = test {
         preparePrivateLightningContact()
         val publicationStarted = CompletableDeferred<Unit>()
@@ -2768,6 +2800,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `deferred private Lightning refresh does not follow a replaced sign in`() = test {
         preparePrivateLightningContact()
+        sut.scheduleSavedContactPreparation(emptyList()).getOrThrow()
+        runCurrent()
         var isCurrent = true
         sut.beginProfileDeletion()
         sut.refreshKnownSavedContactEndpoints(
@@ -2777,7 +2811,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).getOrThrow()
         isCurrent = false
         sut.endProfileDeletion()
-        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
 
         verify(lightningRepo).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
@@ -2807,7 +2841,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             privateListDeliveryReport(queuedCounterparties = keys),
         )
         clearInvocations(paykitSdkService)
-        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        sut.scheduleSavedContactPreparation(keys).getOrThrow()
         runCurrent()
         verify(lightningRepo, times(5)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
         val publication = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()

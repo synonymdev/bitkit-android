@@ -20,6 +20,8 @@ While deletion is held, make a Lightning channel usable or ready, then fail dele
 
 Hold initial session restoration before sign-in is available, then make a Lightning channel usable. Release restoration while public publication cannot proceed, then restore readiness or connectivity without another channel event. Normal maintenance must retain the forced invoice refresh for the restored identity. A refresh that began with an existing sign-in must not transfer to a replacement session.
 
+On Android, hold the saved-contact load at cold start while a Lightning channel becomes usable. When contacts load, their pending private invoice refresh must use current route hints without another channel event. Repeating the contact list must not refresh already-completed peers again, and replacing the session must discard the old request. This Android-specific check requires a contact-load gate beyond the journey runner capabilities.
+
 For a saved identity, inject a temporary import failure (`concurrent_update`, `shared_state_busy`, or a transport failure) during cold start. Verify that no "Session expired" toast appears, the saved credentials remain, and recovery succeeds after the temporary failure ends. A genuinely invalid session must still produce the existing expiry feedback.
 
 For the reported background-resume case, verify returning directly to Profile with the process still alive, then repeat after the OS recreates the process. A delay in session recovery must keep the saved identity on the profile loading/retry screen rather than show profile onboarding.

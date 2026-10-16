@@ -2269,6 +2269,8 @@ class PrivatePaykitRepo @Inject constructor(
 
     private fun rememberSavedContacts(publicKeys: Collection<String>, replacing: Boolean): List<String> {
         val normalizedKeys = publicKeys.mapNotNull { normalizedPublicKey(it) }.distinct()
+        val newKeys = normalizedKeys.filter { it !in knownSavedContactKeys }
+        currentLightningRefresh()?.remainingKeys?.addAll(newKeys)
         if (replacing) {
             knownSavedContactKeys.clear()
             unavailableLinkRetryAt.keys.retainAll(normalizedKeys.toSet())
