@@ -422,6 +422,33 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `grant signup with only a stored key shows that identity and authorizes without identity creation`() = test {
+        val authUrl = "pubkyauth://signup_grant?hs=homeserver"
+        val request = PubkyAuthRequest.parseGrantSignup(
+            rawUrl = authUrl,
+            clientId = clientId,
+            relay = "https://relay.example",
+            capabilities = "/pub/example/:rw",
+            homeserverPublicKey = "homeserver",
+        ).getOrThrow()
+        whenever(pubkyRepo.localIdentityPublicKey()).thenReturn("pubky_stored")
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+        whenever(pubkyRepo.approveAuth(authUrl, request.capabilities, clientId)).thenReturn(Result.success(Unit))
+        val sut = createSut()
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.createsIdentity)
+        assertEquals("pubky_stored", sut.uiState.value.profile?.publicKey)
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo) { approveAuth(authUrl, request.capabilities, clientId) }
+        verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
+    }
+
+    @Test
     fun `terminal signup outcomes allow the same URL to reload for consent`() = test {
         listOf(Result.success(Unit), Result.failure(PubkyAlreadySignedInError)).forEach { outcome ->
             val authUrl = "pubkyauth://direct_signup?hs=homeserver"

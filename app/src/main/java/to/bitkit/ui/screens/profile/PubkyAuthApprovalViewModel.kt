@@ -113,6 +113,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                 it.isNotEmpty()
             }?.joinToString(context.getString(R.string.profile__auth_approval_services_separator)) ?: unknownService
             val usdtEnabled = usdtPreferences.enabled.first()
+            val identityPublicKey = pubkyRepo.publicKey.value ?: pubkyRepo.localIdentityPublicKey()
+            val profile = approvalProfile(identityPublicKey)
             _uiState.update {
                 it.copy(
                     state = if (request.bitkitClaim?.sharesBitcoin == true ||
@@ -124,11 +126,11 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                     },
                     clientId = request.clientId,
                     homeserverPublicKey = request.homeserverPublicKey,
-                    createsIdentity = request.requiresIdentityCreation(pubkyRepo.publicKey.value != null),
+                    createsIdentity = request.requiresIdentityCreation(identityPublicKey != null),
                     serviceName = serviceName,
                     permissions = request.permissions.toImmutableList(),
                     bitkitClaim = request.bitkitClaim,
-                    profile = approvalProfile(),
+                    profile = profile,
                     isUsdtEnabled = usdtEnabled,
                     shareUsdt = usdtEnabled,
                 )
@@ -416,8 +418,10 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         return context.getString(R.string.profile__auth_approval_watch_only_account_default_name, serviceName)
     }
 
-    private fun approvalProfile() = pubkyRepo.profile.value ?: pubkyRepo.publicKey.value?.let { publicKey ->
-        PubkyProfile.forDisplay(
+    private fun approvalProfile(identityPublicKey: String?): PubkyProfile? {
+        pubkyRepo.profile.value?.let { return it }
+        val publicKey = identityPublicKey ?: return null
+        return PubkyProfile.forDisplay(
             publicKey = publicKey,
             name = pubkyRepo.displayName.value,
             imageUrl = pubkyRepo.displayImageUri.value,

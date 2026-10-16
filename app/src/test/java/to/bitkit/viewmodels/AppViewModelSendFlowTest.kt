@@ -5016,6 +5016,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cold pubky auth deeplink opens the sheet with the stored key while the restore stays deferred`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(pubkyRepo.awaitIdentityReady()).thenReturn(PubkyIdentityReadiness.Unavailable)
+        whenever(pubkyRepo.localIdentityPublicKey()).thenReturn(testPublicKey)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertNull(pubkyPublicKey.value)
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        verify(pubkyRepo, times(1)).awaitIdentityReady()
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager).dismiss(check { assertTrue(it.isLoading) })
+    }
+
+    @Test
     fun `pubky auth deeplink shows a retryable error for a saved identity it cannot restore`() = test {
         enablePaykitUi()
         whenever(pubkyRepo.hasIdentity()).thenReturn(true)

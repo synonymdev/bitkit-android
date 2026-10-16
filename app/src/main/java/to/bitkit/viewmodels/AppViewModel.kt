@@ -3149,6 +3149,10 @@ class AppViewModel @Inject constructor(
 
     private suspend fun awaitPubkyAuthIdentity() {
         while (pubkyRepo.awaitIdentityReady() == PubkyIdentityReadiness.Unavailable) {
+            if (pubkyRepo.localIdentityPublicKey() != null) {
+                Logger.debug("Continuing sign-in link with the stored Pubky key while the session restores", context = TAG)
+                return
+            }
             delay(PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL)
             isOnline.first { it == ConnectivityState.CONNECTED }
             Logger.debug("Retrying Pubky session restore for a sign-in link", context = TAG)
@@ -7659,7 +7663,8 @@ class AppViewModel @Inject constructor(
         }
 
         if (pubkyRepo.publicKey.value == null) {
-            showPubkyIdentityUnavailableToast()
+            if (pubkyRepo.localIdentityPublicKey() == null) return showPubkyIdentityUnavailableToast()
+            showSheet(Sheet.PubkyAuth(authUrl))
             return
         }
 

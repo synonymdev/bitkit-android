@@ -1532,6 +1532,18 @@ class PubkyRepo @Inject constructor(
         keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name) && !keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)
     }
 
+    /**
+     * The identity of the key Bitkit stores for the saved session, read without restoring the session.
+     * Null for a Ring-sourced identity or when no key is stored.
+     */
+    suspend fun localIdentityPublicKey(): String? = runSuspendCatching {
+        withContext(ioDispatcher) {
+            if (!hasLocalSecretKey()) return@withContext null
+            val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name) ?: return@withContext null
+            pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix()
+        }
+    }.getOrNull()
+
     suspend fun hasIdentity(): Boolean = withContext(ioDispatcher) {
         _publicKey.value != null ||
             !keychain.loadString(Keychain.Key.PAYKIT_SESSION.name).isNullOrEmpty() ||
