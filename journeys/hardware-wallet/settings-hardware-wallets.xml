@@ -44,6 +44,7 @@
     <action>
       Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HardwareWalletIntroScreen") showing hardware device illustrations, then press Android back and verify the sheet closes back to the Hardware Wallets screen
     </action>
+    <action>On Android, reopen Add Hardware Wallet at font scale 2.0. Verify Cancel and Continue stack vertically with complete readable labels and working tap targets. Close with Cancel and restore the normal font scale; reopen and verify both buttons return to their original side-by-side row and 56dp height, then close with Cancel.</action>
     <action>
       Tap the trash (delete) icon on the device row
     </action>

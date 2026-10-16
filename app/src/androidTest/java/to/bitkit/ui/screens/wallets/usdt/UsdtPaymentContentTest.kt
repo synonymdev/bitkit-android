@@ -42,6 +42,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppThemeSurface
 import java.util.Locale
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -75,6 +76,32 @@ class UsdtPaymentContentTest {
     @After
     fun teardown() {
         Locale.setDefault(originalLocale)
+    }
+
+    @Test
+    fun decimalKeyMatchesAmountLocaleWithoutChangingInputEncoding() {
+        Locale.setDefault(Locale.GERMANY)
+        val amount = mutableStateOf("5")
+        composeTestRule.setContent {
+            AppThemeSurface {
+                Column {
+                    UsdtReceiveAmountContent(
+                        amount = amount.value,
+                        allowEmpty = false,
+                        busy = false,
+                        error = null,
+                        limits = null,
+                        onAmount = { amount.value = it },
+                        onContinue = {},
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithText(",").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NDecimal").performClick()
+        composeTestRule.onNodeWithTag("N5").performClick()
+        composeTestRule.onNodeWithText("5,5").assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals("5.5", amount.value) }
     }
 
     @Test

@@ -2,13 +2,14 @@ package to.bitkit.ui.sheets.hardware
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -69,9 +70,11 @@ private fun Content(
             VerticalSpacer(8.dp)
             BodyM(stringResource(R.string.hardware__intro_text), color = Colors.White64)
             VerticalSpacer(32.dp)
-            Row(
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                maxItemsInEachRow = if (LocalDensity.current.fontScale > 1.3f) 1 else 2,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__cancel),
