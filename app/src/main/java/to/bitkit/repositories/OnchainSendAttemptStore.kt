@@ -112,10 +112,21 @@ data class OnchainSendAttempt(
 
     val blocksNextSend: Boolean
         get() = isUnresolved || (hasPositiveEvidence && !localFollowupComplete)
+
+    /** A Shop payment from the node wallet that dispatched but never had its acceptance confirmed. */
+    val canBeAbandoned: Boolean
+        get() = isUnresolved && requestId != null && !isTransfer && walletId == WalletScope.default &&
+            !payerIdentity.isNullOrBlank() && initialDispatchAttempted && txid != null &&
+            !originalInputs.isNullOrEmpty() && candidateTxids.isNotEmpty()
 }
 
 class OnchainSendBlockedError(val attempt: OnchainSendAttempt? = null) :
     AppError("A previous on-chain send is unresolved or this payment was already sent.")
+
+class OnchainSendAbandonRefusedError(val requestOpen: Boolean) :
+    AppError("This on-chain payment may still reach the network or its request is still open.")
+
+class OnchainSendAbandonSyncError : AppError("The on-chain wallet could not sync before releasing a payment.")
 
 class OnchainSendAttemptUnreadableError(cause: Throwable) : AppError("Failed to read on-chain send attempt", cause)
 
@@ -243,6 +254,27 @@ class OnchainSendAttemptStore @Inject constructor(
             }
             if (current.walletId != WalletScope.default || current.payerIdentity.isNullOrBlank()) return@withLock false
             if (current.evidence != OnchainSendEvidence.Pending) return@withLock false
+            if (!removeOriginalProof(current)) return@withLock false
+            keychain.delete(KEY, current.walletIndex)
+            _backupStateVersion.update { it + 1 }
+            true
+        }
+    }
+
+    /**
+     * Releases a Shop payment whose request has ended once the caller has shown that none of its candidates
+     * reached the network. The original proof is removed first, so a crash in between leaves an attempt that
+     * a later call can still release.
+     */
+    suspend fun abandonUnbroadcast(
+        expected: OnchainSendAttempt,
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = withContext(ioDispatcher + NonCancellable) {
+        mutex.withLock {
+            val current = loadWithRetainedAccepted(expected.walletIndex) ?: return@withLock false
+            if (current != expected || !current.canBeAbandoned || current.attemptId in inFlightPreparations) {
+                return@withLock false
+            }
             if (!removeOriginalProof(current)) return@withLock false
             keychain.delete(KEY, current.walletIndex)
             _backupStateVersion.update { it + 1 }

@@ -2514,6 +2514,53 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
+    @Test
+    fun `ended Shop request releases a payment that never reached the network`() = test {
+        for (state in listOf(
+            PaymentRequestLifecycleState.CANCELED,
+            PaymentRequestLifecycleState.REJECTED,
+            PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
+        )) {
+            val attempt = unknownShopAttempt("ab".repeat(32))
+            storedProofs = listOf(startedOnchainProof(attempt))
+            whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord(state = state)))
+            stubAbandon(attempt)
+            var checked: OnchainSendAttempt? = null
+
+            val result = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt) {
+                checked = it
+                true
+            }
+
+            assertTrue(result.isSuccess)
+            assertEquals(attempt, checked)
+            assertTrue(storedProofs.isEmpty())
+        }
+    }
+
+    @Test
+    fun `payment that may still confirm or whose request is open keeps its proof`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32))
+        val proof = startedOnchainProof(attempt)
+        stubAbandon(attempt)
+        val cases = listOf(
+            Triple(paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED), true, true),
+            Triple(paymentRequestRecord(state = PaymentRequestLifecycleState.PROOF_SUBMITTED), true, true),
+            Triple(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED), false, false),
+        )
+        for ((record, neverReached, requestOpen) in cases) {
+            storedProofs = listOf(proof)
+            whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+
+            val error = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt) { neverReached }.exceptionOrNull()
+
+            assertEquals(requestOpen, (error as OnchainSendAbandonRefusedError).requestOpen)
+            assertEquals(listOf(proof), storedProofs)
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(emptyList())
+        assertFalse(paymentProofRepo().onchainRequestHasEnded(attempt))
+    }
+
     private fun TestScope.observeRequestStateChanges() {
         paymentProofRepo(projectionStore).paymentRequestStateChanges(projectionIdentity)
             .onEach { requestStateChanges++ }
@@ -2590,6 +2637,33 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         privatePaykitRepo = dagger.Lazy { privatePaykitRepo },
     )
 
+    private fun unknownShopAttempt(txid: String) = acceptedAttempt(
+        paymentRequest(MethodId.entries.first { it.isOnchain }.rawValue), txid,
+    ).copy(
+        evidence = OnchainSendEvidence.Unknown,
+        payerIdentity = LOCAL_IDENTITY,
+        originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+        candidateTxids = listOf(txid),
+    )
+
+    private fun startedOnchainProof(attempt: OnchainSendAttempt) = PendingPaykitPaymentProof(
+        identity = LOCAL_IDENTITY,
+        requestId = requireNotNull(attempt.requestId),
+        paymentEndpointIdentifier = MethodId.entries.first { it.isOnchain }.rawValue,
+        kind = PaykitPaymentProofKind.Onchain,
+        paymentStarted = true,
+        paymentIdentifier = attempt.txid,
+        onchainAddress = attempt.address,
+        onchainAmountSats = attempt.amountSats,
+        paymentAppId = "bitkit",
+    )
+
+    private suspend fun stubAbandon(attempt: OnchainSendAttempt) {
+        whenever(lightningRepo.abandonUnbroadcastOnchainSend(any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend (OnchainSendAttempt) -> Boolean>(1).invoke(attempt)
+        }
+    }
+
     private fun acceptedAttempt(request: PaykitPaymentRequest, txid: String) = OnchainSendAttempt(
         walletId = WalletScope.default,
         attemptId = "attempt-1",
@@ -2637,11 +2711,12 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private fun paymentRequestRecord(
         paymentProofs: List<PaymentProofRecord> = emptyList(),
         paymentRequestId: String = PAYMENT_REQUEST_ID,
+        state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
     ) = PaymentRequestRecord(
         counterparty = COUNTERPARTY,
         paymentRequestId = paymentRequestId,
         localRole = PaymentRequestLocalRole.PAYER,
-        state = PaymentRequestLifecycleState.PROPOSED,
+        state = state,
         proposalStreamItemId = 1uL,
         proposalOutboundMessageId = null,
         proposalOutboundStatus = null,

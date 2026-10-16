@@ -1861,6 +1861,26 @@ class LightningRepo @Inject constructor(
 
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
 
+    /** Syncs the on-chain wallet, then checks that none of the attempt's candidates reached the mempool or the chain. */
+    suspend fun onchainCandidatesNeverReachedNetwork(
+        attempt: OnchainSendAttempt,
+        timeout: Duration = ABANDON_SYNC_TIMEOUT,
+    ): Boolean {
+        val requestedAt = (System.currentTimeMillis() / 1000).toULong()
+        withTimeoutOrNull(timeout) {
+            sync()
+            while ((lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL) <= requestedAt) {
+                delay(1.seconds)
+            }
+        } ?: throw OnchainSendAbandonSyncError()
+        return lightningService.walletKnowsNoCandidate(attempt)
+    }
+
+    suspend fun abandonUnbroadcastOnchainSend(
+        expected: OnchainSendAttempt,
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = onchainSendAttemptStore.abandonUnbroadcast(expected, removeOriginalProof)
+
     suspend fun releaseInterruptedShopPreparation(
         removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
     ): Boolean = onchainSendAttemptStore.releaseInterruptedShopPreparation(removeOriginalProof)
@@ -2581,6 +2601,7 @@ class LightningRepo @Inject constructor(
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
+        private val ABANDON_SYNC_TIMEOUT = 30.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
 
         /** Max time to wait for a starting node before its id is treated as unavailable. */

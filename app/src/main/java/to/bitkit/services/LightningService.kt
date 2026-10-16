@@ -1028,6 +1028,21 @@ class LightningService internal constructor(
         }
     }
 
+    /**
+     * Whether the wallet knows none of the attempt's candidates while it still knows the transactions its coins
+     * came from. A candidate that reached the mempool or the chain spends wallet coins, so a sync adds it.
+     */
+    suspend fun walletKnowsNoCandidate(attempt: OnchainSendAttempt): Boolean {
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        val inputs = attempt.originalInputs.orEmpty()
+        if (inputs.isEmpty() || attempt.walletIndex != currentWalletIndex) return false
+        return callOnchainSend {
+            if (currentWalletIndex != attempt.walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            attempt.candidateTxids.none { originalNode.getTransactionDetails(it) != null } &&
+                inputs.all { originalNode.getTransactionDetails(it.txid) != null }
+        }
+    }
+
     internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =
         ServiceQueue.LDK.background(ldkQueue) { runSuspendCatching { block() } }.getOrThrow()
 
