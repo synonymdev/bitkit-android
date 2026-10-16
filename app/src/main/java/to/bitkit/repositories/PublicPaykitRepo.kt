@@ -202,16 +202,28 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     private val publishMutex = Mutex()
-    private class LightningRefresh(val signIn: PubkySignIn)
+    private val invoiceMutex = Mutex()
+    private class LightningRefresh(signIn: PubkySignIn?, val ownsIdentity: () -> Boolean) {
+        val signIn = AtomicReference(signIn)
+        var invalidateInvoice = true
+    }
 
     private val pendingLightningRefresh = AtomicReference<LightningRefresh?>(null)
 
-    internal fun requestLightningRefresh(signIn: PubkySignIn) {
-        if (pubkyRepo.isCurrent(signIn)) pendingLightningRefresh.set(LightningRefresh(signIn))
+    internal fun requestLightningRefresh(signIn: PubkySignIn?, restorationGuard: (() -> Boolean)? = null) {
+        val ownsIdentity = signIn?.let { { pubkyRepo.isCurrent(it) } } ?: restorationGuard ?: return
+        if (ownsIdentity()) pendingLightningRefresh.set(LightningRefresh(signIn, ownsIdentity))
     }
 
     internal val hasPendingLightningRefresh: Boolean
-        get() = pendingLightningRefresh.get()?.let { pubkyRepo.isCurrent(it.signIn) } == true
+        get() = currentLightningRefresh() != null
+
+    private fun currentLightningRefresh(): LightningRefresh? = pendingLightningRefresh.get()?.takeIf { request ->
+        pubkyRepo.currentSignIn()?.let { request.signIn.compareAndSet(null, it) }
+        val current = request.ownsIdentity() && request.signIn.get()?.let { pubkyRepo.isCurrent(it) } != false
+        if (!current) pendingLightningRefresh.compareAndSet(request, null)
+        current
+    }
 
     suspend fun beginPayment(publicKey: String): Result<PublicPaykitPaymentResult> = withContext(ioDispatcher) {
         runSuspendCatching {
@@ -270,21 +282,18 @@ class PublicPaykitRepo @Inject constructor(
         runSuspendCatching {
             pubkyRepo.isRestoringSession.first { !it }
             if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
-            val requestedRefresh = pendingLightningRefresh.get()?.takeIf { request ->
-                pubkyRepo.isCurrent(request.signIn).also { current ->
-                    if (!current) pendingLightningRefresh.compareAndSet(request, null)
-                }
-            }
+            val requestedRefresh = currentLightningRefresh()
             val desired = buildWalletEndpoints(
                 refresh = false,
-                forceRefreshLightning = forceRefreshLightning || requestedRefresh != null,
+                forceRefreshLightning = forceRefreshLightning && requestedRefresh == null,
                 requireEndpoint = requireEndpoint,
+                lightningRefresh = requestedRefresh,
             )
             if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
             syncPaykitApp().getOrThrow()
             if (applyPublishedEndpoints(desired) { isAutomaticPublicationAllowed(canPublish) }) {
                 acknowledgePublishedEndpoints(desired, canPublish)
-                if (requestedRefresh != null && pubkyRepo.isCurrent(requestedRefresh.signIn)) {
+                if (requestedRefresh != null && currentLightningRefresh() === requestedRefresh) {
                     pendingLightningRefresh.compareAndSet(requestedRefresh, null)
                 }
             }
@@ -388,6 +397,7 @@ class PublicPaykitRepo @Inject constructor(
         refresh: Boolean,
         forceRefreshLightning: Boolean = false,
         requireEndpoint: Boolean = true,
+        lightningRefresh: LightningRefresh? = null,
     ): List<Endpoint> {
         val settings = settingsStore.data.first()
         val includeLightning = isLightningPaymentOptionEnabled(settings)
@@ -407,7 +417,7 @@ class PublicPaykitRepo @Inject constructor(
         val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()
         if (includeLightning) {
-            buildPublicBolt11Endpoint(forceRefreshLightning)?.let { endpoints += it }
+            buildPublicBolt11Endpoint(forceRefreshLightning, lightningRefresh)?.let { endpoints += it }
         } else {
             clearPublicBolt11Metadata()
         }
@@ -436,7 +446,18 @@ class PublicPaykitRepo @Inject constructor(
         return endpoints
     }
 
-    private suspend fun buildPublicBolt11Endpoint(forceRefreshLightning: Boolean = false): Endpoint? {
+    private suspend fun buildPublicBolt11Endpoint(
+        forceRefreshLightning: Boolean = false,
+        lightningRefresh: LightningRefresh? = null,
+    ): Endpoint? = invoiceMutex.withLock {
+        if (lightningRefresh?.invalidateInvoice == true && currentLightningRefresh() === lightningRefresh) {
+            clearPublicBolt11Metadata(publicationPending = true)
+            lightningRefresh.invalidateInvoice = false
+        }
+        preparePublicBolt11Endpoint(forceRefreshLightning)
+    }
+
+    private suspend fun preparePublicBolt11Endpoint(forceRefreshLightning: Boolean): Endpoint? {
         if (!lightningRepo.canReceive()) {
             clearPublicBolt11Metadata()
             return null

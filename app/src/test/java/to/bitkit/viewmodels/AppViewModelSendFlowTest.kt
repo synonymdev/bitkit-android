@@ -79,6 +79,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -11935,23 +11936,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCurrent()
             nodeState.update { it.copy(channels = persistentListOf(mock { on { isUsable } doReturn true })) }
             advanceUntilIdle()
-            verify(publicPaykitRepo, never()).requestLightningRefresh(any())
+            verify(publicPaykitRepo, never()).requestLightningRefresh(any(), anyOrNull())
+            verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
             verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
 
             pubkyPublicKey.value = testPublicKey
             isRestoringPubkySession.value = false
             advanceUntilIdle()
 
-            val request = argumentCaptor<PubkySignIn>()
-            verify(publicPaykitRepo).requestLightningRefresh(request.capture())
-            assertEquals(testPublicKey, request.firstValue.publicKey)
-            assertEquals(0L, request.firstValue.generation)
+            verify(publicPaykitRepo, never()).requestLightningRefresh(any(), anyOrNull())
+            verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
             if (hasAddress) {
-                verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(true), eq(false), any())
+                verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
             } else {
                 verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
             }
         }
+    }
+
+    @Test
+    fun `forced public refresh survives deferred initial restoration without another channel event`() = test {
+        enablePublicPaykitSharing()
+        pubkyPublicKey.value = null
+        isRestoringPubkySession.value = true
+        val nodeState = lightningRepo.lightningState as MutableStateFlow<LightningState>
+        runCurrent()
+        nodeState.update { it.copy(channels = persistentListOf(mock { on { isUsable } doReturn true })) }
+        advanceUntilIdle()
+        isRestoringPubkySession.value = false
+        advanceUntilIdle()
+        verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
+
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
+        verify(publicPaykitRepo, never()).requestLightningRefresh(any(), anyOrNull())
     }
 
     @Test
@@ -11993,7 +12013,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
         verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
-        verify(publicPaykitRepo).requestLightningRefresh(any())
+        verify(publicPaykitRepo).requestLightningRefresh(any(), isNull())
         val privateAdmission = argumentCaptor<() -> Boolean>()
         verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(
             any(),
@@ -12018,9 +12038,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val cleanupStarted = CompletableDeferred<Unit>()
         val finishCleanup = CompletableDeferred<Unit>()
         var holdCleanup = false
-        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(eq(true), eq(false), any())).thenAnswer {
+        whenever(publicPaykitRepo.requestLightningRefresh(any(), isNull())).thenAnswer {
             holdCleanup = true
-            Result.success(Unit)
+            Unit
         }
         whenever(privatePaykitRepo.retryPendingEndpointRemoval(any<Collection<String>>())).doSuspendableAnswer {
             if (holdCleanup) {
@@ -12069,8 +12089,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(true), eq(false), any())
+        verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+        verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
     }
 
     @Test
@@ -12954,6 +12974,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     )
 
     private suspend fun enablePublicPaykitSharing() {
+        whenever(pubkyRepo.savedIdentityGuard()).thenReturn { true }
         whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).thenReturn(Result.success(Unit))
         walletState.value = WalletState(onchainAddress = "bc1qtest")
         isPaykitEnabled.value = true

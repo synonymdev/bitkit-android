@@ -114,11 +114,120 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             assertTrue(sut.hasPendingLightningRefresh, outcome)
             sut.syncCurrentPublishedEndpoints().getOrThrow()
             assertFalse(sut.hasPendingLightningRefresh, outcome)
-            assertEquals(listOf("ln-second"), published.last(), outcome)
+            val expectedInvoice = if (outcome == "superseded") "ln-second" else "ln-first"
+            assertEquals(listOf(expectedInvoice), published.last(), outcome)
             sut.syncCurrentPublishedEndpoints().getOrThrow()
-            assertEquals(listOf("ln-second"), published.last(), outcome)
-            verifyBlocking(lightningRepo, times(2)) { createInvoice(null, "", 86_400u) }
+            assertEquals(listOf(expectedInvoice), published.last(), outcome)
+            verifyBlocking(lightningRepo, times(if (outcome == "superseded") 2 else 1)) {
+                createInvoice(null, "", 86_400u)
+            }
         }
+    }
+
+    @Test
+    fun `initial public refresh waits for its saved identity and binds its first restored sign in`() = test {
+        for (outcome in listOf("restore", "replace before", "replace after")) {
+            var ownsIdentity = true
+            var signIn: PubkySignIn? = null
+            whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+            whenever(pubkyRepo.isCurrent(any())).thenAnswer {
+                val token = it.getArgument<PubkySignIn>(0)
+                token.publicKey == signIn?.publicKey && token.generation == signIn?.generation
+            }
+            whenever(lightningRepo.canReceive()).thenReturn(true)
+            PublicPaykitRepo.lightningRouteHintsValidator = { true }
+            settingsFlow.value = SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                publicPaykitOnchainEnabled = false,
+                publicPaykitUsdtEnabled = false,
+                publicPaykitBolt11 = "ln-cached",
+                publicPaykitBolt11PaymentHash = "01",
+                publicPaykitBolt11ExpiresAtMillis = Long.MAX_VALUE,
+            )
+            whenever(lightningRepo.createInvoice(null, "", 86_400u)).thenReturn(Result.success("ln-refreshed"))
+            whenever(coreService.decode("ln-refreshed")).thenReturn(Scanner.Lightning(invoice("ln-refreshed")))
+            sut.requestLightningRefresh(null) { ownsIdentity }
+            repeat(2) {
+                sut.syncCurrentPublishedEndpoints(canPublish = { signIn != null }).getOrThrow()
+                assertTrue(sut.hasPendingLightningRefresh, outcome)
+                assertEquals("ln-cached", settingsFlow.value.publicPaykitBolt11, outcome)
+            }
+            if (outcome == "replace before") ownsIdentity = false
+            signIn = PubkySignIn("pubkyself", 1L)
+            var publicationFails = true
+            whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+                if (publicationFails) throw PublicPaykitError.PublicationFailed
+                EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList())
+            }
+            assertTrue(sut.syncCurrentPublishedEndpoints().isFailure)
+            assertEquals(outcome != "replace before", sut.hasPendingLightningRefresh, outcome)
+            if (outcome == "replace after") {
+                signIn = PubkySignIn("pubkyself", 2L)
+                settingsFlow.value = settingsFlow.value.copy(publicPaykitBolt11 = "ln-replacement")
+                assertFalse(sut.hasPendingLightningRefresh)
+            }
+            publicationFails = false
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            assertEquals(
+                when (outcome) {
+                    "restore" -> "ln-refreshed"
+                    "replace before" -> "ln-cached"
+                    else -> "ln-replacement"
+                },
+                settingsFlow.value.publicPaykitBolt11,
+                outcome,
+            )
+            assertFalse(sut.hasPendingLightningRefresh, outcome)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `overlapping refreshes prepare one invoice each and reuse it after publication failure`() = test {
+        val signIn = PubkySignIn("pubkyself", 0L)
+        whenever(pubkyRepo.currentSignIn()).thenReturn(signIn)
+        whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        PublicPaykitRepo.lightningRouteHintsValidator = { true }
+        settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = true, publicPaykitOnchainEnabled = false)
+        val preparing = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        var invoiceCount = 0
+        whenever(lightningRepo.createInvoice(null, "", 86_400u)).doSuspendableAnswer {
+            invoiceCount += 1
+            if (invoiceCount == 1) {
+                preparing.complete(Unit)
+                resume.await()
+            }
+            Result.success("ln-$invoiceCount")
+        }
+        for (bolt11 in listOf("ln-1", "ln-2")) {
+            whenever(coreService.decode(bolt11)).thenReturn(Scanner.Lightning(invoice(bolt11)))
+        }
+        var publicationFails = true
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+            if (publicationFails) throw PublicPaykitError.PublicationFailed
+            EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList())
+        }
+        sut.requestLightningRefresh(signIn)
+        val first = async { sut.syncCurrentPublishedEndpoints() }
+        preparing.await()
+        val duplicate = async { sut.syncCurrentPublishedEndpoints() }
+        runCurrent()
+        sut.requestLightningRefresh(signIn)
+        val newer = async { sut.syncCurrentPublishedEndpoints() }
+        resume.complete(Unit)
+        assertTrue(first.await().isFailure)
+        assertTrue(duplicate.await().isFailure)
+        assertTrue(newer.await().isFailure)
+        assertEquals(2, invoiceCount)
+        assertTrue(sut.hasPendingLightningRefresh)
+
+        publicationFails = false
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        assertEquals(2, invoiceCount)
+        assertEquals("ln-2", settingsFlow.value.publicPaykitBolt11)
+        assertFalse(sut.hasPendingLightningRefresh)
     }
 
     @Test
