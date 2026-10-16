@@ -3,7 +3,8 @@
 ## Sign-in from a link
 
 - `signin-cold-start.xml` checks a `pubkyauth://signin_grant` link opened while Bitkit is not running:
-  the loading toast while the saved session restores, then the authorization sheet. The iOS
+  the loading toast while the saved session restores, then the authorization sheet, which opens with
+  the stored key's identity when the restore is deferred while online. The iOS
   counterpart is `open-signin-link.xml`, which opens the same flow through `bitkit://pubky-auth/signin`;
   only Android has the raw `pubkyauth` scheme, the loading toast and Authorize through to
   `PubkyAuthOK`. A restore that fails while
