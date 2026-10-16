@@ -42,8 +42,8 @@ class SendSheetNavigationTest {
     }
 
     @Test
-    fun `prepared requests discard confirmation while contact payments retain their previous screen`() {
-        for (start in listOf(SendRoute.Confirm, SendRoute.ContactSelect)) {
+    fun `amount review discards confirmations while contact payments retain their previous screen`() {
+        for (start in listOf(SendRoute.Confirm, SendRoute.Amount, SendRoute.ContactSelect)) {
             val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
                 navigatorProvider.addNavigator(ComposeNavigator())
                 graph = createGraph(startDestination = start) {
@@ -57,11 +57,16 @@ class SendSheetNavigationTest {
             navController.navigateTo(SendRoute.UsdtReview)
             assertTrue(navController.popBackStack())
             assertTrue(navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
+            repeat(2) {
+                navController.navigateTo(SendRoute.Confirm)
+                navController.navigateToSendAmount(start)
+                assertTrue(navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
+            }
             navController.popBackStack()
-            if (start == SendRoute.Confirm) {
-                assertNull(navController.currentDestination)
-            } else {
+            if (start == SendRoute.ContactSelect) {
                 assertTrue(navController.currentDestination?.hasRoute<SendRoute.ContactSelect>() == true)
+            } else {
+                assertNull(navController.currentDestination)
             }
         }
     }

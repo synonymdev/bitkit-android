@@ -1796,7 +1796,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private fun clearStateLocked() {
-        setPaymentSubmissionActive(false)
         completedRefreshGeneration = -1L
         receivedContacts = null
         expirationJob?.cancel()

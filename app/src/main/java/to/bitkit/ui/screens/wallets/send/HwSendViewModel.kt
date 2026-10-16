@@ -91,12 +91,14 @@ class HwSendViewModel @Inject constructor(
         prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean = { true },
         authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
         onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
+        beginPaymentSubmission: () -> (() -> Unit) = { {} },
     ) {
         if (pendingResult.value != null || _uiState.value.isSigning || signingJob?.isActive == true) return
         signingWalletId = request.walletId
         _uiState.update { it.copy(isSigning = true) }
         val attempt = ++signingAttempt
         signingJob = viewModelScope.launch {
+            val finishSubmission = beginPaymentSubmission()
             try {
                 runCatching {
                     if (pendingBroadcast?.matches(request) == false) {
@@ -179,6 +181,7 @@ class HwSendViewModel @Inject constructor(
                     handleFailure(it, request.walletId)
                 }
             } finally {
+                finishSubmission()
                 // A cancelled job can outlive cancel() while a device call returns, and must not
                 // reset the state of a signing attempt started after it.
                 if (signingAttempt == attempt) {
@@ -277,11 +280,9 @@ class HwSendViewModel @Inject constructor(
     }
 
     fun submitPassphrase(
-        request: HwSendRequest,
+        walletId: String,
         passphrase: String,
-        prepareContactPayment: suspend (HwFundingSignedTx) -> Boolean = { true },
-        authorizeContactPayment: suspend (hasAttemptedBroadcast: Boolean) -> Boolean = { true },
-        onPaymentDeadlineExpired: suspend (hasAttemptedBroadcast: Boolean) -> Unit = {},
+        onReady: () -> Unit,
     ) {
         if (passphrase.isEmpty()) return
         val state = _uiState.value
@@ -292,16 +293,11 @@ class HwSendViewModel @Inject constructor(
         _uiState.update { it.copy(isVerifyingPassphrase = true) }
         passphraseJob = viewModelScope.launch {
             try {
-                hwWalletRepo.reconnectWithPassphrase(request.walletId, passphrase)
+                hwWalletRepo.reconnectWithPassphrase(walletId, passphrase)
                     .onSuccess {
                         if (!_uiState.value.isPassphraseRequired) return@onSuccess
                         _uiState.update { it.copy(isPassphraseRequired = false) }
-                        signAndBroadcast(
-                            request,
-                            prepareContactPayment,
-                            authorizeContactPayment,
-                            onPaymentDeadlineExpired,
-                        )
+                        onReady()
                     }
                     .onFailure { error ->
                         if (error is HwPassphraseMismatchError) {
@@ -311,7 +307,7 @@ class HwSendViewModel @Inject constructor(
                                 description = context.getString(R.string.hardware__passphrase_mismatch),
                             )
                         } else {
-                            handleFailure(error, request.walletId)
+                            handleFailure(error, walletId)
                         }
                     }
             } finally {

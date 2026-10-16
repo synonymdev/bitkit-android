@@ -109,6 +109,7 @@ internal fun NavController.navigateToCoinSelection() {
 }
 
 internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
+    if (popBackStack(SendRoute.Amount, inclusive = false)) return
     navigateTo(SendRoute.Amount) {
         if (startDestination == SendRoute.Confirm) {
             popUpTo(SendRoute.Confirm) { inclusive = true }
@@ -341,7 +342,7 @@ fun SendSheet(
                         } else {
                             lightningState.nodeLifecycleState
                         },
-                        canGoBack = startDestination != SendRoute.Amount,
+                        canGoBack = startDestination != SendRoute.Amount || uiState.isPaymentRequest,
                         onBack = {
                             if (!navController.popBackStack()) {
                                 appViewModel.hideSheet()
@@ -483,7 +484,7 @@ fun SendSheet(
                                 walletId,
                             )
                         },
-                        onPaymentSubmissionChange = appViewModel::onHardwarePaymentSubmissionChanged,
+                        beginPaymentSubmission = appViewModel::beginHardwarePaymentSubmission,
                         onPaymentDeadlineExpired = { attempted ->
                             appViewModel.onHardwarePaymentDeadlineExpired(attempted, uiState.incomingPaymentRequestId, paymentIdentity, walletId)
                         },

@@ -282,7 +282,9 @@ class HwSendViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(sut.uiState.value.isPassphraseRequired)
 
-        sut.submitPassphrase(request(), "hidden wallet", prepareContactPayment, authorizeContactPayment)
+        sut.submitPassphrase(WALLET_ID, "hidden wallet") {
+            sut.signAndBroadcast(request(), prepareContactPayment, authorizeContactPayment)
+        }
         advanceUntilIdle()
 
         assertEquals(1, preparationCalls)
@@ -984,15 +986,25 @@ class HwSendViewModelTest : BaseUnitTest() {
                 org.mockito.kotlin.anyOrNull()
             )
         }.doSuspendableAnswer { resume.await() }
-        sut.signAndBroadcast(original)
+        var submissionActive = false
+        val finishSubmission = { submissionActive = false }
+        sut.signAndBroadcast(
+            original,
+            beginPaymentSubmission = {
+                submissionActive = true
+                finishSubmission
+            },
+        )
         advanceUntilIdle()
         assertTrue(sut.uiState.value.isBroadcastUnresolved)
         sut.cancel()
+        assertTrue(submissionActive)
         assertTrue(sut.uiState.value.hasPendingBroadcast)
         resume.complete(true)
         advanceUntilIdle()
         verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
         verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+        assertFalse(submissionActive)
     }
 
     @Test

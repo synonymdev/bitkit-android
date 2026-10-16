@@ -30,14 +30,17 @@ class UsdtSupportDetailsTest {
             status = UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION,
             timestamp = 1u,
         )
-        assertTrue(transfer.supportDetails.contains("Bridge: USDT0"))
-        assertTrue(transfer.supportDetails.contains("LayerZero message: message-id"))
-        assertFalse(transfer.supportDetails.contains("Destination transaction:"))
+        assertTrue(transfer.supportDetails("Needs attention").contains("Bridge: USDT0"))
+        assertTrue(
+            transfer.supportDetails("Needs attention").contains("Status: Needs attention (BRIDGE_NEEDS_ATTENTION)")
+        )
+        assertTrue(transfer.supportDetails("Needs attention").contains("LayerZero message: message-id"))
+        assertFalse(transfer.supportDetails("Needs attention").contains("Destination transaction:"))
 
         val details = transfer.copy(
             bridgeGuid = null,
             orchestra = UsdtOrchestraTransfer("order-id", "funding-address", "destination-tx", "refund-tx", 90u),
-        ).supportDetails
+        ).supportDetails("Needs attention")
         listOf("Orchestra", "Arbitrum One", "Polygon", "order-id", "source-tx", "destination-tx", "refund-tx").forEach {
             assertTrue(details.contains(it), it)
         }
@@ -49,11 +52,12 @@ class UsdtSupportDetailsTest {
     fun `deposit support uses current order status and refund`() {
         val deposit = UsdtDeposit("deposit-id", "tron", "USDT", 100u, "source-tx", "held", "old-code", "deposit-refund")
         val detail = UsdtDepositDetail(deposit, null)
-        assertTrue(detail.supportDetails.contains("Status code: old-code"))
-        assertTrue(detail.supportDetails.contains("Refund transaction: deposit-refund"))
+        assertTrue(detail.supportDetails("Needs attention").contains("Status code: old-code"))
+        assertTrue(detail.supportDetails("Needs attention").contains("Refund transaction: deposit-refund"))
         val details = detail.copy(
             order = UsdtDepositOrder("refunded", 100u, null, null, "order-refund", null),
-        ).supportDetails
+        ).supportDetails("Refunded")
+        assertTrue(details.contains("Status: Refunded (refunded)"))
         listOf("Orchestra", "tron", "Arbitrum One", "deposit-id", "source-tx", "refunded", "order-refund").forEach {
             assertTrue(details.contains(it), it)
         }

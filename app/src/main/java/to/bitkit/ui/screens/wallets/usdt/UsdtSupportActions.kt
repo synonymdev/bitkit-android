@@ -44,30 +44,28 @@ internal fun UsdtSupportActions(details: String, enabled: Boolean = true) {
     }
 }
 
-internal val UsdtTransfer.supportDetails: String
-    get() = buildList {
-        add("Asset: USDT")
-        add("Bridge: ${if (orchestra == null) "USDT0" else "Orchestra"}")
-        add("Source network: Arbitrum One")
-        add("Recipient network: ${destination.label}")
-        add("Status: $status")
-        orchestra?.quoteId?.let { add("Bridge reference: $it") }
-        txHash?.let { add("Source transaction: $it") }
-        bridgeGuid?.let { add("LayerZero message: $it") }
-        orchestra?.destinationTx?.let { add("Destination transaction: $it") }
-        orchestra?.refundTx?.let { add("Refund transaction: $it") }
-    }.joinToString("\n")
+internal fun UsdtTransfer.supportDetails(statusText: String): String = buildList {
+    add("Asset: USDT")
+    add("Bridge: ${if (orchestra == null) "USDT0" else "Orchestra"}")
+    add("Source network: Arbitrum One")
+    add("Recipient network: ${destination.label}")
+    add("Status: $statusText ($status)")
+    orchestra?.quoteId?.let { add("Bridge reference: $it") }
+    txHash?.let { add("Source transaction: $it") }
+    bridgeGuid?.let { add("LayerZero message: $it") }
+    orchestra?.destinationTx?.let { add("Destination transaction: $it") }
+    orchestra?.refundTx?.let { add("Refund transaction: $it") }
+}.joinToString("\n")
 
-internal val UsdtDepositDetail.supportDetails: String
-    get() = buildList {
-        add("Asset: ${deposit.asset}")
-        add("Bridge: Orchestra")
-        add("Source network: ${deposit.network}")
-        add("Recipient network: Arbitrum One")
-        add("Deposit reference: ${deposit.id}")
-        add("Status: ${order?.status ?: deposit.status}")
-        add("Source transaction: ${deposit.sourceTx}")
-        statusCode?.let { add("Status code: $it") }
-        order?.destinationTx?.let { add("Destination transaction: $it") }
-        (order?.refundTx ?: deposit.refundTx)?.let { add("Refund transaction: $it") }
-    }.joinToString("\n")
+internal fun UsdtDepositDetail.supportDetails(statusText: String): String = buildList {
+    add("Asset: ${deposit.asset}")
+    add("Bridge: Orchestra")
+    add("Source network: ${deposit.network}")
+    add("Recipient network: Arbitrum One")
+    add("Deposit reference: ${deposit.id}")
+    add("Status: $statusText (${order?.status ?: deposit.status})")
+    add("Source transaction: ${deposit.sourceTx}")
+    statusCode?.let { add("Status code: $it") }
+    order?.destinationTx?.let { add("Destination transaction: $it") }
+    (order?.refundTx ?: deposit.refundTx)?.let { add("Refund transaction: $it") }
+}.joinToString("\n")

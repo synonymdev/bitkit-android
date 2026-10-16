@@ -19,10 +19,9 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -58,8 +57,9 @@ class UsdtRepo @Inject constructor(
     private var rateLimitedUntil = 0L
     private val _state = MutableStateFlow(UsdtWalletState())
     val state = _state.asStateFlow()
-    private val _receivedTxs = MutableSharedFlow<UsdtTransfer>(extraBufferCapacity = 8)
-    val receivedTxs = _receivedTxs.asSharedFlow()
+    fun consumeReceipt(id: String): Boolean = _state.getAndUpdate {
+        it.copy(pendingReceipts = it.pendingReceipts.filterNot { receipt -> receipt.id == id }.toImmutableList())
+    }.pendingReceipts.any { it.id == id }
 
     suspend fun refresh(history: Boolean, force: Boolean = false) = withContext(ioDispatcher) {
         mutex.withLock {
@@ -97,13 +97,18 @@ class UsdtRepo @Inject constructor(
         }
     }
 
-    private suspend fun announceNewReceipts(previous: List<UsdtTransfer>?, current: List<UsdtTransfer>) {
+    private fun announceNewReceipts(previous: List<UsdtTransfer>?, current: List<UsdtTransfer>) {
         if (previous == null) return
         val knownIds = previous.filter { it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED }
             .map { it.id }.toSet()
-        current.filter {
+        val received = current.filter {
             it.isIncoming && it.status == UsdtTransferStatus.CONFIRMED && it.amount > 0u && it.id !in knownIds
-        }.forEach { _receivedTxs.emit(it) }
+        }
+        _state.update {
+            it.copy(
+                pendingReceipts = (it.pendingReceipts + received).distinctBy { receipt -> receipt.id }.toImmutableList()
+            )
+        }
     }
 
     suspend fun waitForTransfer(id: String): Result<Unit> = withContext(ioDispatcher) {
@@ -154,6 +159,7 @@ class UsdtRepo @Inject constructor(
                         address = wallet.receiveAddress(),
                         transfers = wallet.history().toImmutableList(),
                         historyComplete = false,
+                        pendingReceipts = persistentListOf(),
                         pendingDepositIds = persistentSetOf(),
                     )
                 }
@@ -260,6 +266,7 @@ data class UsdtWalletState(
     val balance: ULong? = null,
     val transfers: ImmutableList<UsdtTransfer> = persistentListOf(),
     val historyComplete: Boolean = false,
+    val pendingReceipts: ImmutableList<UsdtTransfer> = persistentListOf(),
     val pendingDepositIds: ImmutableSet<String> = persistentSetOf(),
 )
 

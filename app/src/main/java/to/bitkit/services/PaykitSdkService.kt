@@ -265,7 +265,8 @@ class PaykitSdkService @Inject constructor(
     private var sdk: PaykitSdk? = null
 
     @Volatile
-    private var runtimeGeneration = 0L
+    internal var runtimeGeneration = 0L
+        private set
 
     private var cachedPaykitKey: PaykitKeyGeneration? = null
     private var cachedBackupState: PaykitBackupStateSnapshot? = null
@@ -1295,17 +1296,18 @@ class PaykitSdkService @Inject constructor(
             },
         )
 
-    internal suspend fun exportBackupState(priority: Priority = Priority.Background): String {
+    internal suspend fun exportBackupState(priority: Priority = Priority.Background): PaykitSdkBackupExport {
         isSetup.await()
         val generation = runtimeGeneration
         return operationLock.withoutLock {
-            var backup: String?
+            var backup: PaykitSdkBackupExport?
             do {
                 if (priority == Priority.Background) isPaymentSubmissionActive.first { !it }
                 backup = operationLock.withLock(priority) {
                     check(runtimeGeneration == generation) { "Paykit runtime changed before backup export" }
                     if (priority == Priority.Background && isPaymentSubmissionActive.value) return@withLock null
-                    withPaykitKey { completeSdkCall { it.exportBackupString() } }
+                    val state = withPaykitKey { completeSdkCall { it.exportBackupString() } }
+                    PaykitSdkBackupExport(state, backupStateVersion.value)
                 }
             } while (backup == null)
             backup
@@ -1627,6 +1629,8 @@ internal fun isBitkitPaymentRequest(record: PaymentRequestRecord): Boolean = whe
 private data class PaykitKeyGeneration(val publicKey: String, val generation: ULong)
 
 internal data class PaykitBackupStateSnapshot(val stateRevision: String, val backupRevision: String)
+
+internal data class PaykitSdkBackupExport(val state: String, val version: Long)
 
 @Suppress("LongParameterList")
 internal suspend fun <T> withPaykitBackupStateTracking(

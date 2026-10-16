@@ -70,6 +70,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
+import to.bitkit.services.PaykitSdkBackupExport
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
@@ -3564,13 +3565,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `backupSnapshot and restoreBackup use SDK backup state`() = test {
         val backup = "sdk-backup"
-        whenever(paykitSdkService.exportBackupState(Priority.Interactive)).thenReturn(backup)
+        whenever(paykitSdkService.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitSdkService.exportBackupState(Priority.Interactive)).thenReturn(PaykitSdkBackupExport(backup, 0))
         sut.consumePrivatePaymentList(
             CONTACT_KEY,
             PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 7uL),
         ).getOrThrow()
 
-        val snapshot = sut.backupSnapshot().getOrThrow()
+        val snapshot = sut.backupSnapshot().getOrThrow().state
         sut.restoreBackup(snapshot).getOrThrow()
 
         assertTrue(snapshot?.contains(backup) == true)

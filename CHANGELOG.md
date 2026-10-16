@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bitkit can now hide all toasts from Dev Settings. #1371
 - Opt in to USDT in Settings to send and receive with fees paid in USDT, Paykit contact payments and requests, subscriptions, cross-network deposits, optional Earn address sharing, and encrypted payment recovery backups. #1432
 - Support Pubky grant signup links through the existing authorization and profile setup flows. #1446
-- Added missing translations, including profile, contacts and subscription screens, across languages. #1492
+- Added missing translations, including profile, contacts, subscription and USDT screens, across languages. #1492
 
 ### Changed
 - Standardized intro sheets with consistent artwork, spacing, actions, and localized messaging. #1314
@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bitkit now asks for your PIN again whenever you return to the app from the background, and a payment link opened while it was locked now takes you to the send confirmation once you unlock, instead of paying automatically. #724
 
 ### Fixed
+- Preserve payment guards through sign-out, retain USDT receive notifications, and correct payment-request navigation, styling and bridge status messages. #1506
+- Keep wallet backups progressing during Paykit activity without accepting inconsistent payment snapshots. #1507
 - Retried Lightning payments now show the amount and fee of the attempt that succeeded. #1042
 - An expired Paykit session is now reported on startup when the profile service fails to start. #1305
 - Retrying a failed wallet restore no longer leaves the Lightning node in an error state after a temporary startup failure. #1291

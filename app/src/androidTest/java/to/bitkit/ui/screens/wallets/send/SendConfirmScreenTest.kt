@@ -12,11 +12,13 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -39,6 +41,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
@@ -51,6 +54,7 @@ import to.bitkit.ui.screens.subscriptions.SubscriptionFirstPaymentProgress
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.OnchainFeeUi
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -162,6 +166,38 @@ class SendConfirmScreenTest {
             assertEquals(2, visibleCount)
             assertEquals(0, dismissCount)
         }
+    }
+
+    @Test
+    fun preparingUsdtRequestUsesUsdtAccentAndCannotPay() {
+        val request = PaykitPaymentRequest(
+            paymentRequestId = "preparing-usdt",
+            counterparty = "requester",
+            amount = PaykitAmount(PaykitAsset.USDT, 5_000_000u),
+            paymentReference = "test-reference",
+            expiresAt = null,
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.UsdtArbitrum.rawValue),
+        )
+        composeTestRule.setContent {
+            AppThemeSurface {
+                CompositionLocalProvider(LocalInspectionMode provides true) {
+                    SendConfirmContent(
+                        uiState = SendUiState(payMethod = SendMethod.LIGHTNING),
+                        isNodeRunning = false,
+                        isLoading = false,
+                        showBiometrics = false,
+                        preparingRequest = request,
+                        modifier = Modifier.sheetHeight()
+                    )
+                }
+            }
+        }
+        val preparing = composeTestRule.onNodeWithTag("PaymentRequestPreparing")
+        preparing.assertIsDisplayed().assertIsNotEnabled()
+        val pixels = preparing.captureToImage().toPixelMap()
+        assertTrue((0 until pixels.width).any { x ->
+            (0 until pixels.height).any { y -> pixels[x, y] == Colors.Usdt }
+        })
     }
 
     @Test
