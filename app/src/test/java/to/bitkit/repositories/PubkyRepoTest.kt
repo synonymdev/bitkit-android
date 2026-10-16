@@ -1773,6 +1773,19 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hasLocalSecretKey is true only for a stored key without a Ring source`() = test {
+        whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
+        assertTrue(sut.hasLocalSecretKey())
+
+        whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(true)
+        assertFalse(sut.hasLocalSecretKey())
+
+        whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(false)
+        whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(false)
+        assertFalse(sut.hasLocalSecretKey())
+    }
+
+    @Test
     fun `adoptRingIdentity should reject a mismatching credential without changing the source`() = test {
         val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
         whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("ring_secret"))

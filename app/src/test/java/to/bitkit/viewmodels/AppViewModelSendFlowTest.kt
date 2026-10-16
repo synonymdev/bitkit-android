@@ -206,7 +206,6 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PendingChannelMigration
-import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
@@ -4731,26 +4730,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         sut.setIsAuthenticated(true)
         whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { awaitCancellation() }
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(context.getString(R.string.profile__auth_error_timeout)).thenReturn("Authorization timed out")
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(context.getString(R.string.pubky_auth__identity_unavailable))
+            .thenReturn("Couldn't Load Your Pubky Profile")
         val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
         val bolt11 = "lnbcrt1posttimeoutscan"
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
 
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
-        advanceTimeBy(PubkyService.AUTHORIZATION_TIMEOUT.inWholeMilliseconds)
+        advanceTimeBy(AppViewModel.PUBKY_AUTH_DEEPLINK_TIMEOUT.inWholeMilliseconds)
         runCurrent()
 
         assertNull(sut.currentSheet.value)
         verify(pubkyRepo, never()).hasSecretKey()
-        verify(toastManager).enqueue(
-            check {
-                assertEquals(Toast.ToastType.ERROR, it.type)
-                assertEquals("Authorization failed", it.title)
-                assertEquals("Authorization timed out", it.description)
-            }
-        )
+        val errorToast = argumentCaptor<Toast>().run {
+            verify(toastManager, times(2)).enqueue(capture())
+            lastValue
+        }
+        assertEquals(Toast.ToastType.ERROR, errorToast.type)
+        assertEquals("Couldn't Load Your Pubky Profile", errorToast.title)
 
         sut.onScanResult(bolt11)
         advanceUntilIdle()
@@ -4971,17 +4970,49 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             pubkyPublicKey.value = null
             retry = CompletableDeferred()
 
+            clearInvocations(toastManager)
             sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
             runCurrent()
 
             assertNull(sut.currentSheet.value)
-            verify(toastManager, never()).enqueue(any())
+            val waitToast = argumentCaptor<Toast>().run {
+                verify(toastManager).enqueue(capture())
+                firstValue
+            }
+            assertTrue(waitToast.isLoading)
+            assertFalse(waitToast.autoHide)
+            assertEquals(AppViewModel.PUBKY_AUTH_WAIT_TOAST_TAG, waitToast.testTag)
+            verify(toastManager, never()).dismiss(any())
             retry.complete(Unit)
             advanceUntilIdle()
 
             assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
-            verify(toastManager, never()).enqueue(any())
+            verify(toastManager).dismiss(waitToast)
+            verify(toastManager).enqueue(any())
         }
+    }
+
+    @Test
+    fun `cold pubky auth deeplink retries a deferred session restore until it succeeds`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        var attempts = 0
+        whenever(pubkyRepo.awaitIdentityReady()).doSuspendableAnswer {
+            attempts++
+            if (attempts < 3) return@doSuspendableAnswer PubkyIdentityReadiness.Unavailable
+            pubkyPublicKey.value = testPublicKey
+            PubkyIdentityReadiness.Ready
+        }
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertEquals(3, attempts)
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        verify(toastManager).dismiss(check { assertTrue(it.isLoading) })
     }
 
     @Test
@@ -5001,16 +5032,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
 
             assertNull(sut.currentSheet.value)
-            verify(pubkyRepo).awaitIdentityReady()
+            verify(pubkyRepo, atLeast(2)).awaitIdentityReady()
             verify(context, never()).getString(R.string.pubky_auth__no_identity)
             verify(context, never()).getString(R.string.pubky_auth__already_signed_in)
-            verify(toastManager).enqueue(
-                check {
-                    assertEquals(Toast.ToastType.ERROR, it.type)
-                    assertEquals("Couldn't Load Your Pubky Profile", it.title)
-                    assertEquals("Check your connection and try again.", it.description)
-                }
-            )
+            val (waitToast, errorToast) = argumentCaptor<Toast>().run {
+                verify(toastManager, times(2)).enqueue(capture())
+                allValues
+            }
+            assertTrue(waitToast.isLoading)
+            verify(toastManager).dismiss(waitToast)
+            assertEquals(Toast.ToastType.ERROR, errorToast.type)
+            assertEquals("Couldn't Load Your Pubky Profile", errorToast.title)
+            assertEquals("Check your connection and try again.", errorToast.description)
+            assertEquals(Toast.VISIBILITY_TIME_LONG, errorToast.visibilityTime)
         }
     }
 
@@ -5040,20 +5074,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         advanceUntilIdle()
         sut.setIsAuthenticated(true)
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
         whenever(pubkyRepo.awaitIdentityReady()).doSuspendableAnswer { awaitCancellation() }
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(context.getString(R.string.profile__auth_error_timeout)).thenReturn("Authorization timed out")
+        whenever(context.getString(R.string.pubky_auth__identity_unavailable_desc))
+            .thenReturn("Check your connection and try again.")
         val bolt11 = "lnbcrt1postretrytimeoutscan"
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
 
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
-        advanceTimeBy(PubkyService.AUTHORIZATION_TIMEOUT.inWholeMilliseconds)
+        advanceTimeBy(AppViewModel.PUBKY_AUTH_DEEPLINK_TIMEOUT.inWholeMilliseconds)
         runCurrent()
 
         assertNull(sut.currentSheet.value)
         verify(pubkyRepo, never()).hasSecretKey()
-        verify(toastManager).enqueue(check { assertEquals("Authorization timed out", it.description) })
+        val enqueued = argumentCaptor<Toast>().run {
+            verify(toastManager, times(2)).enqueue(capture())
+            allValues
+        }
+        verify(toastManager).dismiss(enqueued.first())
+        assertEquals("Check your connection and try again.", enqueued.last().description)
 
         sut.onScanResult(bolt11)
         advanceUntilIdle()

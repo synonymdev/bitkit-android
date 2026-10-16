@@ -1527,6 +1527,11 @@ class PubkyRepo @Inject constructor(
         keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)
     }
 
+    /** Whether Bitkit stores its own key for the saved identity, read without restoring the session. */
+    suspend fun hasLocalSecretKey(): Boolean = withContext(ioDispatcher) {
+        keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name) && !keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+    }
+
     suspend fun hasIdentity(): Boolean = withContext(ioDispatcher) {
         _publicKey.value != null ||
             !keychain.loadString(Keychain.Key.PAYKIT_SESSION.name).isNullOrEmpty() ||
