@@ -1,22 +1,28 @@
 package to.bitkit.ui.sheets.hardware
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.HwDeviceIllustrations
 import to.bitkit.ui.components.PrimaryButton
@@ -64,32 +70,47 @@ private fun Content(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 32.dp)
         ) {
             Display(stringResource(R.string.hardware__intro_header).withAccent(accentColor = Colors.Blue))
             VerticalSpacer(8.dp)
             BodyM(stringResource(R.string.hardware__intro_text), color = Colors.White64)
             VerticalSpacer(32.dp)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                maxItemsInEachRow = if (LocalDensity.current.fontScale > 1.3f) 1 else 2,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                SecondaryButton(
-                    text = stringResource(R.string.common__cancel),
-                    onClick = onCancel,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("HardwareWalletIntroCancel")
+            val cancelLabel = stringResource(R.string.common__cancel)
+            val continueLabel = stringResource(R.string.common__continue)
+            val textMeasurer = rememberTextMeasurer()
+            val buttonStyle = MaterialTheme.typography.labelLarge
+            val minimumButtonWidth = with(LocalDensity.current) {
+                maxOf(
+                    textMeasurer.measure(cancelLabel, buttonStyle, softWrap = false).size.width.toDp() +
+                        ButtonSize.Large.secondaryHorizontalPadding * 2,
+                    textMeasurer.measure(continueLabel, buttonStyle, softWrap = false).size.width.toDp() +
+                        ButtonSize.Large.primaryHorizontalPadding * 2,
                 )
-                PrimaryButton(
-                    text = stringResource(R.string.common__continue),
-                    onClick = onContinue,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("HardwareWalletIntroContinue")
-                )
+            }
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    maxItemsInEachRow = if (maxWidth >= minimumButtonWidth * 2 + 16.dp) 2 else 1,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    SecondaryButton(
+                        text = cancelLabel,
+                        onClick = onCancel,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("HardwareWalletIntroCancel")
+                    )
+                    PrimaryButton(
+                        text = continueLabel,
+                        onClick = onContinue,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("HardwareWalletIntroContinue")
+                    )
+                }
             }
         }
         VerticalSpacer(16.dp)

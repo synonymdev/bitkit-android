@@ -44,7 +44,8 @@
     <action>
       Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HardwareWalletIntroScreen") showing hardware device illustrations, then press Android back and verify the sheet closes back to the Hardware Wallets screen
     </action>
-    <action>On Android, reopen Add Hardware Wallet at font scale 2.0. Verify Cancel and Continue stack vertically with complete readable labels and working tap targets. Close with Cancel and restore the normal font scale; reopen and verify both buttons return to their original side-by-side row and 56dp height, then close with Cancel.</action>
+    <action>On Android, use German on a 360dp-wide device and reopen Add Hardware Wallet at font scales 1.15 and 1.25. Verify Abbrechen and Weiter stack with complete single-line labels. At 411dp wide and font scale 1.3, verify they fit side by side.</action>
+    <action>On Android, reopen Add Hardware Wallet at 360dp wide and font scale 2.0. Scroll the text and actions as needed, then tap Weiter and verify the next connection step opens. Reopen the intro and tap Abbrechen to close it. Restore the original language, display width and font scale; reopen and verify both buttons return to their original side-by-side row and 56dp height, then close with Cancel.</action>
     <action>
       Tap the trash (delete) icon on the device row
     </action>
