@@ -213,6 +213,14 @@ the user edits it. Conversion uses the current fresh BTC/USD rate on both platfo
 Require identical converted amounts only with an unchanged rate. The same rule applies to
 subscription payment-method switches: preserve the originally entered denomination exactly.
 
+### Paykit payment-method review
+
+In `paykit-quoted-usdt.xml`, Android returns to Amount whenever a quoted request changes payment
+method. iOS keeps confirmation open when the exact amount, quote and validity window are unchanged
+and still valid; changed or expired terms return to Amount. Verify the selected method and exact
+payable amount on both platforms, and close without signing. The optional Savings/Spending
+confirmation check requires existing Bitcoin regtest funds and a usable Lightning channel.
+
 ### USDT full-balance errors
 
 `usdt-payment-links-and-scans.xml` accepts either the insufficient-balance message or the paymaster
