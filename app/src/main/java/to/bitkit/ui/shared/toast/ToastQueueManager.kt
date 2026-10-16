@@ -64,6 +64,14 @@ class ToastQueueManager(private val scope: CoroutineScope) {
     }
 
     /**
+     * Hide the given toast, if shown or still queued, and leave any other toast in place.
+     */
+    fun dismiss(toast: Toast) {
+        if (_currentToast.value === toast) return dismissCurrentToast()
+        _queue.update { queue -> queue.filterNot { it === toast } }
+    }
+
+    /**
      * Pause current toast timer (called on drag start).
      */
     fun pauseCurrentToast() {

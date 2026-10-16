@@ -1,5 +1,12 @@
 # Pubky authorization
 
+## Sign-in from a link
+
+- `signin-cold-start.xml` checks a `pubkyauth://signin_grant` link opened while Bitkit is not running:
+  the loading toast while the saved session restores, the authorization sheet, and a restore that
+  fails while offline, which keeps Bitkit open and the link handler enabled. Android only; iOS does
+  not register the raw `pubkyauth` scheme for OS link delivery.
+
 ## Grant signup
 
 - `grant-signup.xml` checks consent, cancellation, homeserver registration, and profile setup for a fresh identity.

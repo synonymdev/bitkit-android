@@ -21,7 +21,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Advertises Pubky signup and authorization handlers when their required identity state is available. */
+/**
+ * Advertises Pubky signup and authorization handlers when their required identity state is available.
+ * While a saved session is not restored yet, a stored secret key keeps the authorization handler on, so a sign-in link
+ * can wait for the restore instead of being dropped. Approval still checks the restored identity's key.
+ */
 @Singleton
 internal class PubkyAuthHandlerRegistrar @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -59,7 +63,7 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
                     .onFailure { Logger.warn("Failed to read saved Pubky identity", it, context = TAG) }
                     .getOrDefault(true)
                 val isPaykitUiEnabled = PaykitFeatureFlags.isUiEnabled(localFlagEnabled)
-                val hasSecretKey = isPaykitUiEnabled && publicKey != null && pubkyRepo.hasSecretKey()
+                val hasSecretKey = isPaykitUiEnabled && hasLocalSecretKey(publicKey)
                 val authEnabled = canHandlePubkyAuth(isPaykitUiEnabled, hasIdentity, hasSecretKey)
                 authEnabled to (isPaykitUiEnabled && !hasIdentity)
             }
@@ -69,6 +73,13 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
                     setAliasEnabled(signupAliasComponent, signupEnabled)
                 }
         }
+    }
+
+    private suspend fun hasLocalSecretKey(publicKey: String?): Boolean {
+        if (publicKey != null) return pubkyRepo.hasSecretKey()
+        return runSuspendCatching { pubkyRepo.hasStoredSecretKey() }
+            .onFailure { Logger.warn("Failed to read saved Pubky secret key", it, context = TAG) }
+            .getOrDefault(false)
     }
 
     private fun setAliasEnabled(component: ComponentName, enabled: Boolean) {

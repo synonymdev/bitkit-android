@@ -199,6 +199,7 @@ import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
 import to.bitkit.repositories.PublicPaykitPaymentResult
@@ -336,6 +337,7 @@ class AppViewModel @Inject constructor(
 
     @Volatile
     private var scheduledScan: ScheduledScan? = null
+    private var pubkyAuthWaitToast: Toast? = null
 
     private val deferredScanLock = Any()
     private var deferredScan: DeferredScan? = null
@@ -3064,11 +3066,15 @@ class AppViewModel @Inject constructor(
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             clearPaymentRequestPreparation(previousPreparation)
             scanMutex.withLock {
-                if (!awaitPubkyDeeplinkInitialization(source, data, allowPubkyAuth)) return@withLock
-                if (deferLockedScan(deferrable)) return@withLock
-                prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
-                if (startDelay > Duration.ZERO) delay(startDelay)
-                handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth, suppressQuickPay)
+                try {
+                    if (!awaitPubkyDeeplinkInitialization(source, data, allowPubkyAuth)) return@withLock
+                    if (deferLockedScan(deferrable)) return@withLock
+                    prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
+                    if (startDelay > Duration.ZERO) delay(startDelay)
+                    handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth, suppressQuickPay)
+                } finally {
+                    hidePubkyAuthWaitToast()
+                }
             }
         }
         val nextScheduledScan = ScheduledScan(
@@ -3115,13 +3121,20 @@ class AppViewModel @Inject constructor(
         }
 
         if (!PubkyAuthRequest.isSignupUrl(data) || PubkyAuthRequest.isGrantSignupUrl(data)) {
-            val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
+            if (!isContactLink) showPubkyAuthWaitToastIfRestoring()
+            val timeout = if (isContactLink) PubkyService.AUTHORIZATION_TIMEOUT else PUBKY_AUTH_DEEPLINK_TIMEOUT
+            val isInitializationReady = withTimeoutOrNull(timeout) {
                 pubkyRepo.awaitInitialization()
-                if (!isContactLink) pubkyRepo.awaitIdentityReady()
+                if (!isContactLink) awaitPubkyAuthIdentity()
                 awaitContactDataForDeeplink(isContactLink)
             } ?: false
             if (!isInitializationReady) {
                 Logger.warn("Failed to initialize Pubky deeplink", context = TAG)
+                if (!isContactLink) {
+                    hidePubkyAuthWaitToast()
+                    showPubkyIdentityUnavailableToast()
+                    return false
+                }
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(
@@ -3139,6 +3152,36 @@ class AppViewModel @Inject constructor(
             }
         }
         return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
+    }
+
+    private suspend fun awaitPubkyAuthIdentity() {
+        while (pubkyRepo.awaitIdentityReady() == PubkyIdentityReadiness.Unavailable) {
+            delay(PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL)
+            isOnline.first { it == ConnectivityState.CONNECTED }
+            Logger.debug("Retrying Pubky session restore for a sign-in link", context = TAG)
+        }
+    }
+
+    private suspend fun showPubkyAuthWaitToastIfRestoring() {
+        if (pubkyRepo.publicKey.value != null) return
+        if (!isPaykitUiEnabledFromSettings() || !walletRepo.walletExists()) return
+        if (!runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(false)) return
+        val waitToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = context.getString(R.string.pubky_auth__loading_identity),
+            description = context.getString(R.string.pubky_auth__loading_identity_desc),
+            autoHide = false,
+            testTag = PUBKY_AUTH_WAIT_TOAST_TAG,
+            isLoading = true,
+        )
+        pubkyAuthWaitToast = waitToast
+        toastManager.enqueue(waitToast)
+    }
+
+    private fun hidePubkyAuthWaitToast() {
+        val waitToast = pubkyAuthWaitToast ?: return
+        pubkyAuthWaitToast = null
+        toastManager.dismiss(waitToast)
     }
 
     private suspend fun awaitContactDataForDeeplink(isContactLink: Boolean): Boolean {
@@ -7629,6 +7672,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.pubky_auth__identity_unavailable),
                 description = context.getString(R.string.pubky_auth__identity_unavailable_desc),
+                visibilityTime = Toast.VISIBILITY_TIME_LONG,
             )
             return
         }
@@ -7725,6 +7769,15 @@ class AppViewModel @Inject constructor(
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
+        /** Longest wait for the saved Pubky session before a sign-in link fails. */
+        internal val PUBKY_AUTH_DEEPLINK_TIMEOUT = 60.seconds
+
+        /** Pause between Pubky session restore attempts while a sign-in link waits. */
+        private val PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL = 3.seconds
+
+        /** Test tag of the toast shown while a sign-in link waits for the Pubky session. */
+        internal const val PUBKY_AUTH_WAIT_TOAST_TAG = "PubkyAuthWaitToast"
+
         private const val BITKIT_SCHEME = "bitkit"
         private const val RECOVERY_MODE_DEEPLINK = "recovery-mode"
 

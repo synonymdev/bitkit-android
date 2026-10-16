@@ -1,0 +1,26 @@
+<journey name="signin cold start">
+  <description>
+    Verifies that a sign-in link opened while Bitkit is not running waits visibly for the saved Pubky
+    session, survives a failed session restore, and opens the authorization sheet. Precondition: an
+    unlocked wallet with Paykit enabled and a locally managed Pubky identity, a requesting app (the
+    Pubky App sign-in page) that shows a fresh pubkyauth://signin_grant link in the device browser,
+    and a reachable homeserver and relay. Android only: iOS does not register the raw pubkyauth scheme
+    for OS link delivery.
+  </description>
+  <actions>
+    <action>Run adb shell am force-stop to.bitkit.dev</action>
+    <action>Tap the requesting app's sign-in link in the browser</action>
+    <action>Unlock Bitkit with PIN or biometrics when prompted</action>
+    <action>Verify a toast with a spinner reads Loading Your Pubky Profile (screenshot; toasts are not in the layout)</action>
+    <action>Verify the toast stays until the authorization sheet opens</action>
+    <action>Verify the authorization sheet shows the requesting app and permissions</action>
+    <action>Tap Authorize (id "PubkyAuthAuthorize") and complete PIN or biometric approval when enabled</action>
+    <action>Verify the authorization success state is shown (id "PubkyAuthOK")</action>
+    <action>Run adb shell am force-stop to.bitkit.dev and turn off the device network</action>
+    <action>Tap a fresh sign-in link in the browser and unlock Bitkit</action>
+    <action>Verify Bitkit stays open and the Loading Your Pubky Profile toast is shown</action>
+    <action>Turn the device network back on within 30 seconds</action>
+    <action>Verify the authorization sheet opens without tapping the link again</action>
+    <action>Run adb shell pm dump to.bitkit.dev and verify to.bitkit.ui.MainActivityPubkyAuth is not listed as disabled</action>
+  </actions>
+</journey>
