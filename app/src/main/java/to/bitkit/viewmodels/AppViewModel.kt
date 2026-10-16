@@ -857,7 +857,11 @@ class AppViewModel @Inject constructor(
         if (privatePaykitRepo.isProfileDeletionInProgress.value) return
 
         pubkyRepo.isRestoringSession.first { !it }
-        val admission = publicPaykitPublicationAdmission(signIn ?: pubkyRepo.currentSignIn())
+        val restoredSignIn = signIn ?: pubkyRepo.currentSignIn()
+        if (forceRefreshLightning && signIn == null && restoredSignIn != null) {
+            publicPaykitRepo.requestLightningRefresh(restoredSignIn)
+        }
+        val admission = publicPaykitPublicationAdmission(restoredSignIn)
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
 

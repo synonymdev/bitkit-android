@@ -11919,6 +11919,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forced public refresh records the restored identity before skipped or failed publication`() = test {
+        val nodeState = lightningRepo.lightningState as MutableStateFlow<LightningState>
+        for (hasAddress in listOf(false, true)) {
+            nodeState.update { it.copy(channels = persistentListOf()) }
+            runCurrent()
+            enablePublicPaykitSharing()
+            pubkyPublicKey.value = null
+            isRestoringPubkySession.value = true
+            walletState.value = WalletState(onchainAddress = if (hasAddress) "bc1qtest" else "")
+            whenever(lightningRepo.canReceive()).thenReturn(false)
+            whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any()))
+                .thenReturn(Result.failure(AppError("publication unavailable")))
+            clearInvocations(publicPaykitRepo)
+            runCurrent()
+            nodeState.update { it.copy(channels = persistentListOf(mock { on { isUsable } doReturn true })) }
+            advanceUntilIdle()
+            verify(publicPaykitRepo, never()).requestLightningRefresh(any())
+            verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
+
+            pubkyPublicKey.value = testPublicKey
+            isRestoringPubkySession.value = false
+            advanceUntilIdle()
+
+            val request = argumentCaptor<PubkySignIn>()
+            verify(publicPaykitRepo).requestLightningRefresh(request.capture())
+            assertEquals(testPublicKey, request.firstValue.publicKey)
+            assertEquals(0L, request.firstValue.generation)
+            if (hasAddress) {
+                verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(true), eq(false), any())
+            } else {
+                verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
+            }
+        }
+    }
+
+    @Test
     fun `profile deletion defers public publication and resumes the latest address on failure`() = test {
         enablePublicPaykitSharing()
         runCurrent()
