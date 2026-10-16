@@ -1534,11 +1534,11 @@ class PubkyRepo @Inject constructor(
 
     /**
      * The identity of the key Bitkit stores for the saved session, read without restoring the session.
-     * Null for a Ring-sourced identity or when no key is stored.
+     * Null for a Ring-sourced identity, or without both a saved session and a stored key.
      */
     suspend fun localIdentityPublicKey(): String? = runSuspendCatching {
         withContext(ioDispatcher) {
-            if (!hasLocalSecretKey()) return@withContext null
+            if (!hasSavedSession() || !hasLocalSecretKey()) return@withContext null
             val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name) ?: return@withContext null
             pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix()
         }

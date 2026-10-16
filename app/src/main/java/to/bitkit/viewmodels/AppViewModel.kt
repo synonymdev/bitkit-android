@@ -3149,8 +3149,8 @@ class AppViewModel @Inject constructor(
 
     private suspend fun awaitPubkyAuthIdentity() {
         while (pubkyRepo.awaitIdentityReady() == PubkyIdentityReadiness.Unavailable) {
-            if (pubkyRepo.localIdentityPublicKey() != null) {
-                Logger.debug("Continuing sign-in link with the stored Pubky key while the session restores", context = TAG)
+            if (isOnline.value == ConnectivityState.CONNECTED && pubkyRepo.localIdentityPublicKey() != null) {
+                Logger.debug("Continuing sign-in link with the stored Pubky key", context = TAG)
                 return
             }
             delay(PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL)

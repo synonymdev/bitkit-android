@@ -1786,10 +1786,13 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `localIdentityPublicKey derives the stored key's identity only without a Ring source`() = test {
+    fun `localIdentityPublicKey derives the stored key's identity only with a saved session and no Ring source`() = test {
         whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
         whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        assertNull(sut.localIdentityPublicKey())
+
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
         assertEquals(VALID_SELF_KEY, sut.localIdentityPublicKey())
 
         whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(true)
