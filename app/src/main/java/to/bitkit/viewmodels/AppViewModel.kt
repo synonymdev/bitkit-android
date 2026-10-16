@@ -3227,16 +3227,15 @@ class AppViewModel @Inject constructor(
         synchronized(deferredScanLock) {
             val queued = deferredScan
             if (queued?.data?.removeLightningSchemes() == normalized) {
-                val suppressQuickPay = scan.suppressQuickPay || queued.suppressQuickPay
-                if (scan.contactPaymentContext != null) {
-                    deferredScan = scan.copy(suppressQuickPay = suppressQuickPay)
-                    return
-                }
-                deferredScan = queued.copy(suppressQuickPay = suppressQuickPay)
-                Logger.info("Skipping duplicate queued scan from '${scan.source.label}': '$scanId'", context = TAG)
+                deferredScan = queued.mergeDuplicate(scan, scanId)
                 return
             }
             if (!scan.isPubkyAuth && (queued?.isPubkyAuth == true || scanAfterPubkyAuth != null)) {
+                val followUp = scanAfterPubkyAuth
+                if (followUp?.data?.removeLightningSchemes() == normalized) {
+                    scanAfterPubkyAuth = followUp.mergeDuplicate(scan, scanId)
+                    return
+                }
                 scanAfterPubkyAuth = scan
                 Logger.info("Queuing '${scan.source.label}' scan after a sign-in link: '$scanId'", context = TAG)
                 return
@@ -3257,6 +3256,13 @@ class AppViewModel @Inject constructor(
             deferredScan = scan
         }
         Logger.info("Queuing '${scan.source.label}' scan for deferred handling: '$scanId'", context = TAG)
+    }
+
+    private fun DeferredScan.mergeDuplicate(scan: DeferredScan, scanId: String): DeferredScan {
+        val suppressQuickPay = scan.suppressQuickPay || this.suppressQuickPay
+        if (scan.contactPaymentContext != null) return scan.copy(suppressQuickPay = suppressQuickPay)
+        Logger.info("Skipping duplicate queued scan from '${scan.source.label}': '$scanId'", context = TAG)
+        return copy(suppressQuickPay = suppressQuickPay)
     }
 
     private fun hasDeferredScan() = synchronized(deferredScanLock) {
