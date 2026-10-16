@@ -1866,10 +1866,10 @@ class LightningRepo @Inject constructor(
         attempt: OnchainSendAttempt,
         timeout: Duration = ABANDON_SYNC_TIMEOUT,
     ): Boolean {
-        val requestedAt = (System.currentTimeMillis() / 1000).toULong()
+        val requestedAt = (nowMillis() / 1000).toULong()
         withTimeoutOrNull(timeout) {
             sync()
-            while ((lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL) <= requestedAt) {
+            while ((lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL) < requestedAt) {
                 delay(1.seconds)
             }
         } ?: throw OnchainSendAbandonSyncError()

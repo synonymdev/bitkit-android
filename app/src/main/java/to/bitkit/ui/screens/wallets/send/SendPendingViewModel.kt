@@ -200,7 +200,7 @@ class SendPendingViewModel @Inject constructor(
                     it.copy(isAbandoning = false, abandoned = true, abandonableAttempt = null, recoveryAttempt = null)
                 }
             }.onFailure { error ->
-                Logger.warn("Could not release on-chain payment ${attempt.txid}", error, context = TAG)
+                Logger.warn("Could not release on-chain payment '${attempt.txid}'", error, context = TAG)
                 _uiState.update {
                     it.copy(
                         isAbandoning = false,

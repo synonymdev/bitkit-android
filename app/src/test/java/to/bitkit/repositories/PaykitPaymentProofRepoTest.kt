@@ -2561,6 +2561,31 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(paymentProofRepo().onchainRequestHasEnded(attempt))
     }
 
+    @Test
+    fun `recurring period counts as ended only without its own proof`() = test {
+        val periodStart = "2027-01-01T00:00:00Z"
+        val base = unknownShopAttempt("ab".repeat(32))
+        val attempt = base.copy(requestId = requireNotNull(base.requestId).copy(billingPeriodStartsAt = periodStart))
+        storedProofs = listOf(startedOnchainProof(attempt))
+        val periodProof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod(periodStart, "2027-02-01T00:00:00Z")
+        }
+        val olderProof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod("2026-12-01T00:00:00Z", periodStart)
+        }
+        val repo = paymentProofRepo()
+
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(listOf(olderProof), state = PaymentRequestLifecycleState.CANCELED))
+        )
+        assertTrue(repo.onchainRequestHasEnded(attempt))
+
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(listOf(periodProof), state = PaymentRequestLifecycleState.CANCELED))
+        )
+        assertFalse(repo.onchainRequestHasEnded(attempt))
+    }
+
     private fun TestScope.observeRequestStateChanges() {
         paymentProofRepo(projectionStore).paymentRequestStateChanges(projectionIdentity)
             .onEach { requestStateChanges++ }

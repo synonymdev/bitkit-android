@@ -765,6 +765,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         store.recordOutcome(attempt.attemptId, outcome, 0)
         val unknown = requireNotNull(store.current())
         assertTrue(unknown.canBeAbandoned)
+        assertFalse(unknown.copy(restoredFromBackup = true).canBeAbandoned)
 
         assertFalse(store.abandonUnbroadcast(unknown) { false })
         assertEquals(unknown, store.current())
