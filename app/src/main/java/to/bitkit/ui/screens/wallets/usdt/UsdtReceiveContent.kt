@@ -44,11 +44,13 @@ internal fun ColumnScope.UsdtReceiveContent(
     network: String,
     onEdit: () -> Unit,
     onNetwork: () -> Unit,
+    amount: String = "",
 ) {
     var showDetails by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showDetails) { showDetails = false }
     val networkTitle = stringResource(R.string.usdt__receive_network, network)
-    val shareContent = "$networkTitle\n$uri"
+    val shareContent = listOfNotNull(networkTitle, address, amount.takeIf { it.isNotEmpty() }?.let { "$it USDT" })
+        .joinToString("\n")
     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
         if (uri.isNotEmpty()) {
             if (showDetails) {
@@ -65,12 +67,13 @@ internal fun ColumnScope.UsdtReceiveContent(
                         testTag = "UsdtReceiveAddress",
                         accentColor = Colors.Usdt,
                         shareContent = shareContent,
+                        shareQrContent = uri,
                     )
                 }
             } else {
                 ReceiveQrView(
                     uri = uri,
-                    copyText = uri,
+                    copyText = address,
                     qrLogoPainter = painterResource(R.drawable.tether_circle),
                     onClickEditInvoice = onEdit,
                     accentColor = Colors.Usdt,

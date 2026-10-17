@@ -157,7 +157,7 @@ fun QrCodeImage(
 }
 
 @Composable
-private fun rememberQrBitmap(content: String, size: Dp): Bitmap? {
+internal fun rememberQrBitmap(content: String, size: Dp): Bitmap? {
     if (content.isEmpty()) return null
 
     var bitmap by remember(content) { mutableStateOf<Bitmap?>(null) }
