@@ -30,6 +30,7 @@ import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
@@ -42,6 +43,7 @@ import org.lightningdevkit.ldknode.OnchainWalletAccount
 import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.ScoringFeeParameters
@@ -1070,14 +1072,23 @@ class LightningService internal constructor(
      */
     suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
         val original = attempt.originalInputs.orEmpty().toSet()
-        val inputSets = releaseInputSets(listSpendableOutputs().getOrThrow(), original)
+        // Only confirmed coins join the original's: nodes holding a candidate refuse a replacement that adds an
+        // unconfirmed input (BIP125 rule 2), and an unconfirmed parent can still be replaced or evicted.
+        val confirmedTxids = listPayments().orEmpty().mapNotNull { payment ->
+            (payment.kind as? PaymentKind.Onchain)?.takeIf { it.status is ConfirmationStatus.Confirmed }?.txid
+        }.toSet()
+        val spendable = listSpendableOutputs().getOrThrow().filter {
+            OnchainSendInput(it.outpoint.txid, it.outpoint.vout) in original || it.outpoint.txid in confirmedTxids
+        }
+        val inputSets = releaseInputSets(spendable, original)
         if (inputSets.isEmpty() || attempt.walletIndex != currentWalletIndex) throw ServiceError.NodeNotSetup()
         val originalCoins = inputSets.first().map { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) }.toSet()
         val address = newAddress()
         var lastError: Throwable = ServiceError.NodeNotSetup()
         for (utxos in inputSets) {
             var feeRate = maxOf(attempt.feeRateSatsPerVByte, attempt.candidateFeeRates.values.maxOrNull() ?: 0uL) + 2uL
-            for (feeAttempt in 0 until RELEASE_FEE_ATTEMPTS) {
+            var feeAttemptsLeft = RELEASE_FEE_ATTEMPTS
+            while (feeAttemptsLeft-- > 0) {
                 val prepared = runSuspendCatching {
                     prepareOnchainSend(
                         address = address,

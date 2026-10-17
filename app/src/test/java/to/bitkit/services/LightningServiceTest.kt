@@ -747,4 +747,72 @@ class LightningServiceTest : BaseUnitTest() {
         isTrackingEnabled = enabled,
         setupState = WatchOnlyAccountSetupState.Active,
     )
+
+    @Test
+    fun `release never adds an unconfirmed wallet coin`() = test {
+        val originalTxid = "11".repeat(32)
+        val unconfirmedTxid = "33".repeat(32)
+        val original = org.lightningdevkit.ldknode.SpendableUtxo(
+            org.lightningdevkit.ldknode.OutPoint(originalTxid, 0u), 1_200uL,
+        )
+        val unconfirmed = org.lightningdevkit.ldknode.SpendableUtxo(
+            org.lightningdevkit.ldknode.OutPoint(unconfirmedTxid, 0u), 90_000uL,
+        )
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.listSpendableOutputs()).thenReturn(listOf(original, unconfirmed))
+        whenever(onchainPayment.newAddress()).thenReturn("bcrt1qrelease")
+        whenever(node.listPayments()).thenReturn(
+            listOf(
+                org.lightningdevkit.ldknode.PaymentDetails(
+                    id = "incoming",
+                    kind = org.lightningdevkit.ldknode.PaymentKind.Onchain(
+                        unconfirmedTxid,
+                        org.lightningdevkit.ldknode.ConfirmationStatus.Unconfirmed,
+                    ),
+                    amountMsat = 90_000_000uL,
+                    feePaidMsat = 0uL,
+                    direction = org.lightningdevkit.ldknode.PaymentDirection.INBOUND,
+                    status = org.lightningdevkit.ldknode.PaymentStatus.PENDING,
+                    latestUpdateTimestamp = 100uL,
+                ),
+            ),
+        )
+        val release = mock<org.lightningdevkit.ldknode.PreparedOnchainSend>().also {
+            whenever(it.txid()).thenReturn("44".repeat(32))
+            whenever(it.inputs()).thenReturn(listOf(original.outpoint, unconfirmed.outpoint))
+            whenever(it.recipientAmountSats()).thenReturn(1_000uL)
+            whenever(it.miningFeeSats()).thenReturn(10_000uL)
+        }
+        // The original's coin alone cannot fund the release; any set with the extra coin can.
+        whenever(onchainPayment.prepareSendToAddress(any(), any(), any(), anyOrNull())).thenAnswer {
+            val utxos = it.getArgument<List<org.lightningdevkit.ldknode.SpendableUtxo>?>(3).orEmpty()
+            if (utxos.any { u -> u.outpoint.txid == unconfirmedTxid }) release else throw ServiceError.NodeNotSetup()
+        }
+        val attempt = OnchainSendAttempt(
+            walletId = WalletScope.default,
+            attemptId = "attempt",
+            requestId = null,
+            orderId = null,
+            address = "bcrt1qpayee",
+            amountSats = 600uL,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 10uL,
+            isTransfer = false,
+            channelId = null,
+            tags = emptyList(),
+            txid = "55".repeat(32),
+            originalInputs = listOf(to.bitkit.repositories.OnchainSendInput(originalTxid, 0u)),
+            candidateTxids = listOf("55".repeat(32)),
+            candidateFeeRates = mapOf("55".repeat(32) to 10uL),
+            candidateMiningFees = mapOf("55".repeat(32) to 1_410uL),
+        )
+
+        val prepared = runCatching { sut.prepareRelease(attempt) }.getOrNull()
+
+        val spent = prepared?.receipt?.inputs.orEmpty().map { it.txid }
+        assertFalse(
+            unconfirmedTxid in spent,
+            "Release spends unconfirmed coin '$unconfirmedTxid'; nodes holding a candidate reject it (BIP125 rule 2)",
+        )
+    }
 }
