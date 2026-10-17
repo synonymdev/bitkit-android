@@ -1,0 +1,23 @@
+<journey name="spending hw sign deeplink">
+  <description>Precondition: onboarded debug build, dev mode on, a paired hardware wallet with an on-chain balance, and a reachable LSP. The link carries a spending amount, not an order: the order is only bought when the user swipes on the sign screen.</description>
+  <actions>
+    <action>Open Settings ▸ Hardware Wallets and note the paired wallet's id from the app log line "Loaded hardware wallet"</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/spending-hw-sign/&lt;walletId&gt;/100000" to.bitkit.dev`</action>
+    <action>Verify that the Transfer sign screen is visible with a non-zero network fee, and that the amount shown matches 100 000 sats</action>
+    <action>Verify that logcat contains no "Refused spending hw sign deeplink" line for that URI</action>
+    <action>Verify that no Blocktank order was created yet — the app log has no "Buying channel with lspBalanceSat" line since the link was opened</action>
+    <action>Press the device back button and verify the wallet overview is visible</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/spending-hw-sign/not-a-wallet/100000" to.bitkit.dev`</action>
+    <action>Verify that the screen does not change and logcat contains "Refused spending hw sign deeplink, unknown wallet 'not-a-wallet'"</action>
+    <action>Verify that logcat contains no "Unhandled screen deeplink" line for that URI, since the link was recognized and deliberately refused</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/spending-hw-sign/&lt;walletId&gt;/0" to.bitkit.dev`</action>
+    <action>Verify that the screen does not change, since a non-positive amount is not a valid link</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/spending-hw-sign/&lt;walletId&gt;/999999999" to.bitkit.dev`</action>
+    <action>Verify that the screen does not change and logcat contains "Refused spending hw sign deeplink, no quote for '999999999' sats"</action>
+    <action>Open Settings ▸ Support and tap the version row five times to turn dev mode off</action>
+    <action>Run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/spending-hw-sign/&lt;walletId&gt;/100000" to.bitkit.dev`</action>
+    <action>Verify that the wallet overview is visible and the sign screen is not, on a cold start with dev mode off</action>
+    <action>Open Settings ▸ Support and tap the version row five times to turn dev mode back on</action>
+  </actions>
+</journey>
