@@ -14,6 +14,8 @@ import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -32,6 +34,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NewTransactionSheetDetails
@@ -111,10 +114,15 @@ class UsdtReceivePrivacyTest {
             composeTestRule.waitUntil(5000) { context.getClipboardText() == receive.address }
             for (details in listOf(false, true)) {
                 if (details) composeTestRule.onNodeWithTag("UsdtReceiveDetails").performClick()
-                composeTestRule.onNodeWithText("Share").performClick()
+                val shareLabel = context.getString(R.string.common__share)
+                composeTestRule.waitUntil(5000) {
+                    composeTestRule.onAllNodes(hasText(shareLabel) and isEnabled()).fetchSemanticsNodes().size == 1
+                }
+                composeTestRule.onNodeWithText(shareLabel).performClick()
                 composeTestRule.runOnIdle {
                     val intent = assertNotNull(shared)
-                    val expected = "Network: ${receive.network}\n${receive.address}" +
+                    val networkTitle = context.getString(R.string.usdt__receive_network, receive.network)
+                    val expected = "$networkTitle\n${receive.address}" +
                         if (receive.amount.isEmpty()) "" else "\n${receive.amount} USDT"
                     assertEquals(expected, intent.getStringExtra(Intent.EXTRA_TEXT))
                     val imageUri = assertNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
@@ -127,7 +135,7 @@ class UsdtReceivePrivacyTest {
                 }
             }
             composeTestRule.runOnIdle { context.setClipboardText("previous clipboard") }
-            composeTestRule.onNodeWithText("Copy").performClick()
+            composeTestRule.onNodeWithText(context.getString(R.string.common__copy)).performClick()
             composeTestRule.waitUntil(5000) { context.getClipboardText() == receive.address }
             composeTestRule.runOnIdle { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
             composeTestRule.onNodeWithTag("ReceiveCopyQR").assertIsDisplayed()
