@@ -13,6 +13,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
@@ -146,6 +147,22 @@ fun releaseOutbids(receipt: OnchainPreparedReceipt, attempt: OnchainSendAttempt)
     val fee = receipt.miningFeeSats ?: return false
     if (receipt.inputs.none { it in original }) return false
     return fee > attempt.highestCandidateFee
+}
+
+/**
+ * The coin sets a release tries, smallest first: the original's coins alone, then with the wallet's largest other
+ * coin, then with all of them. Each set holds every spendable original coin, so no candidate can confirm, while a
+ * small payment's coins alone may not cover the release's output and higher fee.
+ */
+fun releaseInputSets(spendable: List<SpendableUtxo>, original: Set<OnchainSendInput>): List<List<SpendableUtxo>> {
+    val (originals, others) = spendable.partition { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) in original }
+    if (originals.isEmpty()) return emptyList()
+    val byValue = others.sortedByDescending { it.valueSats }
+    return buildList {
+        add(originals)
+        byValue.firstOrNull()?.let { add(originals + it) }
+        if (byValue.size > 1) add(originals + byValue)
+    }
 }
 
 /** The wallet side of cancelling: proving no candidate reached the network, and spending its coins back. */
