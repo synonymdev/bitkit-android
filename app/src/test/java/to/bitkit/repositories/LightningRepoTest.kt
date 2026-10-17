@@ -3794,5 +3794,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertFalse(isOnchainSyncAfter(null, 0uL))
         assertFalse(isOnchainSyncAfter(1_800_000_000uL, 1_800_000_000uL))
         assertTrue(isOnchainSyncAfter(1_800_000_001uL, 1_800_000_000uL))
+        // The requested sync's own success counts even when it finished in the same second.
+        assertTrue(isOnchainSyncAfter(1_800_000_000uL, 1_800_000_000uL, requestedSyncSucceeded = true))
     }
 }

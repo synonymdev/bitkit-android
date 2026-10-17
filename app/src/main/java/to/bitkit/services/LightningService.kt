@@ -159,6 +159,9 @@ class LightningService internal constructor(
     companion object {
         private const val TAG = "LightningService"
         private const val RELEASE_FEE_ATTEMPTS = 4
+
+        /** A small fixed payment to a new wallet address; the rest returns as change, which pays the fee. */
+        private const val RELEASE_AMOUNT_SATS = 1_000uL
         private const val NODE_ID_PREVIEW_LEN = 20
 
         private const val SCORING_BASE_PENALTY_MSAT = 40_000uL
@@ -1060,11 +1063,16 @@ class LightningService internal constructor(
             OnchainSendInput(it.outpoint.txid, it.outpoint.vout) in original
         }
         if (utxos.isEmpty() || attempt.walletIndex != currentWalletIndex) throw ServiceError.NodeNotSetup()
-        val total = utxos.sumOf { it.valueSats }
         var feeRate = maxOf(attempt.feeRateSatsPerVByte, attempt.candidateFeeRates.values.maxOrNull() ?: 0uL) + 2uL
         val address = newAddress()
         repeat(RELEASE_FEE_ATTEMPTS) {
-            val prepared = prepareOnchainSend(address, total / 2uL, feeRate, utxos, walletIndex = attempt.walletIndex)
+            val prepared = prepareOnchainSend(
+                address = address,
+                sats = RELEASE_AMOUNT_SATS,
+                satsPerVByte = feeRate,
+                utxosToSpend = utxos,
+                walletIndex = attempt.walletIndex,
+            )
             check(prepared.receipt.inputs.any { it in original })
             if (releaseOutbids(prepared.receipt, attempt)) return prepared
             feeRate *= 2uL

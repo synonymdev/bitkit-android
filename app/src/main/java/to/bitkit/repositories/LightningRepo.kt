@@ -1869,11 +1869,14 @@ class LightningRepo @Inject constructor(
         attempt: OnchainSendAttempt,
         timeout: Duration,
     ): Boolean {
-        // Only an on-chain sync that finishes after this call moves the timestamp past the one read here.
+        // The requested sync runs on the serial LDK queue after any sync already in flight, so its success proves a
+        // fresh view. Failing that, an on-chain sync that finishes later than the one read here also counts.
         val previousSync = lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL
         withTimeoutOrNull(timeout) {
-            sync()
-            while (!isOnchainSyncAfter(lightningService.status?.latestOnchainWalletSyncTimestamp, previousSync)) {
+            val requestedSyncSucceeded = runSuspendCatching { lightningService.sync() }.isSuccess
+            while (true) {
+                val latestSync = lightningService.status?.latestOnchainWalletSyncTimestamp
+                if (isOnchainSyncAfter(latestSync, previousSync, requestedSyncSucceeded)) break
                 delay(1.seconds)
             }
         } ?: throw OnchainSendAbandonSyncError()
@@ -2805,5 +2808,9 @@ sealed interface ProbeOutcome {
     ) : ProbeOutcome
 }
 
-/** A sync finished in the same second as the one read before a request is not a new sync. */
-internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong): Boolean = (latest ?: 0uL) > previous
+/**
+ * The sync requested for a check proves a fresh view once it succeeds. Otherwise only a sync that finished later than
+ * the one read before the request counts; one finished in the same second may predate it.
+ */
+internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong, requestedSyncSucceeded: Boolean = false): Boolean =
+    requestedSyncSucceeded || (latest ?: 0uL) > previous
