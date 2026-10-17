@@ -769,9 +769,11 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
 
         assertFalse(store.abandonUnbroadcast(unknown) { false })
         assertEquals(unknown, store.current())
+        assertNull(store.recordRelease(unknown, "77".repeat(32)), "A release needs the approval first")
         val approved = requireNotNull(store.approveRelease(unknown))
         assertTrue(approved.releaseApproved)
         assertEquals(approved, store.approveRelease(unknown))
+        assertNull(store.recordRelease(approved, "ab".repeat(32)), "A candidate cannot be its own release")
         // A restore of the same operation keeps the local approval and its release.
         store.restoreActive(unknown.copy(restoredFromBackup = true))
         val restored = requireNotNull(store.current())

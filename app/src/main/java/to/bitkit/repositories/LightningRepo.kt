@@ -135,7 +135,7 @@ class LightningRepo @Inject constructor(
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
     private val electrumProbeService: ElectrumProbeService,
-) {
+) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
 
@@ -1862,9 +1862,12 @@ class LightningRepo @Inject constructor(
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
 
     /** Syncs the on-chain wallet, then checks that none of the attempt's candidates reached the mempool or chain. */
+    override suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean =
+        onchainCandidatesNeverReachedNetwork(attempt, ABANDON_SYNC_TIMEOUT)
+
     suspend fun onchainCandidatesNeverReachedNetwork(
         attempt: OnchainSendAttempt,
-        timeout: Duration = ABANDON_SYNC_TIMEOUT,
+        timeout: Duration,
     ): Boolean {
         // Only an on-chain sync that finishes after this call moves the timestamp past the one read here.
         val previousSync = lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL
@@ -1876,6 +1879,14 @@ class LightningRepo @Inject constructor(
         } ?: throw OnchainSendAbandonSyncError()
         return lightningService.walletKnowsNoCandidate(attempt)
     }
+
+    override suspend fun walletKnowsTransaction(txid: String): Boolean = lightningService.walletKnowsTransaction(txid)
+
+    override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend =
+        lightningService.prepareRelease(attempt)
+
+    suspend fun recordOnchainRelease(expected: OnchainSendAttempt, txid: String): OnchainSendAttempt? =
+        onchainSendAttemptStore.recordRelease(expected, txid)
 
     suspend fun approveOnchainRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
         onchainSendAttemptStore.approveRelease(expected)

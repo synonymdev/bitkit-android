@@ -53,6 +53,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -2528,15 +2529,13 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             storedProofs = listOf(startedOnchainProof(attempt))
             whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord(state = state)))
             stubAbandon(attempt)
-            var checked: OnchainSendAttempt? = null
+            val wallet = FakeReleaseWallet()
 
-            val result = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt) {
-                checked = it
-                true
-            }
+            val result = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}
 
             assertTrue(result.isSuccess)
-            assertEquals(attempt, checked)
+            assertEquals(attempt, wallet.checked)
+            assertEquals(1, wallet.broadcasts)
             assertTrue(storedProofs.isEmpty())
         }
     }
@@ -2555,7 +2554,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             storedProofs = listOf(proof)
             whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
 
-            val error = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt) { neverReached }.exceptionOrNull()
+            val error = paymentProofRepo()
+                .abandonUnbroadcastOnchainPayment(attempt, FakeReleaseWallet(neverReached = neverReached)) {}
+                .exceptionOrNull()
 
             assertEquals(requestOpen, (error as OnchainSendAbandonRefusedError).requestOpen)
             assertEquals(listOf(proof), storedProofs)
@@ -2644,7 +2645,81 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         stubAbandon(approved)
 
         assertTrue(paymentProofRepo().onchainRequestHasEnded(approved))
-        assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(approved) { true }.isSuccess)
+        assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(approved, FakeReleaseWallet()) {}.isSuccess)
+    }
+
+    @Test
+    fun `rejected or unknown release keeps the guard and proof until the wallet sees it`() = test {
+        val outcomes = listOf<(String) -> OnchainSendOutcome>(
+            { OnchainSendOutcome.Rejected(it, "conflict") },
+            { OnchainSendOutcome.Unknown(it) },
+        )
+        for (outcome in outcomes) {
+            reset(lightningRepo)
+            val attempt = unknownShopAttempt("ab".repeat(32))
+            val proof = startedOnchainProof(attempt)
+            storedProofs = listOf(proof)
+            whenever(paykitSdkService.paymentRequests())
+                .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED)))
+            stubAbandon(attempt)
+            val wallet = FakeReleaseWallet(outcome = outcome)
+
+            assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isFailure)
+            assertEquals(listOf(proof), storedProofs)
+            verify(lightningRepo, never()).abandonUnbroadcastOnchainSend(any(), any())
+
+            // Once a sync puts the release in the wallet, a later cancel finishes without another release.
+            val pending = attempt.copy(releaseApproved = true, releaseTxid = wallet.releaseTxid)
+            wallet.known = setOf(wallet.releaseTxid)
+            assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(pending, wallet) {}.isSuccess)
+            assertEquals(1, wallet.prepared)
+            assertTrue(storedProofs.isEmpty())
+        }
+    }
+
+    @Test
+    fun `release must spend an original coin and outbid every candidate`() {
+        val attempt = unknownShopAttempt("ab".repeat(32)).copy(candidateMiningFees = mapOf("ab".repeat(32) to 300uL))
+        val inputs = requireNotNull(attempt.originalInputs)
+        fun receipt(spent: List<OnchainSendInput>, fee: ULong) =
+            OnchainPreparedReceipt("77".repeat(32), spent, "bcrt1qrelease", 500uL, miningFeeSats = fee)
+        assertTrue(releaseOutbids(receipt(inputs, 301uL), attempt))
+        assertFalse(releaseOutbids(receipt(inputs, 300uL), attempt))
+        assertFalse(releaseOutbids(receipt(listOf(OnchainSendInput("99".repeat(32), 7u)), 301uL), attempt))
+    }
+
+    private class FakeReleaseWallet(
+        var neverReached: Boolean = true,
+        var known: Set<String> = emptySet(),
+        val outcome: (String) -> OnchainSendOutcome = { OnchainSendOutcome.Accepted(it) },
+    ) : OnchainReleasing {
+        val releaseTxid = "77".repeat(32)
+        var prepared = 0
+        var broadcasts = 0
+        var checked: OnchainSendAttempt? = null
+
+        override suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean {
+            checked = attempt
+            return neverReached
+        }
+
+        override suspend fun walletKnowsTransaction(txid: String): Boolean = txid in known
+
+        override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
+            prepared++
+            val receipt = OnchainPreparedReceipt(
+                txid = releaseTxid,
+                inputs = attempt.originalInputs.orEmpty(),
+                address = "bcrt1qrelease",
+                amountSats = 500uL,
+                miningFeeSats = attempt.highestCandidateFee + 1uL,
+            )
+            return PreparedOnchainSend(receipt) { beforeDispatch ->
+                beforeDispatch()
+                broadcasts++
+                outcome(releaseTxid)
+            }
+        }
     }
 
     private fun TestScope.observeRequestStateChanges() {
@@ -2748,6 +2823,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private suspend fun stubAbandon(attempt: OnchainSendAttempt) {
         whenever(lightningRepo.approveOnchainRelease(any())).doSuspendableAnswer {
             it.getArgument<OnchainSendAttempt>(0).copy(releaseApproved = true)
+        }
+        whenever(lightningRepo.recordOnchainRelease(any(), any())).doSuspendableAnswer {
+            it.getArgument<OnchainSendAttempt>(0).copy(releaseTxid = it.getArgument<String>(1))
         }
         whenever(lightningRepo.abandonUnbroadcastOnchainSend(any(), any())).doSuspendableAnswer {
             it.getArgument<suspend (OnchainSendAttempt) -> Boolean>(1).invoke(attempt)

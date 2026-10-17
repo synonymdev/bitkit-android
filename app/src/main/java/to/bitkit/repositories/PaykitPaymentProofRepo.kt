@@ -526,20 +526,43 @@ class PaykitPaymentProofRepo @Inject constructor(
      */
     suspend fun abandonUnbroadcastOnchainPayment(
         attempt: OnchainSendAttempt,
-        neverReachedNetwork: suspend (OnchainSendAttempt) -> Boolean,
+        wallet: OnchainReleasing,
+        approveRelease: suspend (OnchainPreparedReceipt) -> Unit,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (!onchainRequestHasEnded(attempt)) throw OnchainSendAbandonRefusedError(requestOpen = true)
-            if (!neverReachedNetwork(attempt)) throw OnchainSendAbandonRefusedError(requestOpen = false)
+            val pendingRelease = attempt.releaseTxid
+            if (pendingRelease != null && wallet.walletKnowsTransaction(pendingRelease)) {
+                return@runSuspendCatching finishRelease(attempt)
+            }
+            if (!wallet.onchainCandidatesNeverReachedNetwork(attempt)) {
+                throw OnchainSendAbandonRefusedError(requestOpen = false)
+            }
             val approved = if (attempt.releaseApproved) attempt else lightningRepo.approveOnchainRelease(attempt)
-            val released = approved != null &&
-                lightningRepo.abandonUnbroadcastOnchainSend(approved) { removeOriginalShopProofs(it) }
-            if (!released) throw OnchainSendBlockedError(attempt)
-            Logger.info(
-                "Released on-chain payment '${attempt.txid}' after its request ended without it reaching the network",
-                context = TAG,
-            )
+            approved ?: throw OnchainSendBlockedError(attempt)
+            val prepared = wallet.prepareRelease(approved)
+            check(releaseOutbids(prepared.receipt, approved))
+            approveRelease(prepared.receipt)
+            val recorded = lightningRepo.recordOnchainRelease(approved, prepared.receipt.txid)
+                ?: throw OnchainSendBlockedError(attempt)
+            when (prepared.broadcast()) {
+                is OnchainSendOutcome.Accepted -> finishRelease(recorded)
+                // A conflicting candidate may be in a mempool; keep the guard until a sync resolves it.
+                is OnchainSendOutcome.Rejected -> throw OnchainSendAbandonRefusedError(requestOpen = false)
+                is OnchainSendOutcome.Unknown -> throw OnchainSendAbandonPendingError()
+            }
         }
+    }
+
+    /** Removes the original proof, then the attempt, once its release reached the network. */
+    private suspend fun finishRelease(attempt: OnchainSendAttempt) {
+        if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt) { removeOriginalShopProofs(it) }) {
+            throw OnchainSendBlockedError(attempt)
+        }
+        Logger.info(
+            "Released on-chain payment '${attempt.txid}' through '${attempt.releaseTxid}' after its request ended",
+            context = TAG,
+        )
     }
 
     suspend fun completeRecoveredOnchainPayment(request: PaykitPaymentRequest, attempt: OnchainSendAttempt): Boolean =

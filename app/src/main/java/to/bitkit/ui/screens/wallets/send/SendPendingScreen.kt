@@ -115,9 +115,9 @@ fun SendPendingScreen(
     AbandonExpiredPayment(
         isAbandoned = uiState.abandoned,
         showConfirmation = showAbandonConfirmation,
-        onConfirm = {
+        onConfirm = { requiresPin, useBiometrics ->
             showAbandonConfirmation = false
-            viewModel.abandonExpired()
+            viewModel.abandonExpired(requiresPin, useBiometrics)
         },
         onDismiss = { showAbandonConfirmation = false },
         onClose = onClose,
@@ -159,10 +159,15 @@ fun SendPendingScreen(
 private fun AbandonExpiredPayment(
     isAbandoned: Boolean,
     showConfirmation: Boolean,
-    onConfirm: () -> Unit,
+    onConfirm: (requiresPin: Boolean, useBiometrics: Boolean) -> Unit,
     onDismiss: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val settings = settingsViewModel ?: return
+    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
+    val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isBiometrySupported = rememberBiometricAuthSupported()
     val abandonedToast = stringResource(R.string.wallet__send_pending__abandon_done)
     LaunchedEffect(isAbandoned) {
         if (isAbandoned) {
@@ -176,7 +181,7 @@ private fun AbandonExpiredPayment(
             text = stringResource(R.string.wallet__send_pending__abandon_note),
             confirmText = stringResource(R.string.common__continue),
             dismissText = stringResource(R.string.common__cancel),
-            onConfirm = onConfirm,
+            onConfirm = { onConfirm(isPinEnabled && pinForPayments, isBiometricEnabled && isBiometrySupported) },
             onDismiss = onDismiss,
         )
     }
@@ -188,6 +193,7 @@ private fun SendPendingUiState.abandonErrorMessage(): String? = abandonError?.le
         when (it) {
             AbandonError.MayStillConfirm -> R.string.wallet__send_pending__abandon_refused
             AbandonError.SyncUnavailable -> R.string.wallet__send_pending__abandon_sync
+            AbandonError.ReleasePending -> R.string.wallet__send_pending__abandon_pending
         }
     )
 }
@@ -251,6 +257,15 @@ private fun RecoveryAuthorization(
                 SecondaryButton(text = stringResource(R.string.common__cancel),
                     onClick = { viewModel.answerRecoveryApproval(false) })
             },
+        )
+        is RecoveryApproval.Release -> AppAlertDialog(
+            title = stringResource(R.string.wallet__send_pending__abandon),
+            text = stringResource(R.string.wallet__send_pending__abandon_release)
+                .replace("{fee}", requireNotNull(approval.receipt.miningFeeSats).toString()),
+            confirmText = stringResource(R.string.wallet__send_yes),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = { viewModel.answerRecoveryApproval(true) },
+            onDismiss = { viewModel.answerRecoveryApproval(false) },
         )
         is RecoveryApproval.Warning -> AppAlertDialog(
             title = stringResource(R.string.common__are_you_sure),

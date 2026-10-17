@@ -75,6 +75,7 @@ import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PreparedOnchainSend
+import to.bitkit.repositories.releaseOutbids
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
@@ -157,6 +158,7 @@ class LightningService internal constructor(
 
     companion object {
         private const val TAG = "LightningService"
+        private const val RELEASE_FEE_ATTEMPTS = 4
         private const val NODE_ID_PREVIEW_LEN = 20
 
         private const val SCORING_BASE_PENALTY_MSAT = 40_000uL
@@ -1041,6 +1043,33 @@ class LightningService internal constructor(
             attempt.candidateTxids.none { originalNode.getTransactionDetails(it) != null } &&
                 inputs.all { originalNode.getTransactionDetails(it.txid) != null }
         }
+    }
+
+    suspend fun walletKnowsTransaction(txid: String): Boolean {
+        val originalNode = node ?: return false
+        return callOnchainSend { originalNode.getTransactionDetails(txid) != null }
+    }
+
+    /**
+     * Spends the original's coins back to the wallet at a fee above every candidate's, so the release replaces any
+     * copy of the original a node still holds, and no candidate can confirm once it does.
+     */
+    suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
+        val original = attempt.originalInputs.orEmpty().toSet()
+        val utxos = listSpendableOutputs().getOrThrow().filter {
+            OnchainSendInput(it.outpoint.txid, it.outpoint.vout) in original
+        }
+        if (utxos.isEmpty() || attempt.walletIndex != currentWalletIndex) throw ServiceError.NodeNotSetup()
+        val total = utxos.sumOf { it.valueSats }
+        var feeRate = maxOf(attempt.feeRateSatsPerVByte, attempt.candidateFeeRates.values.maxOrNull() ?: 0uL) + 2uL
+        val address = newAddress()
+        repeat(RELEASE_FEE_ATTEMPTS) {
+            val prepared = prepareOnchainSend(address, total / 2uL, feeRate, utxos, walletIndex = attempt.walletIndex)
+            check(prepared.receipt.inputs.any { it in original })
+            if (releaseOutbids(prepared.receipt, attempt)) return prepared
+            feeRate *= 2uL
+        }
+        throw ServiceError.NodeNotSetup()
     }
 
     internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =

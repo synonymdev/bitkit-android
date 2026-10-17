@@ -23,6 +23,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendAbandonPendingError
 import to.bitkit.repositories.OnchainSendAbandonSyncError
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
@@ -188,29 +189,43 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
-    fun abandonExpired() {
+    fun abandonExpired(requiresPin: Boolean, useBiometrics: Boolean) {
         val attempt = _uiState.value.abandonableAttempt ?: return
         if (_uiState.value.isAbandoning) return
         _uiState.update { it.copy(isAbandoning = true, abandonError = null) }
         viewModelScope.launch {
-            paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(attempt) {
-                lightningRepo.onchainCandidatesNeverReachedNetwork(it)
-            }.onSuccess {
-                _uiState.update {
-                    it.copy(isAbandoning = false, abandoned = true, abandonableAttempt = null, recoveryAttempt = null)
+            try {
+                releaseExpired(attempt, requiresPin, useBiometrics)
+            } finally {
+                _uiState.update { it.copy(isAbandoning = false) }
+            }
+        }
+    }
+
+    private suspend fun releaseExpired(attempt: OnchainSendAttempt, requiresPin: Boolean, useBiometrics: Boolean) {
+        paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(attempt, lightningRepo) { receipt ->
+            withContext(Dispatchers.Main.immediate) {
+                requestRecoveryApproval(RecoveryApproval.Release(receipt))
+                if (requiresPin) {
+                    requestRecoveryApproval(if (useBiometrics) RecoveryApproval.Biometrics else RecoveryApproval.Pin)
                 }
-            }.onFailure { error ->
-                Logger.warn("Could not release on-chain payment '${attempt.txid}'", error, context = TAG)
-                _uiState.update {
-                    it.copy(
-                        isAbandoning = false,
-                        abandonError = if (error is OnchainSendAbandonSyncError) {
-                            AbandonError.SyncUnavailable
-                        } else {
-                            AbandonError.MayStillConfirm
-                        },
-                    )
-                }
+            }
+        }.onSuccess {
+            _uiState.update {
+                it.copy(isAbandoning = false, abandoned = true, abandonableAttempt = null, recoveryAttempt = null)
+            }
+        }.onFailure { error ->
+            Logger.warn("Could not release on-chain payment '${attempt.txid}'", error, context = TAG)
+            _uiState.update {
+                it.copy(
+                    isAbandoning = false,
+                    abandonError = when (error) {
+                        is CancellationException -> null
+                        is OnchainSendAbandonSyncError -> AbandonError.SyncUnavailable
+                        is OnchainSendAbandonPendingError -> AbandonError.ReleasePending
+                        else -> AbandonError.MayStillConfirm
+                    },
+                )
             }
         }
     }
@@ -318,11 +333,12 @@ data class SendPendingUiState(
     val abandonError: AbandonError? = null,
 )
 
-enum class AbandonError { MayStillConfirm, SyncUnavailable }
+enum class AbandonError { MayStillConfirm, SyncUnavailable, ReleasePending }
 
 sealed interface RecoveryApproval {
     data class Fee(val receipt: OnchainPreparedReceipt) : RecoveryApproval
     data class Warning(val warning: SanityWarning) : RecoveryApproval
     data object Biometrics : RecoveryApproval
     data object Pin : RecoveryApproval
+    data class Release(val receipt: OnchainPreparedReceipt) : RecoveryApproval
 }
