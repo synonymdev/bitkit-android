@@ -809,6 +809,9 @@ class AppViewModel @Inject constructor(
                 .map { it.onchainAddress }
                 .distinctUntilChanged()
                 .combine(isPaymentRequestPollingStopped) { address, stopped -> address.takeUnless { stopped } }
+                .combine(privatePaykitRepo.isProfileDeletionInProgress) { address, deleting ->
+                    address.takeUnless { deleting }
+                }
                 .debounce(PUBLIC_PAYKIT_SYNC_DEBOUNCE)
                 .collect { address ->
                     if (address != null && !isPaymentRequestPollingStopped.value) {
@@ -843,14 +846,31 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
+        val signIn = pubkyRepo.currentSignIn()
+        val restorationGuard = if (forceRefreshLightning && signIn == null) pubkyRepo.savedIdentityGuard() else null
         val settings = settingsStore.data.first()
         if (!isPaykitEnabled.value || !settings.sharesPublicPaykitEndpoints) return
+        if (forceRefreshLightning) {
+            publicPaykitRepo.requestLightningRefresh(signIn, restorationGuard)
+        }
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
 
+        pubkyRepo.isRestoringSession.first { !it }
+        val restoredSignIn = signIn ?: pubkyRepo.currentSignIn()
+        val admission = publicPaykitPublicationAdmission(restoredSignIn)
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
 
-        publicPaykitRepo.syncCurrentPublishedEndpoints(forceRefreshLightning = forceRefreshLightning)
+        publicPaykitRepo.syncCurrentPublishedEndpoints(
+            canPublish = admission,
+        )
             .onFailure { Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG) }
+    }
+
+    private fun publicPaykitPublicationAdmission(signIn: PubkySignIn? = pubkyRepo.currentSignIn()): () -> Boolean {
+        return {
+            signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
     }
 
     private fun observePrivatePaykitContacts() {
@@ -860,15 +880,17 @@ class AppViewModel @Inject constructor(
                 pubkyRepo.contacts,
                 pubkyRepo.contactsLoadVersion,
                 settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) },
-            ) { publicKey, contacts, contactsLoadVersion, isPaykitEnabled ->
+                privatePaykitRepo.isProfileDeletionInProgress,
+            ) { publicKey, contacts, contactsLoadVersion, isPaykitEnabled, deleting ->
                 PaykitContactSyncState(
                     publicKey = publicKey,
                     contactKeys = contacts.map { it.publicKey }.toSet(),
                     contactsLoaded = contactsLoadVersion > 0L,
                     isPaykitEnabled = isPaykitEnabled,
-                )
+                ).takeUnless { deleting }
             }
                 .distinctUntilChanged()
+                .filterNotNull()
                 .collect(::synchronizePaykitContacts)
         }
     }
@@ -922,7 +944,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun isCurrentPaykitContactSync(state: PaykitContactSyncState, signIn: PubkySignIn): Boolean =
-        pubkyRepo.isCurrent(signIn) && isPaykitEnabled.value &&
+        pubkyRepo.isCurrent(signIn) && isPaykitEnabled.value && !privatePaykitRepo.isProfileDeletionInProgress.value &&
             (pubkyRepo.contactsLoadVersion.value > 0L) == state.contactsLoaded &&
             pubkyRepo.contacts.value.map { it.publicKey }.toSet() == state.contactKeys
 
@@ -952,10 +974,32 @@ class AppViewModel @Inject constructor(
         forceRefreshLightning: Boolean = false,
         requeueActive: Boolean = false,
     ) {
+        val signIn = if (forceRefreshLightning) pubkyRepo.currentSignIn() else null
+        val isStillCurrent = signIn?.let { { pubkyRepo.isCurrent(it) } }
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) {
+            if (forceRefreshLightning && isPaykitEnabled.value && signIn != null) {
+                privatePaykitRepo.refreshKnownSavedContactEndpoints(
+                    reason,
+                    forceRefreshLightning = true,
+                    isStillCurrent = isStillCurrent,
+                )
+            }
+            return
+        }
         val contactKeys = pubkyRepo.contacts.value.map { it.publicKey }
         retryPendingPaykitEndpointRemoval(contactKeys, reason)
 
         if (!isPaykitEnabled.value) return
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) {
+            if (forceRefreshLightning && signIn != null) {
+                privatePaykitRepo.refreshKnownSavedContactEndpoints(
+                    reason,
+                    forceRefreshLightning = true,
+                    isStillCurrent = isStillCurrent,
+                )
+            }
+            return
+        }
 
         refreshPrivateOnlyPaykitApp(reason)
         privatePaykitRepo.reconcileReservedReceiveIndexes()
@@ -966,6 +1010,7 @@ class AppViewModel @Inject constructor(
             reason,
             forceRefreshLightning = forceRefreshLightning,
             requeueActive = requeueActive,
+            isStillCurrent = isStillCurrent,
         )
         if (isPaymentRequestPollingStopped.value) return
         refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
@@ -1083,11 +1128,15 @@ class AppViewModel @Inject constructor(
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
-        if (onlyWhileActive && isPaymentRequestPollingStopped.value) {
+        if (privatePaykitRepo.isProfileDeletionInProgress.value ||
+            onlyWhileActive && isPaymentRequestPollingStopped.value
+        ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
         if (reconcileProofs) paykitPaymentProofRepo.reconcile()
-        if (onlyWhileActive && isPaymentRequestPollingStopped.value) {
+        if (privatePaykitRepo.isProfileDeletionInProgress.value ||
+            onlyWhileActive && isPaymentRequestPollingStopped.value
+        ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
         val result = if (forceFresh) {
@@ -1119,12 +1168,16 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         paykitPaymentRequestRepo.refreshEligibleTargets(
             savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey },
             force = force,
         )
     }
+
+    private fun isAutomaticPaykitWorkPaused(): Boolean =
+        isPaymentRequestPollingStopped.value || privatePaykitRepo.isProfileDeletionInProgress.value
 
     fun startPaykitPaymentRequestPolling() {
         privatePaykitRepo.setContactPreparationActive(true)
@@ -1134,25 +1187,22 @@ class AppViewModel @Inject constructor(
         startPaykitSessionRestoreRetries()
         startPaykitContactsRefresh()
         paykitPaymentRequestPollingJob = viewModelScope.launch {
-            if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
+            if (!isAutomaticPaykitWorkPaused() && isOnline.value == ConnectivityState.CONNECTED) {
+                pubkyRepo.republishIdentityIfNeeded()
+            }
             refreshIncomingPaykitPaymentRequests(messagePriority = Priority.Background, onlyWhileActive = true)
             refreshPaymentRequestTargets()
             var maintenanceIntervalIndex = 0
             var nextMaintenance = timeSource.markNow() + PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
                 delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
-                if (isOnline.value != ConnectivityState.CONNECTED) continue
+                if (isOnline.value != ConnectivityState.CONNECTED || isAutomaticPaykitWorkPaused()) continue
                 val refreshMaintenance = nextMaintenance.hasPassedNow()
                 if (refreshMaintenance) {
                     maintenanceIntervalIndex =
                         (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
                     nextMaintenance = timeSource.markNow() + PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
-                    if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
-                    pubkyRepo.republishIdentityIfNeeded()
-                    retryPendingPaykitEndpointRemoval(
-                        contactKeys = pubkyRepo.contacts.value.map { it.publicKey },
-                        reason = "payment request polling",
-                    )
+                    refreshPaykitMaintenance()
                 }
                 val refreshIdentity = pubkyRepo.publicKey.value
                 startShopContactImport()
@@ -1173,12 +1223,23 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private suspend fun refreshPaykitMaintenance() {
+        if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
+        if (isAutomaticPaykitWorkPaused()) return
+        pubkyRepo.republishIdentityIfNeeded()
+        retryPendingPaykitEndpointRemoval(
+            contactKeys = pubkyRepo.contacts.value.map { it.publicKey },
+            reason = "payment request polling",
+        )
+    }
+
     private fun startPaykitContactsRefresh() {
         if (paykitContactsRefreshJob?.isActive == true) return
         paykitContactsRefreshJob = viewModelScope.launch {
             pubkyRepo.awaitInitialization()
-            combine(isOnline, isPaykitEnabled, pubkyRepo.publicKey) { connectivity, enabled, publicKey ->
-                publicKey.takeIf { connectivity == ConnectivityState.CONNECTED && enabled }
+            combine(isOnline, isPaykitEnabled, pubkyRepo.publicKey, privatePaykitRepo.isProfileDeletionInProgress) {
+                    connectivity, enabled, publicKey, deleting ->
+                publicKey.takeIf { connectivity == ConnectivityState.CONNECTED && enabled && !deleting }
             }.distinctUntilChanged().collectLatest { publicKey ->
                 shopContactImportJob?.cancel()
                 shopContactImportJob = null
@@ -1202,7 +1263,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun startShopContactImport() {
-        if (shopContactImportJob?.isActive == true || isPaymentRequestPollingStopped.value) return
+        if (shopContactImportJob?.isActive == true || isAutomaticPaykitWorkPaused()) return
         if (!isPaykitEnabled.value || isOnline.value != ConnectivityState.CONNECTED) return
         if (pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         shopContactImportJob = viewModelScope.launch {
@@ -1324,6 +1385,9 @@ class AppViewModel @Inject constructor(
                 }
                 .combine(isPaymentRequestPollingStopped) { version, stopped ->
                     version.takeUnless { stopped }
+                }
+                .combine(privatePaykitRepo.isProfileDeletionInProgress) { version, deleting ->
+                    version.takeUnless { deleting }
                 }
                 .filterNotNull()
                 .distinctUntilChanged()
@@ -1925,6 +1989,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshPrivateOnlyPaykitApp(reason: String, onlyIfNeeded: Boolean = false) {
         val settings = settingsStore.data.first()
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         if (!settings.sharesPrivatePaykitEndpoints || settings.sharesPublicPaykitEndpoints) return
         val identity = pubkyRepo.publicKey.value ?: return
         if (onlyIfNeeded && PubkyPublicKeyFormat.matches(privatePaykitAppRegistrationIdentity, identity)) return
@@ -1942,6 +2007,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         contactPaymentSettingsRepo.reconcilePendingEndpoints {
             privatePaykitRepo.retryPendingEndpointRemoval(contactKeys)
                 .onFailure {
@@ -1949,15 +2015,20 @@ class AppViewModel @Inject constructor(
                 }
 
             val settings = settingsStore.data.first()
-            if (settings.publicPaykitCleanupPending) {
+            if (privatePaykitRepo.isProfileDeletionInProgress.value) return@reconcilePendingEndpoints
+            if (settings.publicPaykitCleanupPending ||
+                settings.sharesPublicPaykitEndpoints && publicPaykitRepo.hasPendingLightningRefresh
+            ) {
                 val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
-                    publicPaykitRepo.syncCurrentPublishedEndpoints()
+                    publicPaykitRepo.syncCurrentPublishedEndpoints(canPublish = publicPaykitPublicationAdmission())
                 } else {
                     publicPaykitRepo.syncPublishedEndpoints(publish = false)
                 }
                 reconciliationResult
                     .onSuccess {
-                        settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                        if (!settings.sharesPublicPaykitEndpoints) {
+                            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                        }
                     }
                     .onFailure {
                         Logger.warn("Failed to reconcile public Paykit state for '$reason'", it, context = TAG)
@@ -2426,14 +2497,16 @@ class AppViewModel @Inject constructor(
                     syncLdkPayments = false,
                 )
             }
-            publicPaykitRepo.refreshPublishedBolt11ForPayment(paymentHash)
-                .onFailure {
-                    Logger.warn(
-                        "Failed to refresh public Paykit invoice for '$paymentHash'",
-                        it,
-                        context = TAG,
-                    )
-                }
+            publicPaykitRepo.refreshPublishedBolt11ForPayment(
+                paymentHash,
+                canPublish = publicPaykitPublicationAdmission(),
+            ).onFailure {
+                Logger.warn(
+                    "Failed to refresh public Paykit invoice for '$paymentHash'",
+                    it,
+                    context = TAG,
+                )
+            }
             privatePaykitRepo.handleReceivedPayment(paymentHash)
                 .onFailure {
                     Logger.warn(

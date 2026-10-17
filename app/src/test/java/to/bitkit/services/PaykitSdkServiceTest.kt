@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
+import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
@@ -16,6 +17,7 @@ import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitStateObservation
+import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
@@ -55,6 +57,7 @@ import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import org.mockito.Mockito.mockConstruction
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.description
@@ -83,6 +86,8 @@ import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfileData
+import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.forEachCase
@@ -216,6 +221,78 @@ class PaykitSdkServiceTest {
         caller.join()
         assertTrue(finished.isCompleted)
         verify(sdk).importContacts(any(), any())
+    }
+
+    @Test
+    fun `queued public publication cannot restore endpoints after cleanup ends admission`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val release = CompletableDeferred<Unit>()
+            whenever(sdk.contactRecords()).doSuspendableAnswer {
+                release.await()
+                emptyList()
+            }
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val active = async { service.contactRecords() }
+            runCurrent()
+            val removal = async { service.syncPublicEndpoints(emptyList()) }
+            var canPublish = true
+            val publication = async {
+                service.syncPublicEndpoints(
+                    listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest")),
+                ) { canPublish }
+            }
+            runCurrent()
+            canPublish = false
+            release.complete(Unit)
+            active.await()
+
+            assertEquals(report, removal.await())
+            assertNull(publication.await())
+            verify(sdk).syncPublicEndpointsWithReceivingDetails(emptyList())
+            verify(sdk, times(1)).syncPublicEndpointsWithReceivingDetails(any())
+        }
+    }
+
+    @Test
+    fun `admitted public publication finishes before cleanup despite cancellation`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val release = CompletableDeferred<Unit>()
+            val events = mutableListOf<String>()
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).doSuspendableAnswer {
+                if (it.getArgument<List<Any>>(0).isNotEmpty()) {
+                    events.add("publication started")
+                    release.await()
+                    events.add("publication finished")
+                } else {
+                    events.add("removed")
+                }
+                report
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            var canPublish = true
+            val publication = async {
+                service.syncPublicEndpoints(
+                    listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest")),
+                ) { canPublish }
+            }
+            runCurrent()
+            assertEquals(listOf("publication started"), events)
+            canPublish = false
+            publication.cancel()
+            val removal = async { service.syncPublicEndpoints(emptyList()) }
+            runCurrent()
+            assertFalse(removal.isCompleted)
+            release.complete(Unit)
+
+            assertFailsWith<CancellationException> { publication.await() }
+            assertEquals(report, removal.await())
+            assertEquals(listOf("publication started", "publication finished", "removed"), events)
+        }
     }
 
     @Test

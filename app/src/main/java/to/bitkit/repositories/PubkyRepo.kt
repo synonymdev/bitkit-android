@@ -182,6 +182,7 @@ class PubkyRepo @Inject constructor(
     private val adoptionMutex = Mutex()
     private val profileWriteGeneration = AtomicLong(0L)
     private val signInGeneration = AtomicLong(0L)
+    private val storedIdentityRevision = AtomicLong(0L)
     private val readOnlyProfileGeneration = AtomicLong(0L)
     private val readOnlyProfileLock = Any()
     private var isServiceInitialized = false
@@ -482,6 +483,7 @@ class PubkyRepo @Inject constructor(
                     clearAuthenticatedState(
                         clearCachedProfile = false,
                         clearRestorationFailure = notifyFailure,
+                        preserveStoredIdentity = true,
                     )
                     if (notifyFailure) _sessionRestorationFailed.update { result == InitResult.RestorationFailed }
                 }
@@ -640,6 +642,7 @@ class PubkyRepo @Inject constructor(
                         // Before the SDK installs the session, which can be of the same identity: a contact save of the
                         // ending sign-in that the SDK runs after it then fails the sign-in check under the SDK lock.
                         signInGeneration.incrementAndGet()
+                        storedIdentityRevision.incrementAndGet()
                         signInOrSignUpAdoptedIdentity(secretKeyHex, rawPublicKey)
                         sessionInstalled = true
 
@@ -764,6 +767,16 @@ class PubkyRepo @Inject constructor(
     /** Whether [signIn] has not ended: its identity has not signed out and no other sign-in has started since. */
     fun isCurrent(signIn: PubkySignIn): Boolean =
         signInGeneration.get() == signIn.generation && _publicKey.value == signIn.publicKey
+
+    internal suspend fun savedIdentityGuard(): (() -> Boolean)? {
+        val revision = storedIdentityRevision.get()
+        return withContext(ioDispatcher) {
+            if (!runSuspendCatching { hasIdentity() }.getOrDefault(false) || storedIdentityRevision.get() != revision) {
+                return@withContext null
+            }
+            return@withContext { storedIdentityRevision.get() == revision }
+        }
+    }
 
     // endregion
 
@@ -2111,16 +2124,17 @@ class PubkyRepo @Inject constructor(
         _profile.update { profile }
     }
 
-    private fun startSignIn(publicKey: String) {
+    private fun startSignIn(publicKey: String, restoringStoredIdentity: Boolean = false) {
         // First, so the sign-in it replaces has ended before the key is published, even when it is the same identity.
         signInGeneration.incrementAndGet()
+        if (!restoringStoredIdentity) storedIdentityRevision.incrementAndGet()
         invalidateReadOnlyProfile(keepingPublicKey = publicKey)
         _publicKey.update { publicKey }
     }
 
     private fun continueSignIn(publicKey: String) {
         // Restoring or refreshing the session already signed in keeps its sign-in, so an edit under way still saves.
-        if (_publicKey.value != publicKey) startSignIn(publicKey)
+        if (_publicKey.value != publicKey) startSignIn(publicKey, restoringStoredIdentity = true)
     }
 
     private fun invalidateReadOnlyProfile(keepingPublicKey: String? = null) = synchronized(readOnlyProfileLock) {
@@ -2131,9 +2145,11 @@ class PubkyRepo @Inject constructor(
     private suspend fun clearAuthenticatedState(
         clearCachedProfile: Boolean = true,
         clearRestorationFailure: Boolean = true,
+        preserveStoredIdentity: Boolean = false,
     ) = withContext(ioDispatcher) {
         // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
         signInGeneration.incrementAndGet()
+        if (!preserveStoredIdentity) storedIdentityRevision.incrementAndGet()
         if (clearCachedProfile) {
             invalidateReadOnlyProfile()
             evictPubkyImages()

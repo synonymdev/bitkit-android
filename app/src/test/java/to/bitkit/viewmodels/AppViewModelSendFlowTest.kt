@@ -79,6 +79,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -302,7 +303,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
     private val pubkyPublicKey = MutableStateFlow<String?>(null)
+    private val isRestoringPubkySession = MutableStateFlow(false)
     private val pubkyContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
+    private val isProfileDeletionInProgress = MutableStateFlow(false)
     private val pubkyContactsLoadVersion = MutableStateFlow(0L)
     private val pubkyContactsLoadCompletionVersion = MutableStateFlow(0L)
     private val pubkyContactImportFailure = MutableStateFlow<Throwable?>(null)
@@ -331,6 +334,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        whenever(privatePaykitRepo.isProfileDeletionInProgress).thenReturn(isProfileDeletionInProgress)
         whenever(paykitPaymentRequestRepo.isPaymentSubmissionActive).thenReturn(paymentSubmissionActive)
         whenever(paykitPaymentRequestRepo.setPaymentSubmissionActive(any())).thenAnswer {
             paymentSubmissionActive.value = it.getArgument(0)
@@ -624,6 +628,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
+        whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringPubkySession)
         whenever(pubkyRepo.currentSignIn()).thenAnswer { pubkyPublicKey.value?.let { PubkySignIn(it, 0L) } }
         whenever(pubkyRepo.isCurrent(any())).thenAnswer {
             pubkyPublicKey.value == it.getArgument<PubkySignIn>(0).publicKey
@@ -717,7 +722,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any()) }
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any(), anyOrNull()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.reconcileReservedReceiveIndexes() }
             .thenReturn(Result.success(Unit))
@@ -732,7 +737,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(any()) }
             .thenReturn(null)
-        whenever { publicPaykitRepo.refreshPublishedBolt11ForPayment(any()) }
+        whenever { publicPaykitRepo.refreshPublishedBolt11ForPayment(any(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.handleReceivedPayment(any()) }
             .thenReturn(Result.success(Unit))
@@ -1433,18 +1438,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceTimeBy(1.seconds.inWholeMilliseconds)
             runCurrent()
             verify(paykitPaymentRequestRepo).refresh(any())
-            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints(any(), any(), any())
+            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints(any(), any(), any(), anyOrNull())
             verify(paykitPaymentProofRepo, never()).reconcile()
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), eq(true))
 
             repeat(5) { verifyPaymentRequestPollingInterval() }
-            verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(any(), any(), any())
+            verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(any(), any(), any(), anyOrNull())
             verify(paykitPaymentProofRepo).reconcile()
             verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
 
             advanceTimeBy(120.seconds.inWholeMilliseconds)
             runCurrent()
-            verify(privatePaykitRepo, times(3)).refreshKnownSavedContactEndpoints(any(), any(), any())
+            verify(privatePaykitRepo, times(3)).refreshKnownSavedContactEndpoints(any(), any(), any(), anyOrNull())
             verify(paykitPaymentProofRepo, times(3)).reconcile()
         } finally {
             sut.stopPaykitPaymentRequestPolling()
@@ -12126,7 +12131,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         advanceTimeBy(1_000)
         runCurrent()
-        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
 
         sut.stopPaykitPaymentRequestPolling()
         runCurrent()
@@ -12134,14 +12139,214 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         settingsData.update { it.copy(publicPaykitBolt11ExpiresAtMillis = 1L) }
         advanceTimeBy(1_000)
         runCurrent()
-        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo, times(1)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
 
         sut.startPaykitPaymentRequestPolling()
         runCurrent()
         advanceTimeBy(1_000)
         runCurrent()
-        verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
         sut.stopPaykitPaymentRequestPolling()
+    }
+
+    @Test
+    fun `public refresh publishes the initially restored identity without another wallet event`() = test {
+        enablePublicPaykitSharing()
+        isRestoringPubkySession.value = true
+        val admitted = mutableListOf<Boolean>()
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).doSuspendableAnswer {
+            isRestoringPubkySession.first { restoring -> !restoring }
+            admitted.add(it.getArgument<() -> Boolean>(2)())
+            Result.success(Unit)
+        }
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(admitted.isEmpty())
+
+        pubkyPublicKey.value = testPublicKey
+        isRestoringPubkySession.value = false
+        runCurrent()
+        assertEquals(listOf(true), admitted)
+    }
+
+    @Test
+    fun `public refresh rejects an existing sign in replaced during restoration`() = test {
+        enablePublicPaykitSharing()
+        pubkyPublicKey.value = testPublicKey
+        isRestoringPubkySession.value = true
+        var signIn = PubkySignIn(testPublicKey, 0L)
+        whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+        whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0) == signIn }
+        val admitted = mutableListOf<Boolean>()
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).doSuspendableAnswer {
+            isRestoringPubkySession.first { restoring -> !restoring }
+            admitted.add(it.getArgument<() -> Boolean>(2)())
+            Result.success(Unit)
+        }
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(admitted.isEmpty())
+
+        signIn = PubkySignIn(testPublicKey, 1L)
+        isRestoringPubkySession.value = false
+        runCurrent()
+        assertEquals(listOf(false), admitted)
+    }
+
+    @Test
+    fun `forced public refresh records the restored identity before skipped or failed publication`() = test {
+        val nodeState = lightningRepo.lightningState as MutableStateFlow<LightningState>
+        for (hasAddress in listOf(false, true)) {
+            nodeState.update { it.copy(channels = persistentListOf()) }
+            runCurrent()
+            enablePublicPaykitSharing()
+            pubkyPublicKey.value = null
+            isRestoringPubkySession.value = true
+            walletState.value = WalletState(onchainAddress = if (hasAddress) "bc1qtest" else "")
+            whenever(lightningRepo.canReceive()).thenReturn(false)
+            whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any()))
+                .thenReturn(Result.failure(AppError("publication unavailable")))
+            clearInvocations(publicPaykitRepo)
+            runCurrent()
+            nodeState.update { it.copy(channels = persistentListOf(mock { on { isUsable } doReturn true })) }
+            advanceUntilIdle()
+            verify(publicPaykitRepo, never()).requestLightningRefresh(any(), anyOrNull())
+            verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
+            verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
+
+            pubkyPublicKey.value = testPublicKey
+            isRestoringPubkySession.value = false
+            advanceUntilIdle()
+
+            verify(publicPaykitRepo, never()).requestLightningRefresh(any(), anyOrNull())
+            verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
+            if (hasAddress) {
+                verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+            } else {
+                verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
+            }
+        }
+    }
+
+    @Test
+    fun `forced public refresh survives deferred initial restoration without another channel event`() = test {
+        enablePublicPaykitSharing()
+        pubkyPublicKey.value = null
+        isRestoringPubkySession.value = true
+        val nodeState = lightningRepo.lightningState as MutableStateFlow<LightningState>
+        runCurrent()
+        nodeState.update { it.copy(channels = persistentListOf(mock { on { isUsable } doReturn true })) }
+        advanceUntilIdle()
+        isRestoringPubkySession.value = false
+        advanceUntilIdle()
+        verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
+
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
+        verify(publicPaykitRepo, never()).requestLightningRefresh(any(), anyOrNull())
+    }
+
+    @Test
+    fun `profile deletion defers public publication and resumes the latest address on failure`() = test {
+        enablePublicPaykitSharing()
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        clearInvocations(publicPaykitRepo)
+
+        isProfileDeletionInProgress.update { true }
+        walletState.update { it.copy(onchainAddress = "bc1qreplacement") }
+        settingsData.update { it.copy(publicPaykitBolt11ExpiresAtMillis = 1L) }
+        advanceTimeBy(1_000)
+        runCurrent()
+        verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
+
+        isProfileDeletionInProgress.update { false }
+        advanceTimeBy(1_000)
+        runCurrent()
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+    }
+
+    @Test
+    fun `profile deletion retains forced public channel refresh for the retained identity`() = test {
+        enablePublicPaykitSharing()
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+        clearInvocations(publicPaykitRepo)
+
+        isProfileDeletionInProgress.value = true
+        emitNodeEvent(
+            Event.ChannelReady(
+                channelId = "testChannelId",
+                userChannelId = "testUserChannelId",
+                counterpartyNodeId = null,
+                fundingTxo = null,
+            ),
+        )
+        advanceUntilIdle()
+        verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
+        verify(publicPaykitRepo).requestLightningRefresh(any(), isNull())
+        val privateAdmission = argumentCaptor<() -> Boolean>()
+        verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(
+            any(),
+            eq(true),
+            eq(false),
+            privateAdmission.capture(),
+        )
+        assertTrue(privateAdmission.firstValue())
+
+        isProfileDeletionInProgress.value = false
+        advanceUntilIdle()
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+        pubkyPublicKey.value = "replacement"
+        assertFalse(privateAdmission.firstValue())
+    }
+
+    @Test
+    fun `forced private channel refresh survives deletion beginning during cleanup reconciliation`() = test {
+        enablePublicPaykitSharing()
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+        val cleanupStarted = CompletableDeferred<Unit>()
+        val finishCleanup = CompletableDeferred<Unit>()
+        var holdCleanup = false
+        whenever(publicPaykitRepo.requestLightningRefresh(any(), isNull())).thenAnswer {
+            holdCleanup = true
+            Unit
+        }
+        whenever(privatePaykitRepo.retryPendingEndpointRemoval(any<Collection<String>>())).doSuspendableAnswer {
+            if (holdCleanup) {
+                cleanupStarted.complete(Unit)
+                finishCleanup.await()
+            }
+            Result.success(Unit)
+        }
+        emitNodeEvent(
+            Event.ChannelReady(
+                channelId = "testChannelId",
+                userChannelId = "testUserChannelId",
+                counterpartyNodeId = null,
+                fundingTxo = null,
+            ),
+        )
+        advanceUntilIdle()
+        assertTrue(cleanupStarted.isCompleted)
+        isProfileDeletionInProgress.value = true
+        clearInvocations(privatePaykitRepo)
+        finishCleanup.complete(Unit)
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(
+            eq("channel ready delayed"),
+            eq(true),
+            eq(false),
+            any(),
+        )
+        verify(privatePaykitRepo, never()).reconcileReservedReceiveIndexes()
     }
 
     @Test
@@ -12160,8 +12365,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = true)
+        verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+        verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
     }
 
     @Test
@@ -12180,7 +12385,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
     }
 
     @Test
@@ -12544,10 +12749,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactWork.await()
             Result.success(Unit)
         }
-        whenever(privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any())).doSuspendableAnswer {
-            contactWork.await()
-            Result.success(Unit)
-        }
+        whenever(privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any(), anyOrNull()))
+            .doSuspendableAnswer {
+                contactWork.await()
+                Result.success(Unit)
+            }
         pubkyContactsLoadVersion.update { 1L }
         sut.refreshPrivatePaykitEndpoints()
         runCurrent()
@@ -12595,6 +12801,118 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background)
         sut.stopPaykitPaymentRequestPolling()
+    }
+
+    @Test
+    fun `profile deletion lets admitted reconciliation finish without starting automatic intake`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        val reconciliation = CompletableDeferred<Unit>()
+        var reconciled = false
+        whenever(paykitPaymentProofRepo.reconcile()).doSuspendableAnswer {
+            reconciliation.await()
+            reconciled = true
+        }
+        sut.onHomeResumed()
+        runCurrent()
+        assertFalse(reconciled)
+
+        isProfileDeletionInProgress.update { true }
+        clearInvocations(paykitPaymentRequestRepo)
+        reconciliation.complete(Unit)
+        runCurrent()
+        assertTrue(reconciled)
+        verify(paykitPaymentRequestRepo, never()).refresh(any(), any())
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+
+        isProfileDeletionInProgress.update { false }
+        sut.onHomeResumed()
+        runCurrent()
+        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Ordered)
+    }
+
+    @Test
+    fun `profile deletion defers contact synchronization and polling until deletion ends`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        isProfileDeletionInProgress.update { true }
+        pubkyContactsLoadVersion.update { 1L }
+        clearInvocations(privatePaykitRepo, paykitPaymentRequestRepo, pubkyRepo)
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        advanceTimeBy(10_000)
+        runCurrent()
+        verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any<Collection<String>>(), any())
+        verify(paykitPaymentRequestRepo, never()).refresh(any(), any())
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        verify(pubkyRepo, never()).refreshContacts()
+        verify(pubkyRepo, never()).importShopContacts()
+
+        isProfileDeletionInProgress.update { false }
+        runCurrent()
+        verify(privatePaykitRepo).scheduleSavedContactPreparation(eq(emptySet<String>()), any())
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange()
+        verify(pubkyRepo).refreshContacts()
+        sut.stopPaykitPaymentRequestPolling()
+    }
+
+    @Test
+    fun `profile deletion preserves payment completion without starting intake or publication`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        isProfileDeletionInProgress.update { true }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo, publicPaykitRepo, paykitPaymentProofRepo, activityRepo)
+
+        emitNodeEvent(Event.PaymentSuccessful("success-id", "success-hash", "preimage", 10uL))
+        runCurrent()
+        emitNodeEvent(Event.PaymentFailed("failure-id", "failure-hash", PaymentFailureReason.RETRIES_EXHAUSTED))
+        runCurrent()
+        emitNodeEvent(Event.PaymentReceived("received-id", "received-hash", 1_000uL, emptyList()))
+        runCurrent()
+
+        verify(paykitPaymentProofRepo).completeLightningPayment("success-hash", "preimage")
+        verify(paykitPaymentProofRepo).failLightningPayment("failure-hash")
+        verify(activityRepo).notifyPaymentActivityChanged()
+        verify(privatePaykitRepo).handleReceivedPayment("received-hash")
+        verify(paykitPaymentRequestRepo, never()).refresh(any(), any())
+        val publicationAdmission = argumentCaptor<() -> Boolean>()
+        verify(publicPaykitRepo).refreshPublishedBolt11ForPayment(eq("received-hash"), publicationAdmission.capture())
+        assertFalse(publicationAdmission.firstValue())
+        isProfileDeletionInProgress.value = false
+        assertTrue(publicationAdmission.firstValue())
+        pubkyPublicKey.value = null
+        assertFalse(publicationAdmission.firstValue())
+    }
+
+    @Test
+    fun `profile deletion prevents maintenance publication after admitted restoration`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        val restoration = CompletableDeferred<Unit>()
+        var restored = false
+        whenever(pubkyRepo.restoreSessionIfNeeded()).doSuspendableAnswer {
+            restoration.await()
+            restored = true
+            true
+        }
+        clearInvocations(pubkyRepo)
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+        verify(pubkyRepo).restoreSessionIfNeeded()
+        assertFalse(restored)
+
+        isProfileDeletionInProgress.update { true }
+        restoration.complete(Unit)
+        runCurrent()
+        sut.stopPaykitPaymentRequestPolling()
+        assertTrue(restored)
+        verify(pubkyRepo, never()).republishIdentityIfNeeded()
     }
 
     @Test
@@ -12709,20 +13027,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private Paykit refresh reconciles pending public state when sharing is enabled`() = test {
+    fun `private Paykit refresh leaves pending public state for the publisher to acknowledge`() = test {
         isPaykitEnabled.value = true
-        settingsData.value = SettingsData(
-            sharesPublicPaykitEndpoints = true,
-            publicPaykitCleanupPending = true,
-        )
-        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints()).thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).thenReturn(Result.success(Unit))
+        for (paidInvoicePending in listOf(true, false)) {
+            clearInvocations(publicPaykitRepo, privatePaykitRepo)
+            settingsData.value = SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                publicPaykitCleanupPending = paidInvoicePending,
+            )
+            whenever(publicPaykitRepo.hasPendingLightningRefresh).thenReturn(!paidInvoicePending)
+            sut.refreshPrivatePaykitEndpoints()
+            advanceUntilIdle()
 
-        sut.refreshPrivatePaykitEndpoints()
-        advanceUntilIdle()
-
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints()
-        assertFalse(settingsData.value.publicPaykitCleanupPending)
-        verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
+            verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+            assertEquals(paidInvoicePending, settingsData.value.publicPaykitCleanupPending)
+            verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
+        }
     }
 
     @Test
@@ -12929,7 +13250,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     )
 
     private suspend fun enablePublicPaykitSharing() {
-        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.savedIdentityGuard()).thenReturn { true }
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).thenReturn(Result.success(Unit))
         walletState.value = WalletState(onchainAddress = "bc1qtest")
         isPaykitEnabled.value = true
         settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)
