@@ -36,10 +36,12 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        mavenLocal {
-            content {
-                excludeModule("com.synonym", "paykit-android")
-                excludeModule("com.synonym", "bitkit-core-android")
+        if (providers.gradleProperty("useMavenLocal").orNull == "true") {
+            mavenLocal {
+                content {
+                    includeModule("com.synonym", "ldk-node-android")
+                    includeModule("com.synonym", "vss-client-android")
+                }
             }
         }
         google()

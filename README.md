@@ -40,6 +40,11 @@ See also:
 - [bitkit-core android bindings](https://github.com/synonymdev/bitkit-core/tree/master/bindings/android#installation)
 - [vss-rust-client-ffi android bindings](https://github.com/synonymdev/vss-rust-client-ffi/tree/master/bindings/android#installation)
 
+Local LDK/VSS artifacts are opt-in: pass `-PuseMavenLocal=true` when testing locally published
+`com.synonym:ldk-node-android` or `com.synonym:vss-client-android` packages. Normal builds resolve these
+packages from the configured remote repositories. Do not enable this option for published releases.
+For a local Bitkit Core AAR, use [`bitkitCoreAar`](docs/usdt.md) instead.
+
 ### References
 
 - For LNURL dev testing see [bitkit-docker](https://github.com/synonymdev/bitkit-docker)
