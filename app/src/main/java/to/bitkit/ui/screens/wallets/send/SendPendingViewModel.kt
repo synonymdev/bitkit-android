@@ -179,9 +179,17 @@ class SendPendingViewModel @Inject constructor(
     private fun offerAbandonIfRequestEnded(attempt: OnchainSendAttempt) {
         if (!attempt.canBeAbandoned) return
         viewModelScope.launch {
-            while (_uiState.value.recoveryAttempt == attempt && _uiState.value.abandonableAttempt == null) {
-                if (runSuspendCatching { paykitPaymentProofRepo.onchainRequestHasEnded(attempt) }.getOrDefault(false)) {
-                    _uiState.update { it.copy(abandonableAttempt = attempt) }
+            var current = attempt
+            while (_uiState.value.recoveryAttempt?.attemptId == attempt.attemptId &&
+                _uiState.value.abandonableAttempt == null
+            ) {
+                // A retry from this screen can add a candidate; offer the attempt as it is stored now.
+                current = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+                    ?.takeIf { it.attemptId == attempt.attemptId } ?: current
+                val hasEnded = current.canBeAbandoned &&
+                    runSuspendCatching { paykitPaymentProofRepo.onchainRequestHasEnded(current) }.getOrDefault(false)
+                if (hasEnded) {
+                    _uiState.update { it.copy(abandonableAttempt = current) }
                     return@launch
                 }
                 delay(ABANDON_CHECK_INTERVAL)

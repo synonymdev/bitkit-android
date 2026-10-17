@@ -428,7 +428,7 @@ internal fun SendPendingContent(
             if (canRetry) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__send_pending__retry_title),
-                    enabled = !isRecovering,
+                    enabled = !isRecovering && !isAbandoning,
                     onClick = onRetry,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -437,7 +437,7 @@ internal fun SendPendingContent(
             if (canAbandon) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__send_pending__abandon),
-                    enabled = !isAbandoning,
+                    enabled = !isAbandoning && !isRecovering,
                     onClick = onAbandon,
                     modifier = Modifier
                         .fillMaxWidth()

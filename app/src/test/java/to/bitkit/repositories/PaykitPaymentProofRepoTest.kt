@@ -2678,6 +2678,20 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `a coin already spent elsewhere finishes the cancel without another release`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32)).copy(restoredFromBackup = true)
+        storedProofs = listOf(startedOnchainProof(attempt))
+        whenever(paykitSdkService.paymentRequests())
+            .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED)))
+        stubAbandon(attempt)
+        val wallet = FakeReleaseWallet(spentElsewhere = true)
+
+        assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isSuccess)
+        assertEquals(0, wallet.prepared)
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `release must spend an original coin and outbid every candidate`() {
         val attempt = unknownShopAttempt("ab".repeat(32)).copy(candidateMiningFees = mapOf("ab".repeat(32) to 300uL))
         val inputs = requireNotNull(attempt.originalInputs)
@@ -2691,6 +2705,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private class FakeReleaseWallet(
         var neverReached: Boolean = true,
         var known: Set<String> = emptySet(),
+        var spentElsewhere: Boolean = false,
         val outcome: (String) -> OnchainSendOutcome = { OnchainSendOutcome.Accepted(it) },
     ) : OnchainReleasing {
         val releaseTxid = "77".repeat(32)
@@ -2704,6 +2719,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         }
 
         override suspend fun walletKnowsTransaction(txid: String): Boolean = txid in known
+
+        override suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean = spentElsewhere
 
         override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
             prepared++

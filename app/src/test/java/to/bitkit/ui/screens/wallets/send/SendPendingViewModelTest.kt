@@ -329,7 +329,8 @@ class SendPendingViewModelTest : BaseUnitTest() {
             payerIdentity = "payer",
         )
         val saved = original.copy(releaseApproved = true, releaseTxid = "77".repeat(32))
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original, saved)
+        // Read once when the screen opens, once by the cancel poll, then by the cancel itself.
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original, original, saved)
         whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(true)
         whenever(paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(any(), any(), any()))
             .thenReturn(Result.success(Unit))

@@ -1885,6 +1885,9 @@ class LightningRepo @Inject constructor(
 
     override suspend fun walletKnowsTransaction(txid: String): Boolean = lightningService.walletKnowsTransaction(txid)
 
+    override suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean =
+        lightningService.originalCoinSpentElsewhere(attempt)
+
     override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend =
         lightningService.prepareRelease(attempt)
 

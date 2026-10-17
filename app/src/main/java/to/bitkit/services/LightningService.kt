@@ -1048,6 +1048,16 @@ class LightningService internal constructor(
         }
     }
 
+    /** Whether one of the original's coins is no longer spendable, so a transaction the wallet knows spent it. */
+    suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean {
+        val original = attempt.originalInputs.orEmpty()
+        if (original.isEmpty()) return false
+        val spendable = listSpendableOutputs().getOrThrow()
+            .map { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) }
+            .toSet()
+        return original.any { it !in spendable }
+    }
+
     suspend fun walletKnowsTransaction(txid: String): Boolean {
         val originalNode = node ?: return false
         return callOnchainSend { originalNode.getTransactionDetails(txid) != null }

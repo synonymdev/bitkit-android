@@ -122,7 +122,7 @@ data class OnchainSendAttempt(
 
     /** A Shop payment from the node wallet that dispatched but never had its acceptance confirmed. */
     val canBeAbandoned: Boolean
-        get() = isUnresolved && requestId != null && !isTransfer && (!restoredFromBackup || releaseApproved) &&
+        get() = isUnresolved && requestId != null && !isTransfer &&
             walletId == WalletScope.default && !payerIdentity.isNullOrBlank() && initialDispatchAttempted &&
             txid != null && !originalInputs.isNullOrEmpty() && candidateTxids.isNotEmpty()
 }
@@ -152,6 +152,9 @@ fun releaseOutbids(receipt: OnchainPreparedReceipt, attempt: OnchainSendAttempt)
 interface OnchainReleasing {
     suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean
     suspend fun walletKnowsTransaction(txid: String): Boolean
+
+    /** Whether a transaction that is not a candidate already spent one of the original's coins. */
+    suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean
     suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend
 }
 

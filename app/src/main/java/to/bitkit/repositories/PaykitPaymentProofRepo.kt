@@ -538,6 +538,9 @@ class PaykitPaymentProofRepo @Inject constructor(
             if (!wallet.onchainCandidatesNeverReachedNetwork(attempt)) {
                 throw OnchainSendAbandonRefusedError(requestOpen = false)
             }
+            // No candidate is known, yet a coin is spent: an earlier release, or another transaction, already made
+            // the original unconfirmable, including one whose ID a restart or a restore lost.
+            if (wallet.originalCoinSpentElsewhere(attempt)) return@runSuspendCatching finishRelease(attempt)
             val approved = if (attempt.releaseApproved) attempt else lightningRepo.approveOnchainRelease(attempt)
             approved ?: throw OnchainSendBlockedError(attempt)
             val prepared = wallet.prepareRelease(approved)
