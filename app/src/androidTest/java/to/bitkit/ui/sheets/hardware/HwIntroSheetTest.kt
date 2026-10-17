@@ -2,6 +2,7 @@ package to.bitkit.ui.sheets.hardware
 
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -79,7 +81,7 @@ class HwIntroSheetTest {
                 LocalDensity provides Density(LocalDensity.current.density, fontScale = size.value.second)
             ) {
                 AppThemeSurface {
-                    HwIntroSheet(modifier = Modifier.width(size.value.first.dp))
+                    HwIntroSheet(modifier = Modifier.requiredWidth(size.value.first.dp))
                 }
             }
         }
@@ -95,7 +97,11 @@ class HwIntroSheetTest {
             val cancel = composeTestRule.onNodeWithTag("HardwareWalletIntroCancel").getUnclippedBoundsInRoot()
             val proceed = composeTestRule.onNodeWithTag("HardwareWalletIntroContinue").getUnclippedBoundsInRoot()
             assertEquals(stacked, cancel.bottom < proceed.top, "$width dp at $fontScale")
-            assertTrue(proceed.bottom <= composeTestRule.onRoot().getUnclippedBoundsInRoot().bottom)
+            if (fontScale >= 2f) {
+                composeTestRule.onNodeWithTag("HardwareWalletIntroContinue").performScrollTo().assertIsDisplayed()
+            } else {
+                assertTrue(proceed.bottom <= composeTestRule.onRoot().getUnclippedBoundsInRoot().bottom)
+            }
             assertReadableLabels(listOf("Abbrechen", "Weiter"))
         }
     }
@@ -121,7 +127,12 @@ class HwIntroSheetTest {
                 }
             }
         }
-        composeTestRule.onNodeWithTag("HardwareWalletIntroContinue").performScrollTo().assertIsDisplayed().performClick()
+        val content = composeTestRule.onNode(hasScrollAction())
+        content.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, Float.MAX_VALUE) }
+        val proceed = composeTestRule.onNodeWithTag("HardwareWalletIntroContinue")
+        proceed.assertIsDisplayed()
+        assertEquals(16.dp, content.getUnclippedBoundsInRoot().bottom - proceed.getUnclippedBoundsInRoot().bottom)
+        proceed.performClick()
         composeTestRule.onNodeWithTag("HardwareWalletIntroCancel").performScrollTo().assertIsDisplayed().performClick()
         composeTestRule.runOnIdle {
             assertTrue(continued)

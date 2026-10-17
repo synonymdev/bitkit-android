@@ -112,8 +112,8 @@ private fun Content(
                     )
                 }
             }
+            VerticalSpacer(16.dp)
         }
-        VerticalSpacer(16.dp)
     }
 }
 
