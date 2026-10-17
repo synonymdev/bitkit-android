@@ -16,7 +16,9 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
@@ -317,6 +319,27 @@ class SendPendingViewModelTest : BaseUnitTest() {
         advanceTimeBy(31.seconds)
         runCurrent()
         assertEquals(original, sut.uiState.value.abandonableAttempt)
+    }
+
+    @Test
+    fun `a second cancel uses the attempt the first one saved`() = test {
+        val original = pendingOriginal().copy(
+            requestId = PaykitPaymentRequestId("request", "payee"),
+            orderId = "order",
+            payerIdentity = "payer",
+        )
+        val saved = original.copy(releaseApproved = true, releaseTxid = "77".repeat(32))
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original, saved)
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(true)
+        whenever(paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(any(), any(), any()))
+            .thenReturn(Result.success(Unit))
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+
+        sut.abandonExpired(requiresPin = false, useBiometrics = false)
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).abandonUnbroadcastOnchainPayment(eq(saved), any(), any())
     }
 
     @Test

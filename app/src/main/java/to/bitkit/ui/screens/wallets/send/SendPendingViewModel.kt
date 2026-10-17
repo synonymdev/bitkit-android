@@ -202,7 +202,10 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
-    private suspend fun releaseExpired(attempt: OnchainSendAttempt, requiresPin: Boolean, useBiometrics: Boolean) {
+    private suspend fun releaseExpired(shown: OnchainSendAttempt, requiresPin: Boolean, useBiometrics: Boolean) {
+        // An earlier try may have saved its approval and release since the screen loaded the attempt.
+        val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+            ?.takeIf { it.attemptId == shown.attemptId } ?: shown
         paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(attempt, lightningRepo) { receipt ->
             withContext(Dispatchers.Main.immediate) {
                 requestRecoveryApproval(RecoveryApproval.Release(receipt))
