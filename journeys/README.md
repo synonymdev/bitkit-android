@@ -165,6 +165,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | No matching intermediate return route | `amount-limits/custom-fee-wallet-switch.xml` is iOS-only: Custom returns through the fee picker before confirmation. Android's `setTransactionSpeed` returns directly to confirmation. |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
+| `lightning-connections/channel-details-time-format.xml` | not ported — `LightningConnectionDetailView.swift` hardcodes `MMM d, yyyy - HH:mm`, so iOS has no 12-hour behaviour to assert |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `send/prepared-fee-recovery.md` | Same four manual fault cases and file on both platforms; the recipe records original-send versus replacement fee retention and iOS Max/identity-flow adaptations. These faults are not journey capabilities. |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
