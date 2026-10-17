@@ -1470,6 +1470,8 @@
     <string name="pubky_auth__homeserver">الخادم الرئيسي</string>
     <string name="pubky_auth__identity_unavailable">تعذر تحميل ملف Pubky الشخصي</string>
     <string name="pubky_auth__identity_unavailable_desc">تحقق من اتصالك وحاول مرة أخرى.</string>
+    <string name="pubky_auth__loading_identity">جارٍ تحميل ملف Pubky الشخصي</string>
+    <string name="pubky_auth__loading_identity_desc">سيُفتح طلب تسجيل الدخول عندما يصبح ملفك الشخصي جاهزًا.</string>
     <string name="pubky_auth__no_identity">مطلوب هوية Pubky</string>
     <string name="pubky_auth__no_identity_desc">أنشئ هوية Pubky في ملفك الشخصي للموافقة على طلبات المصادقة.</string>
     <string name="pubky_auth__signup_description">أنشئ هوية Pubky جديدة على هذا الخادم الرئيسي. تابع فقط إذا كنت تثق به.</string>

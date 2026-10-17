@@ -535,7 +535,7 @@ class PaykitSdkService @Inject constructor(
         approvedClientId: String,
         secretKeyHex: String,
     ) {
-        isSetup.await()
+        ensurePlatformSetup()
         return operationLock.withLock {
             approvalBootstrap(authUrl, approvedClientId).approveAuth(
                 authUrl = authUrl,
@@ -552,10 +552,10 @@ class PaykitSdkService @Inject constructor(
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
     ) {
-        isSetup.await()
+        val requestedClaim = PubkyAuthRequest.parseBitkitClaim(authUrl, expectedCapabilities).getOrThrow()
+            ?: throw PubkyAuthRequestError.MissingBitkitClaim
+        if (requestedClaim.includesPaykitAccess) isSetup.await() else ensurePlatformSetup()
         return operationLock.withLock {
-            val requestedClaim = PubkyAuthRequest.parseBitkitClaim(authUrl, expectedCapabilities).getOrThrow()
-                ?: throw PubkyAuthRequestError.MissingBitkitClaim
             require(
                 claim.queryParameter == PubkyAuthClaim.QUERY_PARAMETER && claim.claimType == requestedClaim.wireValue
             ) {
@@ -818,7 +818,13 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun syncPublicEndpoints(endpoints: List<Endpoint>): EndpointSyncReport {
+    suspend fun syncPublicEndpoints(endpoints: List<Endpoint>): EndpointSyncReport =
+        checkNotNull(syncPublicEndpoints(endpoints) { true })
+
+    internal suspend fun syncPublicEndpoints(
+        endpoints: List<Endpoint>,
+        canPublish: suspend () -> Boolean,
+    ): EndpointSyncReport? {
         isSetup.await()
         val priority = if (endpoints.isEmpty()) {
             PaykitSdkOperationLock.Priority.Ordered
@@ -827,6 +833,7 @@ class PaykitSdkService @Inject constructor(
         }
         return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
+                if (!canPublish()) return@withStateRevisionTracking null
                 completeSdkCall {
                     handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
                 }
@@ -1556,6 +1563,10 @@ class PaykitSdkService @Inject constructor(
     }
 
     private fun bootstrap() = cachedBootstrap
+
+    private fun ensurePlatformSetup() {
+        if (!isSetup.isCompleted || setupFailed) platformInitializer()
+    }
 
     private fun approvalBootstrap(authUrl: String, approvedClientId: String): PubkySessionBootstrap {
         val requestClientId = parsePubkyAuthUrl(authUrl).clientId.orEmpty()

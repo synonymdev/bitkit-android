@@ -1479,6 +1479,8 @@
     <string name="pubky_auth__homeserver">Serwer domowy</string>
     <string name="pubky_auth__identity_unavailable">Nie udało się wczytać Twojego profilu Pubky</string>
     <string name="pubky_auth__identity_unavailable_desc">Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="pubky_auth__loading_identity">Wczytywanie Twojego profilu Pubky</string>
+    <string name="pubky_auth__loading_identity_desc">Żądanie logowania otworzy się, gdy Twój profil będzie gotowy.</string>
     <string name="pubky_auth__no_identity">Wymagana tożsamość Pubky</string>
     <string name="pubky_auth__no_identity_desc">Utwórz tożsamość Pubky w swoim profilu, aby zatwierdzać żądania autoryzacji.</string>
     <string name="pubky_auth__signup_description">Utwórz nową tożsamość Pubky na tym serwerze domowym. Kontynuuj tylko, jeśli mu ufasz.</string>

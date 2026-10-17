@@ -1514,6 +1514,8 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="pubky_auth__homeserver">Домашний сервер</string>
     <string name="pubky_auth__identity_unavailable">Не Удалось Загрузить Ваш Профиль Pubky</string>
     <string name="pubky_auth__identity_unavailable_desc">Проверьте подключение и попробуйте снова.</string>
+    <string name="pubky_auth__loading_identity">Загрузка Вашего Профиля Pubky</string>
+    <string name="pubky_auth__loading_identity_desc">Запрос на вход откроется, когда ваш профиль будет готов.</string>
     <string name="pubky_auth__no_identity">Требуется Идентификатор Pubky</string>
     <string name="pubky_auth__no_identity_desc">Создайте идентификатор Pubky в своём профиле, чтобы одобрять запросы авторизации.</string>
     <string name="pubky_auth__signup_description">Создайте новый идентификатор Pubky на этом домашнем сервере. Продолжайте, только если доверяете ему.</string>

@@ -1773,6 +1773,33 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hasLocalSecretKey is true only for a stored key without a Ring source`() = test {
+        whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
+        assertTrue(sut.hasLocalSecretKey())
+
+        whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(true)
+        assertFalse(sut.hasLocalSecretKey())
+
+        whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(false)
+        whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(false)
+        assertFalse(sut.hasLocalSecretKey())
+    }
+
+    @Test
+    fun `localIdentityPublicKey needs a saved session and a stored key without a Ring source`() = test {
+        whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        assertNull(sut.localIdentityPublicKey())
+
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        assertEquals(VALID_SELF_KEY, sut.localIdentityPublicKey())
+
+        whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(true)
+        assertNull(sut.localIdentityPublicKey())
+    }
+
+    @Test
     fun `adoptRingIdentity should reject a mismatching credential without changing the source`() = test {
         val ringPubky = VALID_SELF_KEY.removePrefix("pubky")
         whenever(sharedPubkyClient.ringCredential(ringPubky)).thenReturn(Result.success("ring_secret"))
@@ -2654,6 +2681,41 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(repo.isAuthenticated.value)
         verify(pubkyService, never()).signIn(any())
         verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
+    }
+
+    @Test
+    fun `saved identity guard survives deferred restoration but rejects explicit replacement or removal`() = test {
+        for (action in listOf("restore", "wipe", "sign out", "backup", "adopt")) {
+            resetForCase()
+            val restore = stubSavedSessionRestore()
+            restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+            val ownsIdentity = assertNotNull(sut.savedIdentityGuard())
+            sut.initialize()
+            assertTrue(ownsIdentity(), action)
+            assertFalse(sut.restoreSessionIfNeeded())
+            assertTrue(ownsIdentity(), action)
+            restore.answer = { VALID_SELF_KEY }
+            when (action) {
+                "restore" -> assertTrue(sut.restoreSessionIfNeeded())
+                "wipe" -> sut.wipeLocalState()
+                "sign out" -> sut.signOut().getOrThrow()
+                "backup" -> sut.restoreSessionBackupState(null).getOrThrow()
+                "adopt" -> {
+                    whenever(sharedPubkyClient.ringCredential(VALID_SELF_KEY)).thenReturn(Result.success("same-secret"))
+                    whenever(pubkyService.publicKeyFromSecret("same-secret")).thenReturn(VALID_SELF_KEY)
+                    whenever(pubkyService.signIn("same-secret")).thenAnswer { throw TestAppError("Offline") }
+                    assertTrue(sut.adoptRingIdentity(VALID_SELF_KEY).isFailure)
+                }
+            }
+            assertEquals(action == "restore", ownsIdentity(), action)
+        }
+    }
+
+    @Test
+    fun `saved identity guard rejects missing and unreadable credentials`() = test {
+        assertNull(sut.savedIdentityGuard())
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { throw TestAppError("Unavailable") }
+        assertNull(sut.savedIdentityGuard())
     }
 
     @Test

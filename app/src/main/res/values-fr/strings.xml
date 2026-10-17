@@ -1477,6 +1477,8 @@
     <string name="pubky_auth__homeserver">Serveur domestique</string>
     <string name="pubky_auth__identity_unavailable">Impossible de charger votre profil Pubky</string>
     <string name="pubky_auth__identity_unavailable_desc">Vérifiez votre connexion et réessayez.</string>
+    <string name="pubky_auth__loading_identity">Chargement de votre profil Pubky</string>
+    <string name="pubky_auth__loading_identity_desc">Votre demande de connexion s\'ouvrira dès que votre profil sera prêt.</string>
     <string name="pubky_auth__no_identity">Identité Pubky requise</string>
     <string name="pubky_auth__no_identity_desc">Créez une identité Pubky dans votre profil pour approuver les demandes d\'authentification.</string>
     <string name="pubky_auth__signup_description">Créez une nouvelle identité Pubky sur ce serveur domestique. Ne continuez que si vous lui faites confiance.</string>

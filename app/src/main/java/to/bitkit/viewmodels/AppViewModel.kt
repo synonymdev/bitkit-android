@@ -199,6 +199,7 @@ import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
 import to.bitkit.repositories.PublicPaykitPaymentResult
@@ -336,9 +337,11 @@ class AppViewModel @Inject constructor(
 
     @Volatile
     private var scheduledScan: ScheduledScan? = null
+    private var pubkyAuthWaitToast: Toast? = null
 
     private val deferredScanLock = Any()
     private var deferredScan: DeferredScan? = null
+    private var scanAfterPubkyAuth: DeferredScan? = null
 
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
@@ -409,6 +412,7 @@ class AppViewModel @Inject constructor(
     val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
+    private var transitionSheet: Sheet? = null
     private var paymentRequestSheetTransitionJob: Job? = null
     private var queuedPairingCodeRequestId: Long? = null
     private var receiveSheetContext: ReceiveSheetContext? = null
@@ -566,9 +570,8 @@ class AppViewModel @Inject constructor(
 
     private fun markDeferredScanUnlocked() {
         synchronized(deferredScanLock) {
-            val queued = deferredScan ?: return
-            if (queued.suppressQuickPay) return
-            deferredScan = queued.copy(suppressQuickPay = true)
+            deferredScan = deferredScan?.copy(suppressQuickPay = true)
+            scanAfterPubkyAuth = scanAfterPubkyAuth?.copy(suppressQuickPay = true)
         }
     }
 
@@ -806,6 +809,9 @@ class AppViewModel @Inject constructor(
                 .map { it.onchainAddress }
                 .distinctUntilChanged()
                 .combine(isPaymentRequestPollingStopped) { address, stopped -> address.takeUnless { stopped } }
+                .combine(privatePaykitRepo.isProfileDeletionInProgress) { address, deleting ->
+                    address.takeUnless { deleting }
+                }
                 .debounce(PUBLIC_PAYKIT_SYNC_DEBOUNCE)
                 .collect { address ->
                     if (address != null && !isPaymentRequestPollingStopped.value) {
@@ -840,14 +846,31 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
+        val signIn = pubkyRepo.currentSignIn()
+        val restorationGuard = if (forceRefreshLightning && signIn == null) pubkyRepo.savedIdentityGuard() else null
         val settings = settingsStore.data.first()
         if (!isPaykitEnabled.value || !settings.sharesPublicPaykitEndpoints) return
+        if (forceRefreshLightning) {
+            publicPaykitRepo.requestLightningRefresh(signIn, restorationGuard)
+        }
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
 
+        pubkyRepo.isRestoringSession.first { !it }
+        val restoredSignIn = signIn ?: pubkyRepo.currentSignIn()
+        val admission = publicPaykitPublicationAdmission(restoredSignIn)
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
 
-        publicPaykitRepo.syncCurrentPublishedEndpoints(forceRefreshLightning = forceRefreshLightning)
+        publicPaykitRepo.syncCurrentPublishedEndpoints(
+            canPublish = admission,
+        )
             .onFailure { Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG) }
+    }
+
+    private fun publicPaykitPublicationAdmission(signIn: PubkySignIn? = pubkyRepo.currentSignIn()): () -> Boolean {
+        return {
+            signIn != null && pubkyRepo.isCurrent(signIn) && !privatePaykitRepo.isProfileDeletionInProgress.value
+        }
     }
 
     private fun observePrivatePaykitContacts() {
@@ -857,15 +880,17 @@ class AppViewModel @Inject constructor(
                 pubkyRepo.contacts,
                 pubkyRepo.contactsLoadVersion,
                 settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) },
-            ) { publicKey, contacts, contactsLoadVersion, isPaykitEnabled ->
+                privatePaykitRepo.isProfileDeletionInProgress,
+            ) { publicKey, contacts, contactsLoadVersion, isPaykitEnabled, deleting ->
                 PaykitContactSyncState(
                     publicKey = publicKey,
                     contactKeys = contacts.map { it.publicKey }.toSet(),
                     contactsLoaded = contactsLoadVersion > 0L,
                     isPaykitEnabled = isPaykitEnabled,
-                )
+                ).takeUnless { deleting }
             }
                 .distinctUntilChanged()
+                .filterNotNull()
                 .collect(::synchronizePaykitContacts)
         }
     }
@@ -919,7 +944,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun isCurrentPaykitContactSync(state: PaykitContactSyncState, signIn: PubkySignIn): Boolean =
-        pubkyRepo.isCurrent(signIn) && isPaykitEnabled.value &&
+        pubkyRepo.isCurrent(signIn) && isPaykitEnabled.value && !privatePaykitRepo.isProfileDeletionInProgress.value &&
             (pubkyRepo.contactsLoadVersion.value > 0L) == state.contactsLoaded &&
             pubkyRepo.contacts.value.map { it.publicKey }.toSet() == state.contactKeys
 
@@ -949,10 +974,32 @@ class AppViewModel @Inject constructor(
         forceRefreshLightning: Boolean = false,
         requeueActive: Boolean = false,
     ) {
+        val signIn = if (forceRefreshLightning) pubkyRepo.currentSignIn() else null
+        val isStillCurrent = signIn?.let { { pubkyRepo.isCurrent(it) } }
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) {
+            if (forceRefreshLightning && isPaykitEnabled.value && signIn != null) {
+                privatePaykitRepo.refreshKnownSavedContactEndpoints(
+                    reason,
+                    forceRefreshLightning = true,
+                    isStillCurrent = isStillCurrent,
+                )
+            }
+            return
+        }
         val contactKeys = pubkyRepo.contacts.value.map { it.publicKey }
         retryPendingPaykitEndpointRemoval(contactKeys, reason)
 
         if (!isPaykitEnabled.value) return
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) {
+            if (forceRefreshLightning && signIn != null) {
+                privatePaykitRepo.refreshKnownSavedContactEndpoints(
+                    reason,
+                    forceRefreshLightning = true,
+                    isStillCurrent = isStillCurrent,
+                )
+            }
+            return
+        }
 
         refreshPrivateOnlyPaykitApp(reason)
         privatePaykitRepo.reconcileReservedReceiveIndexes()
@@ -963,6 +1010,7 @@ class AppViewModel @Inject constructor(
             reason,
             forceRefreshLightning = forceRefreshLightning,
             requeueActive = requeueActive,
+            isStillCurrent = isStillCurrent,
         )
         if (isPaymentRequestPollingStopped.value) return
         refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
@@ -1080,11 +1128,15 @@ class AppViewModel @Inject constructor(
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
-        if (onlyWhileActive && isPaymentRequestPollingStopped.value) {
+        if (privatePaykitRepo.isProfileDeletionInProgress.value ||
+            onlyWhileActive && isPaymentRequestPollingStopped.value
+        ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
         if (reconcileProofs) paykitPaymentProofRepo.reconcile()
-        if (onlyWhileActive && isPaymentRequestPollingStopped.value) {
+        if (privatePaykitRepo.isProfileDeletionInProgress.value ||
+            onlyWhileActive && isPaymentRequestPollingStopped.value
+        ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
         val result = if (forceFresh) {
@@ -1116,12 +1168,16 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         paykitPaymentRequestRepo.refreshEligibleTargets(
             savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey },
             force = force,
         )
     }
+
+    private fun isAutomaticPaykitWorkPaused(): Boolean =
+        isPaymentRequestPollingStopped.value || privatePaykitRepo.isProfileDeletionInProgress.value
 
     fun startPaykitPaymentRequestPolling() {
         privatePaykitRepo.setContactPreparationActive(true)
@@ -1131,25 +1187,22 @@ class AppViewModel @Inject constructor(
         startPaykitSessionRestoreRetries()
         startPaykitContactsRefresh()
         paykitPaymentRequestPollingJob = viewModelScope.launch {
-            if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
+            if (!isAutomaticPaykitWorkPaused() && isOnline.value == ConnectivityState.CONNECTED) {
+                pubkyRepo.republishIdentityIfNeeded()
+            }
             refreshIncomingPaykitPaymentRequests(messagePriority = Priority.Background, onlyWhileActive = true)
             refreshPaymentRequestTargets()
             var maintenanceIntervalIndex = 0
             var nextMaintenance = timeSource.markNow() + PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
                 delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
-                if (isOnline.value != ConnectivityState.CONNECTED) continue
+                if (isOnline.value != ConnectivityState.CONNECTED || isAutomaticPaykitWorkPaused()) continue
                 val refreshMaintenance = nextMaintenance.hasPassedNow()
                 if (refreshMaintenance) {
                     maintenanceIntervalIndex =
                         (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
                     nextMaintenance = timeSource.markNow() + PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
-                    if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
-                    pubkyRepo.republishIdentityIfNeeded()
-                    retryPendingPaykitEndpointRemoval(
-                        contactKeys = pubkyRepo.contacts.value.map { it.publicKey },
-                        reason = "payment request polling",
-                    )
+                    refreshPaykitMaintenance()
                 }
                 val refreshIdentity = pubkyRepo.publicKey.value
                 startShopContactImport()
@@ -1170,12 +1223,23 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private suspend fun refreshPaykitMaintenance() {
+        if (isPaykitEnabled.value && walletRepo.walletExists()) pubkyRepo.restoreSessionIfNeeded()
+        if (isAutomaticPaykitWorkPaused()) return
+        pubkyRepo.republishIdentityIfNeeded()
+        retryPendingPaykitEndpointRemoval(
+            contactKeys = pubkyRepo.contacts.value.map { it.publicKey },
+            reason = "payment request polling",
+        )
+    }
+
     private fun startPaykitContactsRefresh() {
         if (paykitContactsRefreshJob?.isActive == true) return
         paykitContactsRefreshJob = viewModelScope.launch {
             pubkyRepo.awaitInitialization()
-            combine(isOnline, isPaykitEnabled, pubkyRepo.publicKey) { connectivity, enabled, publicKey ->
-                publicKey.takeIf { connectivity == ConnectivityState.CONNECTED && enabled }
+            combine(isOnline, isPaykitEnabled, pubkyRepo.publicKey, privatePaykitRepo.isProfileDeletionInProgress) {
+                    connectivity, enabled, publicKey, deleting ->
+                publicKey.takeIf { connectivity == ConnectivityState.CONNECTED && enabled && !deleting }
             }.distinctUntilChanged().collectLatest { publicKey ->
                 shopContactImportJob?.cancel()
                 shopContactImportJob = null
@@ -1199,7 +1263,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun startShopContactImport() {
-        if (shopContactImportJob?.isActive == true || isPaymentRequestPollingStopped.value) return
+        if (shopContactImportJob?.isActive == true || isAutomaticPaykitWorkPaused()) return
         if (!isPaykitEnabled.value || isOnline.value != ConnectivityState.CONNECTED) return
         if (pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         shopContactImportJob = viewModelScope.launch {
@@ -1321,6 +1385,9 @@ class AppViewModel @Inject constructor(
                 }
                 .combine(isPaymentRequestPollingStopped) { version, stopped ->
                     version.takeUnless { stopped }
+                }
+                .combine(privatePaykitRepo.isProfileDeletionInProgress) { version, deleting ->
+                    version.takeUnless { deleting }
                 }
                 .filterNotNull()
                 .distinctUntilChanged()
@@ -1892,6 +1959,9 @@ class AppViewModel @Inject constructor(
             if (targetsRequest(deferredScan?.contactPaymentContext)) {
                 deferredScan = null
             }
+            if (targetsRequest(scanAfterPubkyAuth?.contactPaymentContext)) {
+                scanAfterPubkyAuth = null
+            }
         }
         val shouldHideRequestSendSheet = if (requestId != null) {
             synchronized(contactPaymentContextLock) {
@@ -1919,6 +1989,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshPrivateOnlyPaykitApp(reason: String, onlyIfNeeded: Boolean = false) {
         val settings = settingsStore.data.first()
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         if (!settings.sharesPrivatePaykitEndpoints || settings.sharesPublicPaykitEndpoints) return
         val identity = pubkyRepo.publicKey.value ?: return
         if (onlyIfNeeded && PubkyPublicKeyFormat.matches(privatePaykitAppRegistrationIdentity, identity)) return
@@ -1936,6 +2007,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
+        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         contactPaymentSettingsRepo.reconcilePendingEndpoints {
             privatePaykitRepo.retryPendingEndpointRemoval(contactKeys)
                 .onFailure {
@@ -1943,15 +2015,20 @@ class AppViewModel @Inject constructor(
                 }
 
             val settings = settingsStore.data.first()
-            if (settings.publicPaykitCleanupPending) {
+            if (privatePaykitRepo.isProfileDeletionInProgress.value) return@reconcilePendingEndpoints
+            if (settings.publicPaykitCleanupPending ||
+                settings.sharesPublicPaykitEndpoints && publicPaykitRepo.hasPendingLightningRefresh
+            ) {
                 val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
-                    publicPaykitRepo.syncCurrentPublishedEndpoints()
+                    publicPaykitRepo.syncCurrentPublishedEndpoints(canPublish = publicPaykitPublicationAdmission())
                 } else {
                     publicPaykitRepo.syncPublishedEndpoints(publish = false)
                 }
                 reconciliationResult
                     .onSuccess {
-                        settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                        if (!settings.sharesPublicPaykitEndpoints) {
+                            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                        }
                     }
                     .onFailure {
                         Logger.warn("Failed to reconcile public Paykit state for '$reason'", it, context = TAG)
@@ -2420,14 +2497,16 @@ class AppViewModel @Inject constructor(
                     syncLdkPayments = false,
                 )
             }
-            publicPaykitRepo.refreshPublishedBolt11ForPayment(paymentHash)
-                .onFailure {
-                    Logger.warn(
-                        "Failed to refresh public Paykit invoice for '$paymentHash'",
-                        it,
-                        context = TAG,
-                    )
-                }
+            publicPaykitRepo.refreshPublishedBolt11ForPayment(
+                paymentHash,
+                canPublish = publicPaykitPublicationAdmission(),
+            ).onFailure {
+                Logger.warn(
+                    "Failed to refresh public Paykit invoice for '$paymentHash'",
+                    it,
+                    context = TAG,
+                )
+            }
             privatePaykitRepo.handleReceivedPayment(paymentHash)
                 .onFailure {
                     Logger.warn(
@@ -3053,15 +3132,24 @@ class AppViewModel @Inject constructor(
             return null
         }
 
+        if (isPubkyAuthSheetShownOrPending() && !deferrable.isPubkyAuth) {
+            enqueueDeferredScan(deferrable)
+            return null
+        }
+
         val previousJob = scheduled?.job
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             clearPaymentRequestPreparation(previousPreparation)
             scanMutex.withLock {
-                if (!awaitPubkyDeeplinkInitialization(source, data, allowPubkyAuth)) return@withLock
-                if (deferLockedScan(deferrable)) return@withLock
-                prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
-                if (startDelay > Duration.ZERO) delay(startDelay)
-                handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth, suppressQuickPay)
+                try {
+                    if (!awaitPubkyDeeplinkInitialization(source, data, allowPubkyAuth)) return@withLock
+                    if (deferLockedScan(deferrable)) return@withLock
+                    prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
+                    if (startDelay > Duration.ZERO) delay(startDelay)
+                    handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth, suppressQuickPay)
+                } finally {
+                    hidePubkyAuthWaitToast()
+                }
             }
         }
         val nextScheduledScan = ScheduledScan(
@@ -3108,13 +3196,20 @@ class AppViewModel @Inject constructor(
         }
 
         if (!PubkyAuthRequest.isSignupUrl(data) || PubkyAuthRequest.isGrantSignupUrl(data)) {
-            val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
+            if (!isContactLink) showPubkyAuthWaitToastIfRestoring()
+            val timeout = if (isContactLink) PubkyService.AUTHORIZATION_TIMEOUT else PUBKY_AUTH_DEEPLINK_TIMEOUT
+            val isInitializationReady = withTimeoutOrNull(timeout) {
                 pubkyRepo.awaitInitialization()
-                if (!isContactLink) pubkyRepo.awaitIdentityReady()
+                if (!isContactLink) awaitPubkyAuthIdentity()
                 awaitContactDataForDeeplink(isContactLink)
             } ?: false
             if (!isInitializationReady) {
                 Logger.warn("Failed to initialize Pubky deeplink", context = TAG)
+                if (!isContactLink) {
+                    hidePubkyAuthWaitToast()
+                    showPubkyIdentityUnavailableToast()
+                    return false
+                }
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(
@@ -3134,6 +3229,40 @@ class AppViewModel @Inject constructor(
         return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
     }
 
+    private suspend fun awaitPubkyAuthIdentity() {
+        while (pubkyRepo.awaitIdentityReady() == PubkyIdentityReadiness.Unavailable) {
+            if (isOnline.value == ConnectivityState.CONNECTED && pubkyRepo.localIdentityPublicKey() != null) {
+                Logger.debug("Continuing sign-in link with the stored Pubky key", context = TAG)
+                return
+            }
+            delay(PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL)
+            isOnline.first { it == ConnectivityState.CONNECTED }
+            Logger.debug("Retrying Pubky session restore for a sign-in link", context = TAG)
+        }
+    }
+
+    private suspend fun showPubkyAuthWaitToastIfRestoring() {
+        if (pubkyRepo.publicKey.value != null) return
+        if (!isPaykitUiEnabledFromSettings() || !walletRepo.walletExists()) return
+        if (!runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(false)) return
+        val waitToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = context.getString(R.string.pubky_auth__loading_identity),
+            description = context.getString(R.string.pubky_auth__loading_identity_desc),
+            autoHide = false,
+            testTag = PUBKY_AUTH_WAIT_TOAST_TAG,
+            isLoading = true,
+        )
+        pubkyAuthWaitToast = waitToast
+        toastManager.enqueue(waitToast)
+    }
+
+    private fun hidePubkyAuthWaitToast() {
+        val waitToast = pubkyAuthWaitToast ?: return
+        pubkyAuthWaitToast = null
+        toastManager.dismiss(waitToast)
+    }
+
     private suspend fun awaitContactDataForDeeplink(isContactLink: Boolean): Boolean {
         if (!isContactLink || pubkyRepo.publicKey.value == null) return true
         return pubkyRepo.refreshContacts()
@@ -3146,7 +3275,7 @@ class AppViewModel @Inject constructor(
         if (_isAuthenticated.value) return false
 
         synchronized(deferredScanLock) {
-            if (deferredScan == null) {
+            if (deferredScan == null || (scan.isPubkyAuth && deferredScan?.isPubkyAuth == false)) {
                 enqueueDeferredScan(scan)
             } else {
                 Logger.info(
@@ -3175,13 +3304,23 @@ class AppViewModel @Inject constructor(
         synchronized(deferredScanLock) {
             val queued = deferredScan
             if (queued?.data?.removeLightningSchemes() == normalized) {
-                val suppressQuickPay = scan.suppressQuickPay || queued.suppressQuickPay
-                if (scan.contactPaymentContext != null) {
-                    deferredScan = scan.copy(suppressQuickPay = suppressQuickPay)
+                deferredScan = queued.mergeDuplicate(scan, scanId)
+                return
+            }
+            if (!scan.isPubkyAuth && (queued?.isPubkyAuth == true || scanAfterPubkyAuth != null)) {
+                val followUp = scanAfterPubkyAuth
+                if (followUp?.data?.removeLightningSchemes() == normalized) {
+                    scanAfterPubkyAuth = followUp.mergeDuplicate(scan, scanId)
                     return
                 }
-                deferredScan = queued.copy(suppressQuickPay = suppressQuickPay)
-                Logger.info("Skipping duplicate queued scan from '${scan.source.label}': '$scanId'", context = TAG)
+                scanAfterPubkyAuth = scan
+                Logger.info("Queuing '${scan.source.label}' scan after a sign-in link: '$scanId'", context = TAG)
+                return
+            }
+            if (queued != null && scan.isPubkyAuth && !queued.isPubkyAuth) {
+                scanAfterPubkyAuth = queued
+                deferredScan = scan
+                Logger.info("Queuing '${scan.source.label}' sign-in link first: '$scanId'", context = TAG)
                 return
             }
             if (queued != null) {
@@ -3196,7 +3335,16 @@ class AppViewModel @Inject constructor(
         Logger.info("Queuing '${scan.source.label}' scan for deferred handling: '$scanId'", context = TAG)
     }
 
-    private fun hasDeferredScan() = synchronized(deferredScanLock) { deferredScan != null }
+    private fun DeferredScan.mergeDuplicate(scan: DeferredScan, scanId: String): DeferredScan {
+        val suppressQuickPay = scan.suppressQuickPay || this.suppressQuickPay
+        if (scan.contactPaymentContext != null) return scan.copy(suppressQuickPay = suppressQuickPay)
+        Logger.info("Skipping duplicate queued scan from '${scan.source.label}': '$scanId'", context = TAG)
+        return copy(suppressQuickPay = suppressQuickPay)
+    }
+
+    private fun hasDeferredScan() = synchronized(deferredScanLock) {
+        deferredScan != null || scanAfterPubkyAuth != null
+    }
 
     private fun isScanPendingOrActive(): Boolean {
         if (scheduledScan?.job?.isActive == true) return true
@@ -3219,7 +3367,7 @@ class AppViewModel @Inject constructor(
         if (_currentSheet.value != null) return
 
         val pending = synchronized(deferredScanLock) {
-            deferredScan.also { deferredScan = null }
+            deferredScan?.also { deferredScan = null } ?: scanAfterPubkyAuth.also { scanAfterPubkyAuth = null }
         } ?: run {
             viewModelScope.launch { presentNextIncomingPaykitPaymentRequest() }
             return
@@ -6566,6 +6714,7 @@ class AppViewModel @Inject constructor(
     fun showSheet(sheetType: Sheet) {
         if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
         val previousJob = sheetTransitionJob
+        transitionSheet = sheetType
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
             if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
@@ -6585,11 +6734,17 @@ class AppViewModel @Inject constructor(
         }
         sheetTransitionJob = nextJob
         nextJob.invokeOnCompletion {
-            if (sheetTransitionJob === nextJob) sheetTransitionJob = null
+            if (sheetTransitionJob === nextJob) {
+                sheetTransitionJob = null
+                transitionSheet = null
+            }
         }
         previousJob?.cancel()
         nextJob.start()
     }
+
+    private fun isPubkyAuthSheetShownOrPending() = _currentSheet.value is Sheet.PubkyAuth ||
+        (sheetTransitionJob?.isActive == true && transitionSheet is Sheet.PubkyAuth)
 
     private fun replacesSubscriptionReview(sheet: Sheet): Boolean {
         if (sheet !is Sheet.Send || !_sendUiState.value.isInitialSubscriptionPayment) return false
@@ -7624,7 +7779,8 @@ class AppViewModel @Inject constructor(
         }
 
         if (pubkyRepo.publicKey.value == null) {
-            showPubkyIdentityUnavailableToast()
+            if (pubkyRepo.localIdentityPublicKey() == null) return showPubkyIdentityUnavailableToast()
+            showSheet(Sheet.PubkyAuth(authUrl))
             return
         }
 
@@ -7646,6 +7802,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.pubky_auth__identity_unavailable),
                 description = context.getString(R.string.pubky_auth__identity_unavailable_desc),
+                visibilityTime = Toast.VISIBILITY_TIME_LONG,
             )
             return
         }
@@ -7742,6 +7899,15 @@ class AppViewModel @Inject constructor(
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
+        /** Longest wait for the saved Pubky session before a sign-in link fails. */
+        internal val PUBKY_AUTH_DEEPLINK_TIMEOUT = 60.seconds
+
+        /** Pause between Pubky session restore attempts while a sign-in link waits. */
+        private val PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL = 3.seconds
+
+        /** Test tag of the toast shown while a sign-in link waits for the Pubky session. */
+        internal const val PUBKY_AUTH_WAIT_TOAST_TAG = "PubkyAuthWaitToast"
+
         private const val BITKIT_SCHEME = "bitkit"
         private const val RECOVERY_MODE_DEEPLINK = "recovery-mode"
 
@@ -7783,7 +7949,9 @@ private data class DeferredScan(
     val contactPaymentContext: ContactPaymentContext?,
     val allowPubkyAuth: Boolean,
     val suppressQuickPay: Boolean,
-)
+) {
+    val isPubkyAuth: Boolean get() = allowPubkyAuth && PubkyAuthRequest.isProtocolUrl(data)
+}
 
 // region send contract
 @Stable
