@@ -1872,12 +1872,14 @@ class LightningRepo @Inject constructor(
         // The requested sync runs on the serial LDK queue after any sync already in flight, so its success proves a
         // fresh view. Failing that, an on-chain sync that finishes later than the one read here also counts.
         val previousSync = lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL
+        // The sync blocks on the LDK queue and ignores cancellation, so it runs apart and the wait keeps its limit.
+        val requestedSyncSucceeded = AtomicBoolean(false)
+        scope.launch { if (runSuspendCatching { lightningService.sync() }.isSuccess) requestedSyncSucceeded.set(true) }
         withTimeoutOrNull(timeout) {
-            val requestedSyncSucceeded = runSuspendCatching { lightningService.sync() }.isSuccess
             while (true) {
                 val latestSync = lightningService.status?.latestOnchainWalletSyncTimestamp
-                if (isOnchainSyncAfter(latestSync, previousSync, requestedSyncSucceeded)) break
-                delay(1.seconds)
+                if (isOnchainSyncAfter(latestSync, previousSync, requestedSyncSucceeded.get())) break
+                delay(500.milliseconds)
             }
         } ?: throw OnchainSendAbandonSyncError()
         return lightningService.walletKnowsNoCandidate(attempt)

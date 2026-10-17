@@ -113,6 +113,7 @@ fun SendPendingScreen(
 
     var showAbandonConfirmation by remember { mutableStateOf(false) }
     AbandonExpiredPayment(
+        abandonError = uiState.abandonErrorMessage(),
         isAbandoned = uiState.abandoned,
         showConfirmation = showAbandonConfirmation,
         onConfirm = { requiresPin, useBiometrics ->
@@ -157,6 +158,7 @@ fun SendPendingScreen(
 
 @Composable
 private fun AbandonExpiredPayment(
+    abandonError: String?,
     isAbandoned: Boolean,
     showConfirmation: Boolean,
     onConfirm: (requiresPin: Boolean, useBiometrics: Boolean) -> Unit,
@@ -169,6 +171,10 @@ private fun AbandonExpiredPayment(
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
     val abandonedToast = stringResource(R.string.wallet__send_pending__abandon_done)
+    // The cancel can take up to 30 s; a failure is announced, not only shown above the hourglass.
+    LaunchedEffect(abandonError) {
+        abandonError?.let { ToastEventBus.send(type = Toast.ToastType.WARNING, title = it) }
+    }
     LaunchedEffect(isAbandoned) {
         if (isAbandoned) {
             ToastEventBus.send(type = Toast.ToastType.SUCCESS, title = abandonedToast)
@@ -443,6 +449,10 @@ internal fun SendPendingContent(
                         .fillMaxWidth()
                         .testTag("AbandonExpiredOnchainPayment"),
                 )
+                if (isAbandoning) {
+                    VerticalSpacer(8.dp)
+                    BodyM(stringResource(R.string.wallet__send_pending__abandon_checking), color = Colors.White64)
+                }
                 VerticalSpacer(16.dp)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
