@@ -19,7 +19,7 @@ Create a PR on GitHub using the `gh` CLI for the currently checked-out branch.
 
 ### 1. Check for Existing PR
 Run `gh pr view --json number,url 2>/dev/null` to check if a PR already exists for this branch.
-- If PR exists: Output `PR already exists: [URL]` and stop
+- If PR exists and the user explicitly requested a description update (models, relationships, or the full body): follow "Updating an existing PR description" below, then stop. Otherwise output `PR already exists: [URL]` and stop.
 - If no PR: Continue
 
 ### 2. Parse Arguments
@@ -63,9 +63,14 @@ If no base branch argument provided, detect the repo's default branch:
 
 ### 4. Extract Linked Issues
 Scan commits for issue references:
-- Pattern to match: `#123` (just the issue number reference)
-- Extract unique issue numbers: `git log $base..HEAD --oneline | grep -oE "#[0-9]+" | sort -u`
-- Fetch each issue title: `gh api "repos/$REPO/issues/NUMBER" --jq '.title'` (using repo from Step 3)
+- Read commit messages with `git log $base..HEAD --format=%B`; collect unique issue references,
+  preserving repository-qualified references and full GitHub issue/PR URLs. Resolve bare `#123`
+  references in the current repository.
+- Fetch each candidate with `gh api "repos/OWNER/REPO/issues/NUMBER"`; read its title and check
+  whether the response has a `pull_request` field (which identifies a PR, not an issue).
+- Resolve each reference against its own repository and verify it is an issue before using a
+  closing keyword. Related PR references belong under Related PRs; do not turn Twin, Companion,
+  or Dependency PR numbers into issue-closing lines.
 - These will be used to start the PR description with linking keywords (see Step 6)
 
 ### 5. Identify Suggested Reviewers
@@ -87,6 +92,7 @@ Starting from the template in `.github/pull_request_template.md`:
 If linked issues were found in commit messages, begin the PR description with linking keywords:
 - Use `Fixes #123` for bug fixes
 - Use `Closes #123` for features/enhancements
+- Preserve `owner/repo#123` for cross-repository issues; never strip their repository qualification
 - One per line, before the "This PR..." opening separated by one empty line
 - Reference: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/using-keywords-in-issues-and-pull-requests
 
@@ -97,6 +103,30 @@ Closes #418
 
 This PR adds support for...
 ```
+
+**Related PRs:**
+- After any issue-closing lines and before the opening summary, add applicable `Twin:`, `Companion:`,
+  and `Dependency:` lines, in that order. Omit labels with no confirmed relationship; do not add
+  empty placeholders or `N/A` lines. Use `owner/repo#number`, or a Markdown link with that label,
+  so the PR number identifies the correct repository. Use one line per related PR when needed.
+- `Twin:` is the matching implementation of the same change in the other native Bitkit app:
+  Android points to `synonymdev/bitkit-ios#number`, and iOS to `synonymdev/bitkit-android#number`.
+  E2E tests and libraries are not native twins.
+- `Companion:` is related coordinated work that is not a prerequisite, such as coverage in
+  `synonymdev/bitkit-e2e-tests`.
+- `Dependency:` is a PR whose changes are required to build, validate, or ship this change, such as
+  a `synonymdev/bitkit-core` or other library PR. State any required merge/release order or published
+  version in the description; linking the PR does not imply its artifact is already available.
+  If a related E2E or app PR is itself a prerequisite, label it Dependency rather than Companion
+  (repository name alone does not determine the role). A twin can also be a dependency when both
+  relationships genuinely apply; state the reason.
+- Confirm references from the user's supplied links, existing PR/issue links, and the candidate
+  PR's body and diff. Read the candidate PR to verify repository, number, scope and status. Branch
+  names or similar titles alone do not prove a relationship. If pairing is ambiguous, report it
+  and ask for the missing reference rather than guessing; do not block an unrelated standalone PR.
+- For an existing `Counterpart:` line, classify the actual relationship and replace it with the
+  appropriate label when updating relationships. Do not duplicate the same link under equivalent
+  labels or edit the other PR automatically without authorization.
 
 **Opening Format:**
 - Single change: Start with "This PR [verb]s..." as a complete sentence
@@ -136,16 +166,60 @@ When the user provides custom instructions after `--`:
 - Preserve exact manual testing steps provided by the user (don't summarize or omit details)
 - If custom instructions include automated checks or coverage notes, place them under `#### Automated Checks`
 
+**Models used:**
+- Include `### Models used` using the policy in `AGENTS.md` under Agent workflow.
+- Always include `Planning/scoping`, `Implementation`, and one `Review` entry. Aggregate all review
+  passes into that entry: list each distinct model/effort pair once, separated by commas. Do not
+  create numbered review-model rows. Repeated use of the same pair needs no duplicate entry.
+- Optionally add `- Review rounds: N` when the number of completed review passes is known. Omit it
+  when unknown; count passes, not individual parallel reviewer agents.
+- Use reported model names, `Not used` for a phase without AI involvement, or `Unknown` if the model
+  was not recorded. Use `Review: Not performed` if there has been no review. The same model is valid
+  in every phase; never substitute the PR-writing model for an unknown earlier model.
+- Include each model's actual reasoning effort as `` `model-name` (reasoning: `medium`) ``. Consult
+  available session/run metadata first; use `reasoning: Unknown` if unrecorded or
+  `reasoning: Not exposed` if the tool does not expose the setting. Never infer it from the model
+  or current configuration; omit effort for `Not used` and `Not performed`.
+- Wrap the model name and reasoning value in separate inline-code spans; keep the phase label
+  and `(reasoning: ...)` punctuation outside them.
+- When updating an older PR, collapse per-round rows into Review without losing known model/effort
+  pairs. Preserve any known round count if included. Update the aggregate after subsequent reviews.
+  This is informational; it does not require different models or certify review quality.
+
 **QA Notes / Validation:**
 - QA Notes separate actionable human QA instructions from automated verification coverage.
+- Follow `AGENTS.md` under Stable QA case IDs: label manual cases `1.`, `2.` (sub-cases
+  `2a`, `2b`) and journeys `J1`, `J2`. Keep existing IDs on description updates, assign
+  new IDs after the highest previously assigned ID, and never reuse retired IDs.
+  Note removed IDs and reasons outside runnable checkboxes; reference IDs in Evidence,
+  Gaps and review/test reports, preserving the revision each result actually tested.
 - Always use this structure:
   ```md
   ### QA Notes
+  #### Setup
   #### Journeys
   #### Manual Tests
   #### Automated Checks
+  #### Evidence
+  #### Gaps
   ```
-- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line as an unchecked checkbox (`- [ ] `), then `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
+- Strongly recommend that authors run the tests they request from reviewers before requesting
+  review, following `AGENTS.md`'s Author verification guidance. Existing mandatory checks still apply.
+- Under `#### Evidence`, briefly identify the cases the author actually verified, app commit/build,
+  environment, observed results, and supporting report/artifact links where useful. Distinguish tests
+  added or requested from tests executed; a checkbox alone does not establish a complete pass.
+- Under `#### Gaps`, identify failed, blocked or untested cases, the failure or reason for not running
+  them, and missing prerequisites. Do not present partial verification as a complete pass. Use
+  `None` only when no applicable gaps remain. Documentation-only changes can report documentation
+  checks and a justified runtime `N/A`. Preserve authored notes and the tested revisions on updates.
+- Under `#### Setup`, follow `AGENTS.md`'s Device-test setup guidance: give executable steps or a
+  reproducible shared recipe plus PR-specific deviations for the journeys/manual tests requested.
+  Include necessary service/library versions or pins, staging vs local backend/network, flags,
+  prerequisites, fixture accounts/identities and preparation/reset steps. Resolve recipe branches
+  to commits. Do not assume staging includes new Shop/Marketplace, Pubky Ring, homeserver or library
+  versions; explain compatible setup or missing prerequisites. Keep details proportional; use a
+  justified `N/A` when no device tests apply (for example, documentation-only changes).
+- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line as an unchecked checkbox (`- [ ] `), then its stable journey ID (`J1: `), then `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
 - List a journey as `temporary` only when the user asks for one in custom instructions or a `.ai/pr/` file: a reproduction that needs a code change or data that will not exist on master. Put its XML, and any code change as a `.diff`, in a collapsed `<details>` block under its line, and do not commit it. Never add one unasked; at most, suggest it to the author and ask whether they agree.
 - Reference journeys by bare file name only, never the full path. Only when two listed journeys share the same name, prefix the shortest leading path segment(s) that disambiguate them, the same rule as test files.
 - A PR with a user-visible change adds or updates the journey that proves it, and any journey whose route the diff changes; list them all. Reviewers drive the listed journeys on a device.
@@ -164,7 +238,7 @@ When the user provides custom instructions after `--`:
 - If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
 - Write manual tests using this template:
   ```md
-  - [ ] {optional_condition + →} {action} → {expectation} — {missing capability} not in Capabilities
+  - [ ] {manual_case_id}. {optional_condition + →} {action} → {expectation} — {missing capability} not in Capabilities
   ```
 - Use `regression:` for regression checks, positioned at the start of the action.
 - Always use `→` to denote navigation, for example `Send → Amount`; the last `→` introduces the expectation.
@@ -187,8 +261,8 @@ Example:
 ```
 ### QA Notes
 #### Manual Tests
-- [ ] Consumer app → exercise the updated binding flow → behavior matches the previous release
-- [ ] `regression:` Android integration screen → trigger the changed API path → no crash or stale data
+- [ ] 1. Consumer app → exercise the updated binding flow → behavior matches the previous release
+- [ ] 2. `regression:` Android integration screen → trigger the changed API path → no crash or stale data
 #### Automated Checks
 - added `FooBindingTest.kt` — covers the updated Android API path
 - ran `cargo test --all-features` — binding round-trip CI does not build
@@ -198,10 +272,10 @@ Concrete style target:
 ```md
 ### QA Notes
 #### Journeys
-- [ ] new `send-amount-over-balance.xml` — error shows before the 15 s timeout
-- [ ] updated `lightning-transfer-detail.xml` — Connection opens Channel Detail
+- [ ] J1: new `send-amount-over-balance.xml` — error shows before the 15 s timeout
+- [ ] J2: updated `lightning-transfer-detail.xml` — Connection opens Channel Detail
 #### Manual Tests
-- [ ] Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities
+- [ ] 1. Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities
 #### Automated Checks
 - added `TransferViewModelTest.kt` — rejects amounts over the spending balance
 - updated `SendFlowTest.kt` — fixed-amount invoice skips the Amount screen
@@ -226,6 +300,20 @@ Only include if the PR template (`.github/pull_request_template.md`) contains a 
   - Fall back to generated placeholders: `IMAGE_1`, `VIDEO_2`, etc.
   - Add code comment under each placeholder describing what it should show
   - Example: `<!-- VIDEO_1: Record the send flow by scanning a LN invoice and setting amount to 5000 sats -->`
+
+### 6b. Verification and review
+
+Keep development/fix PRs in draft; publish a non-draft PR only when ready for review after
+applicable validation. Prefer returning an existing PR to draft while addressing review feedback
+before intermediate pushes. Follow `AGENTS.md`'s Draft status and review readiness guidance;
+draft status cannot guarantee that all automation skips the PR. Keep explicitly requested drafts
+as drafts and do not undraft as a side effect of description updates.
+
+Before publishing, apply the verification requirements in `AGENTS.md` under Agent workflow.
+Prefer an independent subagent review with fresh context as described there before marking the PR
+ready for human review. Summarize the models used for completed reviews under Review; include a
+round count only when known.
+A dry run only prepares the description; it does not certify verification or review completion.
 
 ### 7. Save PR Description
 Before creating the PR:
@@ -293,3 +381,18 @@ If no media files were found (generated placeholders):
 - [ ] VIDEO_2: [description]
 ```
 List all media placeholders as TODOs with their descriptions.
+
+### Updating an existing PR description
+
+When the user explicitly requests a model-section, relationship, or full-description update:
+- Read the current body and actual base with `gh pr view --json number,url,body,baseRefName`.
+- For a model-only update, apply Models used above. For a relationship-only update, apply Related
+  PRs above. Preserve all other PR content, including authored QA notes and known model metadata.
+- For a requested full-description update, gather current branch/issue context using Steps 3–6,
+  comparing against the PR's actual base. Reconcile with the existing description; retain still-valid
+  authored QA instructions, stable case IDs and known model/effort pairs rather than replacing them with defaults.
+- Save the complete updated body to `.ai/pr_NN.md` using the actual PR number. With `--dry`, stop
+  after saving and report the path; otherwise apply it with `gh pr edit NN --body-file .ai/pr_NN.md`.
+- Description-only updates do not require application checks or an additional code review. When
+  source also changed, apply the repository verification requirements before publishing the update.
+- Keep the existing PR's draft/ready state; do not create a duplicate PR or mark it ready implicitly.
