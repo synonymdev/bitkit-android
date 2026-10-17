@@ -96,6 +96,10 @@ data class OnchainSendAttempt(
     val verifiedWinningFeeSats: ULong? = null,
     // Write-ahead boundary: false is proof that this original prepared payment never dispatched.
     val initialDispatchAttempted: Boolean = true,
+    // Set once its request was found ended, so a release cut short after its proof was removed can finish.
+    val releaseApproved: Boolean = false,
+    // The transaction spending the original's coins back to the wallet, saved before it is broadcast.
+    val releaseTxid: String? = null,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -112,10 +116,47 @@ data class OnchainSendAttempt(
 
     val blocksNextSend: Boolean
         get() = isUnresolved || (hasPositiveEvidence && !localFollowupComplete)
+
+    val highestCandidateFee: ULong
+        get() = maxOf(candidateMiningFees.values.maxOrNull() ?: 0uL, verifiedWinningFeeSats ?: 0uL)
+
+    /** A Shop payment from the node wallet that dispatched but never had its acceptance confirmed. */
+    val canBeAbandoned: Boolean
+        get() = isUnresolved && requestId != null && !isTransfer &&
+            walletId == WalletScope.default && !payerIdentity.isNullOrBlank() && initialDispatchAttempted &&
+            txid != null && !originalInputs.isNullOrEmpty() && candidateTxids.isNotEmpty()
 }
 
 class OnchainSendBlockedError(val attempt: OnchainSendAttempt? = null) :
     AppError("A previous on-chain send is unresolved or this payment was already sent.")
+
+class OnchainSendAbandonRefusedError(val requestOpen: Boolean) :
+    AppError("This on-chain payment may still reach the network or its request is still open.")
+
+class OnchainSendAbandonSyncError : AppError("The on-chain wallet could not sync before releasing a payment.")
+
+class OnchainSendAbandonPendingError : AppError("The release transaction was sent but is not confirmed yet.")
+
+/**
+ * A release must spend at least one of the original's coins and pay more than any candidate, so it replaces a
+ * candidate a node may still hold, and no candidate can confirm once it does.
+ */
+fun releaseOutbids(receipt: OnchainPreparedReceipt, attempt: OnchainSendAttempt): Boolean {
+    val original = attempt.originalInputs.orEmpty().toSet()
+    val fee = receipt.miningFeeSats ?: return false
+    if (receipt.inputs.none { it in original }) return false
+    return fee > attempt.highestCandidateFee
+}
+
+/** The wallet side of cancelling: proving no candidate reached the network, and spending its coins back. */
+interface OnchainReleasing {
+    suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean
+    suspend fun walletKnowsTransaction(txid: String): Boolean
+
+    /** Whether a transaction that is not a candidate already spent one of the original's coins. */
+    suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean
+    suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend
+}
 
 class OnchainSendAttemptUnreadableError(cause: Throwable) : AppError("Failed to read on-chain send attempt", cause)
 
@@ -243,6 +284,53 @@ class OnchainSendAttemptStore @Inject constructor(
             }
             if (current.walletId != WalletScope.default || current.payerIdentity.isNullOrBlank()) return@withLock false
             if (current.evidence != OnchainSendEvidence.Pending) return@withLock false
+            if (!removeOriginalProof(current)) return@withLock false
+            keychain.delete(KEY, current.walletIndex)
+            _backupStateVersion.update { it + 1 }
+            true
+        }
+    }
+
+    /** Records that the payment's request has ended before its original proof is removed. */
+    suspend fun approveRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
+        withContext(ioDispatcher + NonCancellable) {
+            mutex.withLock {
+                val current = loadWithRetainedAccepted(expected.walletIndex)
+                val approved = expected.copy(releaseApproved = true)
+                when {
+                    current == approved -> current
+                    current != expected || !current.canBeAbandoned || current.attemptId in inFlightPreparations -> null
+                    else -> approved.also { persist(it) }
+                }
+            }
+        }
+
+    /** Saves the release transaction before it is broadcast, so a later cancel can find it in the wallet. */
+    suspend fun recordRelease(expected: OnchainSendAttempt, txid: String): OnchainSendAttempt? =
+        withContext(ioDispatcher + NonCancellable) {
+            mutex.withLock {
+                val current = loadWithRetainedAccepted(expected.walletIndex)
+                val isCandidate = current?.candidateTxids?.any { it.equals(txid, ignoreCase = true) } == true
+                val releasable = current == expected && current.canBeAbandoned && current.releaseApproved
+                if (!releasable || isCandidate) return@withLock null
+                current.copy(releaseTxid = txid.lowercase()).also { persist(it) }
+            }
+        }
+
+    /**
+     * Releases a Shop payment whose request has ended once the caller has shown that none of its candidates
+     * reached the network. The original proof is removed first, so a crash in between leaves an attempt that
+     * a later call can still release.
+     */
+    suspend fun abandonUnbroadcast(
+        expected: OnchainSendAttempt,
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = withContext(ioDispatcher + NonCancellable) {
+        mutex.withLock {
+            val current = loadWithRetainedAccepted(expected.walletIndex) ?: return@withLock false
+            if (current != expected || !current.canBeAbandoned || current.attemptId in inFlightPreparations) {
+                return@withLock false
+            }
             if (!removeOriginalProof(current)) return@withLock false
             keychain.delete(KEY, current.walletIndex)
             _backupStateVersion.update { it + 1 }
@@ -513,6 +601,9 @@ class OnchainSendAttemptStore @Inject constructor(
                     preparationPending = attempt.preparationPending,
                     verifiedWinningFeeSats = attempt.verifiedWinningFeeSats,
                     initialDispatchAttempted = attempt.initialDispatchAttempted,
+                    // A local release approval and its transaction are not part of the shared backup record.
+                    releaseApproved = attempt.releaseApproved,
+                    releaseTxid = attempt.releaseTxid,
                 ) == attempt
                 check(sameOperation && existing.candidateTxids.containsAll(attempt.candidateTxids)) {
                     "Cannot change a restored on-chain operation's original context"

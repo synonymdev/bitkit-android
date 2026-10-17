@@ -1633,6 +1633,14 @@
     <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_max_spending__description">The maximum spendable amount is a bit lower due to a required reserve balance.</string>
     <string name="wallet__send_max_spending__title">Reserve Balance</string>
+    <string name="wallet__send_pending__abandon">Cancel expired payment</string>
+    <string name="wallet__send_pending__abandon_checking">Checking the network. This can take up to 30 seconds.</string>
+    <string name="wallet__send_pending__abandon_done">Payment cancelled. Its coins are back in your wallet.</string>
+    <string name="wallet__send_pending__abandon_note">This payment\'s request has ended. Bitkit first checks the network, then sends the payment\'s coins back to your wallet so the original payment can never confirm. This costs a network fee.</string>
+    <string name="wallet__send_pending__abandon_pending">The cancellation was sent but is not confirmed yet. Open this payment again later to finish it.</string>
+    <string name="wallet__send_pending__abandon_refused">This payment may still reach the network, so it cannot be cancelled.</string>
+    <string name="wallet__send_pending__abandon_release">Send this payment\'s coins back to your wallet? Network fee: {fee} sats.</string>
+    <string name="wallet__send_pending__abandon_sync">Bitkit could not sync with the network. Check your connection and try again.</string>
     <string name="wallet__send_pending__blocked_new_send">The new payment was not sent. Finish the previous payment before trying again.</string>
     <string name="wallet__send_pending__description">This payment is taking a bit longer than expected. You can continue using Bitkit.</string>
     <string name="wallet__send_pending__funding_description">Funding transaction is unresolved. Check its transaction before trying again.</string>

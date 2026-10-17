@@ -15,6 +15,7 @@ import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PubkyIdentityCapability
@@ -52,10 +53,12 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.reset
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
@@ -81,6 +84,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -2514,6 +2519,288 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
+    @Test
+    fun `ended Shop request releases a payment that never reached the network`() = test {
+        for (state in listOf(
+            PaymentRequestLifecycleState.CANCELED,
+            PaymentRequestLifecycleState.REJECTED,
+            PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
+        )) {
+            val attempt = unknownShopAttempt("ab".repeat(32))
+            storedProofs = listOf(startedOnchainProof(attempt))
+            whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord(state = state)))
+            stubAbandon(attempt)
+            val wallet = FakeReleaseWallet()
+
+            val result = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}
+
+            assertTrue(result.isSuccess)
+            assertEquals(attempt, wallet.checked)
+            assertEquals(1, wallet.broadcasts)
+            assertTrue(storedProofs.isEmpty())
+        }
+    }
+
+    @Test
+    fun `payment that may still confirm or whose request is open keeps its proof`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32))
+        val proof = startedOnchainProof(attempt)
+        stubAbandon(attempt)
+        val cases = listOf(
+            Triple(paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED), true, true),
+            Triple(paymentRequestRecord(state = PaymentRequestLifecycleState.PROOF_SUBMITTED), true, true),
+            Triple(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED), false, false),
+        )
+        for ((record, neverReached, requestOpen) in cases) {
+            storedProofs = listOf(proof)
+            whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+
+            val error = paymentProofRepo()
+                .abandonUnbroadcastOnchainPayment(attempt, FakeReleaseWallet(neverReached = neverReached)) {}
+                .exceptionOrNull()
+
+            assertEquals(requestOpen, (error as OnchainSendAbandonRefusedError).requestOpen)
+            assertEquals(listOf(proof), storedProofs)
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(emptyList())
+        assertFalse(paymentProofRepo().onchainRequestHasEnded(attempt))
+    }
+
+    @Test
+    fun `recurring period counts as ended only without its own proof`() = test {
+        val periodStart = "2027-01-01T00:00:00Z"
+        val base = unknownShopAttempt("ab".repeat(32))
+        val attempt = base.copy(requestId = requireNotNull(base.requestId).copy(billingPeriodStartsAt = periodStart))
+        storedProofs = listOf(startedOnchainProof(attempt))
+        val periodProof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod(periodStart, "2027-02-01T00:00:00Z")
+        }
+        val olderProof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod("2026-12-01T00:00:00Z", periodStart)
+        }
+        val repo = paymentProofRepo()
+
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(listOf(olderProof), state = PaymentRequestLifecycleState.CANCELED))
+        )
+        assertTrue(repo.onchainRequestHasEnded(attempt))
+
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(listOf(periodProof), state = PaymentRequestLifecycleState.CANCELED))
+        )
+        assertFalse(repo.onchainRequestHasEnded(attempt))
+    }
+
+    private fun recurringShopRecord(quoteExpiresAt: Instant): Pair<PaymentRequestRecord, PaykitBillingPeriod> {
+        val start = Instant.fromEpochSeconds((Clock.System.now() - 10.days).epochSeconds)
+        val end = java.time.Instant.ofEpochSecond(start.epochSeconds).atZone(java.time.ZoneOffset.UTC).plusMonths(1)
+            .toEpochSecond().let(Instant::fromEpochSeconds)
+        val period = PaykitBillingPeriod(start, end)
+        val sdkPeriod = BillingPeriod(period.startsAt.toString(), period.endsAt.toString())
+        val base = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        val onchain = MethodId.entries.first { it.isOnchain }.rawValue
+        return base.copy(
+            terms = requireNotNull(base.terms).copy(
+                paymentReference = mock<PaymentReference> { on { exportText() }.thenReturn("payment-reference") },
+                recurrence = PaymentRequestRecurrence(1u, "month", sdkPeriod.startsAt, sdkPeriod.startsAt, null),
+                conversion = PaymentConversion.PerPeriod,
+                acceptedPaymentEndpointIdentifiers = listOf(onchain),
+            ),
+            conversionQuotes = listOf(
+                PaymentConversionQuoteRecord(
+                    "quote-1", sdkPeriod, listOf(ConversionRate("btc", "1")), sdkPeriod.startsAt,
+                    quoteExpiresAt.toString(), null,
+                )
+            ),
+        ) to period
+    }
+
+    private fun recurringAttempt(period: PaykitBillingPeriod) = unknownShopAttempt("ab".repeat(32)).let {
+        it.copy(requestId = requireNotNull(it.requestId).copy(billingPeriodStartsAt = period.startsAt.toString()))
+    }
+
+    @Test
+    fun `expired quote ends an active subscription period`() = test {
+        val cases = listOf(
+            Clock.System.now() + 1.days to false,
+            Clock.System.now() - 1.minutes to true,
+        )
+        for ((expiresAt, ended) in cases) {
+            val (record, period) = recurringShopRecord(expiresAt)
+            val attempt = recurringAttempt(period)
+            storedProofs = listOf(
+                startedOnchainProof(attempt).copy(billingPeriod = period, conversionQuoteId = "quote-1"),
+            )
+            whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+
+            assertEquals(ended, paymentProofRepo().onchainRequestHasEnded(attempt))
+        }
+    }
+
+    @Test
+    fun `approved release finishes after its proof was removed`() = test {
+        val (record, period) = recurringShopRecord(Clock.System.now() + 1.days)
+        val approved = recurringAttempt(period).copy(releaseApproved = true)
+        storedProofs = emptyList()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        stubAbandon(approved)
+
+        assertTrue(paymentProofRepo().onchainRequestHasEnded(approved))
+        assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(approved, FakeReleaseWallet()) {}.isSuccess)
+    }
+
+    @Test
+    fun `rejected or unknown release keeps the guard and proof until the wallet sees it`() = test {
+        val outcomes = listOf<(String) -> OnchainSendOutcome>(
+            { OnchainSendOutcome.Rejected(it, "conflict") },
+            { OnchainSendOutcome.Unknown(it) },
+        )
+        for (outcome in outcomes) {
+            reset(lightningRepo)
+            val attempt = unknownShopAttempt("ab".repeat(32))
+            val proof = startedOnchainProof(attempt)
+            storedProofs = listOf(proof)
+            whenever(paykitSdkService.paymentRequests())
+                .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED)))
+            stubAbandon(attempt)
+            val wallet = FakeReleaseWallet(outcome = outcome)
+
+            assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isFailure)
+            assertEquals(listOf(proof), storedProofs)
+            verify(lightningRepo, never()).abandonUnbroadcastOnchainSend(any(), any())
+
+            // Once a sync puts the release in the wallet, a later cancel finishes without another release.
+            val pending = attempt.copy(releaseApproved = true, releaseTxid = wallet.releaseTxid)
+            wallet.known = setOf(wallet.releaseTxid)
+            assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(pending, wallet) {}.isSuccess)
+            assertEquals(1, wallet.prepared)
+            assertTrue(storedProofs.isEmpty())
+        }
+    }
+
+    @Test
+    fun `a coin already spent elsewhere finishes the cancel without another release`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32)).copy(restoredFromBackup = true)
+        storedProofs = listOf(startedOnchainProof(attempt))
+        whenever(paykitSdkService.paymentRequests())
+            .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED)))
+        stubAbandon(attempt)
+        val wallet = FakeReleaseWallet(spentElsewhere = true)
+
+        assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isSuccess)
+        assertEquals(0, wallet.prepared)
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `release after a restore must still pay more than the candidate it replaces`() {
+        val txid = "ab".repeat(32)
+        // Candidate: one P2WPKH input, a P2TR recipient and P2WPKH change, ~153 vB at 30 sat/vB = 4,590 sats.
+        val beforeWipe = unknownShopAttempt(txid).copy(
+            attemptId = "0b8c6d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e",
+            feeRateSatsPerVByte = 30uL,
+            candidateFeeRates = mapOf(txid to 30uL),
+            candidateMiningFees = mapOf(txid to 4_590uL),
+            backupFollowup = ActiveOnchainAttemptBackup.Followup(
+                feeSats = "0",
+                tags = emptyList(),
+                createdAtMillis = "0",
+            ),
+        )
+        val backup = ActiveOnchainAttemptBackup.from(beforeWipe, "regtest", "11".repeat(32))
+        val restored = backup.restored("regtest", backup.wallet.binding, WalletScope.default, 0)
+        // Release: the same input, two P2WPKH outputs, ~141 vB at prepareRelease's first rate (30 + 2) = 4,512 sats.
+        val release = OnchainPreparedReceipt(
+            txid = "77".repeat(32),
+            inputs = requireNotNull(restored.originalInputs),
+            address = "bcrt1qrelease",
+            amountSats = 1_000uL,
+            miningFeeSats = 4_512uL,
+        )
+        assertFalse(releaseOutbids(release, beforeWipe), "Before the wipe a 4,512-sat release is refused")
+        assertFalse(
+            releaseOutbids(release, restored),
+            "After a restore a 4,512-sat release must still not outbid the 4,590-sat candidate",
+        )
+    }
+
+    @Test
+    fun `a cancel cut short on the spent-elsewhere path can still finish`() = test {
+        val (record, period) = recurringShopRecord(Clock.System.now() - 1.minutes)
+        var stored = recurringAttempt(period)
+        storedProofs = listOf(startedOnchainProof(stored).copy(billingPeriod = period, conversionQuoteId = "quote-1"))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(lightningRepo.approveOnchainRelease(any())).doSuspendableAnswer {
+            it.getArgument<OnchainSendAttempt>(0).copy(releaseApproved = true).also { approved -> stored = approved }
+        }
+        var crash = true
+        whenever(lightningRepo.abandonUnbroadcastOnchainSend(any(), any())).doSuspendableAnswer {
+            val removed = it.getArgument<suspend (OnchainSendAttempt) -> Boolean>(1).invoke(it.getArgument(0))
+            if (crash) {
+                crash = false
+                error("Crashed after the proof was removed, before the attempt was deleted")
+            }
+            removed
+        }
+        val wallet = FakeReleaseWallet(spentElsewhere = true)
+        val repo = paymentProofRepo()
+        assertTrue(repo.onchainRequestHasEnded(stored))
+
+        assertTrue(repo.abandonUnbroadcastOnchainPayment(stored, wallet) {}.isFailure)
+        assertTrue(storedProofs.isEmpty())
+
+        val retry = repo.abandonUnbroadcastOnchainPayment(stored, wallet) {}
+        assertTrue(retry.isSuccess, "The next cancel must finish, but failed with '${retry.exceptionOrNull()}'")
+    }
+
+    @Test
+    fun `release must spend an original coin and outbid every candidate`() {
+        val attempt = unknownShopAttempt("ab".repeat(32)).copy(candidateMiningFees = mapOf("ab".repeat(32) to 300uL))
+        val inputs = requireNotNull(attempt.originalInputs)
+        fun receipt(spent: List<OnchainSendInput>, fee: ULong) =
+            OnchainPreparedReceipt("77".repeat(32), spent, "bcrt1qrelease", 500uL, miningFeeSats = fee)
+        assertTrue(releaseOutbids(receipt(inputs, 301uL), attempt))
+        assertFalse(releaseOutbids(receipt(inputs, 300uL), attempt))
+        assertFalse(releaseOutbids(receipt(listOf(OnchainSendInput("99".repeat(32), 7u)), 301uL), attempt))
+    }
+
+    private class FakeReleaseWallet(
+        var neverReached: Boolean = true,
+        var known: Set<String> = emptySet(),
+        var spentElsewhere: Boolean = false,
+        val outcome: (String) -> OnchainSendOutcome = { OnchainSendOutcome.Accepted(it) },
+    ) : OnchainReleasing {
+        val releaseTxid = "77".repeat(32)
+        var prepared = 0
+        var broadcasts = 0
+        var checked: OnchainSendAttempt? = null
+
+        override suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean {
+            checked = attempt
+            return neverReached
+        }
+
+        override suspend fun walletKnowsTransaction(txid: String): Boolean = txid in known
+
+        override suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean = spentElsewhere
+
+        override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
+            prepared++
+            val receipt = OnchainPreparedReceipt(
+                txid = releaseTxid,
+                inputs = attempt.originalInputs.orEmpty(),
+                address = "bcrt1qrelease",
+                amountSats = 500uL,
+                miningFeeSats = attempt.highestCandidateFee + 1uL,
+            )
+            return PreparedOnchainSend(receipt) { beforeDispatch ->
+                beforeDispatch()
+                broadcasts++
+                outcome(releaseTxid)
+            }
+        }
+    }
+
     private fun TestScope.observeRequestStateChanges() {
         paymentProofRepo(projectionStore).paymentRequestStateChanges(projectionIdentity)
             .onEach { requestStateChanges++ }
@@ -2590,6 +2877,40 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         privatePaykitRepo = dagger.Lazy { privatePaykitRepo },
     )
 
+    private fun unknownShopAttempt(txid: String) = acceptedAttempt(
+        request = paymentRequest(MethodId.entries.first { it.isOnchain }.rawValue),
+        txid = txid,
+    ).copy(
+        evidence = OnchainSendEvidence.Unknown,
+        payerIdentity = LOCAL_IDENTITY,
+        originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+        candidateTxids = listOf(txid),
+    )
+
+    private fun startedOnchainProof(attempt: OnchainSendAttempt) = PendingPaykitPaymentProof(
+        identity = LOCAL_IDENTITY,
+        requestId = requireNotNull(attempt.requestId),
+        paymentEndpointIdentifier = MethodId.entries.first { it.isOnchain }.rawValue,
+        kind = PaykitPaymentProofKind.Onchain,
+        paymentStarted = true,
+        paymentIdentifier = attempt.txid,
+        onchainAddress = attempt.address,
+        onchainAmountSats = attempt.amountSats,
+        paymentAppId = "bitkit",
+    )
+
+    private suspend fun stubAbandon(attempt: OnchainSendAttempt) {
+        whenever(lightningRepo.approveOnchainRelease(any())).doSuspendableAnswer {
+            it.getArgument<OnchainSendAttempt>(0).copy(releaseApproved = true)
+        }
+        whenever(lightningRepo.recordOnchainRelease(any(), any())).doSuspendableAnswer {
+            it.getArgument<OnchainSendAttempt>(0).copy(releaseTxid = it.getArgument<String>(1))
+        }
+        whenever(lightningRepo.abandonUnbroadcastOnchainSend(any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend (OnchainSendAttempt) -> Boolean>(1).invoke(attempt)
+        }
+    }
+
     private fun acceptedAttempt(request: PaykitPaymentRequest, txid: String) = OnchainSendAttempt(
         walletId = WalletScope.default,
         attemptId = "attempt-1",
@@ -2637,11 +2958,12 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private fun paymentRequestRecord(
         paymentProofs: List<PaymentProofRecord> = emptyList(),
         paymentRequestId: String = PAYMENT_REQUEST_ID,
+        state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
     ) = PaymentRequestRecord(
         counterparty = COUNTERPARTY,
         paymentRequestId = paymentRequestId,
         localRole = PaymentRequestLocalRole.PAYER,
-        state = PaymentRequestLifecycleState.PROPOSED,
+        state = state,
         proposalStreamItemId = 1uL,
         proposalOutboundMessageId = null,
         proposalOutboundStatus = null,

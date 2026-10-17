@@ -2,6 +2,9 @@ package to.bitkit.repositories
 
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.PaymentProofRecord
+import com.synonym.paykit.PaymentRequestLifecycleState
+import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PubkyIdentityCapability
 import dagger.Lazy
 import kotlinx.coroutines.CoroutineDispatcher
@@ -407,6 +410,163 @@ class PaykitPaymentProofRepo @Inject constructor(
                 request.submissionDeadline(payment)
             }
         }
+    }
+
+    /**
+     * Whether the request behind an unresolved Shop payment can no longer be paid: the payee ended it, or its
+     * deadline passed. A record that is missing, carries a proof or needs recovery never counts as ended.
+     */
+    suspend fun onchainRequestHasEnded(attempt: OnchainSendAttempt): Boolean = withContext(ioDispatcher) {
+        val identity = currentIdentity()?.takeIf { PubkyPublicKeyFormat.matches(it, attempt.payerIdentity) }
+        val record = attempt.takeIf { it.canBeAbandoned && identity != null }?.let { payerRecord(it) }
+        val periodStartsAt = attempt.requestId?.billingPeriodStartsAt
+        when {
+            identity != null && attempt.canBeAbandoned && attempt.releaseApproved -> true
+            identity == null || record == null -> false
+            periodStartsAt != null -> recurringPeriodHasEnded(record, attempt, periodStartsAt)
+            record.paymentProofs.isNotEmpty() -> false
+            else -> oneTimeRequestHasEnded(record, identity)
+        }
+    }
+
+    private suspend fun payerRecord(attempt: OnchainSendAttempt): PaymentRequestRecord? {
+        val requestId = attempt.requestId ?: return null
+        return paykitSdkService.paymentRequests().firstOrNull {
+            it.localRole == PaymentRequestLocalRole.PAYER && it.paymentRequestId == requestId.paymentRequestId &&
+                PubkyPublicKeyFormat.matches(it.counterparty, requestId.counterparty)
+        }
+    }
+
+    private suspend fun oneTimeRequestHasEnded(record: PaymentRequestRecord, identity: String): Boolean =
+        when (record.state) {
+            PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
+            PaymentRequestLifecycleState.REJECTED,
+            PaymentRequestLifecycleState.CANCELED -> true
+            PaymentRequestLifecycleState.PROPOSED,
+            PaymentRequestLifecycleState.ACCEPTED -> {
+                val now = Clock.System.now()
+                val request = runCatching { record.toPaykitPaymentRequestHistory(now) }.getOrNull()
+                request != null && (request.isExpired(now) || quoteDeadlinePassed(request, identity, now))
+            }
+            else -> false
+        }
+
+    private suspend fun recurringPeriodHasEnded(
+        record: PaymentRequestRecord,
+        attempt: OnchainSendAttempt,
+        periodStartsAt: String,
+    ): Boolean {
+        if (record.paymentProofs.any { it.billingPeriod?.startsAt == periodStartsAt }) return false
+        return when (record.state) {
+            PaymentRequestLifecycleState.CANCELED,
+            PaymentRequestLifecycleState.REJECTED -> true
+            PaymentRequestLifecycleState.ACTIVE_RECURRING -> activeRecurringPeriodPassed(record, attempt)
+            else -> false
+        }
+    }
+
+    private suspend fun activeRecurringPeriodPassed(
+        record: PaymentRequestRecord,
+        attempt: OnchainSendAttempt,
+    ): Boolean {
+        val now = Clock.System.now()
+        val subscription = runCatching { record.toPaykitSubscription() }.getOrNull() ?: return false
+        val period = operationMutex.withLock {
+            loadProofs().lastOrNull {
+                it.kind == PaykitPaymentProofKind.Onchain && it.requestId == attempt.requestId &&
+                    PubkyPublicKeyFormat.matches(it.identity, attempt.payerIdentity)
+            }?.billingPeriod
+        }
+        val deadline = period?.let { runCatching { subscription.pricing.paymentDeadline(it) }.getOrNull() }
+        val request = period?.let {
+            runCatching { subscription.requestsThrough(now, it.startsAt) }.getOrNull()
+                ?.firstOrNull { request -> request.billingPeriod?.startsAt == it.startsAt }
+        }
+        val identity = requireNotNull(attempt.payerIdentity)
+        return subscription.isExpired(now) || deadline?.let { now > it } == true ||
+            (request != null && quoteDeadlinePassed(request, identity, now))
+    }
+
+    private suspend fun removeOriginalShopProofs(attempt: OnchainSendAttempt): Boolean = operationMutex.withLock {
+        val proofs = loadProofs()
+        val original = proofs.filter {
+            it.kind == PaykitPaymentProofKind.Onchain && it.requestId == attempt.requestId &&
+                PubkyPublicKeyFormat.matches(it.identity, requireNotNull(attempt.payerIdentity))
+        }
+        val safe = original.all { proof ->
+            val identifier = proof.paymentIdentifier
+            val isCandidate = identifier == null ||
+                attempt.candidateTxids.any { it.equals(identifier, ignoreCase = true) }
+            proof.onchainWalletId == attempt.walletId && proof.proofData == null &&
+                !proof.onchainAcceptanceVerified && isCandidate
+        }
+        if (!safe) return@withLock false
+        for (proof in original) releaseDeniedPrivateConsumption(proof)
+        if (original.isNotEmpty()) persist(proofs - original.toSet())
+        true
+    }
+
+    private suspend fun quoteDeadlinePassed(request: PaykitPaymentRequest, identity: String, now: Instant): Boolean {
+        val proof = operationMutex.withLock {
+            loadProofs().lastOrNull {
+                it.kind == PaykitPaymentProofKind.Onchain && it.requestId == request.id &&
+                    PubkyPublicKeyFormat.matches(it.identity, identity)
+            }
+        }
+        val quoteId = proof?.conversionQuoteId ?: return false
+        val method = MethodId.entries.firstOrNull { it.rawValue == proof.paymentEndpointIdentifier && it.isOnchain }
+            ?: return false
+        val payment = runCatching { request.payment(method, now, quoteId) }.getOrNull() ?: return false
+        return request.submissionDeadline(payment)?.let { now > it } == true
+    }
+
+    /**
+     * Releases an unresolved Shop payment whose request has ended once [neverReachedNetwork] shows that none of its
+     * transactions reached the mempool or the chain. Its original proof is removed so the request stays unpaid.
+     */
+    suspend fun abandonUnbroadcastOnchainPayment(
+        attempt: OnchainSendAttempt,
+        wallet: OnchainReleasing,
+        approveRelease: suspend (OnchainPreparedReceipt) -> Unit,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            if (!onchainRequestHasEnded(attempt)) throw OnchainSendAbandonRefusedError(requestOpen = true)
+            val pendingRelease = attempt.releaseTxid
+            if (pendingRelease != null && wallet.walletKnowsTransaction(pendingRelease)) {
+                return@runSuspendCatching finishRelease(attempt)
+            }
+            if (!wallet.onchainCandidatesNeverReachedNetwork(attempt)) {
+                throw OnchainSendAbandonRefusedError(requestOpen = false)
+            }
+            // Approve before anything changes, so a cancel cut short after the proof is removed can still finish.
+            val approved = if (attempt.releaseApproved) attempt else lightningRepo.approveOnchainRelease(attempt)
+            approved ?: throw OnchainSendBlockedError(attempt)
+            // No candidate is known, yet a coin is spent: an earlier release, or another transaction, already made
+            // the original unconfirmable, including one whose ID a restart or a restore lost.
+            if (wallet.originalCoinSpentElsewhere(approved)) return@runSuspendCatching finishRelease(approved)
+            val prepared = wallet.prepareRelease(approved)
+            check(releaseOutbids(prepared.receipt, approved))
+            approveRelease(prepared.receipt)
+            val recorded = lightningRepo.recordOnchainRelease(approved, prepared.receipt.txid)
+                ?: throw OnchainSendBlockedError(attempt)
+            when (prepared.broadcast()) {
+                is OnchainSendOutcome.Accepted -> finishRelease(recorded)
+                // A conflicting candidate may be in a mempool; keep the guard until a sync resolves it.
+                is OnchainSendOutcome.Rejected -> throw OnchainSendAbandonRefusedError(requestOpen = false)
+                is OnchainSendOutcome.Unknown -> throw OnchainSendAbandonPendingError()
+            }
+        }
+    }
+
+    /** Removes the original proof, then the attempt, once its release reached the network. */
+    private suspend fun finishRelease(attempt: OnchainSendAttempt) {
+        if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt) { removeOriginalShopProofs(it) }) {
+            throw OnchainSendBlockedError(attempt)
+        }
+        Logger.info(
+            "Released on-chain payment '${attempt.txid}' through '${attempt.releaseTxid}' after its request ended",
+            context = TAG,
+        )
     }
 
     suspend fun completeRecoveredOnchainPayment(request: PaykitPaymentRequest, attempt: OnchainSendAttempt): Boolean =

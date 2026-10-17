@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
@@ -22,23 +23,29 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendAbandonPendingError
+import to.bitkit.repositories.OnchainSendAbandonSyncError
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.SanityWarning
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class SendPendingViewModel @Inject constructor(
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val activityRepo: ActivityRepo,
     private val lightningRepo: LightningRepo,
+    private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "SendPendingViewModel"
+        private val ABANDON_CHECK_INTERVAL = 30.seconds
     }
 
     private val _uiState = MutableStateFlow(SendPendingUiState())
@@ -78,6 +85,7 @@ class SendPendingViewModel @Inject constructor(
                 if (matchesOriginalWallet && hasOriginalReceipt && attempt != null) {
                     if (attempt.isUnresolved) _uiState.update { it.copy(recoveryAttempt = attempt) }
                     observeOriginalCompletion(attempt)
+                    offerAbandonIfRequestEnded(attempt)
                 }
             }
         }
@@ -163,6 +171,72 @@ class SendPendingViewModel @Inject constructor(
                 }
             } finally {
                 _uiState.update { it.copy(isRecovering = false) }
+            }
+        }
+    }
+
+    // The request can end, or a failed check recover, while Payment Pending stays open.
+    private fun offerAbandonIfRequestEnded(attempt: OnchainSendAttempt) {
+        if (!attempt.canBeAbandoned) return
+        viewModelScope.launch {
+            var current = attempt
+            while (_uiState.value.recoveryAttempt?.attemptId == attempt.attemptId &&
+                _uiState.value.abandonableAttempt == null
+            ) {
+                // A retry from this screen can add a candidate; offer the attempt as it is stored now.
+                current = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+                    ?.takeIf { it.attemptId == attempt.attemptId } ?: current
+                val hasEnded = current.canBeAbandoned &&
+                    runSuspendCatching { paykitPaymentProofRepo.onchainRequestHasEnded(current) }.getOrDefault(false)
+                if (hasEnded) {
+                    _uiState.update { it.copy(abandonableAttempt = current) }
+                    return@launch
+                }
+                delay(ABANDON_CHECK_INTERVAL)
+            }
+        }
+    }
+
+    fun abandonExpired(requiresPin: Boolean, useBiometrics: Boolean) {
+        val attempt = _uiState.value.abandonableAttempt ?: return
+        if (_uiState.value.isAbandoning) return
+        _uiState.update { it.copy(isAbandoning = true, abandonError = null) }
+        viewModelScope.launch {
+            try {
+                releaseExpired(attempt, requiresPin, useBiometrics)
+            } finally {
+                _uiState.update { it.copy(isAbandoning = false) }
+            }
+        }
+    }
+
+    private suspend fun releaseExpired(shown: OnchainSendAttempt, requiresPin: Boolean, useBiometrics: Boolean) {
+        // An earlier try may have saved its approval and release since the screen loaded the attempt.
+        val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+            ?.takeIf { it.attemptId == shown.attemptId } ?: shown
+        paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(attempt, lightningRepo) { receipt ->
+            withContext(Dispatchers.Main.immediate) {
+                requestRecoveryApproval(RecoveryApproval.Release(receipt))
+                if (requiresPin) {
+                    requestRecoveryApproval(if (useBiometrics) RecoveryApproval.Biometrics else RecoveryApproval.Pin)
+                }
+            }
+        }.onSuccess {
+            _uiState.update {
+                it.copy(isAbandoning = false, abandoned = true, abandonableAttempt = null, recoveryAttempt = null)
+            }
+        }.onFailure { error ->
+            Logger.warn("Could not release on-chain payment '${attempt.txid}'", error, context = TAG)
+            _uiState.update {
+                it.copy(
+                    isAbandoning = false,
+                    abandonError = when (error) {
+                        is CancellationException -> null
+                        is OnchainSendAbandonSyncError -> AbandonError.SyncUnavailable
+                        is OnchainSendAbandonPendingError -> AbandonError.ReleasePending
+                        else -> AbandonError.MayStillConfirm
+                    },
+                )
             }
         }
     }
@@ -264,11 +338,18 @@ data class SendPendingUiState(
     val currentTxid: String? = null,
     val recoveredTxid: String? = null,
     val recoveredTransfer: OnchainSendAttempt? = null,
+    val abandonableAttempt: OnchainSendAttempt? = null,
+    val isAbandoning: Boolean = false,
+    val abandoned: Boolean = false,
+    val abandonError: AbandonError? = null,
 )
+
+enum class AbandonError { MayStillConfirm, SyncUnavailable, ReleasePending }
 
 sealed interface RecoveryApproval {
     data class Fee(val receipt: OnchainPreparedReceipt) : RecoveryApproval
     data class Warning(val warning: SanityWarning) : RecoveryApproval
     data object Biometrics : RecoveryApproval
     data object Pin : RecoveryApproval
+    data class Release(val receipt: OnchainPreparedReceipt) : RecoveryApproval
 }

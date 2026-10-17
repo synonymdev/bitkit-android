@@ -135,7 +135,7 @@ class LightningRepo @Inject constructor(
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
     private val electrumProbeService: ElectrumProbeService,
-) {
+) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
 
@@ -1861,6 +1861,49 @@ class LightningRepo @Inject constructor(
 
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
 
+    /** Syncs the on-chain wallet, then checks that none of the attempt's candidates reached the mempool or chain. */
+    override suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean =
+        onchainCandidatesNeverReachedNetwork(attempt, ABANDON_SYNC_TIMEOUT)
+
+    suspend fun onchainCandidatesNeverReachedNetwork(
+        attempt: OnchainSendAttempt,
+        timeout: Duration,
+    ): Boolean {
+        // The requested sync runs on the serial LDK queue after any sync already in flight, so its success proves a
+        // fresh view. Failing that, an on-chain sync that finishes later than the one read here also counts.
+        val previousSync = lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL
+        // The sync blocks on the LDK queue and ignores cancellation, so it runs apart and the wait keeps its limit.
+        val requestedSyncSucceeded = AtomicBoolean(false)
+        scope.launch { if (runSuspendCatching { lightningService.sync() }.isSuccess) requestedSyncSucceeded.set(true) }
+        withTimeoutOrNull(timeout) {
+            while (true) {
+                val latestSync = lightningService.status?.latestOnchainWalletSyncTimestamp
+                if (isOnchainSyncAfter(latestSync, previousSync, requestedSyncSucceeded.get())) break
+                delay(500.milliseconds)
+            }
+        } ?: throw OnchainSendAbandonSyncError()
+        return lightningService.walletKnowsNoCandidate(attempt)
+    }
+
+    override suspend fun walletKnowsTransaction(txid: String): Boolean = lightningService.walletKnowsTransaction(txid)
+
+    override suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean =
+        lightningService.originalCoinSpentElsewhere(attempt)
+
+    override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend =
+        lightningService.prepareRelease(attempt)
+
+    suspend fun recordOnchainRelease(expected: OnchainSendAttempt, txid: String): OnchainSendAttempt? =
+        onchainSendAttemptStore.recordRelease(expected, txid)
+
+    suspend fun approveOnchainRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
+        onchainSendAttemptStore.approveRelease(expected)
+
+    suspend fun abandonUnbroadcastOnchainSend(
+        expected: OnchainSendAttempt,
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = onchainSendAttemptStore.abandonUnbroadcast(expected, removeOriginalProof)
+
     suspend fun releaseInterruptedShopPreparation(
         removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
     ): Boolean = onchainSendAttemptStore.releaseInterruptedShopPreparation(removeOriginalProof)
@@ -2581,6 +2624,7 @@ class LightningRepo @Inject constructor(
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
+        private val ABANDON_SYNC_TIMEOUT = 30.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
 
         /** Max time to wait for a starting node before its id is treated as unavailable. */
@@ -2768,3 +2812,10 @@ sealed interface ProbeOutcome {
         val routeFeeMsat: ULong?,
     ) : ProbeOutcome
 }
+
+/**
+ * The sync requested for a check proves a fresh view once it succeeds. Otherwise only a sync that finished later than
+ * the one read before the request counts; one finished in the same second may predate it.
+ */
+internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong, requestedSyncSucceeded: Boolean = false): Boolean =
+    requestedSyncSucceeded || (latest ?: 0uL) > previous
