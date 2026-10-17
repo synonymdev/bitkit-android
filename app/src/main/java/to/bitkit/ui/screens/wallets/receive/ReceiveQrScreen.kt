@@ -82,6 +82,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.rememberQrBitmap
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.usdt.UsdtDepositReceiveScreen
@@ -896,8 +897,10 @@ fun CopyAddressCard(
     testTag: String? = null,
     accentColor: Color? = null,
     shareContent: String = address,
+    shareQrContent: String? = null,
 ) {
     val context = LocalContext.current
+    val shareBitmap = shareQrContent?.let { rememberQrBitmap(it, 400.dp) }
 
     val tooltipState = rememberTooltipState()
     val coroutineScope = rememberCoroutineScope()
@@ -970,7 +973,10 @@ fun CopyAddressCard(
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,
-                onClick = { shareText(context, shareContent) },
+                enabled = shareQrContent == null || shareBitmap != null,
+                onClick = {
+                    shareBitmap?.let { shareQrCode(context, it, shareContent) } ?: shareText(context, shareContent)
+                },
                 fullWidth = false,
                 icon = {
                     Icon(

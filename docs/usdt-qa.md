@@ -45,7 +45,7 @@ Requires a wallet with USDT enabled and a matching backend with Orchestra creden
 
 - [ ] Open the USDT wallet and Receive. Verify direct Arbitrum One receiving is available.
 - [ ] Open the network selector. Verify only configured supported sources are offered: Ethereum, Tron, Solana, Polygon, Base and BNB Smart Chain.
-- [ ] Select each enabled source network, enter an amount within its live limits, and get its deposit address. Verify the selected network, reusable address, estimated received amount and deduction are shown. Verify the QR and Copy action use the same address.
+- [ ] Select each enabled source network, enter an amount within its live limits, and get its deposit address. Verify the selected network, reusable address, estimated received amount and deduction are shown. Verify Copy and tapping the QR copy only that network’s deposit address, not the Arbitrum wallet address. Decode the QR and verify it retains the payment URI for the selected network. From both the QR and Show Details, verify Share includes the plain deposit address, network name, exact requested amount and QR image.
 - [ ] Return to Arbitrum One and verify its original wallet address remains unchanged.
 - [ ] From Receive → Network, verify the full-width primary Cross-Network Deposits button stays pinned over the bottom of the network list while the rows and artwork scroll behind it. Scroll to the end and verify the last content clears the button. Repeat with large text and verify the label is not clipped. Open it before any receipt exists and verify empty history and Load more work without showing a failure.
 - [ ] Enter an amount below the route minimum and verify the limit error appears without a deposit address.
