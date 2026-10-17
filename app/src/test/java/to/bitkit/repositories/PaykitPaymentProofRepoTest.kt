@@ -58,6 +58,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
@@ -2689,6 +2690,67 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isSuccess)
         assertEquals(0, wallet.prepared)
         assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `release after a restore must still pay more than the candidate it replaces`() {
+        val txid = "ab".repeat(32)
+        // Candidate: one P2WPKH input, a P2TR recipient and P2WPKH change, ~153 vB at 30 sat/vB = 4,590 sats.
+        val beforeWipe = unknownShopAttempt(txid).copy(
+            attemptId = "0b8c6d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e",
+            feeRateSatsPerVByte = 30uL,
+            candidateFeeRates = mapOf(txid to 30uL),
+            candidateMiningFees = mapOf(txid to 4_590uL),
+            backupFollowup = ActiveOnchainAttemptBackup.Followup(
+                feeSats = "0",
+                tags = emptyList(),
+                createdAtMillis = "0",
+            ),
+        )
+        val backup = ActiveOnchainAttemptBackup.from(beforeWipe, "regtest", "11".repeat(32))
+        val restored = backup.restored("regtest", backup.wallet.binding, WalletScope.default, 0)
+        // Release: the same input, two P2WPKH outputs, ~141 vB at prepareRelease's first rate (30 + 2) = 4,512 sats.
+        val release = OnchainPreparedReceipt(
+            txid = "77".repeat(32),
+            inputs = requireNotNull(restored.originalInputs),
+            address = "bcrt1qrelease",
+            amountSats = 1_000uL,
+            miningFeeSats = 4_512uL,
+        )
+        assertFalse(releaseOutbids(release, beforeWipe), "Before the wipe a 4,512-sat release is refused")
+        assertFalse(
+            releaseOutbids(release, restored),
+            "After a restore a 4,512-sat release must still not outbid the 4,590-sat candidate",
+        )
+    }
+
+    @Test
+    fun `a cancel cut short on the spent-elsewhere path can still finish`() = test {
+        val (record, period) = recurringShopRecord(Clock.System.now() - 1.minutes)
+        var stored = recurringAttempt(period)
+        storedProofs = listOf(startedOnchainProof(stored).copy(billingPeriod = period, conversionQuoteId = "quote-1"))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(lightningRepo.approveOnchainRelease(any())).doSuspendableAnswer {
+            it.getArgument<OnchainSendAttempt>(0).copy(releaseApproved = true).also { approved -> stored = approved }
+        }
+        var crash = true
+        whenever(lightningRepo.abandonUnbroadcastOnchainSend(any(), any())).doSuspendableAnswer {
+            val removed = it.getArgument<suspend (OnchainSendAttempt) -> Boolean>(1).invoke(it.getArgument(0))
+            if (crash) {
+                crash = false
+                error("Crashed after the proof was removed, before the attempt was deleted")
+            }
+            removed
+        }
+        val wallet = FakeReleaseWallet(spentElsewhere = true)
+        val repo = paymentProofRepo()
+        assertTrue(repo.onchainRequestHasEnded(stored))
+
+        assertTrue(repo.abandonUnbroadcastOnchainPayment(stored, wallet) {}.isFailure)
+        assertTrue(storedProofs.isEmpty())
+
+        val retry = repo.abandonUnbroadcastOnchainPayment(stored, wallet) {}
+        assertTrue(retry.isSuccess, "The next cancel must finish, but failed with '${retry.exceptionOrNull()}'")
     }
 
     @Test

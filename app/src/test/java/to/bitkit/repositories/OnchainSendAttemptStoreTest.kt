@@ -72,7 +72,8 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val accepted = reopened.recordOutcome(attempt.attemptId, OnchainSendOutcome.Accepted(replacement.txid), 0)
         val backup = ActiveOnchainAttemptBackup.from(accepted, "regtest", "11".repeat(32))
         val restored = backup.restored("regtest", backup.wallet.binding, attempt.walletId, 0)
-        assertTrue(restored.candidateMiningFees.isEmpty())
+        // The backup carries each candidate's mining fee, so a release after a restore still outbids it.
+        assertEquals(pending.candidateMiningFees, restored.candidateMiningFees)
         reopened.restoreActive(restored)
         assertEquals(accepted.candidateMiningFees, reopened.current()?.candidateMiningFees)
     }
