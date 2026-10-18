@@ -42,12 +42,18 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val original = utxo("11", 1_200uL)
         val small = utxo("22", 5_000uL)
         val large = utxo("33", 90_000uL)
+        val medium = utxo("44", 20_000uL)
         val originalInput = setOf(OnchainSendInput("11".repeat(32), 0u))
 
-        val sets = releaseInputSets(listOf(small, original, large), originalInput)
+        val sets = releaseInputSets(listOf(small, original, large, medium), originalInput)
 
         assertEquals(
-            listOf(listOf(1_200uL), listOf(1_200uL, 90_000uL), listOf(1_200uL, 90_000uL, 5_000uL)),
+            listOf(
+                listOf(1_200uL),
+                listOf(1_200uL, 90_000uL),
+                listOf(1_200uL, 90_000uL, 20_000uL),
+                listOf(1_200uL, 90_000uL, 20_000uL, 5_000uL),
+            ),
             sets.map { set -> set.map { it.valueSats } },
         )
         assertTrue(releaseInputSets(listOf(small, large), originalInput).isEmpty(), "A release needs an original coin")

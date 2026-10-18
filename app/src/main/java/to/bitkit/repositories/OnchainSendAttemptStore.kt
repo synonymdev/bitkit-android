@@ -150,19 +150,16 @@ fun releaseOutbids(receipt: OnchainPreparedReceipt, attempt: OnchainSendAttempt)
 }
 
 /**
- * The coin sets a release tries, smallest first: the original's coins alone, then with the wallet's largest other
- * coin, then with all of them. Each set holds every spendable original coin, so no candidate can confirm, while a
- * small payment's coins alone may not cover the release's output and higher fee.
+ * The coin sets a release tries, smallest first: the original's coins alone, then with the wallet's other coins added
+ * one at a time, largest first. Each set holds every spendable original coin, so no candidate can confirm, while a
+ * small payment's coins alone may not cover the release's output and higher fee. Growing one coin at a time stops at
+ * the first set that can pay, so dust coins join only when nothing smaller would.
  */
 fun releaseInputSets(spendable: List<SpendableUtxo>, original: Set<OnchainSendInput>): List<List<SpendableUtxo>> {
     val (originals, others) = spendable.partition { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) in original }
     if (originals.isEmpty()) return emptyList()
     val byValue = others.sortedByDescending { it.valueSats }
-    return buildList {
-        add(originals)
-        byValue.firstOrNull()?.let { add(originals + it) }
-        if (byValue.size > 1) add(originals + byValue)
-    }
+    return (0..byValue.size).map { originals + byValue.take(it) }
 }
 
 /** The wallet side of cancelling: proving no candidate reached the network, and spending its coins back. */
