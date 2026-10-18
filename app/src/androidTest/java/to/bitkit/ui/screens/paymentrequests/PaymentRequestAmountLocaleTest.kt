@@ -2,7 +2,11 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -10,6 +14,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.persistentListOf
 import org.junit.After
 import org.junit.Before
@@ -24,6 +30,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AmountInputViewModel
 import java.util.Locale
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -80,4 +87,50 @@ class PaymentRequestAmountLocaleTest {
 
         assertEquals(PaykitAmount(PaykitAsset.USD, 15_050uL), submitted?.amount)
     }
+
+    @Test
+    fun amountActionsStayAlignedAndReachableOnCompactScreens() {
+        val configuration = mutableStateOf(Triple(320, 1f, PaykitAsset.USD))
+        val amountInput = AmountInputViewModel(AmountInputHandler.stub())
+        composeTestRule.setContent {
+            val (width, scale, asset) = configuration.value
+            CompositionLocalProvider(LocalDensity provides Density(2f, scale), LocalInspectionMode provides true) {
+                AppThemeSurface {
+                    PaymentRequestAmountContent(
+                        amountInputViewModel = amountInput,
+                        initialDraft = PaykitPaymentRequestDraft(
+                            amount = PaykitAmount(asset, 150uL),
+                            note = "",
+                            expiresAt = Instant.fromEpochSeconds(2_000_000_000),
+                        ),
+                        contact = null,
+                        onBack = {},
+                        onContinue = {},
+                        modifier = Modifier.requiredSize(width.dp, 640.dp)
+                    )
+                }
+            }
+        }
+        for (width in listOf(320, 375)) {
+            for (scale in listOf(1f, 1.6f)) {
+                for (asset in listOf(PaykitAsset.BTC, PaykitAsset.USD)) {
+                    composeTestRule.runOnIdle { configuration.value = Triple(width, scale, asset) }
+                    composeTestRule.waitForIdle()
+                    val amount = composeTestRule.onNodeWithTag("PaymentRequestAmountField").fetchSemanticsNode().boundsInRoot
+                    val actions = composeTestRule.onNodeWithTag("PaymentRequestAmountActions").fetchSemanticsNode().boundsInRoot
+                    val divider = composeTestRule.onNodeWithTag("PaymentRequestAmountDivider").fetchSemanticsNode().boundsInRoot
+                    val lastControl = if (asset == PaykitAsset.BTC) "PaymentRequestAmountUnit" else "PaymentRequestAssetUSD"
+                    val control = composeTestRule.onNodeWithTag(lastControl).fetchSemanticsNode().boundsInRoot
+                    assertEquals(divider.left, amount.left, 1f)
+                    assertEquals(divider.right, control.right, 1f)
+                    assertTrue(actions.top >= amount.bottom && actions.top - amount.bottom <= 34f)
+                    assertTrue(divider.top >= actions.bottom)
+                    listOf("N1", "N0", "NRemove", "PaymentRequestAmountContinue").forEach {
+                        composeTestRule.onNodeWithTag(it).assertIsDisplayed()
+                    }
+                }
+            }
+        }
+    }
+
 }

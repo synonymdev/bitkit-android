@@ -329,7 +329,7 @@ private fun UsdtWalletContent(
     val allowSwipe by settings?.enableSwipeToHideBalance?.collectAsStateWithLifecycle() ?: remember {
         mutableStateOf(false)
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(Colors.Black)) {
         UsdtCoinIllustration(
             modifier = Modifier.align(Alignment.TopEnd)
                 .offset(x = 81.dp, y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 4.dp)

@@ -307,6 +307,10 @@ fun ReceiveQrScreen(
         onDispose { onUsdtSelected(false) }
     }
 
+    val tabLabels = remember(hardwareTabLabel) {
+        hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
+    }
+
     if (selectedTab == ReceiveTab.USDT) {
         Column(
             modifier = modifier.fillMaxSize().background(
@@ -316,11 +320,13 @@ fun ReceiveQrScreen(
             UsdtDepositReceiveScreen(
                 viewModel = hiltViewModel(),
                 tabs = visibleTabs,
+                tabLabels = tabLabels,
                 onSelectTab = ::selectReceiveTab,
                 onBack = onClose,
                 onBlockingChange = onBlockingChange,
                 onContacts = onClickPaymentRequestContacts.takeIf { showPaymentRequestContacts },
             )
+            VerticalSpacer(16.dp)
         }
         return
     }
@@ -359,9 +365,7 @@ fun ReceiveQrScreen(
             CustomTabRowWithSpacing(
                 tabs = visibleTabs,
                 currentTabIndex = visibleTabs.indexOf(selectedTab),
-                labelOverrides = remember(hardwareTabLabel) {
-                    hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
-                },
+                labelOverrides = tabLabels,
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val newIndex = visibleTabs.indexOf(tab)
