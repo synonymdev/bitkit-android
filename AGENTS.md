@@ -10,7 +10,7 @@ Durable shared agent command specs live in `.agents/commands/`. For PR creation,
 
 When addressing review feedback on any PR, release PRs included, the author's agent or babysitter keeps the PR in scope:
 - Fix in the PR only critical findings and reachable correctness bugs. MEDIUM findings are a judgment call.
-- Re-triage each LOW or non-blocking finding. If it is still LOW, leave the code unchanged: file an issue in the next release's milestone, add an Out of Scope bullet linking the issue and the thread (see `.agents/commands/pr.md`), reply in the thread `out of scope: tracked in #N, because …`, and resolve it.
+- Re-triage each LOW or non-blocking finding. If it is still LOW and not a reachable correctness bug, leave the code unchanged: file an issue in the next release's milestone, add an Out of Scope bullet linking the issue and the thread (see `.agents/commands/pr.md`), reply in the thread `out of scope: tracked in #N, because …`, and resolve it.
 
 ## Build Commands
 
