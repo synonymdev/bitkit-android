@@ -30,6 +30,7 @@ import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
@@ -42,6 +43,7 @@ import org.lightningdevkit.ldknode.OnchainWalletAccount
 import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.ScoringFeeParameters
@@ -75,6 +77,7 @@ import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PreparedOnchainSend
+import to.bitkit.repositories.releaseInputSets
 import to.bitkit.repositories.releaseOutbids
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
@@ -1069,25 +1072,43 @@ class LightningService internal constructor(
      */
     suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
         val original = attempt.originalInputs.orEmpty().toSet()
-        val utxos = listSpendableOutputs().getOrThrow().filter {
-            OnchainSendInput(it.outpoint.txid, it.outpoint.vout) in original
+        // Only confirmed coins join the original's: nodes holding a candidate refuse a replacement that adds an
+        // unconfirmed input (BIP125 rule 2), and an unconfirmed parent can still be replaced or evicted.
+        val confirmedTxids = listPayments().orEmpty().mapNotNull { payment ->
+            (payment.kind as? PaymentKind.Onchain)?.takeIf { it.status is ConfirmationStatus.Confirmed }?.txid
+        }.toSet()
+        val spendable = listSpendableOutputs().getOrThrow().filter {
+            OnchainSendInput(it.outpoint.txid, it.outpoint.vout) in original || it.outpoint.txid in confirmedTxids
         }
-        if (utxos.isEmpty() || attempt.walletIndex != currentWalletIndex) throw ServiceError.NodeNotSetup()
-        var feeRate = maxOf(attempt.feeRateSatsPerVByte, attempt.candidateFeeRates.values.maxOrNull() ?: 0uL) + 2uL
+        val inputSets = releaseInputSets(spendable, original)
+        if (inputSets.isEmpty() || attempt.walletIndex != currentWalletIndex) throw ServiceError.NodeNotSetup()
+        val originalCoins = inputSets.first().map { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) }.toSet()
         val address = newAddress()
-        repeat(RELEASE_FEE_ATTEMPTS) {
-            val prepared = prepareOnchainSend(
-                address = address,
-                sats = RELEASE_AMOUNT_SATS,
-                satsPerVByte = feeRate,
-                utxosToSpend = utxos,
-                walletIndex = attempt.walletIndex,
-            )
-            check(prepared.receipt.inputs.any { it in original })
-            if (releaseOutbids(prepared.receipt, attempt)) return prepared
-            feeRate *= 2uL
+        var lastError: Throwable = ServiceError.NodeNotSetup()
+        for (utxos in inputSets) {
+            var feeRate = maxOf(attempt.feeRateSatsPerVByte, attempt.candidateFeeRates.values.maxOrNull() ?: 0uL) + 2uL
+            var feeAttemptsLeft = RELEASE_FEE_ATTEMPTS
+            while (feeAttemptsLeft-- > 0) {
+                val prepared = runSuspendCatching {
+                    prepareOnchainSend(
+                        address = address,
+                        sats = RELEASE_AMOUNT_SATS,
+                        satsPerVByte = feeRate,
+                        utxosToSpend = utxos,
+                        walletIndex = attempt.walletIndex,
+                    )
+                }.getOrElse {
+                    // These coins cannot fund the release at this fee; try the next, larger set.
+                    lastError = it
+                    null
+                } ?: break
+                // Every spendable original coin must go, so no candidate can still confirm.
+                check(prepared.receipt.inputs.containsAll(originalCoins))
+                if (releaseOutbids(prepared.receipt, attempt)) return prepared
+                feeRate *= 2uL
+            }
         }
-        throw ServiceError.NodeNotSetup()
+        throw lastError
     }
 
     internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =

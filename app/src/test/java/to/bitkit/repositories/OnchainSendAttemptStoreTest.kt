@@ -8,6 +8,8 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.lightningdevkit.ldknode.OutPoint
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -33,6 +35,29 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
 
     @get:Rule
     val temporaryFolder = TemporaryFolder()
+
+    @Test
+    fun `release adds wallet coins when the original coins fall short`() {
+        fun utxo(byte: String, value: ULong) = SpendableUtxo(OutPoint(byte.repeat(32), 0u), value)
+        val original = utxo("11", 1_200uL)
+        val small = utxo("22", 5_000uL)
+        val large = utxo("33", 90_000uL)
+        val medium = utxo("44", 20_000uL)
+        val originalInput = setOf(OnchainSendInput("11".repeat(32), 0u))
+
+        val sets = releaseInputSets(listOf(small, original, large, medium), originalInput)
+
+        assertEquals(
+            listOf(
+                listOf(1_200uL),
+                listOf(1_200uL, 90_000uL),
+                listOf(1_200uL, 90_000uL, 20_000uL),
+                listOf(1_200uL, 90_000uL, 20_000uL, 5_000uL),
+            ),
+            sets.map { set -> set.map { it.valueSats } },
+        )
+        assertTrue(releaseInputSets(listOf(small, large), originalInput).isEmpty(), "A release needs an original coin")
+    }
 
     @Test
     fun `prepared candidate fees survive disk reopen without promoting unknown outcomes`() = test {
