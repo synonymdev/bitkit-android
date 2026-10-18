@@ -225,7 +225,8 @@ private fun ColumnScope.Content(
                 uri = state.address?.uri ?: uri,
                 error = receiveError,
                 network = state.network?.label ?: "Arbitrum One",
-                amount = state.address?.let { usdtFormatAmount(it.amount) } ?: amount,
+                amount = state.address?.let { usdtFormatAmount(it.amount) }
+                    ?: atomic?.let { usdtFormatAmount(it) }.orEmpty(),
                 onEdit = onRefresh,
                 onNetwork = { onPage(ReceivePage.NETWORKS) },
             )

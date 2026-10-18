@@ -64,36 +64,39 @@ class SendContactSelectViewModel @Inject constructor(
     }
 
     fun payContact(publicKey: String) {
-        if (_uiState.value.isResolvingPayment) return
+        if (_uiState.value.resolvingPublicKey != null) return
+        _uiState.update { it.copy(resolvingPublicKey = publicKey) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isResolvingPayment = true) }
-            privatePaykitRepo.beginSavedContactPayment(publicKey)
-                .onSuccess { result ->
-                    when (result) {
-                        is PublicPaykitPaymentResult.Opened ->
-                            _effects.emit(
-                                SendContactSelectEffect.OpenPayment(
-                                    result.paymentRequest,
-                                    publicKey,
-                                    result.privatePaymentContext,
-                                    result.endpoints,
+            try {
+                privatePaykitRepo.beginSavedContactPayment(publicKey)
+                    .onSuccess { result ->
+                        when (result) {
+                            is PublicPaykitPaymentResult.Opened ->
+                                _effects.emit(
+                                    SendContactSelectEffect.OpenPayment(
+                                        result.paymentRequest,
+                                        publicKey,
+                                        result.privatePaymentContext,
+                                        result.endpoints,
+                                    )
                                 )
-                            )
-                        PublicPaykitPaymentResult.NoEndpoint ->
-                            showPayError(R.string.slashtags__error_pay_empty_msg)
-                        PublicPaykitPaymentResult.NotOpened ->
-                            showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.PrivateLinkPending,
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
-                        ->
-                            showPayError(R.string.slashtags__error_pay_waiting_msg)
+                            PublicPaykitPaymentResult.NoEndpoint ->
+                                showPayError(R.string.slashtags__error_pay_empty_msg)
+                            PublicPaykitPaymentResult.NotOpened ->
+                                showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                            PublicPaykitPaymentResult.PrivateLinkPending,
+                            PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
+                            ->
+                                showPayError(R.string.slashtags__error_pay_waiting_msg)
+                        }
                     }
-                }
-                .onFailure {
-                    Logger.warn("Failed to begin contact payment", it, context = TAG)
-                    showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                }
-            _uiState.update { it.copy(isResolvingPayment = false) }
+                    .onFailure {
+                        Logger.warn("Failed to begin contact payment", it, context = TAG)
+                        showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                    }
+            } finally {
+                _uiState.update { it.copy(resolvingPublicKey = null) }
+            }
         }
     }
 
@@ -114,7 +117,7 @@ class SendContactSelectViewModel @Inject constructor(
 data class SendContactSelectUiState(
     val contacts: ImmutableList<PubkyProfile> = persistentListOf(),
     val isLoading: Boolean = false,
-    val isResolvingPayment: Boolean = false,
+    val resolvingPublicKey: String? = null,
 )
 
 sealed interface SendContactSelectEffect {

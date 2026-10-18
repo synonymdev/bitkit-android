@@ -2,10 +2,15 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -17,6 +22,10 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
@@ -39,6 +48,8 @@ import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.AppThemeSurface
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -298,6 +309,32 @@ class PaymentRequestsScreenTest {
         }
 
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertDoesNotExist()
+    }
+
+    @Test
+    fun longReceiptStatusKeepsContactAndExactAmountReadable() {
+        val status = "Płatność zweryfikowana · 0.001647 USDT"
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                    Box(Modifier.width(320.dp)) {
+                        PaymentRequestCard(
+                            request = request().copy(amount = PaykitAmount(PaykitAsset.USDT, 1_647u)),
+                            contact = PubkyProfile.forDisplay(request().counterparty, "Alice", imageUrl = null),
+                            fiatStatus = status,
+                        )
+                    }
+                }
+            }
+        }
+        for (text in listOf("Alice", status)) {
+            val results = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            assertTrue(results.isNotEmpty())
+            assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation")
+        }
     }
 
     private fun setOutgoingRequestContent(primaryDisplay: PrimaryDisplay) {

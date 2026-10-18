@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -89,7 +90,7 @@ fun PaykitUsdtReview(
         UsdtActivityDetail(transfer, settings.hideBalance, wallet.address) { details = false }
     } else {
         Column(
-            Modifier.sheetHeight().background(Colors.Gray7)
+            Modifier.sheetHeight().background(Colors.Gray7).navigationBarsPadding()
         ) {
             if (state.authenticationRequired) {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {

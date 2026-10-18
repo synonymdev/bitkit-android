@@ -57,7 +57,7 @@ fun SendContactSelectScreen(
 }
 
 @Composable
-private fun SendContactSelectContent(
+internal fun SendContactSelectContent(
     uiState: SendContactSelectUiState,
     onBack: () -> Unit = {},
     onContactClick: (String) -> Unit = {},
@@ -100,6 +100,7 @@ private fun SendContactSelectContent(
 
             else -> SendContactList(
                 contacts = uiState.contacts,
+                resolvingPublicKey = uiState.resolvingPublicKey,
                 onContactClick = onContactClick,
             )
         }
@@ -109,6 +110,7 @@ private fun SendContactSelectContent(
 @Composable
 private fun SendContactList(
     contacts: ImmutableList<PubkyProfile>,
+    resolvingPublicKey: String?,
     onContactClick: (String) -> Unit,
 ) {
     LazyColumn(
@@ -119,6 +121,8 @@ private fun SendContactList(
         items(contacts, key = { it.publicKey }) { contact ->
             PubkyContactRow(
                 profile = contact,
+                isEnabled = resolvingPublicKey == null,
+                isLoading = resolvingPublicKey == contact.publicKey,
                 onClick = { onContactClick(contact.publicKey) },
                 modifier = Modifier.testTag("SendContact_${contact.publicKey}")
             )

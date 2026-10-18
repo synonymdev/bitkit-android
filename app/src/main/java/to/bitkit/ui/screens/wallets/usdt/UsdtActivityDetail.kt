@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -178,7 +179,7 @@ internal fun UsdtActivityDetail(
         if (showDetails && (transfer.txHash != null || canOpenDeposits)) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.navigationBarsPadding().padding(16.dp)
             ) {
                 if (canOpenDeposits) {
                     PrimaryButton(

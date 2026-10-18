@@ -19,5 +19,6 @@
     <action>On the payer, wait for preparation to finish and swipe to pay the 5,000 sats request</action>
     <action>On the requester, close any received-payment sheet covering the Sent receipt, leaving the receipt open underneath</action>
     <action>Keep the requester foregrounded through its existing Paykit synchronization; after the protocol payment proof arrives, verify the same Sent receipt shows "Proof submitted" instead of "Waiting for payment", while its PAYMENT REQUESTED heading remains unchanged</action>
+    <action>Open existing USDT payment request history with a verified receipt containing an exact six-decimal amount. With enlarged text and a long translated verification status, verify the contact name stays readable and the complete status wraps within the amount column. Repeat for a BTC-denominated request paid in USDT.</action>
   </actions>
 </journey>

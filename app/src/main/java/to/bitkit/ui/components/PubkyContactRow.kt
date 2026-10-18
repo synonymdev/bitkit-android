@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
@@ -32,6 +33,7 @@ fun PubkyContactRow(
     modifier: Modifier = Modifier,
     isSelected: Boolean? = null,
     isEnabled: Boolean = true,
+    isLoading: Boolean = false,
     verticalPadding: Dp = 12.dp,
     selectionColor: Color = Colors.PubkyGreen,
 ) {
@@ -41,17 +43,11 @@ fun PubkyContactRow(
         modifier = modifier
             .fillMaxWidth()
             .clickableAlpha(enabled = isEnabled, onClick = onClick)
-            .then(
-                if (isSelected == null) {
-                    Modifier
-                } else {
-                    Modifier.semantics {
-                        role = Role.RadioButton
-                        selected = isSelected
-                        if (!isEnabled) disabled()
-                    }
-                }
-            )
+            .semantics {
+                role = if (isSelected == null) Role.Button else Role.RadioButton
+                isSelected?.let { selected = it }
+                if (!isEnabled) disabled()
+            }
             .padding(vertical = verticalPadding)
     ) {
         PubkyContactAvatar(profile = profile)
@@ -71,7 +67,11 @@ fun PubkyContactRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (isSelected == true) {
+        if (isLoading) {
+            GradientCircularProgressIndicator(
+                modifier = Modifier.size(24.dp).testTag("SendContactLoading_${profile.publicKey}")
+            )
+        } else if (isSelected == true) {
             Icon(
                 painter = painterResource(R.drawable.ic_check),
                 contentDescription = null,

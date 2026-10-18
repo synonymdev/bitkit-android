@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -90,6 +91,7 @@ fun MoneyCell(
         primary?.let { text ->
             BodyMSB(
                 text = (if (primaryIsReplaced) text else "$prefix$text").withAccent(accentColor = Colors.White64),
+                textAlign = TextAlign.End,
                 modifier = Modifier.testTag("MoneyPrimary"),
             )
         }
@@ -97,6 +99,7 @@ fun MoneyCell(
             CaptionB(
                 text = text.withAccent(accentColor = Colors.White64),
                 color = Colors.White64,
+                textAlign = TextAlign.End,
                 modifier = Modifier.testTag("MoneySecondary"),
             )
         }

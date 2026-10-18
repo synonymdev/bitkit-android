@@ -5,7 +5,7 @@
     <action>Open USDT from Home. Verify the USDT balance, teal Tether icon and existing activity rows.</action>
     <action>Open Receive. Verify Receive Dollars, the USDT tab and Network: Arbitrum One on the QR screen.</action>
     <action>Tap Edit, enter 5 and tap Back. Verify the QR has no uint256 amount.</action>
-    <action>Tap Edit. Enter 3.5. Verify the dollar amount and BTC equivalent are displayed, there is no input-unit toggle, the keypad follows the divider, and Continue stays at the bottom without overlap.</action>
+    <action>Tap Edit. Enter 3.50. Verify the dollar amount and BTC equivalent are displayed, there is no input-unit toggle, the keypad follows the divider, and Continue stays at the bottom without overlap.</action>
     <action>Continue to the QR. Verify it requests the Arbitrum USDT token, the wallet address and uint256=3500000, never Bitcoin.</action>
     <action>Tap Edit, enter a different amount and tap Back. Verify the QR still requests uint256=3500000.</action>
     <action>Tap Copy on the QR screen and verify the clipboard contains only the receiving address. Tap the QR and verify it copies the same address, while the QR still encodes the payment URI including uint256=3500000.</action>

@@ -625,6 +625,7 @@ internal fun PaymentRequestCard(
                 prefix = amountPrefix,
                 showBitcoinSymbol = showBitcoinSymbol,
                 status = paymentRequestAmountStatus(request, receipt, fiatStatus),
+                modifier = Modifier.weight(1f)
             )
         }
         if (onPay != null || onDismiss != null) {

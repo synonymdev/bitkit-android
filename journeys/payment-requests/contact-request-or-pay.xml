@@ -16,5 +16,6 @@
     <action>Verify the Request or Pay sheet (testTag "RequestOrPaySheet") appears</action>
     <action>Tap Request on the sheet</action>
     <action>Verify the Payment Request amount screen (testTag "PaymentRequestAmount") opens</action>
+    <action>Open Send and choose Contact. Tap a saved contact and verify its row shows loading feedback while payment details resolve; other contacts cannot be selected meanwhile. When resolution finishes, verify the amount screen opens. If resolution fails, verify the error is shown and contact selection becomes available for retry. Cancel without paying.</action>
   </actions>
 </journey>
