@@ -3,6 +3,10 @@ package to.bitkit.ui.screens.wallets.send
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -40,7 +44,12 @@ class SendContactSelectScreenTest {
         }
         composeTestRule.onNodeWithTag("SendContactLoading_alice", useUnmergedTree = true).assertIsDisplayed()
         composeTestRule.onNodeWithTag("SendContactLoading_bob", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("SendContact_bob").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("SendContact_alice").assertIsNotEnabled().assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate)
+        )
+        composeTestRule.onNodeWithTag("SendContact_bob").assertIsNotEnabled().assert(
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.ProgressBarRangeInfo)
+        )
         composeTestRule.runOnIdle { state.value = state.value.copy(resolvingPublicKey = null) }
         composeTestRule.onNodeWithTag("SendContactLoading_alice", useUnmergedTree = true).assertDoesNotExist()
         composeTestRule.onNodeWithTag("SendContact_bob").assertIsEnabled().performClick()

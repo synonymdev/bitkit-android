@@ -133,7 +133,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
         VerticalSpacer(16.dp)
     }
     walletUi.error?.let { BodyS(stringResource(it), color = Colors.Brand) }
-    Content(
+    UsdtDepositReceiveContent(
         page = page,
         onPage = { page = it },
         wallet = wallet,
@@ -174,7 +174,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
 }
 
 @Composable
-private fun ColumnScope.Content(
+internal fun ColumnScope.UsdtDepositReceiveContent(
     page: ReceivePage,
     onPage: (ReceivePage) -> Unit,
     wallet: UsdtWalletState,
@@ -234,7 +234,7 @@ private fun ColumnScope.Content(
     }
 }
 
-private enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
+internal enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
 
 @Composable
 private fun ColumnScope.NetworkSelector(

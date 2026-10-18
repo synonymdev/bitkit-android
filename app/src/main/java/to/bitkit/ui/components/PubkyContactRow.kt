@@ -13,8 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -47,6 +49,7 @@ fun PubkyContactRow(
                 role = if (isSelected == null) Role.Button else Role.RadioButton
                 isSelected?.let { selected = it }
                 if (!isEnabled) disabled()
+                if (isLoading) progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
             }
             .padding(vertical = verticalPadding)
     ) {

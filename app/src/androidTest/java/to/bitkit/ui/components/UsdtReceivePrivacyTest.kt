@@ -41,6 +41,10 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.test.annotations.ComposeUi
+import to.bitkit.repositories.UsdtWalletState
+import to.bitkit.ui.screens.wallets.usdt.DepositUiState
+import to.bitkit.ui.screens.wallets.usdt.UsdtDepositReceiveContent
+import to.bitkit.ui.screens.wallets.usdt.ReceivePage
 import to.bitkit.ui.screens.wallets.usdt.UsdtReceiveContent
 import to.bitkit.ui.sheets.NewTransactionSheetView
 import to.bitkit.ui.theme.AppThemeSurface
@@ -75,7 +79,8 @@ class UsdtReceivePrivacyTest {
         val polygonUri = "ethereum:0xc2132D05D31c914a87C6611C10748AEb04B58e8F@137/transfer?address=$deposit"
         val cases = listOf(
             ReceiveCase(wallet, "Arbitrum One", arbitrumUri),
-            ReceiveCase(wallet, "Arbitrum One", "$arbitrumUri&uint256=1234567", "1.234567"),
+            ReceiveCase(wallet, "Arbitrum One", "$arbitrumUri&uint256=3500000", "3.5", "3.50"),
+            ReceiveCase(wallet, "Arbitrum One", "$arbitrumUri&uint256=1", "0.000001", "0.000001"),
             ReceiveCase(deposit, "Polygon", "$polygonUri&uint256=3500000", "3.5"),
             ReceiveCase(wallet, "Arbitrum One", arbitrumUri),
         )
@@ -94,7 +99,23 @@ class UsdtReceivePrivacyTest {
                 AppThemeSurface {
                     Column {
                         val receive = current.value
-                        UsdtReceiveContent(receive.address, receive.uri, null, receive.network, {}, {}, receive.amount)
+                        if (receive.inputAmount != null) {
+                            UsdtDepositReceiveContent(
+                                page = ReceivePage.ADDRESS,
+                                onPage = {},
+                                wallet = UsdtWalletState(address = wallet, receiveUri = arbitrumUri),
+                                receiveError = null,
+                                state = DepositUiState(),
+                                amount = receive.inputAmount,
+                                onNetwork = {},
+                                onAmount = {},
+                                onCreate = {},
+                                onHistory = {},
+                                onRefresh = {},
+                            )
+                        } else {
+                            UsdtReceiveContent(receive.address, receive.uri, null, receive.network, {}, {}, receive.amount)
+                        }
                     }
                 }
             }
@@ -142,7 +163,13 @@ class UsdtReceivePrivacyTest {
         }
     }
 
-    private data class ReceiveCase(val address: String, val network: String, val uri: String, val amount: String = "")
+    private data class ReceiveCase(
+        val address: String,
+        val network: String,
+        val uri: String,
+        val amount: String = "",
+        val inputAmount: String? = null,
+    )
 
     @Test
     fun incomingPaymentHonorsHiddenBalance() {
