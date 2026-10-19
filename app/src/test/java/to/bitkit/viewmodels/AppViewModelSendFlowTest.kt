@@ -27,6 +27,7 @@ import com.synonym.bitkitcore.ValidationResult
 import com.synonym.paykit.ConversionRate
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentConversionQuoteRecord
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
@@ -13532,6 +13533,117 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.sendUiState.value.isAmountInputValid)
         assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
         assertFalse(sut.sendUiState.value.shouldConfirmPay)
+        verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `quoted Bitcoin wallet switches stay on confirmation and bind the new amount`() = test {
+        usdtEnabled.value = false
+        val lnurl = LnurlPayData(
+            uri = "lnurl1request",
+            callback = "https://example.com/pay",
+            minSendable = 1_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val endpoints = listOf(
+            Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS),
+            Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = ""),
+        )
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 250u),
+            pricing = PaykitRequestPricing(
+                PaymentConversion.Fixed(
+                    listOf(ConversionRate("btc", "0.00001"), ConversionRate("btc-lightning", "0.00002")),
+                ),
+            ),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
+        sut.openContactPayment(REGTEST_ADDRESS, testPublicKey, incomingPaymentRequest = request, endpoints = endpoints)
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(5_000uL, sut.sendUiState.value.amount)
+        sut.sendEffect.test {
+            for ((method, amount) in listOf(SendMethod.ONCHAIN to 2_500uL, SendMethod.LIGHTNING to 5_000uL)) {
+                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                advanceUntilIdle()
+                expectNoEvents()
+                assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+                assertEquals(method, sut.sendUiState.value.payMethod)
+                assertEquals(amount, sut.sendUiState.value.amount)
+                assertTrue(sut.sendUiState.value.isAmountInputValid)
+                assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            }
+        }
+        verify(paykitPaymentRequestRepo, never()).accept(request)
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `quoted Bitcoin switches return to amount when target terms cannot be reviewed`() = test {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1request",
+            callback = "https://example.com/pay",
+            minSendable = 1_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val endpoints = listOf(
+            Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS),
+            Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = ""),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        for (failure in listOf("minimum", "expired", "unavailable")) {
+            val request = paymentRequest().copy(
+                amount = PaykitAmount(PaykitAsset.USD, 250u),
+                pricing = PaykitRequestPricing(
+                    PaymentConversion.Fixed(
+                        listOf(ConversionRate(MethodId.P2wpkh.rawValue.substringBeforeLast("-"), "0.00001")),
+                    ),
+                ),
+                acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+            )
+            setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request, endpoints = endpoints)
+            setUnifiedState(amount = 2_500u, payMethod = SendMethod.ONCHAIN)
+            setSendState(sut.sendUiState.value.copy(lnurl = LnurlParams.LnurlPay(lnurl)))
+            sut.sendEffect.test(name = failure) {
+                sut.setSendEvent(SendEvent.AmountContinue)
+                advanceUntilIdle()
+                assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+                val target = request.copy(
+                    pricing = PaykitRequestPricing(
+                        PaymentConversion.Fixed(
+                            listOf(
+                                ConversionRate(MethodId.P2wpkh.rawValue.substringBeforeLast("-"), "0.00001"),
+                                ConversionRate("btc-lightning", if (failure == "minimum") "0.000001" else "0.00002"),
+                            ),
+                        ),
+                        deadline = if (failure == "expired") PaymentDeadline.At("2000-01-01T00:00:00Z") else null,
+                    ),
+                ).takeUnless { failure == "unavailable" } ?: request
+                setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = target, endpoints = endpoints)
+                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                advanceUntilIdle()
+                assertEquals(SendEffect.NavigateToAmount, awaitItem())
+                assertFalse(sut.sendUiState.value.shouldConfirmPay)
+                expectNoEvents()
+            }
+        }
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
     }
