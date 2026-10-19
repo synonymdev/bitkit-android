@@ -31,6 +31,7 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
@@ -59,6 +60,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val pubkySwapRepo = mock<PubkySwapRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
@@ -81,6 +83,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
+        whenever { pubkySwapRepo.disconnectForWipe() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitAddressReservationRepo.clear() }.thenReturn(Unit)
@@ -102,6 +105,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             hwWalletRepo = hwWalletRepo,
             lightningRepo = lightningRepo,
             pubkyRepo = pubkyRepo,
+            pubkySwapRepo = pubkySwapRepo,
             privatePaykitRepo = privatePaykitRepoProvider,
             privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
             firebaseMessaging = firebaseMessaging,
@@ -133,6 +137,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             hwWalletRepo,
             lightningRepo,
             pubkyRepo,
+            pubkySwapRepo,
             privatePaykitRepo,
             privatePaykitAddressReservationRepo,
             migrationService,
@@ -148,6 +153,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
         inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
+        inOrder.verify(pubkySwapRepo).disconnectForWipe()
         inOrder.verify(pubkyRepo).wipeLocalState()
         inOrder.verify(usdtRepo).wipe(any())
         inOrder.verify(keychain).wipe()

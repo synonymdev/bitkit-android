@@ -16,6 +16,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
@@ -43,6 +44,7 @@ class WipeWalletUseCase @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,
     private val lightningRepo: LightningRepo,
     private val pubkyRepo: PubkyRepo,
+    private val pubkySwapRepo: PubkySwapRepo,
     private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
     private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val firebaseMessaging: FirebaseMessaging,
@@ -98,6 +100,7 @@ class WipeWalletUseCase @Inject constructor(
         step("clear post-migration sync flag") { migrationService.setNeedsPostMigrationSync(false) }
         step("clear migration data") { migrationService.cleanupAfterMigration() }
         step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }
+        step("disconnect Pubky swap provider") { pubkySwapRepo.disconnectForWipe() }
         step("wipe Pubky local state") { pubkyRepo.wipeLocalState() }
         val keychainWiped = step("wipe USDT and keychain") { usdtRepo.wipe { keychain.wipe() } }
         step("delete FCM token") { firebaseMessaging.deleteToken() }
