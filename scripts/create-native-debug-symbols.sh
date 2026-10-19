@@ -38,10 +38,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Sets new_tmp_dir instead of printing it: a $(...) caller would run in a subshell and never
+# register the directory for cleanup.
 make_tmp_dir() {
-    dir=$(mktemp -d)
-    tmp_dirs="$tmp_dirs $dir"
-    echo "$dir"
+    new_tmp_dir=$(mktemp -d)
+    tmp_dirs="$tmp_dirs $new_tmp_dir"
 }
 
 local_properties_value() {
@@ -129,7 +130,8 @@ build_id() {
 # must carry the same Build ID as its symbol file.
 validate_symbols_match_shipped_libs() {
     root="$1"
-    shipped_root=$(make_tmp_dir)
+    make_tmp_dir
+    shipped_root=$new_tmp_dir
     checked=0
 
     for artifact in "$shipped_dir"/*.aab "$shipped_dir"/*.apk; do
@@ -252,7 +254,8 @@ validate_output_zip() {
     archive="$1"
     zip -T "$archive" >/dev/null
 
-    tmp_dir=$(make_tmp_dir)
+    make_tmp_dir
+    tmp_dir=$new_tmp_dir
     for abi in arm64-v8a armeabi-v7a; do
         for lib_name in $required_libs; do
             extract_archive_lib "$archive" "$tmp_dir" "$abi" "$lib_name"
@@ -283,7 +286,8 @@ create_output_zip_from_tree() {
 }
 
 if [ -d "$dependency_symbols_dir" ]; then
-    tmp_dir=$(make_tmp_dir)
+    make_tmp_dir
+    tmp_dir=$new_tmp_dir
     found_archive=false
 
     for archive in "$dependency_symbols_dir"/*.zip; do
@@ -325,7 +329,8 @@ if [ -z "$native_lib_dir" ]; then
     exit 1
 fi
 
-tmp_dir=$(make_tmp_dir)
+make_tmp_dir
+tmp_dir=$new_tmp_dir
 
 for abi in arm64-v8a armeabi-v7a; do
     source_dir="$native_lib_dir/$abi"
