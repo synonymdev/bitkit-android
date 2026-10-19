@@ -1554,7 +1554,7 @@ class AppViewModel @Inject constructor(
             val result = finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
             Logger.debug(
                 "Paykit request preparation: resolveMs=${resolvedAfter.inWholeMilliseconds} " +
-                    "setupMs=${(started.elapsedNow() - resolvedAfter).inWholeMilliseconds}",
+                    "dispatchMs=${(started.elapsedNow() - resolvedAfter).inWholeMilliseconds}",
                 context = TAG,
             )
             return result

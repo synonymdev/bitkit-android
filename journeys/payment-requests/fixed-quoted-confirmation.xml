@@ -3,6 +3,7 @@
   <actions>
     <action>Disable USDT on the payer. Create a fixed 2.50 USD request accepting Bitcoin, then open it on the payer.</action>
     <action>Verify Preparing changes directly to Confirm without showing a disabled Amount keypad. Verify the exact BTC amount follows the request quote, the fiat equivalent uses the payer wallet rate, and the fee is shown before payment is enabled.</action>
+    <action>Choose a non-default automatic coin-selection setting, open a fixed quoted Savings request and verify the selected coins and fee follow that setting. Close, choose manual coin selection and reopen; verify the coin picker appears before payment can be approved. Close without paying.</action>
     <action>Verify the requested amount cannot be edited and payment does not start without the confirmation swipe. Close the sheet and verify the unpaid request remains available to reopen.</action>
     <action>Reopen the same request, then close while Preparing is visible. Verify late completion does not reopen the sheet or start a payment. Reopen once more and verify confirmation is usable.</action>
     <action>Open a request whose BTC amount exceeds the payer balance. Verify payment cannot be authorized. Close without paying.</action>
