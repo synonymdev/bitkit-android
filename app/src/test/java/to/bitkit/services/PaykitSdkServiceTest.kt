@@ -105,7 +105,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
-@Suppress("LargeClass")
 class PaykitSdkServiceTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
@@ -2627,7 +2626,7 @@ class PaykitSdkServiceTest {
         failRecovery = false
         val complete = service.clearPrivatePaymentLists(keys)
         assertTrue(complete?.failedToQueue?.isEmpty() == true)
-        assertEquals(keys, complete?.cleared?.map { it.counterparty })
+        assertEquals(keys, complete.cleared.map { it.counterparty })
         inOrder(sdk) {
             verify(sdk).ensureLinkWithPeer(RING_PUBKY, 1u)
             verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)

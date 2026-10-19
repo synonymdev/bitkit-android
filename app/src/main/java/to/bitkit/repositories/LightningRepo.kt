@@ -118,7 +118,6 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @Singleton
-@Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
 class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
@@ -330,7 +329,6 @@ class LightningRepo @Inject constructor(
         Logger.warn("fetchTrustedPeers error", it, context = TAG)
     }.getOrNull()
 
-    @Suppress("LongParameterList")
     suspend fun start(
         walletIndex: Int = 0,
         timeout: Duration? = null,
@@ -352,7 +350,6 @@ class LightningRepo @Inject constructor(
         shouldRetryYieldToStop = false,
     )
 
-    @Suppress("LongMethod", "LongParameterList")
     private suspend fun startNode(
         walletIndex: Int = 0,
         timeout: Duration? = null,
@@ -569,7 +566,8 @@ class LightningRepo @Inject constructor(
         if (observedTxid != null) {
             runSuspendCatching {
                 val observed = onchainSendAttemptStore.observeExactTransaction(
-                    observedTxid, isConfirmed = event is Event.OnchainTransactionConfirmed,
+                    observedTxid,
+                    isConfirmed = event is Event.OnchainTransactionConfirmed,
                 )
                 val attempt = observed ?: onchainSendAttemptStore.current()
                 if (attempt != null && attempt.txid.equals(observedTxid, ignoreCase = true) &&
@@ -772,7 +770,6 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("sync") {
         // If sync is in progress, mark pending and skip
         if (!syncMutex.tryLock()) {
@@ -1495,7 +1492,6 @@ class LightningRepo @Inject constructor(
         delay(NO_USABLE_CHANNELS_FEEDBACK_DELAY)
     }
 
-    @Suppress("LongParameterList")
     suspend fun sendOnChain(
         address: Address,
         sats: ULong,
@@ -1680,8 +1676,10 @@ class LightningRepo @Inject constructor(
         if (!outcomePersisted) {
             runSuspendCatching {
                 val durable = requireNotNull(onchainSendAttemptStore.currentDurable())
-                check(durable.attemptId == recorded.attemptId && durable.walletId == recorded.walletId &&
-                    durable.hasPositiveEvidence && durable.txid.equals(txId, true)) {
+                check(
+                    durable.attemptId == recorded.attemptId && durable.walletId == recorded.walletId &&
+                        durable.hasPositiveEvidence && durable.txid.equals(txId, true)
+                ) {
                     "Accepted on-chain outcome repair is not durable"
                 }
             }.getOrElse {
@@ -1702,7 +1700,8 @@ class LightningRepo @Inject constructor(
 
                 override suspend fun prepareRecovery(
                     attempt: OnchainSendAttempt,
-                    feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?,
+                    feeRateSatsPerVByte: ULong,
+                    paymentDeadlineAt: Instant?,
                 ): PreparedOnchainSend {
                     val inputs = requireNotNull(attempt.originalInputs)
                     // The saved signed receipt is the input identity. Native preparation resolves
@@ -1734,7 +1733,12 @@ class LightningRepo @Inject constructor(
         authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("retryOriginalOnchainSend") {
         val result = recoveryCoordinator.retryOriginal(
-            attemptId, walletId, feeRateSatsPerVByte, paymentDeadlineAt, approvePrepared, authorizeOriginal,
+            attemptId,
+            walletId,
+            feeRateSatsPerVByte,
+            paymentDeadlineAt,
+            approvePrepared,
+            authorizeOriginal,
         )
         val accepted = result.getOrNull() as? OnchainSendOutcome.Accepted
         if (accepted != null) {
@@ -1747,8 +1751,10 @@ class LightningRepo @Inject constructor(
             }.onFailure { Logger.warn("Failed to finish recovered on-chain send locally", it, context = TAG) }
             runSuspendCatching {
                 val durable = requireNotNull(onchainSendAttemptStore.currentDurable())
-                check(durable.attemptId == attemptId && durable.walletId == walletId &&
-                    durable.hasPositiveEvidence && durable.txid.equals(accepted.txid, true)) {
+                check(
+                    durable.attemptId == attemptId && durable.walletId == walletId &&
+                        durable.hasPositiveEvidence && durable.txid.equals(accepted.txid, true)
+                ) {
                     "Recovered on-chain outcome is not durable"
                 }
             }.getOrElse {
@@ -1769,8 +1775,10 @@ class LightningRepo @Inject constructor(
         }
         val txId = requireNotNull(attempt.txid) { "On-chain send has no transaction id" }
         val isSuccessor = attempt.candidateTxids.isNotEmpty() && !txId.equals(attempt.candidateTxids.first(), true)
-        val needsExactFee = attempt.verifiedWinningFeeSats == null && (isSuccessor ||
-            (attempt.candidateTxids.isNotEmpty() && originalFollowup?.feeSats?.toULongOrNull() == 0uL))
+        val needsExactFee = attempt.verifiedWinningFeeSats == null && (
+            isSuccessor ||
+                (attempt.candidateTxids.isNotEmpty() && originalFollowup?.feeSats?.toULongOrNull() == 0uL)
+            )
         val fee = attempt.verifiedWinningFeeSats ?: if (needsExactFee) {
             requireNotNull(winningCandidateFee(attempt)) {
                 "Winning transaction fee is unavailable"
@@ -1806,7 +1814,12 @@ class LightningRepo @Inject constructor(
             coreService.activity.restoreSentOnchainContact(txId, attempt.walletId, originalContact)
         }
         if (needsExactFee || attempt.verifiedWinningFeeSats != null) {
-            coreService.activity.repairVerifiedSentOnchainFee(txId, attempt.walletId, fee, attempt.winningFeeRateSatsPerVByte)
+            coreService.activity.repairVerifiedSentOnchainFee(
+                txId,
+                attempt.walletId,
+                fee,
+                attempt.winningFeeRateSatsPerVByte
+            )
         }
         check(coreService.activity.getOnchainActivityByTxId(txId, attempt.walletId) != null) {
             "Accepted on-chain transaction has no durable local activity"
@@ -1827,7 +1840,9 @@ class LightningRepo @Inject constructor(
                 val attempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull() ?: return@launch
                 if (!attempt.hasPositiveEvidence || attempt.localFollowupComplete ||
                     attempt.isTransfer || attempt.requestId != null
-                ) return@launch
+                ) {
+                    return@launch
+                }
                 completeAcceptedOrdinaryFollowup(requireNotNull(attempt.txid))
             }
         }

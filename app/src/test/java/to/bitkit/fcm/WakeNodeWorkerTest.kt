@@ -93,7 +93,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         assertEquals(ListenableWorker.Result.success(), result)
         val notification = findNotificationByTitle(receivedTitle)
         assertNotNull(notification, "CJIT notification should be delivered when app is killed")
-        assertEquals(body, notification?.extras?.getString(Notification.EXTRA_TEXT))
+        assertEquals(body, notification.extras?.getString(Notification.EXTRA_TEXT))
         verify(activityRepo).insertActivityFromCjit(any(), any())
     }
 
@@ -173,7 +173,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         assertEquals(ListenableWorker.Result.success(), result)
         val notification = findNotificationByTitle(title)
         assertNotNull(notification, "Payment notification should be delivered when app is killed")
-        assertEquals(body, notification?.extras?.getString(Notification.EXTRA_TEXT))
+        assertEquals(body, notification.extras?.getString(Notification.EXTRA_TEXT))
     }
 
     @Test

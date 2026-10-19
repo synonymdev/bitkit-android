@@ -88,7 +88,6 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
-@Suppress("LargeClass")
 class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     companion object {
         private const val CONTACT_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"

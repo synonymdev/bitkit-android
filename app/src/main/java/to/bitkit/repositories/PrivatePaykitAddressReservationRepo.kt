@@ -34,7 +34,6 @@ sealed class PrivatePaykitAddressReservationError(message: String) : AppError(me
 }
 
 @Singleton
-@Suppress("TooManyFunctions")
 class PrivatePaykitAddressReservationRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val reservationStore: PrivatePaykitReservationStore,

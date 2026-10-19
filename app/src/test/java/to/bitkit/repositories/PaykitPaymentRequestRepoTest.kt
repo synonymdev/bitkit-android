@@ -2705,7 +2705,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    @Suppress("LongMethod") // Keep the reload, original receipt and guarded variants in one regression.
     fun `refused retained hardware request remains reopenable after proof store reload`() = test {
         restoreAcceptedRequest()
         val record = paymentRequestRecord(
@@ -2790,7 +2789,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.activate(LOCAL_IDENTITY)
     }
 
-    @Suppress("LongParameterList")
     private fun paymentRequestRecord(
         id: String = PAYMENT_REQUEST_ID,
         role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYER,

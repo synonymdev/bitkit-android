@@ -102,7 +102,6 @@ import kotlin.time.Instant
 import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
-@Suppress("LargeClass")
 class PubkyRepoTest : BaseUnitTest() {
     companion object {
         /** Public reads `PaykitSdkService` runs at once. */

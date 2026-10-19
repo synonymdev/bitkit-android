@@ -1,4 +1,3 @@
-@file:Suppress("TooManyFunctions")
 
 package to.bitkit.ui.components
 

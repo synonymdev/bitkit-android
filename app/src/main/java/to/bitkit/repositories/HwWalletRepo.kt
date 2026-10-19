@@ -88,7 +88,6 @@ import kotlin.time.Instant
  * touches a device is routed by the vendor of the wallet's stored entry. The watcher and
  * on-chain transport is vendor neutral and lives in [TrezorRepo].
  */
-@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
@@ -891,7 +890,9 @@ class HwWalletRepo @Inject constructor(
     ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
         runSuspendCatching {
             val txId = trezorRepo.broadcastRawTxAtBoundary(
-                signedTx.serializedTx, paymentDeadlineAt, beforeNativeBroadcast
+                signedTx.serializedTx,
+                paymentDeadlineAt,
+                beforeNativeBroadcast
             ).getOrThrow()
             HwFundingBroadcastResult(txId, signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent)
         }

@@ -6,23 +6,23 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendAbandonPendingError
 import to.bitkit.repositories.OnchainSendAbandonSyncError
 import to.bitkit.repositories.OnchainSendAttempt
@@ -81,8 +81,8 @@ class SendPendingViewModel @Inject constructor(
                 }
                 val matchesOriginalWallet = walletId == WalletScope.default && attempt?.walletId == walletId
                 val hasOriginalReceipt = !attempt?.originalInputs.isNullOrEmpty() &&
-                    attempt?.candidateTxids?.any { it.equals(txid, true) } == true
-                if (matchesOriginalWallet && hasOriginalReceipt && attempt != null) {
+                    attempt.candidateTxids.any { it.equals(txid, true) }
+                if (matchesOriginalWallet && hasOriginalReceipt) {
                     if (attempt.isUnresolved) _uiState.update { it.copy(recoveryAttempt = attempt) }
                     observeOriginalCompletion(attempt)
                     offerAbandonIfRequestEnded(attempt)
@@ -149,7 +149,9 @@ class SendPendingViewModel @Inject constructor(
                 val result = runSuspendCatching { retry(original, feeRateSatsPerVByte).getOrThrow() }
                 result.onSuccess { outcome ->
                     val completed = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
-                        ?.takeIf { it.hasPositiveEvidence && it.localFollowupComplete && it.matchesOriginalRoute(original) }
+                        ?.takeIf {
+                            it.hasPositiveEvidence && it.localFollowupComplete && it.matchesOriginalRoute(original)
+                        }
                     _uiState.update {
                         if (it.recoveredTxid != null || it.recoveredTransfer != null) return@update it
                         it.copy(

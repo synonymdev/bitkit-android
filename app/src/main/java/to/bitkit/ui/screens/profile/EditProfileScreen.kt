@@ -87,7 +87,6 @@ fun EditProfileScreen(
     )
 }
 
-@Suppress("LongParameterList")
 @Composable
 private fun Content(
     uiState: EditProfileUiState,

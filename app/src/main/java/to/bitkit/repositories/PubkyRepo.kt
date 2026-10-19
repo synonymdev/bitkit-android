@@ -121,7 +121,6 @@ enum class PubkyIdentityReadiness {
 }
 
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @Singleton
 class PubkyRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -1108,7 +1107,6 @@ class PubkyRepo @Inject constructor(
         Logger.info("Deleted all contacts", context = TAG)
     }
 
-    @Suppress("LongParameterList")
     private suspend fun writeProfile(
         name: String,
         bio: String,
@@ -1332,7 +1330,6 @@ class PubkyRepo @Inject constructor(
      * save that lands after it must not write one back, least of all for the next identity, which may have saved a
      * contact with the same key.
      */
-    @Suppress("LongParameterList")
     suspend fun updateContact(
         signIn: PubkySignIn,
         publicKey: String,

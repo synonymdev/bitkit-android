@@ -58,7 +58,6 @@ import javax.inject.Singleton
  * serial (a CP210x bridge on Jade v1, native USB CDC on Jade Plus) and Bluetooth (Nordic UART
  * Service). Every callback runs on a Rust blocking thread, so blocking here is expected.
  */
-@Suppress("LargeClass", "TooManyFunctions")
 @Singleton
 class JadeTransport @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -227,7 +226,6 @@ class JadeTransport @Inject constructor(
         @Volatile var detached: Boolean = false,
     )
 
-    @Suppress("LongParameterList")
     private class BleConnection(
         val gatt: BluetoothGatt,
         @Volatile var writeCharacteristic: BluetoothGattCharacteristic? = null,
@@ -354,7 +352,6 @@ class JadeTransport @Inject constructor(
             )
         }
 
-    @Suppress("TooGenericExceptionCaught", "ReturnCount")
     private fun openUsbDevice(path: String): JadeTransportResult {
         return try {
             closeUsbDevice(path)
@@ -494,7 +491,6 @@ class JadeTransport @Inject constructor(
         connection.close()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun closeUsbDevice(path: String): JadeTransportResult {
         val device = usbConnections.remove(path) ?: return ok()
         return try {
@@ -513,7 +509,6 @@ class JadeTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun readUsbChunk(path: String, timeoutMs: UInt): JadeTransportReadResult {
         val device = usbConnections[path]
             ?: return readFail("Device not open: '$path'", JadeTransportErrorCode.NOT_CONNECTED)
@@ -545,7 +540,6 @@ class JadeTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun writeUsbChunk(path: String, data: ByteArray): JadeTransportResult {
         val device = usbConnections[path]
             ?: return fail("Device not open: '$path'", JadeTransportErrorCode.NOT_CONNECTED)
@@ -622,7 +616,6 @@ class JadeTransport @Inject constructor(
         }
     }
 
-    @Suppress("ReturnCount")
     @SuppressLint("MissingPermission")
     private fun waitForBonding(device: BluetoothDevice, address: String): JadeTransportResult? {
         when (device.bondState) {
@@ -649,7 +642,6 @@ class JadeTransport @Inject constructor(
         return null
     }
 
-    @Suppress("ReturnCount")
     @SuppressLint("MissingPermission")
     private fun openBleDevice(path: String): JadeTransportResult {
         bleConnections[path]?.takeIf { it.isConnected && it.writeCharacteristic != null }?.let {
@@ -690,7 +682,6 @@ class JadeTransport @Inject constructor(
         return ok()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     @SuppressLint("MissingPermission")
     private fun disconnectBleDevice(path: String): JadeTransportResult {
         val connection = bleConnections[path] ?: return ok()
@@ -741,7 +732,6 @@ class JadeTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught", "ReturnCount")
     @SuppressLint("MissingPermission")
     private fun writeBleChunk(path: String, data: ByteArray): JadeTransportResult {
         val connection = bleConnections[path]

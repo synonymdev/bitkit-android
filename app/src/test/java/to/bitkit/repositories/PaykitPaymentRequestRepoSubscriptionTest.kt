@@ -438,7 +438,6 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertEquals(PaykitPaymentProofKind.Lightning, received.paymentProofKind)
     }
 
-    @Suppress("LongMethod")
     @Test
     fun `creator proposal sends recurring terms and stays queued until delivery`() = test {
         val target = stubSubscriptionProposal()
@@ -1500,7 +1499,6 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         return target
     }
 
-    @Suppress("LongParameterList")
     private fun paymentRequestRecord(
         id: String = PAYMENT_REQUEST_ID,
         role: PaymentRequestLocalRole = PaymentRequestLocalRole.PAYER,

@@ -48,7 +48,6 @@ import kotlin.math.roundToInt
 const val LOADING_MS = 2000
 const val RESTORING_MS = 8000
 
-@Suppress("MagicNumber")
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun InitializingWalletView(

@@ -27,7 +27,6 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
-@Suppress("LongParameterList")
 @Singleton
 class WipeWalletUseCase @Inject constructor(
     private val backupRepo: BackupRepo,
