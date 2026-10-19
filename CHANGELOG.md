@@ -351,8 +351,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
 [Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.0.1...HEAD
-[3.0.1]: https://github.com/synonymdev/bitkit-android/compare/v3.0.0-rc2...v3.0.1
-[3.0.0]: https://github.com/synonymdev/bitkit-android/compare/v2.5.1...v3.0.0
+[3.0.1]: https://github.com/synonymdev/bitkit-android/compare/v3.0.0..v3.0.1
+[3.0.0]: https://github.com/synonymdev/bitkit-android/compare/v2.5.1..v3.0.0
 [2.5.1]: https://github.com/synonymdev/bitkit-android/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/synonymdev/bitkit-android/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/synonymdev/bitkit-android/compare/v2.4.0...v2.4.1
