@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.0] - 2026-10-19
+## [3.0.1] - 2026-10-19
+
+### Fixed
+- Pause automatic Paykit refresh and publication during profile deletion while preserving safe cleanup and recovery. #1510
+- Fixed Pubky sign-in links closing Bitkit or doing nothing while it starts; Bitkit now shows that it is loading your profile until the request opens. #1514
+- On-chain payments are sent again after a dropped Electrum connection instead of failing until the app restarts. #1526
+- Preserved pending USDT payment protection after backup restore and kept bridge support details safely formatted. #1528
+- Pubky sign-in links that open Bitkit now show the Authorize sheet even while your Pubky profile is still loading. #1541
+- Opening another link while a Pubky sign-in is pending no longer drops the sign-in; the other link opens after it. #1542
+- Wallet backups that run while Paykit is busy now retry on their own instead of waiting for the next change or restart. #1550
+- An on-chain payment whose request ended before it reached the network can now be cancelled, which sends its coins back to the wallet so it no longer blocks new on-chain payments. #1551
+- Copy plain USDT receiving addresses and share them with the selected network, requested amount and payment QR code. #1558
+
+## [3.0.0] - 2026-10-16
 
 ### Added
 - Bitkit now shows helpful guidance the first time you switch the displayed balance unit or swipe to hide your wallet balance. #1272
@@ -120,15 +133,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pasting part of a recovery phrase on the restore screen now fills the following word fields instead of being ignored. #896
 - Paying a Lightning invoice created by your own wallet now shows an error, and unified QR codes containing one fall back to an on-chain send. #901
 - Receiving over Lightning now refreshes liquidity requests correctly and avoids showing stale or invalid CJIT quotes.
-- Pause automatic Paykit refresh and publication during profile deletion while preserving safe cleanup and recovery. #1510
-- Fixed Pubky sign-in links closing Bitkit or doing nothing while it starts; Bitkit now shows that it is loading your profile until the request opens. #1514
-- On-chain payments are sent again after a dropped Electrum connection instead of failing until the app restarts. #1526
-- Preserved pending USDT payment protection after backup restore and kept bridge support details safely formatted. #1528
-- Pubky sign-in links that open Bitkit now show the Authorize sheet even while your Pubky profile is still loading. #1541
-- Opening another link while a Pubky sign-in is pending no longer drops the sign-in; the other link opens after it. #1542
-- Wallet backups that run while Paykit is busy now retry on their own instead of waiting for the next change or restart. #1550
-- An on-chain payment whose request ended before it reached the network can now be cancelled, which sends its coins back to the wallet so it no longer blocks new on-chain payments. #1551
-- Copy plain USDT receiving addresses and share them with the selected network, requested amount and payment QR code. #1558
 
 ### Security
 - Paykit payment approvals remain tied to the reviewed proposal when private state changes. #1470
@@ -346,7 +350,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.0.1...HEAD
+[3.0.1]: https://github.com/synonymdev/bitkit-android/compare/v3.0.0-rc2...v3.0.1
 [3.0.0]: https://github.com/synonymdev/bitkit-android/compare/v2.5.1...v3.0.0
 [2.5.1]: https://github.com/synonymdev/bitkit-android/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/synonymdev/bitkit-android/compare/v2.4.1...v2.5.0
