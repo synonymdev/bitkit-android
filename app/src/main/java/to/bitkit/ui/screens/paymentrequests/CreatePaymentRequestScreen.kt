@@ -7,14 +7,16 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -68,7 +70,6 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadAmountText
@@ -192,71 +193,71 @@ internal fun PaymentRequestAmountContent(
                 }
             },
         )
-        BoxWithConstraints(modifier = Modifier.weight(1f)) {
-            val availableHeight = this.maxHeight
-
-            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                VerticalSpacer(16.dp)
-                if (asset == PaykitAsset.BTC) {
-                    NumberPadTextField(
-                        viewModel = amountInputViewModel,
-                        modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountField")
-                    )
-                } else {
-                    NumberPadAmountText(
-                        value = dollars.ifEmpty { "0" }.replace('.', decimalSeparator),
-                        symbol = "$",
-                        modifier = Modifier.testTag("PaymentRequestAmountField")
-                    )
-                }
-                VerticalSpacer(16.dp)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountActions"),
-                ) {
-                    PaymentRequestAssetSelector(
-                        asset = asset,
-                        amount = entered,
-                        allowedAssets = allowedAssets,
-                        conversion = conversion,
-                        onConverted = {
-                            asset = it.asset
-                            if (it.asset == PaykitAsset.BTC) {
-                                amountInputViewModel.setSats(it.atomic.toLong(), currencies)
-                            } else {
-                                dollars = if (it.atomic == 0uL) "" else it.value
-                            }
-                            conversionError = false
-                        },
-                        onUnavailable = { conversionError = true },
-                    )
-                    if (asset == PaykitAsset.BTC) {
-                        UnitButton(
-                            onClick = { amountInputViewModel.switchUnit(currencies) },
-                            color = Colors.Brand,
-                            modifier = Modifier.testTag("PaymentRequestAmountUnit")
-                        )
-                    }
-                }
-                if (conversionError) {
-                    BodyS(
-                        text = stringResource(R.string.wallet__payment_request_rate_unavailable),
-                        color = Colors.White64
-                    )
-                }
-                VerticalSpacer(16.dp)
-                HorizontalDivider(
-                    color = Colors.White10,
-                    modifier = Modifier.testTag("PaymentRequestAmountDivider"),
+        Column(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp)) {
+            VerticalSpacer(16.dp)
+            if (asset == PaykitAsset.BTC) {
+                NumberPadTextField(
+                    viewModel = amountInputViewModel,
+                    modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountField")
                 )
-                FillHeight(min = 16.dp)
+            } else {
+                NumberPadAmountText(
+                    value = dollars.ifEmpty { "0" }.replace('.', decimalSeparator),
+                    symbol = "$",
+                    modifier = Modifier.testTag("PaymentRequestAmountField")
+                )
+            }
+            VerticalSpacer(16.dp)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountActions"),
+            ) {
+                PaymentRequestAssetSelector(
+                    asset = asset,
+                    amount = entered,
+                    allowedAssets = allowedAssets,
+                    conversion = conversion,
+                    onConverted = {
+                        asset = it.asset
+                        if (it.asset == PaykitAsset.BTC) {
+                            amountInputViewModel.setSats(it.atomic.toLong(), currencies)
+                        } else {
+                            dollars = if (it.atomic == 0uL) "" else it.value
+                        }
+                        conversionError = false
+                    },
+                    onUnavailable = { conversionError = true },
+                )
+                if (asset == PaykitAsset.BTC) {
+                    UnitButton(
+                        onClick = { amountInputViewModel.switchUnit(currencies) },
+                        color = Colors.Brand,
+                        modifier = Modifier.testTag("PaymentRequestAmountUnit")
+                    )
+                }
+            }
+            if (conversionError) {
+                BodyS(
+                    text = stringResource(R.string.wallet__payment_request_rate_unavailable),
+                    color = Colors.White64
+                )
+            }
+            VerticalSpacer(16.dp)
+            HorizontalDivider(
+                color = Colors.White10,
+                modifier = Modifier.testTag("PaymentRequestAmountDivider"),
+            )
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 16.dp, bottom = 24.dp),
+            ) {
+                val padModifier = Modifier.heightIn(max = 300.dp).fillMaxHeight().testTag("PaymentRequestNumberPad")
                 if (asset == PaykitAsset.BTC) {
                     NumberPad(
                         viewModel = amountInputViewModel,
                         currencies = currencies,
-                        availableHeight = availableHeight,
-                        modifier = Modifier.testTag("PaymentRequestNumberPad")
+                        modifier = padModifier
                     )
                 } else {
                     NumberPad(
@@ -266,22 +267,20 @@ internal fun PaymentRequestAmountContent(
                             )
                         },
                         type = NumberPadType.DECIMAL,
-                        availableHeight = availableHeight,
                         decimalSeparator = decimalSeparator.toString(),
-                        modifier = Modifier.testTag("PaymentRequestNumberPad")
+                        modifier = padModifier
                     )
                 }
-                FillHeight(min = 24.dp)
-                PrimaryButton(
-                    text = stringResource(R.string.common__continue),
-                    enabled = (entered?.atomic ?: 0uL) > 0uL,
-                    onClick = {
-                        entered?.let { onContinue(initialDraft.copy(amount = it)) }
-                    },
-                    modifier = Modifier.testTag("PaymentRequestAmountContinue"),
-                )
-                VerticalSpacer(16.dp)
             }
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                enabled = (entered?.atomic ?: 0uL) > 0uL,
+                onClick = {
+                    entered?.let { onContinue(initialDraft.copy(amount = it)) }
+                },
+                modifier = Modifier.testTag("PaymentRequestAmountContinue"),
+            )
+            VerticalSpacer(16.dp)
         }
     }
 }

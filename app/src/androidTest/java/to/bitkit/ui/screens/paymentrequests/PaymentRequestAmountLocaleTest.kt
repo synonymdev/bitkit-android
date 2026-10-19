@@ -91,6 +91,7 @@ class PaymentRequestAmountLocaleTest {
     @Test
     fun amountActionsStayAlignedAndReachableOnCompactScreens() {
         val configuration = mutableStateOf(Triple(320, 1f, PaykitAsset.USD))
+        val height = mutableStateOf(520)
         val amountInput = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
             val (width, scale, asset) = configuration.value
@@ -106,15 +107,18 @@ class PaymentRequestAmountLocaleTest {
                         contact = null,
                         onBack = {},
                         onContinue = {},
-                        modifier = Modifier.requiredSize(width.dp, 640.dp)
+                        modifier = Modifier.requiredSize(width.dp, height.value.dp)
                     )
                 }
             }
         }
-        for (width in listOf(320, 375)) {
+        for ((width, screenHeight) in listOf(320 to 520, 375 to 520, 320 to 640, 375 to 640)) {
             for (scale in listOf(1f, 1.6f)) {
                 for (asset in listOf(PaykitAsset.BTC, PaykitAsset.USD)) {
-                    composeTestRule.runOnIdle { configuration.value = Triple(width, scale, asset) }
+                    composeTestRule.runOnIdle {
+                        height.value = screenHeight
+                        configuration.value = Triple(width, scale, asset)
+                    }
                     composeTestRule.waitForIdle()
                     val amount = composeTestRule.onNodeWithTag("PaymentRequestAmountField").fetchSemanticsNode().boundsInRoot
                     val actions = composeTestRule.onNodeWithTag("PaymentRequestAmountActions").fetchSemanticsNode().boundsInRoot
@@ -125,6 +129,9 @@ class PaymentRequestAmountLocaleTest {
                     assertEquals(divider.right, control.right, 1f)
                     assertTrue(actions.top >= amount.bottom && actions.top - amount.bottom <= 34f)
                     assertTrue(divider.top >= actions.bottom)
+                    val continueButton = composeTestRule.onNodeWithTag("PaymentRequestAmountContinue")
+                        .fetchSemanticsNode().boundsInRoot
+                    assertTrue(continueButton.height >= 112f, "Continue must be fully visible")
                     listOf("N1", "N0", "NRemove", "PaymentRequestAmountContinue").forEach {
                         composeTestRule.onNodeWithTag(it).assertIsDisplayed()
                     }
