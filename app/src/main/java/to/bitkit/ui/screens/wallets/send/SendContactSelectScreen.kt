@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.Job
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.Endpoint
@@ -36,7 +37,7 @@ import to.bitkit.ui.theme.Colors
 fun SendContactSelectScreen(
     viewModel: SendContactSelectViewModel,
     onBack: () -> Unit,
-    onOpenPayment: (String, String, PrivatePaykitPaymentContext?, List<Endpoint>) -> Unit,
+    onOpenPayment: (String, String, PrivatePaykitPaymentContext?, List<Endpoint>) -> Job?,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -44,7 +45,9 @@ fun SendContactSelectScreen(
         viewModel.effects.collect {
             when (it) {
                 is SendContactSelectEffect.OpenPayment ->
-                    onOpenPayment(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
+                    viewModel.onPaymentOpening(
+                        onOpenPayment(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
+                    )
             }
         }
     }

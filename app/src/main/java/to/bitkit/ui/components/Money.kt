@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -60,6 +61,7 @@ fun MoneyCell(
     prefix: String = "",
     showBitcoinSymbol: Boolean = true,
     fiatReplacement: String? = null,
+    maxAmountLines: Int = Int.MAX_VALUE,
 ) {
     val currencies = LocalCurrencies.current
     val primaryUnit = currencies.primaryDisplay
@@ -77,7 +79,9 @@ fun MoneyCell(
     )
     val primaryIsReplaced = fiatReplacement != null && primaryUnit == PrimaryDisplay.FIAT
     val primary = if (primaryIsReplaced) fiatReplacement else primaryMoney
-    val secondary = if (fiatReplacement != null && secondaryUnit == PrimaryDisplay.FIAT) {
+    val secondaryIsReplaced = fiatReplacement != null && secondaryUnit == PrimaryDisplay.FIAT
+    val amountOverflow = if (maxAmountLines == Int.MAX_VALUE) TextOverflow.Clip else TextOverflow.Ellipsis
+    val secondary = if (secondaryIsReplaced) {
         fiatReplacement
     } else {
         secondaryMoney
@@ -92,6 +96,8 @@ fun MoneyCell(
             BodyMSB(
                 text = (if (primaryIsReplaced) text else "$prefix$text").withAccent(accentColor = Colors.White64),
                 textAlign = TextAlign.End,
+                maxLines = if (primaryIsReplaced) Int.MAX_VALUE else maxAmountLines,
+                overflow = amountOverflow,
                 modifier = Modifier.testTag("MoneyPrimary"),
             )
         }
@@ -100,6 +106,8 @@ fun MoneyCell(
                 text = text.withAccent(accentColor = Colors.White64),
                 color = Colors.White64,
                 textAlign = TextAlign.End,
+                maxLines = if (secondaryIsReplaced) Int.MAX_VALUE else maxAmountLines,
+                overflow = amountOverflow,
                 modifier = Modifier.testTag("MoneySecondary"),
             )
         }

@@ -337,6 +337,32 @@ class PaymentRequestsScreenTest {
         }
     }
 
+    @Test
+    fun shortAmountLeavesRoomForContactNameAtLargeText() {
+        val name = "Alexandra Payer"
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                    Box(Modifier.width(375.dp)) {
+                        PaymentRequestCard(
+                            request = request().copy(amount = PaykitAmount(PaykitAsset.USD, 200u)),
+                            contact = PubkyProfile.forDisplay(request().counterparty, name, imageUrl = null),
+                            fiatStatus = "Pending",
+                        )
+                    }
+                }
+            }
+        }
+        for (text in listOf(name, "$2.00", "Pending")) {
+            val results = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            assertTrue(results.isNotEmpty())
+            assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation")
+        }
+    }
+
     private fun setOutgoingRequestContent(primaryDisplay: PrimaryDisplay) {
         val outgoing = request(id = "outgoing").copy(
             createdAt = Clock.System.now(),

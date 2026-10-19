@@ -116,7 +116,7 @@ internal fun UsdtActivityDetail(
     var showDetails by rememberSaveable(transfer.id) { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     LaunchedEffect(transfer.id, showDetails) { scrollState.scrollTo(0) }
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
         AppTopBar(
             titleText = stringResource(
                 transfer.detailTitleResource
@@ -179,7 +179,7 @@ internal fun UsdtActivityDetail(
         if (showDetails && (transfer.txHash != null || canOpenDeposits)) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.navigationBarsPadding().padding(16.dp)
+                modifier = Modifier.padding(16.dp)
             ) {
                 if (canOpenDeposits) {
                     PrimaryButton(

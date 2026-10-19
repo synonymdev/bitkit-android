@@ -3,7 +3,11 @@ package to.bitkit.ui.screens.wallets.send
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -46,5 +50,39 @@ class SendContactSelectViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         verify(payments, times(2)).beginSavedContactPayment("alice")
         assertNull(model.uiState.value.resolvingPublicKey)
+    }
+
+    @Test
+    fun `contact stays busy through navigation and unlocks on completion or cancellation`() = test {
+        val context: Context = mock()
+        val contacts: PubkyRepo = mock()
+        val payments: PrivatePaykitRepo = mock()
+        whenever(context.getString(any<Int>())).thenReturn("")
+        whenever(contacts.contacts).thenReturn(MutableStateFlow(emptyList()))
+        whenever(contacts.isLoadingContacts).thenReturn(MutableStateFlow(false))
+        whenever(payments.beginSavedContactPayment("alice"))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.Opened("payment")))
+        val model = SendContactSelectViewModel(context, contacts, payments)
+
+        for (cancel in listOf(false, true)) {
+            val received = CompletableDeferred<SendContactSelectEffect>()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { received.complete(model.effects.first()) }
+            model.payContact("alice")
+            advanceUntilIdle()
+            assertEquals("alice", (received.await() as SendContactSelectEffect.OpenPayment).publicKey)
+            model.payContact("bob")
+            assertEquals("alice", model.uiState.value.resolvingPublicKey)
+
+            val navigation = Job()
+            model.onPaymentOpening(navigation)
+            advanceUntilIdle()
+            model.payContact("bob")
+            assertEquals("alice", model.uiState.value.resolvingPublicKey)
+            verify(payments, times(0)).beginSavedContactPayment("bob")
+            if (cancel) navigation.cancel() else navigation.complete()
+            advanceUntilIdle()
+            assertNull(model.uiState.value.resolvingPublicKey)
+        }
+        verify(payments, times(2)).beginSavedContactPayment("alice")
     }
 }

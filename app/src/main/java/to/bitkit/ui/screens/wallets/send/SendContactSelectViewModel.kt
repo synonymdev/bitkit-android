@@ -9,6 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,11 +68,13 @@ class SendContactSelectViewModel @Inject constructor(
         if (_uiState.value.resolvingPublicKey != null) return
         _uiState.update { it.copy(resolvingPublicKey = publicKey) }
         viewModelScope.launch {
+            var openingPayment = false
             try {
                 privatePaykitRepo.beginSavedContactPayment(publicKey)
                     .onSuccess { result ->
                         when (result) {
-                            is PublicPaykitPaymentResult.Opened ->
+                            is PublicPaykitPaymentResult.Opened -> {
+                                openingPayment = true
                                 _effects.emit(
                                     SendContactSelectEffect.OpenPayment(
                                         result.paymentRequest,
@@ -80,6 +83,7 @@ class SendContactSelectViewModel @Inject constructor(
                                         result.endpoints,
                                     )
                                 )
+                            }
                             PublicPaykitPaymentResult.NoEndpoint ->
                                 showPayError(R.string.slashtags__error_pay_empty_msg)
                             PublicPaykitPaymentResult.NotOpened ->
@@ -94,6 +98,16 @@ class SendContactSelectViewModel @Inject constructor(
                         Logger.warn("Failed to begin contact payment", it, context = TAG)
                         showPayError(R.string.slashtags__error_pay_not_opened_msg)
                     }
+            } finally {
+                if (!openingPayment) _uiState.update { it.copy(resolvingPublicKey = null) }
+            }
+        }
+    }
+
+    fun onPaymentOpening(scanJob: Job?) {
+        viewModelScope.launch {
+            try {
+                scanJob?.join()
             } finally {
                 _uiState.update { it.copy(resolvingPublicKey = null) }
             }

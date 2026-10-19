@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.ui.theme.Colors
@@ -46,6 +47,7 @@ fun PaykitAmountCell(
     prefix: String = "",
     status: String? = null,
     showBitcoinSymbol: Boolean = true,
+    maxAmountLines: Int = Int.MAX_VALUE,
 ) {
     if (amount.asset == PaykitAsset.BTC) {
         MoneyCell(
@@ -53,6 +55,7 @@ fun PaykitAmountCell(
             prefix = prefix,
             showBitcoinSymbol = showBitcoinSymbol,
             fiatReplacement = status,
+            maxAmountLines = maxAmountLines,
             modifier = modifier
         )
     } else {
@@ -65,7 +68,11 @@ fun PaykitAmountCell(
             }
         }
         Column(horizontalAlignment = Alignment.End, modifier = modifier) {
-            BodyMSB(text = prefix + "$" + displayAmount)
+            BodyMSB(
+                text = prefix + "$" + displayAmount,
+                maxLines = maxAmountLines,
+                overflow = if (maxAmountLines == Int.MAX_VALUE) TextOverflow.Clip else TextOverflow.Ellipsis,
+            )
             status?.let { BodyS(text = it, color = Colors.White64, textAlign = TextAlign.End) }
         }
     }
