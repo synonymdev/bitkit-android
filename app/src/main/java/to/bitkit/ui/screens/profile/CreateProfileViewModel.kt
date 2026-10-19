@@ -25,7 +25,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class CreateProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

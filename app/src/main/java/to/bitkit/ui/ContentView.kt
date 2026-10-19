@@ -1,4 +1,3 @@
-@file:Suppress("TooManyFunctions")
 
 package to.bitkit.ui
 
@@ -261,9 +260,9 @@ internal fun shouldFinishWalletInitialization(
     restoreState !is RestoreState.BackupFailed &&
     !isRestoringFromRNRemoteBackup
 
-@Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("CyclomaticComplexMethod")
 fun ContentView(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
@@ -1216,7 +1215,6 @@ private fun RootNavHost(
 }
 
 // region destinations
-@Suppress("LongMethod", "LongParameterList")
 private fun NavGraphBuilder.home(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
@@ -1433,7 +1431,6 @@ private fun PaykitRouteGuard(
     }
 }
 
-@Suppress("LongMethod")
 private fun NavGraphBuilder.contacts(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
@@ -1595,7 +1592,6 @@ private fun NavGraphBuilder.contacts(
     }
 }
 
-@Suppress("LongMethod")
 private fun NavGraphBuilder.profile(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,

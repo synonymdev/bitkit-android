@@ -140,7 +140,6 @@ data class PubkyAuthRequest(
     fun requiresIdentityCreation(hasIdentity: Boolean): Boolean = isSignup && (!isGrantSignup || !hasIdentity)
 
     companion object {
-        @Suppress("LongParameterList")
         fun parse(
             rawUrl: String,
             clientId: String,

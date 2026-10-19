@@ -16,7 +16,9 @@ class SignedTransactionIdTest {
         val withoutWitness = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction-legacy.hex"))
             .bufferedReader().readText().trim()
         assertEquals(expected, SignedTransactionId.fromHex(withoutWitness))
-        val witnessChanged = original.hexToByteArray().also { it[it.size - 5] = (it[it.size - 5].toInt() xor 1).toByte() }
+        val witnessChanged = original.hexToByteArray().also {
+            it[it.size - 5] = (it[it.size - 5].toInt() xor 1).toByte()
+        }
         assertEquals(expected, SignedTransactionId.fromHex(witnessChanged.toHexString()))
     }
 

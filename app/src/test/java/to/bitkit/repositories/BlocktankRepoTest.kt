@@ -31,7 +31,6 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
@@ -396,8 +395,8 @@ class BlocktankRepoTest : BaseUnitTest() {
 
         val cachedInfo = mock<IBtInfo>()
         val serverInfo = mock<IBtInfo>()
-        wheneverBlocking { coreService.blocktank.info(refresh = false) }.thenReturn(cachedInfo)
-        wheneverBlocking { coreService.blocktank.info(refresh = true) }.thenReturn(serverInfo)
+        whenever { coreService.blocktank.info(refresh = false) }.thenReturn(cachedInfo)
+        whenever { coreService.blocktank.info(refresh = true) }.thenReturn(serverInfo)
 
         sut.blocktankState.test {
             awaitItem() // Skip initial state
@@ -419,8 +418,8 @@ class BlocktankRepoTest : BaseUnitTest() {
 
         val cachedOrders = listOf<IBtOrder>(mock())
         val serverOrders = listOf<IBtOrder>(mock())
-        wheneverBlocking { coreService.blocktank.orders(refresh = false) }.thenReturn(cachedOrders)
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(serverOrders)
+        whenever { coreService.blocktank.orders(refresh = false) }.thenReturn(cachedOrders)
+        whenever { coreService.blocktank.orders(refresh = true) }.thenReturn(serverOrders)
 
         sut.blocktankState.test {
             awaitItem() // Skip initial state
@@ -441,7 +440,7 @@ class BlocktankRepoTest : BaseUnitTest() {
     fun `refreshOrders filters paid orders based on cacheStore data`() = test {
         sut = createSut()
         val expectedOrders = listOf(testOrder1)
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(expectedOrders)
+        whenever { coreService.blocktank.orders(refresh = true) }.thenReturn(expectedOrders)
         val orderId = "order1"
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(paidOrders = mapOf(orderId to "txId"))))
 
@@ -460,11 +459,11 @@ class BlocktankRepoTest : BaseUnitTest() {
 
     @Test
     fun `openChannel updates state after open`() = test {
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(listOf(testOrder1))
+        whenever { coreService.blocktank.orders(refresh = true) }.thenReturn(listOf(testOrder1))
         sut = createSut()
         val orderId = "order1"
         val updatedOrder = mock<IBtOrder>().apply { whenever(id).thenReturn(orderId) }
-        wheneverBlocking { coreService.blocktank.open(orderId) }.thenReturn(updatedOrder)
+        whenever { coreService.blocktank.open(orderId) }.thenReturn(updatedOrder)
 
         sut.blocktankState.test {
             awaitItem() // Skip initial state
@@ -486,7 +485,7 @@ class BlocktankRepoTest : BaseUnitTest() {
     fun `getOrder returns order from state after refresh`() = test {
         sut = createSut()
 
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(listOf(testOrder1))
+        whenever { coreService.blocktank.orders(refresh = true) }.thenReturn(listOf(testOrder1))
         val result = sut.getOrder(testOrder1.id, refresh = true)
 
         assertTrue(result.isSuccess)

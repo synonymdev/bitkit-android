@@ -108,7 +108,6 @@ import kotlin.time.Duration.Companion.seconds
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
 
-@Suppress("MagicNumber")
 @Composable
 fun SendConfirmScreen(
     savedStateHandle: SavedStateHandle,
@@ -229,7 +228,6 @@ internal fun AutoPayOverlay(
 }
 
 @Composable
-@Suppress("CyclomaticComplexMethod")
 internal fun SendConfirmContent(
     uiState: SendUiState,
     isNodeRunning: Boolean,
@@ -709,7 +707,6 @@ private fun OnChainDetails(
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun LightningDetails(
     uiState: SendUiState,
@@ -974,7 +971,6 @@ private fun sendUiState() = SendUiState(
     ),
 )
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "onchain")
 @Composable
 private fun PreviewOnChain() {
@@ -998,7 +994,6 @@ private fun PreviewOnChain() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "onchain details")
 @Composable
 private fun PreviewOnChainDetails() {
@@ -1023,7 +1018,6 @@ private fun PreviewOnChainDetails() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "lightning details")
 @Composable
 private fun PreviewLightningDetails() {
@@ -1046,7 +1040,6 @@ private fun PreviewLightningDetails() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "onchain", device = Devices.NEXUS_5)
 @Composable
 private fun PreviewOnChainLongFeeSmallScreen() {
@@ -1090,7 +1083,6 @@ private fun PreviewOnChainFeeLoading() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun PreviewLightning() {
@@ -1112,7 +1104,6 @@ private fun PreviewLightning() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "payment request")
 @Composable
 private fun PreviewPaymentRequest() {
@@ -1137,7 +1128,6 @@ private fun PreviewPaymentRequest() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "payment request")
 @Composable
 private fun PreviewPaymentRequestDetails() {
@@ -1165,7 +1155,6 @@ private fun PreviewPaymentRequestDetails() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "payment request")
 @Composable
 private fun PreviewPaymentRequestWithoutNote() {
@@ -1216,7 +1205,6 @@ private fun PreviewLnurl() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "lnurl details")
 @Composable
 private fun PreviewLnurlDetails() {

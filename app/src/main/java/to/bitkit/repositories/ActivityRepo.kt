@@ -59,7 +59,6 @@ import com.synonym.bitkitcore.TransactionDetails as BitkitCoreTransactionDetails
 
 private const val MS_SYNC_TIMEOUT = 40_000L
 
-@Suppress("LargeClass", "LongParameterList", "TooManyFunctions")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class ActivityRepo @Inject constructor(
@@ -221,13 +220,21 @@ class ActivityRepo @Inject constructor(
         runSuspendCatching {
             require(walletId != WalletScope.default)
             coreService.activity.createSentOnchainActivityFromSendResult(
-                txid = txid, address = address, amount = amountSats, fee = fee, feeRate = feeRate,
-                isTransfer = false, channelId = null, walletId = walletId,
+                txid = txid,
+                address = address,
+                amount = amountSats,
+                fee = fee,
+                feeRate = feeRate,
+                isTransfer = false,
+                channelId = null,
+                walletId = walletId,
             )
             // The Core writer logs storage errors internally. Read back before completing the proof.
             val activity = getOnchainActivityByTxId(txid, walletId)
-            check(activity?.walletId == walletId && activity.txId.equals(txid, true) &&
-                activity.txType == PaymentType.SENT) { "Original hardware payment activity is not durable" }
+            check(
+                activity?.walletId == walletId && activity.txId.equals(txid, true) &&
+                    activity.txType == PaymentType.SENT
+            ) { "Original hardware payment activity is not durable" }
             val tagsChanged = coreService.activity.restoreSentOnchainTags(txid, walletId)
             notifyPaymentActivityChanged()
             if (tagsChanged) notifyActivitiesChanged(tagsChanged = true)

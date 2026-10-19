@@ -58,7 +58,6 @@ data class PaykitSubscriptionRecurrence(
     val canMaterializePeriods: Boolean
         get() = firstBoundaryIndexAfter(startsAt) != null
 
-    @Suppress("ReturnCount")
     fun periodsThrough(date: Instant, acceptedAt: Instant): List<PaykitBillingPeriod> {
         if (!unit.isSupported || startsAt > date) return emptyList()
         val periods = mutableListOf<PaykitBillingPeriod>()
@@ -79,7 +78,6 @@ data class PaykitSubscriptionRecurrence(
         return periods
     }
 
-    @Suppress("ReturnCount")
     fun nextPeriodAfter(date: Instant): PaykitBillingPeriod? {
         val start: Instant
         val endIndex: Int
@@ -307,7 +305,6 @@ fun PaykitSubscription.canceledPaidThrough(): Instant? =
 fun PaykitSubscription.runsUntilPaidThrough(now: Instant): Boolean =
     isActive(now) || canceledPaidThrough()?.let { it > now } == true
 
-@Suppress("CyclomaticComplexMethod", "ReturnCount")
 internal fun PaymentRequestRecord.toPaykitSubscription(
     deliveryStatusOverride: PaykitPaymentRequestDeliveryStatus? = null,
     verifiedUsdtReceipts: List<PaykitUsdtReceipt> = emptyList(),
@@ -384,7 +381,6 @@ private fun PaymentRequestRecord.paidSubscriptionPeriods(
         }
 }.map { it.first }.distinct()
 
-@Suppress("ReturnCount")
 private fun PaymentProofRecord.toSubscriptionPayment(
     recurrence: PaykitSubscriptionRecurrence,
 ): Pair<PaykitBillingPeriod, PaykitPaymentProofKind?>? {

@@ -47,7 +47,6 @@ import javax.inject.Inject
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class ContactDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -48,6 +49,7 @@ import kotlin.test.assertTrue
 
 class UsdtViewModelTest : BaseUnitTest() {
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `initial subscription prepares before authorization and cancellation requires explicit retry`() = test {
         val viewModel = createViewModel()
         val app = mock<AppViewModel>()
@@ -85,6 +87,7 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `manual initial subscription preparation never shows automatic progress or authorizes`() = test {
         val viewModel = createViewModel()
         val app = mock<AppViewModel>()
@@ -110,6 +113,7 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `failed initial subscription quote cannot authorize automatically after recovery`() = test {
         for (error in listOf(UsdtException.InsufficientBalance(), UsdtException.QuoteExpired())) {
             val viewModel = createViewModel()
@@ -130,6 +134,7 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `cancelled initial subscription preparation cannot authorize when quote finishes`() = test {
         val viewModel = createViewModel()
         val app = mock<AppViewModel>()

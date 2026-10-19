@@ -60,7 +60,6 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ReceiveSheet(
     appViewModel: AppViewModel,

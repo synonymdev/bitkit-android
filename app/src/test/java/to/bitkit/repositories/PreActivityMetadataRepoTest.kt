@@ -11,7 +11,6 @@ import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
@@ -70,7 +69,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `getAllPreActivityMetadata returns success with metadata list`() = test {
         val metadataList = listOf(testMetadata)
-        wheneverBlocking { activityService.getAllPreActivityMetadata() }.thenReturn(metadataList)
+        whenever { activityService.getAllPreActivityMetadata() }.thenReturn(metadataList)
 
         val result = sut.getAllPreActivityMetadata()
 
@@ -81,7 +80,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
 
     @Test
     fun `getAllPreActivityMetadata returns empty list when no metadata exists`() = test {
-        wheneverBlocking { activityService.getAllPreActivityMetadata() }.thenReturn(emptyList())
+        whenever { activityService.getAllPreActivityMetadata() }.thenReturn(emptyList())
 
         val result = sut.getAllPreActivityMetadata()
 
@@ -92,7 +91,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `getAllPreActivityMetadata returns failure on exception`() = test {
         val exception = RuntimeException("Database error")
-        wheneverBlocking { activityService.getAllPreActivityMetadata() } doThrow exception
+        whenever { activityService.getAllPreActivityMetadata() } doThrow exception
 
         val result = sut.getAllPreActivityMetadata()
 
@@ -107,7 +106,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `upsertPreActivityMetadata succeeds and notifies changed`() = test {
         val metadataList = listOf(testMetadata)
-        wheneverBlocking { activityService.upsertPreActivityMetadata(metadataList) }.thenReturn(Unit)
+        whenever { activityService.upsertPreActivityMetadata(metadataList) }.thenReturn(Unit)
 
         sut.preActivityMetadataChanged.test {
             val initialValue = awaitItem()
@@ -127,7 +126,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val metadata1 = testMetadata.copy(paymentId = "payment-1")
         val metadata2 = testMetadata.copy(paymentId = "payment-2")
         val metadataList = listOf(metadata1, metadata2)
-        wheneverBlocking { activityService.upsertPreActivityMetadata(metadataList) }.thenReturn(Unit)
+        whenever { activityService.upsertPreActivityMetadata(metadataList) }.thenReturn(Unit)
 
         val result = sut.upsertPreActivityMetadata(metadataList)
 
@@ -139,7 +138,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `upsertPreActivityMetadata returns failure on exception`() = test {
         val metadataList = listOf(testMetadata)
         val exception = RuntimeException("Upsert failed")
-        wheneverBlocking { activityService.upsertPreActivityMetadata(metadataList) } doThrow exception
+        whenever { activityService.upsertPreActivityMetadata(metadataList) } doThrow exception
 
         val result = sut.upsertPreActivityMetadata(metadataList)
 
@@ -155,7 +154,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `addPreActivityMetadataTags succeeds and notifies changed`() = test {
         val paymentId = "payment-123"
         val tags = listOf("shopping", "groceries")
-        wheneverBlocking { activityService.addPreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
+        whenever { activityService.addPreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
 
         sut.preActivityMetadataChanged.test {
             val initialValue = awaitItem()
@@ -174,7 +173,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `addPreActivityMetadataTags with single tag succeeds`() = test {
         val paymentId = "payment-123"
         val tags = listOf("important")
-        wheneverBlocking { activityService.addPreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
+        whenever { activityService.addPreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
 
         val result = sut.addPreActivityMetadataTags(paymentId, tags)
 
@@ -186,7 +185,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val paymentId = "payment-123"
         val tags = listOf("tag1")
         val exception = RuntimeException("Add tags failed")
-        wheneverBlocking { activityService.addPreActivityMetadataTags(paymentId, tags) } doThrow exception
+        whenever { activityService.addPreActivityMetadataTags(paymentId, tags) } doThrow exception
 
         val result = sut.addPreActivityMetadataTags(paymentId, tags)
 
@@ -202,7 +201,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `removePreActivityMetadataTags succeeds and notifies changed`() = test {
         val paymentId = "payment-123"
         val tags = listOf("tag1")
-        wheneverBlocking { activityService.removePreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
+        whenever { activityService.removePreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
 
         sut.preActivityMetadataChanged.test {
             val initialValue = awaitItem()
@@ -221,7 +220,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `removePreActivityMetadataTags with multiple tags succeeds`() = test {
         val paymentId = "payment-123"
         val tags = listOf("tag1", "tag2", "tag3")
-        wheneverBlocking { activityService.removePreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
+        whenever { activityService.removePreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
 
         val result = sut.removePreActivityMetadataTags(paymentId, tags)
 
@@ -234,7 +233,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val paymentId = "payment-123"
         val tags = listOf("tag1")
         val exception = RuntimeException("Remove tags failed")
-        wheneverBlocking { activityService.removePreActivityMetadataTags(paymentId, tags) } doThrow exception
+        whenever { activityService.removePreActivityMetadataTags(paymentId, tags) } doThrow exception
 
         val result = sut.removePreActivityMetadataTags(paymentId, tags)
 
@@ -249,7 +248,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `resetPreActivityMetadataTags succeeds and notifies changed`() = test {
         val paymentId = "payment-123"
-        wheneverBlocking { activityService.resetPreActivityMetadataTags(paymentId) }.thenReturn(Unit)
+        whenever { activityService.resetPreActivityMetadataTags(paymentId) }.thenReturn(Unit)
 
         sut.preActivityMetadataChanged.test {
             val initialValue = awaitItem()
@@ -268,7 +267,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `resetPreActivityMetadataTags returns failure on exception`() = test {
         val paymentId = "payment-123"
         val exception = RuntimeException("Reset failed")
-        wheneverBlocking { activityService.resetPreActivityMetadataTags(paymentId) } doThrow exception
+        whenever { activityService.resetPreActivityMetadataTags(paymentId) } doThrow exception
 
         val result = sut.resetPreActivityMetadataTags(paymentId)
 
@@ -283,7 +282,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `getPreActivityMetadata by payment id returns metadata`() = test {
         val searchKey = "payment-123"
-        wheneverBlocking { activityService.getPreActivityMetadata(searchKey, false) }.thenReturn(testMetadata)
+        whenever { activityService.getPreActivityMetadata(searchKey, false) }.thenReturn(testMetadata)
 
         val result = sut.getPreActivityMetadata(searchKey, searchByAddress = false)
 
@@ -295,7 +294,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `getPreActivityMetadata by address returns metadata`() = test {
         val address = "bc1qtest"
-        wheneverBlocking { activityService.getPreActivityMetadata(address, true) }.thenReturn(testMetadata)
+        whenever { activityService.getPreActivityMetadata(address, true) }.thenReturn(testMetadata)
 
         val result = sut.getPreActivityMetadata(address, searchByAddress = true)
 
@@ -307,7 +306,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `getPreActivityMetadata returns null when not found`() = test {
         val searchKey = "non-existent"
-        wheneverBlocking { activityService.getPreActivityMetadata(searchKey, false) }.thenReturn(null)
+        whenever { activityService.getPreActivityMetadata(searchKey, false) }.thenReturn(null)
 
         val result = sut.getPreActivityMetadata(searchKey, searchByAddress = false)
 
@@ -319,7 +318,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `getPreActivityMetadata returns failure on exception`() = test {
         val searchKey = "payment-123"
         val exception = RuntimeException("Query failed")
-        wheneverBlocking { activityService.getPreActivityMetadata(searchKey, false) } doThrow exception
+        whenever { activityService.getPreActivityMetadata(searchKey, false) } doThrow exception
 
         val result = sut.getPreActivityMetadata(searchKey, searchByAddress = false)
 
@@ -334,7 +333,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `deletePreActivityMetadata succeeds and notifies changed`() = test {
         val paymentId = "payment-123"
-        wheneverBlocking { activityService.deletePreActivityMetadata(paymentId) }.thenReturn(Unit)
+        whenever { activityService.deletePreActivityMetadata(paymentId) }.thenReturn(Unit)
 
         sut.preActivityMetadataChanged.test {
             val initialValue = awaitItem()
@@ -353,7 +352,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `deletePreActivityMetadata returns failure on exception`() = test {
         val paymentId = "payment-123"
         val exception = RuntimeException("Delete failed")
-        wheneverBlocking { activityService.deletePreActivityMetadata(paymentId) } doThrow exception
+        whenever { activityService.deletePreActivityMetadata(paymentId) } doThrow exception
 
         val result = sut.deletePreActivityMetadata(paymentId)
 
@@ -370,7 +369,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val id = "payment-123"
         val address = "bc1qtest"
         val tags = listOf("tag1", "tag2")
-        wheneverBlocking { activityService.upsertPreActivityMetadata(any()) }.thenReturn(Unit)
+        whenever { activityService.upsertPreActivityMetadata(any()) }.thenReturn(Unit)
 
         val result = sut.savePreActivityMetadata(
             id = id,
@@ -388,7 +387,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `savePreActivityMetadata with transfer flag succeeds even without tags`() = test {
         val id = "payment-123"
         val address = "bc1qtest"
-        wheneverBlocking { activityService.upsertPreActivityMetadata(any()) }.thenReturn(Unit)
+        whenever { activityService.upsertPreActivityMetadata(any()) }.thenReturn(Unit)
 
         val result = sut.savePreActivityMetadata(
             id = id,
@@ -405,7 +404,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `savePreActivityMetadata with all optional parameters succeeds`() = test {
         val id = "payment-123"
-        wheneverBlocking { activityService.upsertPreActivityMetadata(any()) }.thenReturn(Unit)
+        whenever { activityService.upsertPreActivityMetadata(any()) }.thenReturn(Unit)
 
         val result = sut.savePreActivityMetadata(
             id = id,
@@ -449,7 +448,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val address = "bc1qtest"
         val tags = listOf("tag1")
 
-        wheneverBlocking { activityService.upsertPreActivityMetadata(any()) }.thenAnswer { invocation ->
+        whenever { activityService.upsertPreActivityMetadata(any()) }.thenAnswer { invocation ->
             val metadataList = invocation.getArgument<List<PreActivityMetadata>>(0)
             assertEquals(0u, metadataList.first().feeRate, "Default feeRate should be 0")
             Unit
@@ -473,7 +472,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val address = "bc1qtest"
         val tags = listOf("tag1")
 
-        wheneverBlocking { activityService.upsertPreActivityMetadata(any()) }.thenAnswer { invocation ->
+        whenever { activityService.upsertPreActivityMetadata(any()) }.thenAnswer { invocation ->
             val metadataList = invocation.getArgument<List<PreActivityMetadata>>(0)
             assertEquals("", metadataList.first().channelId, "Null channelId should be empty string")
             Unit
@@ -497,7 +496,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val address = "bc1qtest"
         val tags = listOf("tag1")
         val exception = RuntimeException("Save failed")
-        wheneverBlocking { activityService.upsertPreActivityMetadata(any()) } doThrow exception
+        whenever { activityService.upsertPreActivityMetadata(any()) } doThrow exception
 
         val result = sut.savePreActivityMetadata(
             id = id,
@@ -520,8 +519,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val paymentId = "payment-123"
         val tags = listOf("tag1")
 
-        wheneverBlocking { activityService.addPreActivityMetadataTags(any(), any()) }.thenReturn(Unit)
-        wheneverBlocking { activityService.removePreActivityMetadataTags(any(), any()) }.thenReturn(Unit)
+        whenever { activityService.addPreActivityMetadataTags(any(), any()) }.thenReturn(Unit)
+        whenever { activityService.removePreActivityMetadataTags(any(), any()) }.thenReturn(Unit)
 
         // Test that add operation triggers notification
         val initialValue = sut.preActivityMetadataChanged.value
@@ -541,7 +540,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val paymentId = "payment-123"
         val exception = RuntimeException("Operation failed")
 
-        wheneverBlocking { activityService.deletePreActivityMetadata(paymentId) } doThrow exception
+        whenever { activityService.deletePreActivityMetadata(paymentId) } doThrow exception
 
         sut.preActivityMetadataChanged.test {
             awaitItem()
@@ -556,7 +555,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
 
     @Test
     fun `getAllPreActivityMetadata does not trigger change notification`() = test {
-        wheneverBlocking { activityService.getAllPreActivityMetadata() }.thenReturn(emptyList())
+        whenever { activityService.getAllPreActivityMetadata() }.thenReturn(emptyList())
 
         sut.preActivityMetadataChanged.test {
             awaitItem()
@@ -572,7 +571,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `getPreActivityMetadata does not trigger change notification`() = test {
         val searchKey = "payment-123"
-        wheneverBlocking { activityService.getPreActivityMetadata(searchKey, false) }.thenReturn(null)
+        whenever { activityService.getPreActivityMetadata(searchKey, false) }.thenReturn(null)
 
         sut.preActivityMetadataChanged.test {
             awaitItem()
@@ -594,7 +593,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         val id = ""
         val address = ""
         val tags = listOf("tag1")
-        wheneverBlocking { activityService.upsertPreActivityMetadata(any()) }.thenReturn(Unit)
+        whenever { activityService.upsertPreActivityMetadata(any()) }.thenReturn(Unit)
 
         val result = sut.savePreActivityMetadata(
             id = id,
@@ -611,7 +610,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     fun `addPreActivityMetadataTags with empty tag list succeeds`() = test {
         val paymentId = "payment-123"
         val tags = emptyList<String>()
-        wheneverBlocking { activityService.addPreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
+        whenever { activityService.addPreActivityMetadataTags(paymentId, tags) }.thenReturn(Unit)
 
         val result = sut.addPreActivityMetadataTags(paymentId, tags)
 
@@ -622,7 +621,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     @Test
     fun `upsertPreActivityMetadata with empty list succeeds`() = test {
         val emptyList = emptyList<PreActivityMetadata>()
-        wheneverBlocking { activityService.upsertPreActivityMetadata(emptyList) }.thenReturn(Unit)
+        whenever { activityService.upsertPreActivityMetadata(emptyList) }.thenReturn(Unit)
 
         val result = sut.upsertPreActivityMetadata(emptyList)
 

@@ -141,7 +141,6 @@ fun DateRangeSelectorSheet() {
     )
 }
 
-@Suppress("MaxLineLength", "CyclomaticComplexMethod")
 @VisibleForTesting
 @Composable
 internal fun DateRangeSelectorContent(
@@ -283,7 +282,8 @@ internal fun DateRangeSelectorContent(
 
             for (i in 0 until CalendarConstants.DAYS_IN_WEEK) {
                 val dayOfWeek =
-                    (calendar.firstDayOfWeek + i - CalendarConstants.CALENDAR_WEEK_OFFSET) % CalendarConstants.DAYS_IN_WEEK_MOD + CalendarConstants.CALENDAR_WEEK_OFFSET
+                    (calendar.firstDayOfWeek + i - CalendarConstants.CALENDAR_WEEK_OFFSET) %
+                        CalendarConstants.DAYS_IN_WEEK_MOD + CalendarConstants.CALENDAR_WEEK_OFFSET
                 calendar.set(Calendar.DAY_OF_WEEK, dayOfWeek)
                 Caption13Up(
                     text = weekdaySymbols.format(calendar.time).take(CalendarConstants.WEEKDAY_ABBREVIATION_LENGTH)
