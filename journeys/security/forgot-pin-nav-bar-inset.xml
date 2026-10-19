@@ -25,6 +25,7 @@
     <action>Re-enter the same 4-digit PIN to confirm it</action>
     <action>On the biometrics screen, tap Skip</action>
     <action>Tap OK (tag "OK")</action>
+    <action>Press back until the wallet home screen is visible (testTag "Send")</action>
     <action>Run adb shell input keyevent KEYCODE_HOME and wait 3 seconds</action>
     <action>Run adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity</action>
     <action>Verify the PIN pad is visible with the text "Please enter your PIN code" and keys (tag "N1")</action>
