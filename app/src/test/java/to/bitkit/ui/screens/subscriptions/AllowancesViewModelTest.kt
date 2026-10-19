@@ -125,7 +125,8 @@ class AllowancesViewModelTest : BaseUnitTest() {
 
         val allowance = loadedState().allowances.single()
 
-        assertEquals("Active · $5.00 a payment", allowance.subtitle)
+        // The same short form the payer's row shows from its own whole-dollar limits.
+        assertEquals("Active · $5 a payment", allowance.subtitle)
         assertEquals("Up to $5.00", allowance.perPaymentUpTo)
         assertEquals("50.00", allowance.monthlyAmount)
     }
@@ -163,6 +164,13 @@ class AllowancesViewModelTest : BaseUnitTest() {
         targets.value = listOf(PaykitPaymentRequestTarget(LEO_KEY))
 
         assertEquals(listOf("Leo"), loadedState().contacts.map { it.name })
+    }
+
+    @Test
+    fun `a limit known only in sats below a dollar keeps its cents`() = test {
+        entries.value = listOf(entry(perPaymentSats = 500uL, monthlySats = 49_900uL, limits = null))
+
+        assertEquals("Active · $0.50 a payment", loadedState().allowances.single().subtitle)
     }
 
     @Test
