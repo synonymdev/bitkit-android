@@ -1154,6 +1154,40 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `withActiveSecretKey should run the block with the verified key of the signed in identity`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+
+        val result = sut.withActiveSecretKey { publicKey, secretKeyHex -> publicKey to secretKeyHex }
+
+        assertEquals(VALID_SELF_KEY to "local_secret", result.getOrThrow())
+    }
+
+    @Test
+    fun `withActiveSecretKey should fail without a signed in identity`() = test {
+        var ran = false
+
+        val result = sut.withActiveSecretKey { _, _ -> ran = true }
+
+        assertEquals(PubkySecretAccessError.NotSignedIn, result.exceptionOrNull())
+        assertFalse(ran)
+    }
+
+    @Test
+    fun `withActiveSecretKey should not run the block with a key of another identity`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("other_secret")
+        whenever(pubkyService.publicKeyFromSecret("other_secret")).thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+        var ran = false
+
+        val result = sut.withActiveSecretKey { _, _ -> ran = true }
+
+        assertEquals(PubkySecretAccessError.SecretUnavailable, result.exceptionOrNull())
+        assertFalse(ran)
+    }
+
+    @Test
     fun `signOut should clear state and keychain`() = test {
         authenticateForTesting()
         clearInvocations(pubkyStore)

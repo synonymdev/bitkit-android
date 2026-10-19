@@ -108,6 +108,12 @@ private fun Throwable.isPaykitReadTimeout(): Boolean =
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
 
+sealed class PubkySecretAccessError(message: String) : AppError(message) {
+    data object NotSignedIn : PubkySecretAccessError("No Pubky identity is signed in")
+    data object SecretUnavailable : PubkySecretAccessError("Secret key of the signed-in Pubky identity is unavailable")
+    data object SignInChanged : PubkySecretAccessError("Pubky sign-in changed while reading its secret key")
+}
+
 /** Whether a Pubky identity is ready to use once restores already under way have finished. */
 enum class PubkyIdentityReadiness {
     /** A session is active. */
@@ -1535,6 +1541,23 @@ class PubkyRepo @Inject constructor(
         val publicKey = _publicKey.value ?: return@runSuspendCatching false
         managedSecretKeyFor(publicKey) != null
     }.getOrDefault(false)
+
+    /**
+     * Runs [block] with the secret key of the signed-in identity, whether Bitkit stores it or Pubky Ring shares it.
+     * The key is checked against the signed-in public key and is never kept after [block] returns. Fails with a
+     * [PubkySecretAccessError] when no identity is signed in, its key is unavailable, or the sign-in changes first.
+     */
+    suspend fun <T> withActiveSecretKey(block: suspend (publicKey: String, secretKeyHex: String) -> T): Result<T> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val signIn = currentSignIn() ?: throw PubkySecretAccessError.NotSignedIn
+                val secretKeyHex = managedSecretKeyFor(signIn.publicKey)
+                    ?.takeIf { pubkyService.publicKeyFromSecret(it).ensurePubkyPrefix() == signIn.publicKey }
+                    ?: throw PubkySecretAccessError.SecretUnavailable
+                if (!isCurrent(signIn)) throw PubkySecretAccessError.SignInChanged
+                block(signIn.publicKey, secretKeyHex)
+            }
+        }
 
     suspend fun hasStoredSecretKey(): Boolean = withContext(ioDispatcher) {
         keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)
