@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.subscriptions
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +62,7 @@ import to.bitkit.ui.components.Slider
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -92,43 +95,67 @@ fun AllowanceSheet(
         return
     }
 
-    when (route) {
-        AllowanceRoute.Set -> AllowanceSetFlow(
-            uiState = uiState,
-            onSave = { contact, perPaymentUsd, monthlyUsd ->
-                viewModel.propose(contact, perPaymentUsd, monthlyUsd, onSuccess = appViewModel::hideSheet)
-            },
-        )
+    // A cancelled check resets the swiped End control, which otherwise stays at its confirmed end.
+    var authorizationCancels by remember { mutableIntStateOf(0) }
+    val onAuthorizationCancel: () -> Unit = {
+        viewModel.onAuthorizationCancelled()
+        authorizationCancels++
+    }
+    Box {
+        when (route) {
+            AllowanceRoute.Set -> AllowanceSetFlow(
+                uiState = uiState,
+                onSave = { contact, perPaymentUsd, monthlyUsd ->
+                    viewModel.propose(contact, perPaymentUsd, monthlyUsd, onSuccess = appViewModel::hideSheet)
+                },
+            )
 
-        is AllowanceRoute.Review -> {
-            val allowance = uiState.allowances.firstOrNull { it.id == route.entryId }
-            if (allowance == null) {
-                AllowanceUnavailableContent(onClose = appViewModel::hideSheet, modifier = Modifier.sheetHeight())
-            } else {
-                LaunchedEffect(route.entryId) {
-                    delay(PROPOSAL_SEEN_DELAY)
-                    viewModel.markProposalPresented(route.entryId)
+            is AllowanceRoute.Review -> {
+                val allowance = uiState.allowances.firstOrNull { it.id == route.entryId }
+                if (allowance == null) {
+                    AllowanceUnavailableContent(onClose = appViewModel::hideSheet, modifier = Modifier.sheetHeight())
+                } else {
+                    LaunchedEffect(route.entryId) {
+                        delay(PROPOSAL_SEEN_DELAY)
+                        viewModel.markProposalPresented(route.entryId)
+                    }
+                    AllowanceReviewContent(
+                        allowance = allowance,
+                        isWorking = uiState.isWorking,
+                        onClickDecline = { viewModel.decline(allowance.id, onSuccess = appViewModel::hideSheet) },
+                        onClickAccept = { viewModel.accept(allowance.id, onSuccess = appViewModel::hideSheet) },
+                        modifier = Modifier.sheetHeight()
+                    )
                 }
-                AllowanceReviewContent(
-                    allowance = allowance,
-                    isWorking = uiState.isWorking,
-                    onClickDecline = { viewModel.decline(allowance.id, onSuccess = appViewModel::hideSheet) },
-                    onClickAccept = { viewModel.accept(allowance.id, onSuccess = appViewModel::hideSheet) },
-                    modifier = Modifier.sheetHeight()
-                )
+            }
+
+            is AllowanceRoute.Details -> {
+                val allowance = uiState.allowances.firstOrNull { it.id == route.entryId }
+                if (allowance == null) {
+                    AllowanceUnavailableContent(onClose = appViewModel::hideSheet, modifier = Modifier.sheetHeight())
+                } else {
+                    key(authorizationCancels) {
+                        AllowanceDetailContent(
+                            allowance = allowance,
+                            isWorking = uiState.isWorking,
+                            onEnd = { viewModel.end(allowance.id, onSuccess = appViewModel::hideSheet) },
+                            modifier = Modifier.sheetHeight()
+                        )
+                    }
+                }
             }
         }
-
-        is AllowanceRoute.Details -> {
-            val allowance = uiState.allowances.firstOrNull { it.id == route.entryId }
-            if (allowance == null) {
-                AllowanceUnavailableContent(onClose = appViewModel::hideSheet, modifier = Modifier.sheetHeight())
-            } else {
-                AllowanceDetailContent(
-                    allowance = allowance,
-                    isWorking = uiState.isWorking,
-                    onEnd = { viewModel.end(allowance.id, onSuccess = appViewModel::hideSheet) },
-                    modifier = Modifier.sheetHeight()
+        uiState.authorization?.let {
+            BackHandler(onBack = onAuthorizationCancel)
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
+            ) {
+                UsdtAuthentication(
+                    useBiometrics = it.useBiometrics,
+                    onCancel = onAuthorizationCancel,
+                    onVerified = viewModel::onAuthorized,
                 )
             }
         }

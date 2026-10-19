@@ -581,6 +581,25 @@ class PaykitPaymentProofRepo @Inject constructor(
             completeOnchainPayment(request, txid, proof.paymentEndpointIdentifier, proof.paymentAppId)
         }
 
+    /** Whether a verified on-chain proof of [txid] is held for [requestId], here or already queued in the SDK. */
+    suspend fun hasVerifiedOnchainProof(requestId: PaykitPaymentRequestId, txid: String): Boolean =
+        withContext(ioDispatcher) {
+            val held = operationMutex.withLock {
+                loadProofs().any {
+                    it.requestId == requestId && it.kind == PaykitPaymentProofKind.Onchain &&
+                        it.onchainAcceptanceVerified == true && it.proofData.equals(txid, ignoreCase = true)
+                }
+            }
+            held || paykitSdkService.paymentRequests().any { record ->
+                record.paymentRequestId == requestId.paymentRequestId &&
+                    PubkyPublicKeyFormat.matches(record.counterparty, requestId.counterparty) &&
+                    record.paymentProofs.any {
+                        it.proof.exportText().proofValues() == proofJson(PaykitPaymentProofKind.Onchain, txid.lowercase())
+                            .proofValues()
+                    }
+            }
+        }
+
     @Suppress("LongParameterList")
     suspend fun completeOnchainPayment(
         request: PaykitPaymentRequest,

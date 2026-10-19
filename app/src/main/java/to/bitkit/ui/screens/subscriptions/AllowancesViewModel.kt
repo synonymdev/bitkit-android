@@ -3,6 +3,7 @@
 package to.bitkit.ui.screens.subscriptions
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,11 +22,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.SettingsStore
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
@@ -52,6 +55,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
+@Suppress("LongParameterList")
 @HiltViewModel
 class AllowancesViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -59,6 +63,7 @@ class AllowancesViewModel @Inject constructor(
     private val paymentRequestRepo: PaykitPaymentRequestRepo,
     private val pubkyRepo: PubkyRepo,
     private val currencyRepo: CurrencyRepo,
+    private val settingsStore: SettingsStore,
     private val clock: Clock,
 ) : ViewModel() {
     companion object {
@@ -70,6 +75,8 @@ class AllowancesViewModel @Inject constructor(
     }
 
     private val isWorking = MutableStateFlow(false)
+    private val authorization = MutableStateFlow<AllowanceAuthorization?>(null)
+    private var authorizedAction: (() -> Unit)? = null
 
     private val now: Flow<Instant> = flow {
         while (true) {
@@ -102,12 +109,14 @@ class AllowancesViewModel @Inject constructor(
         allowances,
         contactChoices,
         isWorking,
-    ) { allowances, contacts, isWorking ->
+        authorization,
+    ) { allowances, contacts, isWorking, authorization ->
         AllowancesUiState(
             isLoaded = true,
             allowances = allowances,
             contacts = contacts,
             isWorking = isWorking,
+            authorization = authorization,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -137,14 +146,48 @@ class AllowancesViewModel @Inject constructor(
             viewModelScope.launch { toastError(context.getString(R.string.subscriptions__allowance_error_unavailable)) }
             return
         }
-        runAction(onSuccess) { allowanceRepo.propose(contact.publicKey, limits) }
+        authorizeThen(isGated = true) { runAction(onSuccess) { allowanceRepo.propose(contact.publicKey, limits) } }
     }
 
-    fun accept(entryId: String, onSuccess: () -> Unit) = runAction(onSuccess) { allowanceRepo.accept(entryId) }
+    fun accept(entryId: String, onSuccess: () -> Unit) = authorizeThen(isGated = isAllower(entryId)) {
+        runAction(onSuccess) { allowanceRepo.accept(entryId) }
+    }
 
     fun decline(entryId: String, onSuccess: () -> Unit) = runAction(onSuccess) { allowanceRepo.reject(entryId) }
 
-    fun end(entryId: String, onSuccess: () -> Unit) = runAction(onSuccess) { allowanceRepo.end(entryId) }
+    fun end(entryId: String, onSuccess: () -> Unit) = authorizeThen(isGated = isAllower(entryId)) {
+        runAction(onSuccess) { allowanceRepo.end(entryId) }
+    }
+
+    fun onAuthorized() {
+        val action = authorizedAction ?: return
+        authorizedAction = null
+        authorization.update { null }
+        action()
+    }
+
+    fun onAuthorizationCancelled() {
+        authorizedAction = null
+        authorization.update { null }
+    }
+
+    private fun isAllower(entryId: String): Boolean =
+        allowanceRepo.entries.value.firstOrNull { it.id == entryId }?.role == PaykitAllowance.Role.ALLOWER
+
+    /**
+     * Runs [action] after the same PIN or biometric check as Send when the user requires a PIN for payments. Gated
+     * actions are the payer's: they create or change the spending power that later pays without asking.
+     */
+    private fun authorizeThen(isGated: Boolean, action: () -> Unit) {
+        if (!isGated) return action()
+        if (isWorking.value || authorization.value != null) return
+        viewModelScope.launch {
+            val settings = settingsStore.data.first()
+            if (!settings.isPinEnabled || !settings.isPinForPaymentsEnabled) return@launch action()
+            authorizedAction = action
+            authorization.update { AllowanceAuthorization(useBiometrics = settings.isBiometricEnabled) }
+        }
+    }
 
     private fun runAction(onSuccess: () -> Unit, action: suspend () -> Result<Unit>) {
         if (isWorking.value) return
@@ -295,7 +338,12 @@ data class AllowancesUiState(
     val allowances: ImmutableList<AllowanceUi> = persistentListOf(),
     val contacts: ImmutableList<PubkyProfile> = persistentListOf(),
     val isWorking: Boolean = false,
+    val authorization: AllowanceAuthorization? = null,
 )
+
+/** A pending PIN or biometric check before a gated allowance action. */
+@Immutable
+data class AllowanceAuthorization(val useBiometrics: Boolean)
 
 /** One allowance entry as the UI shows it, with every amount already converted to US dollars. */
 @Stable

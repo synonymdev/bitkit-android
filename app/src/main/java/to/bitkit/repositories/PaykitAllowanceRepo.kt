@@ -344,6 +344,8 @@ class PaykitAllowanceRepo @Inject constructor(
      * the Allowance was accepted stays manual: it may already have been shown to the user for a decision.
      */
     fun coversRequest(request: PaykitPaymentRequest): Boolean {
+        // Only bitcoin requests are paid automatically; anything else follows the manual flow at once.
+        if (request.allowanceSats() == null) return false
         val now = clock.now()
         return _allowances.value.any { allowance ->
             allowance.isAllower &&
@@ -413,8 +415,9 @@ class PaykitAllowanceRepo @Inject constructor(
     }
 
     private fun isCreatedAfterAcceptance(request: PaykitPaymentRequest, allowance: PaykitAllowance): Boolean {
-        val acceptedAt = allowance.lastEventAt ?: return true
-        val createdAt = request.createdAt ?: return true
+        // A request whose order against the acceptance cannot be proven may predate it, so it stays manual.
+        val acceptedAt = allowance.lastEventAt ?: return false
+        val createdAt = request.createdAt ?: return false
         return createdAt >= acceptedAt - ACCEPTANCE_CLOCK_TOLERANCE
     }
 

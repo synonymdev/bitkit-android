@@ -80,6 +80,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     private val payer = mock<PaykitAllowancePayer>()
     private val keychain = mock<Keychain>()
     private var storedState: String? = null
+    private var failSave: (String) -> Boolean = { false }
     private var now = fixtures.now
     private val clock = object : Clock {
         override fun now(): Instant = this@PaykitAllowanceExecutorTest.now
@@ -118,7 +119,11 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
     private suspend fun stubLedger() {
         whenever(keychain.loadString(any())).thenAnswer { storedState }
-        whenever(keychain.upsertString(any(), any())).doSuspendableAnswer { storedState = it.getArgument(1) }
+        whenever(keychain.upsertString(any(), any())).doSuspendableAnswer {
+            val state = it.getArgument<String>(1)
+            if (failSave(state)) throw TestAllowanceError("save")
+            storedState = state
+        }
 
         whenever(sdk.allowanceAccountingState()).thenAnswer { accountingState }
         whenever(sdk.reconcileAllowanceAccounting(any())).doSuspendableAnswer {
@@ -213,6 +218,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             runCatching { it.getArgument<suspend () -> AllowanceAssociationRecord>(1).invoke() }
         }
         whenever(payer.consumePaymentList(any(), any())).thenReturn(Result.success(Unit))
+        whenever(payer.releasePaymentList(any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.prepareProof(any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(payer.associateLightningPayment(any(), any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.captureOnchainPayer(any())).thenReturn(Result.success(PAYER_IDENTITY))
@@ -335,6 +341,23 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `request above the per-payment limit stays manual and notifies once`() = test {
+        collectEvents()
+        candidates = listOf(candidate(blocked = AllowanceAccountingBlock.SharedRule("amount_outside_range")))
+        val request = fixtures.paymentRequest()
+        val allowances = listOf(fixtures.allowance(perPaymentMaxSats = 500uL))
+
+        val first = sut.autoPay(request, allowances, identity)
+        val second = sut.autoPay(request, allowances, identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, first)
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, second)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verifyNoInteractions(payer)
+        assertEquals(listOf<PaykitAllowanceEvent>(PaykitAllowanceEvent.LimitReached(fixtures.counterpartyKey, 1_000uL)), events)
+    }
+
+    @Test
     fun `over the monthly cap stays manual and notifies once`() = test {
         collectEvents()
         accountingState = stateNearTheMonthlyCap()
@@ -410,7 +433,34 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         verify(payer).cancelProofPreparation(request)
+        verify(payer).releasePaymentList(eq(request.counterparty), any())
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
+        verify(payer, never()).payLightning(any(), anyOrNull())
+    }
+
+    @Test
+    fun `unsaved journal stops the attempt before anything is consumed`() = test {
+        failSave = { true }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
+        verify(sdk, never()).beginPaymentExecution(any(), any())
+        verify(payer, never()).consumePaymentList(any(), any())
+        verify(payer, never()).payLightning(any(), anyOrNull())
+    }
+
+    @Test
+    fun `unsaved sending stage releases the payment list and never sends`() = test {
+        failSave = { "SENDING" in it }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
+        verify(payer).discardLightningProof(PAYMENT_HASH)
+        verify(payer).releasePaymentList(any(), any())
         verify(payer, never()).payLightning(any(), anyOrNull())
     }
 
@@ -618,6 +668,36 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(payer, never()).payOnchain(any(), any(), any(), any())
         verify(payer, never()).resolve(any(), any())
         assertEquals(emptyList(), reconciliations)
+    }
+
+    @Test
+    fun `recovery settles an on-chain attempt only on the wallet's positive evidence`() = test {
+        val request = fixtures.paymentRequest()
+        val refusedTxid = "a".repeat(64)
+        val acceptedTxid = "b".repeat(64)
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(
+                occurrence("onchain-refused", PaymentExecutionStatus.UNKNOWN),
+                occurrence("onchain-accepted", PaymentExecutionStatus.UNKNOWN),
+            ),
+        )
+        seedJournal(
+            journalEntry("onchain-refused", request, Stage.UNKNOWN).copy(transactionId = refusedTxid),
+            journalEntry("onchain-accepted", request, Stage.UNKNOWN).copy(transactionId = acceptedTxid),
+        )
+        whenever(payer.onchainPaymentOutcome(request.id, refusedTxid)).thenReturn(null)
+        whenever(payer.onchainPaymentOutcome(request.id, acceptedTxid)).thenReturn(PaymentOutcome.SUCCEEDED)
+
+        sut.recover(identity)
+
+        assertEquals(
+            listOf(PaymentOutcomeReport("onchain-accepted", PaymentOutcome.SUCCEEDED)),
+            recordedOutcomes,
+        )
+        assertEquals(
+            mapOf("onchain-refused" to Stage.UNKNOWN, "onchain-accepted" to Stage.SUCCEEDED),
+            sut.localState(identity).journal.associate { it.attemptId to it.stage },
+        )
     }
 
     @Test

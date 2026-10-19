@@ -49,6 +49,10 @@ killed right after handing the payment to the node never paid twice after relaun
   whose subtitle ends with "· Auto-paid" for an automatic payment
 - Incoming request: `PaymentRequestsBell`, `PaymentRequestsSheet`
 
+A payer who requires a PIN for payments sees the PIN pad (or biometrics) over the sheet when saving or ending
+an allowance, and when accepting an allowance a payee asked for; the payee's answers and automatic payments never
+ask. `pin-gates-allowance-changes.xml` covers it.
+
 The payee's wallet accepts the payer's offer as soon as it arrives, about a second after the
 proposal is received, and posts "<payer> set up an allowance for you"; no review sheet opens and no
 tap is needed. `android layout` can omit test tags applied to plain `Box` and `Column`

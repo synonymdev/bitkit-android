@@ -13,6 +13,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
@@ -1220,10 +1221,12 @@ class AppViewModel @Inject constructor(
 
     /**
      * Allowance events post a system notification when allowed, as on iOS: the request sheet that opens right after a
-     * limit is reached would cover an in-app toast. Without the permission they fall back to a toast.
+     * limit is reached would cover an in-app toast. When notifications are off they fall back to a toast.
      */
     private fun notifyAllowanceEvent(type: Toast.ToastType, title: String, description: String, testTag: String) {
-        if (context.pushNotification(title, description) != ID_NOTIFICATION_SKIPPED) return
+        val isPosted = NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+            context.pushNotification(title, description) != ID_NOTIFICATION_SKIPPED
+        if (isPosted) return
         toast(type = type, title = title, description = description, testTag = testTag)
     }
 
@@ -5639,6 +5642,7 @@ class AppViewModel @Inject constructor(
             paykitPaymentProofRepo.captureOriginalOnchainPayer(it).getOrElse { error ->
                 releasePrivatePaymentListIfNeeded(contactPaymentContext)
                 cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
                 handlePaymentPreparationFailure(error, contactPaymentContext)
                 return
             }
@@ -5981,6 +5985,7 @@ class AppViewModel @Inject constructor(
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return
         }
@@ -6017,6 +6022,7 @@ class AppViewModel @Inject constructor(
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
             lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
             handlePaymentPreparationFailure(it, contactPaymentContext)
