@@ -1284,6 +1284,9 @@
     <string name="usdt__error_backup">Unable to back up this payment. It will be retried when backup is available.</string>
     <string name="usdt__error_balance">Not enough USDT to cover the amount and fees.</string>
     <string name="usdt__error_bridge_amount">Amount too small to cover bridge costs. Try a larger amount.</string>
+    <string name="usdt__error_bridge_liquidity">This route cannot complete the transfer right now. Try another network or try again later.</string>
+    <string name="usdt__error_bridge_maximum">Amount is above this route’s maximum. Try a smaller amount.</string>
+    <string name="usdt__error_bridge_minimum">Amount is below this route’s minimum. Try a larger amount.</string>
     <string name="usdt__error_clock">Set your device date and time automatically, then try again.</string>
     <string name="usdt__error_configuration">USDT is currently unavailable. Please try again later.</string>
     <string name="usdt__error_delegation">This address uses another wallet’s smart account. Disable its smart account mode there before sending with Bitkit.</string>

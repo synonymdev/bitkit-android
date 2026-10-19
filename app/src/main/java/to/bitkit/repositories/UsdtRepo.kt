@@ -29,7 +29,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.UsdtService
@@ -64,7 +63,7 @@ class UsdtRepo @Inject constructor(
     suspend fun refresh(history: Boolean, force: Boolean = false) = withContext(ioDispatcher) {
         mutex.withLock {
             val refreshAfter = if (force) rateLimitedUntil else maxOf(nextRefresh, rateLimitedUntil)
-            if (nowMillis() < refreshAfter) {
+            if (clock.now().toEpochMilliseconds() < refreshAfter) {
                 return@withLock if (force) Result.failure(UsdtException.RateLimited()) else Result.success(Unit)
             }
             runSuspendCatching {
@@ -90,9 +89,12 @@ class UsdtRepo @Inject constructor(
                 settlement.getOrThrow()
             }.also {
                 if (it.exceptionOrNull() is UsdtException.RateLimited) {
-                    rateLimitedUntil = nowMillis() + 60.seconds.inWholeMilliseconds
+                    rateLimitedUntil = clock.now().toEpochMilliseconds() + 60.seconds.inWholeMilliseconds
                 }
-                nextRefresh = maxOf(rateLimitedUntil, nowMillis() + 10.seconds.inWholeMilliseconds)
+                nextRefresh = maxOf(
+                    rateLimitedUntil,
+                    clock.now().toEpochMilliseconds() + 10.seconds.inWholeMilliseconds
+                )
             }
         }
     }
@@ -114,7 +116,7 @@ class UsdtRepo @Inject constructor(
     suspend fun waitForTransfer(id: String): Result<Unit> = withContext(ioDispatcher) {
         withTimeoutOrNull(5.seconds) {
             mutex.withLock {
-                if (nowMillis() < rateLimitedUntil) return@withLock Result.success(Unit)
+                if (clock.now().toEpochMilliseconds() < rateLimitedUntil) return@withLock Result.success(Unit)
                 runSuspendCatching {
                     val wallet = service.wallet()
                     while (true) {
@@ -128,7 +130,7 @@ class UsdtRepo @Inject constructor(
                     }
                 }.onFailure {
                     if (it is UsdtException.RateLimited) {
-                        rateLimitedUntil = nowMillis() + 60.seconds.inWholeMilliseconds
+                        rateLimitedUntil = clock.now().toEpochMilliseconds() + 60.seconds.inWholeMilliseconds
                         nextRefresh = maxOf(nextRefresh, rateLimitedUntil)
                     }
                 }
@@ -136,7 +138,7 @@ class UsdtRepo @Inject constructor(
         } ?: Result.success(Unit)
     }
 
-    suspend fun paymentEndpoint(): Result<Endpoint> = operation { PaykitUsdt.endpoint(wallet().receiveAddress()) }
+    suspend fun paymentEndpoint(): Result<Endpoint> = operation { PaykitUsdt.endpoint(paymentAddress) }
 
     suspend fun sendDestinations() = operation {
         (Env.usdtDestinations + service.wallet().orchestraDestinations()).distinct().toImmutableList()
@@ -182,6 +184,15 @@ class UsdtRepo @Inject constructor(
         mutex.withLock { runSuspendCatching { block(service) } }
     }
 
+    private suspend fun <T> paymentOperation(block: suspend UsdtService.() -> T): Result<T> = operation {
+        if (clock.now().toEpochMilliseconds() < rateLimitedUntil) throw UsdtException.RateLimited()
+        runSuspendCatching { block(this) }.onFailure {
+            if (it is UsdtException.RateLimited) {
+                rateLimitedUntil = clock.now().toEpochMilliseconds() + 60.seconds.inWholeMilliseconds
+            }
+        }.getOrThrow()
+    }
+
     suspend fun wipe(clearCredentials: suspend () -> Unit = {}) = withContext(ioDispatcher) {
         mutex.withLock {
             clearCredentials()
@@ -198,52 +209,42 @@ class UsdtRepo @Inject constructor(
         amount: String,
         destination: UsdtDestination,
         locale: Locale = Locale.getDefault(),
-    ) = withContext(ioDispatcher) {
-        mutex.withLock {
-            runSuspendCatching {
-                val wallet = service.wallet()
-                if (recipient.trim().equals(wallet.receiveAddress(), ignoreCase = true)) throw UsdtSelfSendError()
-                wallet.quoteTransfer(
-                    recipient,
-                    usdtParseAmount(amount.replace(DecimalFormatSymbols.getInstance(locale).decimalSeparator, '.')),
-                    destination
-                )
-            }
-        }
+    ) = paymentOperation {
+        val wallet = wallet()
+        if (recipient.trim().equals(wallet.receiveAddress(), ignoreCase = true)) throw UsdtSelfSendError()
+        wallet.quoteTransfer(
+            recipient,
+            usdtParseAmount(amount.replace(DecimalFormatSymbols.getInstance(locale).decimalSeparator, '.')),
+            destination
+        )
     }
 
-    suspend fun quoteMaximum(recipient: String, destination: UsdtDestination) = withContext(ioDispatcher) {
-        mutex.withLock {
-            runSuspendCatching {
-                val wallet = service.wallet()
-                if (recipient.trim().equals(wallet.receiveAddress(), ignoreCase = true)) throw UsdtSelfSendError()
-                wallet.quoteMaxTransfer(recipient, destination)
-            }
-        }
+    suspend fun quoteMaximum(recipient: String, destination: UsdtDestination) = paymentOperation {
+        val wallet = wallet()
+        if (recipient.trim().equals(wallet.receiveAddress(), ignoreCase = true)) throw UsdtSelfSendError()
+        wallet.quoteMaxTransfer(recipient, destination)
     }
 
     suspend fun send(
         quote: UsdtQuote,
         submissionDeadline: Instant? = null,
         beforeSend: suspend () -> Unit = {},
-    ) = withContext(ioDispatcher) {
-        mutex.withLock {
-            runSuspendCatching {
-                beforeSend()
-                quote.requireValidForSubmission(clock.now())
-                service.send(quote, submissionDeadline).also { transfer ->
-                    _state.update {
-                        it.copy(
-                            transfers = (listOf(transfer) + it.transfers.filter { saved -> saved.id != transfer.id })
-                                .toImmutableList()
-                        )
-                    }
+    ) = paymentOperation {
+        runSuspendCatching {
+            beforeSend()
+            quote.requireValidForSubmission(clock.now())
+            send(quote, submissionDeadline).also { transfer ->
+                _state.update {
+                    it.copy(
+                        transfers = (listOf(transfer) + it.transfers.filter { saved -> saved.id != transfer.id })
+                            .toImmutableList()
+                    )
                 }
-            }.onFailure {
-                runSuspendCatching { service.wallet().history().toImmutableList() }
-                    .onSuccess { transfers -> _state.update { it.copy(transfers = transfers) } }
             }
-        }
+        }.onFailure {
+            runSuspendCatching { wallet().history().toImmutableList() }
+                .onSuccess { transfers -> _state.update { it.copy(transfers = transfers) } }
+        }.getOrThrow()
     }
 }
 

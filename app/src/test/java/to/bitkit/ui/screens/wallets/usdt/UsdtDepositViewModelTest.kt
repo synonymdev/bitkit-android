@@ -30,6 +30,30 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
     private val repo: UsdtDepositRepo = mock()
 
     @Test
+    fun `refund feedback survives polling and clears when the address changes or refund is retried`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf()))
+        val deposit = UsdtDeposit("deposit", "bsc", "USDT", 100u, "tx", "held", null, null)
+        whenever(repo.depositDetail("deposit", 0u)).thenReturn(Result.success(UsdtDepositDetail(deposit, null)))
+        whenever(repo.refundDeposit("deposit", 0u, "invalid", UsdtDepositNetwork.BSC))
+            .thenReturn(Result.failure(UsdtException.InvalidAddress()))
+        val model = UsdtDepositViewModel(repo)
+        model.detail("deposit")
+        model.refund("deposit", 0u, "invalid", UsdtDepositNetwork.BSC).join()
+        val error = requireNotNull(model.state.value.refundError)
+        model.refreshDetail("deposit")
+        assertEquals(error, model.state.value.refundError)
+        assertNull(model.state.value.error)
+        model.clearError()
+        assertNull(model.state.value.refundError)
+        model.refund("deposit", 0u, "invalid", UsdtDepositNetwork.BSC).join()
+        assertEquals(error, model.state.value.refundError)
+        whenever(repo.refundDeposit("deposit", 0u, "valid", UsdtDepositNetwork.BSC)).thenReturn(Result.success(Unit))
+        model.refund("deposit", 0u, "valid", UsdtDepositNetwork.BSC).join()
+        assertNull(model.state.value.refundError)
+        assertEquals("refund_requested", model.state.value.detail?.deposit?.status)
+    }
+
+    @Test
     fun `USD cents respect locale grouping and decimal separators`() {
         assertEquals("$10,000.00", "1000000".usdCents(Locale.US))
         assertEquals("$10.000,00", "1000000".usdCents(Locale.GERMANY))
@@ -108,7 +132,7 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
         assertNull(model.state.value.amountLimits)
         assertNull(model.state.value.address)
         assertFalse(model.state.value.busy)
-        model.clearAmountError()
+        model.clearError()
         assertNull(model.state.value.error)
     }
 
@@ -122,7 +146,7 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
         model.prepare("1").join()
         assertEquals(R.string.usdt__deposit_amount_out_of_range, model.state.value.error)
         assertEquals(error, model.state.value.amountLimits)
-        model.clearAmountError()
+        model.clearError()
         assertNull(model.state.value.error)
         assertNull(model.state.value.amountLimits)
         assertEquals(UsdtDepositNetwork.POLYGON, model.state.value.network)

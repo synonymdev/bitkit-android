@@ -5,6 +5,8 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.validateBitcoinAddress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -109,7 +111,6 @@ class PublicPaykitRepo @Inject constructor(
     private val usdtRepo: UsdtRepo,
 ) {
     companion object {
-        private const val TAG = "PublicPaykitRepo"
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
 
         internal val payablePreferenceOrder = listOf(
@@ -386,7 +387,9 @@ class PublicPaykitRepo @Inject constructor(
         val publishedInvoice = endpoints.firstOrNull { it.methodId == MethodId.Bolt11 }?.value.orEmpty()
         settingsStore.update {
             if (it.sharesPublicPaykitEndpoints && canPublish()) {
-                it.copy(publicPaykitCleanupPending = it.publicPaykitBolt11 != publishedInvoice)
+                val usdtPending = isUsdtPaymentOptionEnabled(it, usdtRepo.state.value) &&
+                    endpoints.none { endpoint -> endpoint.methodId == MethodId.UsdtArbitrum }
+                it.copy(publicPaykitCleanupPending = it.publicPaykitBolt11 != publishedInvoice || usdtPending)
             } else {
                 it
             }
@@ -433,12 +436,11 @@ class PublicPaykitRepo @Inject constructor(
         }
 
         if (isUsdtPaymentOptionEnabled(settings, usdtRepo.state.value)) {
-            usdtRepo.paymentEndpoint()
-                .onSuccess { endpoints += it }
-                .onFailure {
-                    if (it is CancellationException) throw it
-                    Logger.warn("Failed to prepare public Paykit USDT endpoint", it, context = TAG)
-                }
+            usdtRepo.paymentEndpoint().onSuccess { endpoints += it }.onFailure {
+                if (it is CancellationException) throw it
+                currentCoroutineContext().ensureActive()
+                Logger.warn("Deferred USDT endpoint preparation", context = "PublicPaykitRepo")
+            }
         }
 
         if (endpoints.isEmpty() && requireEndpoint) throw PublicPaykitError.NoSupportedEndpoint
@@ -495,6 +497,7 @@ class PublicPaykitRepo @Inject constructor(
 
         settingsStore.update {
             it.copy(
+                publicPaykitCleanupPending = true,
                 publicPaykitBolt11 = bolt11,
                 publicPaykitBolt11PaymentHash = invoice.paymentHash.toHex(),
                 publicPaykitBolt11ExpiresAtMillis = expiresAtMillis,

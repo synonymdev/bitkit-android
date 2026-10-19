@@ -226,6 +226,35 @@ class UsdtViewModelTest : BaseUnitTest() {
         verify(repo, never()).send(any(), anyOrNull(), any())
     }
 
+    @Test
+    fun `bridge rejections retain provider limits and clear when editing`() = test {
+        val cases = listOf(
+            Triple(UsdtException.BridgeAmountBelowMinimum("200"), R.string.usdt__deposit_minimum, "200".usdCents()),
+            Triple(UsdtException.BridgeAmountBelowMinimum(null), R.string.usdt__error_bridge_minimum, null),
+            Triple(UsdtException.BridgeAmountAboveMaximum("10000"), R.string.usdt__deposit_maximum, "10000".usdCents()),
+            Triple(UsdtException.BridgeAmountAboveMaximum(null), R.string.usdt__error_bridge_maximum, null),
+            Triple(UsdtException.BridgeLiquidityUnavailable(), R.string.usdt__error_bridge_liquidity, null),
+            Triple(UsdtException.InvalidAmount(), R.string.usdt__error_amount, null),
+        )
+        val viewModel = createViewModel()
+        for ((error, resource, limit) in cases) {
+            whenever(repo.quote(eq(quote.recipient), eq("1"), eq(UsdtDestination.SOLANA), any()))
+                .thenReturn(Result.failure(error))
+            viewModel.quote(quote.recipient, "1", UsdtDestination.SOLANA).join()
+            assertEquals(resource, viewModel.state.value.error, error.javaClass.simpleName)
+            assertEquals(limit, viewModel.state.value.errorAmount)
+            assertNull(viewModel.state.value.quote)
+            viewModel.edit()
+            assertNull(viewModel.state.value.error)
+            assertNull(viewModel.state.value.errorAmount)
+        }
+        whenever(repo.quoteMaximum(eq(quote.recipient), eq(UsdtDestination.SOLANA)))
+            .thenReturn(Result.failure(UsdtException.BridgeLiquidityUnavailable()))
+        viewModel.quoteMaximum(quote.recipient, UsdtDestination.SOLANA) {}.join()
+        assertEquals(R.string.usdt__error_bridge_liquidity, viewModel.state.value.error)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
     private val repo: UsdtRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val walletState = MutableStateFlow(UsdtWalletState())

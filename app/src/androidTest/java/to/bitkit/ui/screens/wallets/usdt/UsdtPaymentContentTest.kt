@@ -2,11 +2,16 @@ package to.bitkit.ui.screens.wallets.usdt
 
 import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
@@ -17,6 +22,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.UsdtBridgeProvider
 import com.synonym.bitkitcore.UsdtDestination
@@ -32,6 +38,8 @@ import org.junit.Rule
 import org.junit.Test
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.test.annotations.ComposeUi
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppThemeSurface
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -98,6 +106,65 @@ class UsdtPaymentContentTest {
         SystemClock.sleep(600)
         composeTestRule.onNodeWithText("3.00").performClick()
         composeTestRule.runOnIdle { assertEquals(1, pageChanges) }
+    }
+
+    @Test
+    fun decimalKeyMatchesAmountLocaleWithoutChangingInputEncoding() {
+        Locale.setDefault(Locale.GERMANY)
+        val amount = mutableStateOf("5")
+        composeTestRule.setContent {
+            AppThemeSurface {
+                Column {
+                    UsdtReceiveAmountContent(
+                        amount = amount.value,
+                        allowEmpty = false,
+                        busy = false,
+                        error = null,
+                        limits = null,
+                        onAmount = { amount.value = it },
+                        onContinue = {},
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithText(",").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NDecimal").performClick()
+        composeTestRule.onNodeWithTag("N5").performClick()
+        composeTestRule.onNodeWithText("5,5").assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals("5.5", amount.value) }
+    }
+
+    @Test
+    fun largeHeadersAndNetworkLabelsRemainReadable() {
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
+                AppThemeSurface {
+                    Column(Modifier.width(280.dp).verticalScroll(rememberScrollState())) {
+                        AppTopBar(titleText = "Cross-Network Deposits", onBackClick = {})
+                        SheetTopBar(titleText = "Select Network", onBack = {})
+                        UsdtNetworkButton(
+                            UsdtDestination.BSC,
+                            {},
+                            persistentListOf(UsdtDestination.BSC, UsdtDestination.ARBITRUM)
+                        )
+                    }
+                }
+            }
+        }
+        listOf("Cross-Network Deposits", "Select Network", "BNB Smart Chain").forEach { label ->
+            val node = composeTestRule.onNodeWithText(label).performScrollTo()
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertFalse(layout.didOverflowHeight, "Clipped height for $label")
+            repeat(layout.lineCount) { line ->
+                assertFalse(layout.isLineEllipsized(line), "Ellipsized $label")
+                assertTrue(
+                    layout.getLineRight(line) - layout.getLineLeft(line) <= layout.size.width + 1f,
+                    "Clipped width for $label"
+                )
+            }
+        }
     }
 
     @Test

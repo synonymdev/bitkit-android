@@ -269,7 +269,7 @@ class EditProfileViewModel @Inject constructor(
         }
         try {
             privatePaykitRepo.beginProfileDeletion()
-            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true)
             val result = pubkyRepo.deleteProfileWithSessionRetry()
             if (result.isSuccess) {
                 privatePaykitRepo.closeAndClear()
