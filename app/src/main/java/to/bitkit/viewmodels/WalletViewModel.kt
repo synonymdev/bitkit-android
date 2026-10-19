@@ -41,6 +41,8 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapRepo
+import to.bitkit.repositories.PubkySwapState
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
@@ -71,6 +73,7 @@ class WalletViewModel @Inject constructor(
     private val migrationService: MigrationService,
     private val connectivityRepo: ConnectivityRepo,
     private val boltzService: BoltzService,
+    private val pubkySwapRepo: PubkySwapRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -122,6 +125,13 @@ class WalletViewModel @Inject constructor(
         checkAndPerformRNMigration()
         collectStates()
         observeNetworkState()
+        observeSwapProvider()
+    }
+
+    private fun observeSwapProvider() = viewModelScope.launch {
+        pubkySwapRepo.state.collect {
+            if (it is PubkySwapState.Connected && walletExists) ensureSwapUpdatesRunning()
+        }
     }
 
     private fun observeNetworkState() = viewModelScope.launch(bgDispatcher) {
@@ -429,14 +439,15 @@ class WalletViewModel @Inject constructor(
      * auto-claimed. A live stream is left untouched: restarting it would abort bitkit-core's
      * background tasks and could race an in-flight claim. New swaps are reconciled at creation
      * inside bitkit-core, and the stream reconciles every pending swap periodically, so a
-     * running stream is always enough. Runs only where swaps are supported and enabled in dev
-     * settings, see [BoltzService.isSwapEnabled].
+     * running stream is always enough. Runs only where swaps are supported, and while a swap
+     * provider is connected or earlier swaps still need recovery, see [PubkySwapRepo.shouldRunUpdates].
      */
     fun ensureSwapUpdatesRunning() {
         if (!boltzService.isSwapSupported) return
         if (swapUpdatesRunning || swapUpdatesJob?.isActive == true) return
         swapUpdatesJob = viewModelScope.launch {
-            if (!boltzService.isSwapEnabled()) return@launch
+            if (!pubkySwapRepo.shouldRunUpdates()) return@launch
+            pubkySwapRepo.start()
             collectSwapEventsOnce()
             startSwapUpdates()
         }

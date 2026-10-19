@@ -29,6 +29,8 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkySwapNetwork
+import to.bitkit.models.PubkySwapProvider
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
@@ -37,6 +39,8 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapRepo
+import to.bitkit.repositories.PubkySwapState
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -55,6 +59,10 @@ import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletViewModelTest : BaseUnitTest() {
+    companion object {
+        private const val PROVIDER_KEY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+    }
+
     private lateinit var sut: WalletViewModel
 
     private val context = mock<Context>()
@@ -67,6 +75,8 @@ class WalletViewModelTest : BaseUnitTest() {
     private val migrationService = mock<MigrationService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val boltzService = mock<BoltzService>()
+    private val pubkySwapRepo = mock<PubkySwapRepo>()
+    private val pubkySwapState = MutableStateFlow<PubkySwapState>(PubkySwapState.NoProvider)
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -89,6 +99,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever { backupRepo.hasPendingWalletRestore() }.thenReturn(false)
         whenever(connectivityRepo.isOnline).thenReturn(isOnline)
         whenever(boltzService.events).thenReturn(MutableSharedFlow())
+        whenever(pubkySwapRepo.state).thenReturn(pubkySwapState)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(1uL))
 
@@ -104,17 +115,19 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            pubkySwapRepo = pubkySwapRepo,
         )
     }
 
     @Test
     fun `ensureSwapUpdatesRunning should start updates when swaps are enabled`() = test {
         whenever(boltzService.isSwapSupported).thenReturn(true)
-        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        whenever(pubkySwapRepo.shouldRunUpdates()).thenReturn(true)
 
         sut.ensureSwapUpdatesRunning()
         advanceUntilIdle()
 
+        verify(pubkySwapRepo).start()
         verify(boltzService).startUpdates(anyOrNull(), any(), anyOrNull())
     }
 
@@ -129,14 +142,30 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `ensureSwapUpdatesRunning should do nothing when swaps are disabled in dev settings`() = test {
+    fun `ensureSwapUpdatesRunning should do nothing when swaps are disabled and none need recovery`() = test {
         whenever(boltzService.isSwapSupported).thenReturn(true)
-        whenever(boltzService.isSwapEnabled()).thenReturn(false)
+        whenever(pubkySwapRepo.shouldRunUpdates()).thenReturn(false)
 
         sut.ensureSwapUpdatesRunning()
         advanceUntilIdle()
 
+        verify(pubkySwapRepo, never()).start()
         verify(boltzService, never()).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `connected swap provider should start updates for an existing wallet`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(pubkySwapRepo.shouldRunUpdates()).thenReturn(true)
+        walletState.value = WalletState(walletExists = true)
+
+        pubkySwapState.value = PubkySwapState.Connected(
+            provider = PubkySwapProvider(PROVIDER_KEY, PubkySwapNetwork.REGTEST),
+            identity = "pubky$PROVIDER_KEY",
+        )
+        advanceUntilIdle()
+
+        verify(boltzService).startUpdates(anyOrNull(), any(), anyOrNull())
     }
 
     @Test
@@ -536,6 +565,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            pubkySwapRepo = pubkySwapRepo,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -602,6 +632,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            pubkySwapRepo = pubkySwapRepo,
         )
 
         testSut.start()
@@ -657,6 +688,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            pubkySwapRepo = pubkySwapRepo,
         )
 
         // Trigger restore to put state in non-idle
@@ -696,6 +728,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            pubkySwapRepo = pubkySwapRepo,
         )
 
         testSut.restoreWallet("mnemonic", null)
@@ -786,6 +819,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            pubkySwapRepo = pubkySwapRepo,
         )
         advanceUntilIdle()
 
