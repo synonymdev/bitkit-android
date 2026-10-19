@@ -1158,7 +1158,11 @@ class AppViewModel @Inject constructor(
             clearHandledSubscriptionNotification()
             if (mode == PaykitPaymentRequestRefreshMode.FULL) reconcilePaykitUsdt()
             paykitAllowanceRepo.refresh()
-            announceAcceptedAllowanceOffers(paykitAllowanceRepo.acceptOffersFromAllowers())
+            val acceptedOffers = paykitAllowanceRepo.acceptOffersFromAllowers {
+                !privatePaykitRepo.isProfileDeletionInProgress.value &&
+                    !(onlyWhileActive && isPaymentRequestPollingStopped.value)
+            }
+            announceAcceptedAllowanceOffers(acceptedOffers)
             if (processAllowanceRequests()) paykitPaymentRequestRepo.refresh()
             presentNextIncomingPaykitPaymentRequest()
         }

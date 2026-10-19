@@ -698,7 +698,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitAllowanceRepo.events).thenReturn(MutableSharedFlow())
         whenever { paykitAllowanceRepo.refresh() }.thenReturn(Result.success(Unit))
         whenever { paykitAllowanceRepo.beginManualPayment(any(), any()) }.thenReturn(Result.success(null))
-        whenever { paykitAllowanceRepo.acceptOffersFromAllowers() }.thenReturn(emptyList())
+        whenever { paykitAllowanceRepo.acceptOffersFromAllowers(any()) }.thenReturn(emptyList())
         whenever { paykitAllowanceRepo.processIncomingRequests(any()) }.thenReturn(false)
         whenever { paykitAllowanceRepo.isAutomaticallyHandling(any()) }.thenReturn(false)
         whenever { paykitPaymentProofRepo.captureOriginalOnchainPayer(any()) }

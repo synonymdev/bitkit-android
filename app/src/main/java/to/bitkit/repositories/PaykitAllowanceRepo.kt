@@ -239,17 +239,23 @@ class PaykitAllowanceRepo @Inject constructor(
             }
         }
 
-    suspend fun accept(entryId: String): Result<Unit> = respond(entryId) {
-        val proposalStreamItemId = it.proposalStreamItemId ?: throw PaykitAllowanceError.Unavailable
-        paykitSdkService.acceptAllowance(it.counterparty, it.allowanceId, proposalStreamItemId)
+    suspend fun accept(entryId: String): Result<Unit> = respond(entry(entryId)) { acceptProposal(it) }
+
+    private suspend fun acceptProposal(allowance: PaykitAllowance): AllowanceRecord {
+        val proposalStreamItemId = allowance.proposalStreamItemId ?: throw PaykitAllowanceError.Unavailable
+        return paykitSdkService.acceptAllowance(allowance.counterparty, allowance.allowanceId, proposalStreamItemId)
     }
 
     /**
      * Accepts the offers that make this wallet the allowee and returns the ones now active so the caller can tell the
-     * user. A failed accept stays unanswered and is tried again on the next refresh.
+     * user. A failed accept stays unanswered and is tried again on the next refresh. Stops, and returns nothing to
+     * announce, once the identity it started with is gone or [canContinue] turns false.
      */
-    suspend fun acceptOffersFromAllowers(): List<PaykitAllowanceEntry> = withContext(ioDispatcher) {
-        if (activeIdentity == null) return@withContext emptyList()
+    suspend fun acceptOffersFromAllowers(
+        canContinue: () -> Boolean = { true },
+    ): List<PaykitAllowanceEntry> = withContext(ioDispatcher) {
+        val identity = activeIdentity ?: return@withContext emptyList()
+        val isCurrent = { activeIdentity == identity && canContinue() }
         val offers = _entries.value.filter { entry ->
             val answerable = entry.allowances.filter { it.isAnswerable }
             answerable.isNotEmpty() && answerable.all { it.isOfferFromAllower }
@@ -257,17 +263,21 @@ class PaykitAllowanceRepo @Inject constructor(
         if (offers.isEmpty() || !isAcceptingOffers.compareAndSet(false, true)) return@withContext emptyList()
 
         try {
-            offers.filter { offer ->
-                accept(offer.id).onFailure {
-                    Logger.warn("Failed to accept an allowance offer", it, context = TAG)
-                }.isSuccess
+            val accepted = mutableListOf<PaykitAllowanceEntry>()
+            for (offer in offers) {
+                if (!isCurrent()) return@withContext emptyList()
+                // Answers the entry that was checked, so an ask that joined it since is never accepted here.
+                respond(offer) { acceptProposal(it) }
+                    .onSuccess { accepted += offer }
+                    .onFailure { Logger.warn("Failed to accept an allowance offer", it, context = TAG) }
             }
+            if (isCurrent()) accepted else emptyList()
         } finally {
             isAcceptingOffers.set(false)
         }
     }
 
-    suspend fun reject(entryId: String): Result<Unit> = respond(entryId) {
+    suspend fun reject(entryId: String): Result<Unit> = respond(entry(entryId)) {
         paykitSdkService.rejectAllowance(it.counterparty, it.allowanceId)
     }
 
@@ -286,12 +296,12 @@ class PaykitAllowanceRepo @Inject constructor(
     }
 
     private suspend fun respond(
-        entryId: String,
+        entry: PaykitAllowanceEntry?,
         response: suspend (PaykitAllowance) -> AllowanceRecord,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
-            val entry = entry(entryId) ?: throw PaykitAllowanceError.Unavailable
+            if (entry == null) throw PaykitAllowanceError.Unavailable
             val answerable = entry.allowances.filter { it.isAnswerable }
             if (answerable.isEmpty()) throw PaykitAllowanceError.Unavailable
             for (allowance in answerable) {
@@ -299,7 +309,9 @@ class PaykitAllowanceRepo @Inject constructor(
                 sendQueuedMessages(allowance.counterparty)
             }
             val ids = entry.allowances.map { it.allowanceId }
-            executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + ids) }
+            if (activeIdentity == identity) {
+                executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + ids) }
+            }
             refresh()
             Unit
         }
