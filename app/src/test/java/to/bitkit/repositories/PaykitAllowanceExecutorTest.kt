@@ -42,6 +42,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.repositories.PaykitAllowanceFixtures.ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.JournalEntry
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
@@ -456,6 +458,28 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertNull(entry.paymentHash)
         assertTrue(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, TXID) in events)
         assertEquals(listOf(AUTOMATIC_ATTEMPT_ID), sut.succeededAutomaticPayments(identity).map { it.attemptId })
+    }
+
+    @Test
+    fun `unresolved earlier on-chain send keeps an on-chain request manual`() = test {
+        whenever(payer.resolve(any(), any())).thenReturn(Result.success(onchainPayment()))
+        whenever(payer.isOnchainSendBlocked()).thenReturn(true)
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(payer, never()).payOnchain(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `request in another asset stays manual`() = test {
+        val request = fixtures.paymentRequest().copy(amount = PaykitAmount(PaykitAsset.USDT, 1_000_000uL))
+
+        val result = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).evaluateAllowanceCandidates(any(), any())
     }
 
     @Test

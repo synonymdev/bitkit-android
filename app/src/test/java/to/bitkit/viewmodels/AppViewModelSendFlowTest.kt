@@ -1833,7 +1833,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(signed.miningFeeSats.toLong(), sut.sendUiState.value.onchainFeeUi.sats)
         verify(privatePaykitRepo, never()).beginPaymentRequest(request)
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
         verify(hwWalletRepo, never()).signFunding(any(), any())
         assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
         sut.resetSendState(hardwareWalletId = null)
@@ -1850,7 +1850,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
         assertEquals(request.amount.atomic, sut.sendUiState.value.amount)
         assertEquals(Instant.parse(quote.expiresAt), sut.hardwarePaymentDeadlineAt)
-        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -1884,7 +1884,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             cancelAndIgnoreRemainingEvents()
         }
         verify(privatePaykitRepo, never()).beginPaymentRequest(any())
-        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
         verify(hwWalletRepo, never()).signFunding(any(), any())
     }
 
@@ -13729,7 +13729,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         assertTrue(sut.sendUiState.value.paykitUsesUsdt)
         assertFalse(sut.prepareHardwareContactPayment())
-        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -13753,7 +13753,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
     }
     private fun privatePaymentContext(version: ULong?) = PrivatePaykitPaymentContext(
         paymentAppsByEndpoint = mapOf(
