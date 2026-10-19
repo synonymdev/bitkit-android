@@ -212,10 +212,44 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(file.exists())
         verify(paykitSdkService).processOutboundPrivateMessages(
             COUNTERPARTY,
-            PaykitSdkOperationLock.Priority.Interactive,
+            PaykitSdkOperationLock.Priority.Background,
             LOCAL_IDENTITY,
         )
         verify(paykitSdkService, never()).processPendingPrivateMessages()
+    }
+
+    @Test
+    fun `proof delivery does not hold the local proof state lock`() = test {
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+            .thenReturn(record)
+        val deliveryStarted = CompletableDeferred<Unit>()
+        val releaseDelivery = CompletableDeferred<Unit>()
+        whenever(
+            paykitSdkService.processOutboundPrivateMessages(
+                COUNTERPARTY,
+                PaykitSdkOperationLock.Priority.Background,
+                LOCAL_IDENTITY,
+            )
+        ).doSuspendableAnswer {
+            deliveryStarted.complete(Unit)
+            releaseDelivery.await()
+            OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+        }
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+        repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
+        deliveryStarted.await()
+        try {
+            withTimeout(1_000) { repo.backupSnapshot() }
+        } finally {
+            releaseDelivery.complete(Unit)
+        }
+        advanceUntilIdle()
+        verify(paykitSdkService, times(1)).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -532,9 +566,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofCaptor.lastValue,
         )
         assertTrue(storedProofs.isEmpty())
+        runCurrent()
         verify(paykitSdkService).processOutboundPrivateMessages(
             COUNTERPARTY,
-            PaykitSdkOperationLock.Priority.Interactive,
+            PaykitSdkOperationLock.Priority.Background,
             LOCAL_IDENTITY,
         )
     }
@@ -707,7 +742,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(
             paykitSdkService.processOutboundPrivateMessages(
                 COUNTERPARTY,
-                PaykitSdkOperationLock.Priority.Interactive,
+                PaykitSdkOperationLock.Priority.Background,
                 LOCAL_IDENTITY,
             )
         )
@@ -729,11 +764,13 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         assertTrue(repo.submit(proof).getOrThrow())
+        runCurrent()
         assertTrue(repo.submit(proof).getOrThrow())
+        runCurrent()
 
         verify(paykitSdkService, times(2)).processOutboundPrivateMessages(
             COUNTERPARTY,
-            PaykitSdkOperationLock.Priority.Interactive,
+            PaykitSdkOperationLock.Priority.Background,
             LOCAL_IDENTITY,
         )
         verify(paykitSdkService, never()).processPendingPrivateMessages()

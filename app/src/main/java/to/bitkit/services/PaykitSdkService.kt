@@ -89,6 +89,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.BuildConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
@@ -1490,10 +1491,13 @@ class PaykitSdkService @Inject constructor(
             try {
                 operation()
             } finally {
-                Logger.debug(
-                    "Finished Paykit operation '$name' trace='$trace' queue='$queue' work='${admitted.elapsedNow()}'",
-                    context = TAG,
-                )
+                if (BuildConfig.DEBUG) {
+                    Logger.debug(
+                        "Finished Paykit operation '$name' trace='$trace' " +
+                            "queue='$queue' work='${admitted.elapsedNow()}'",
+                        context = TAG,
+                    )
+                }
             }
         }
     }
@@ -1501,7 +1505,7 @@ class PaykitSdkService @Inject constructor(
     private suspend fun <T> withPaykitKey(block: suspend (PaykitSdk) -> T): T {
         val started = TimeSource.Monotonic.markNow()
         refreshPaykitKey()
-        Logger.debug("Prepared Paykit key duration='${started.elapsedNow()}'", context = TAG)
+        if (BuildConfig.DEBUG) Logger.debug("Prepared Paykit key duration='${started.elapsedNow()}'", context = TAG)
         return runSuspendCatching { block(handle()) }
             .onFailure(::invalidatePaykitKeyIfNeeded)
             .getOrThrow()
@@ -1522,7 +1526,9 @@ class PaykitSdkService @Inject constructor(
                         .onFailure(::invalidatePaykitKeyIfNeeded)
                         .getOrThrow()
                 } finally {
-                    Logger.debug("Read Paykit backup revision duration='${started.elapsedNow()}'", context = TAG)
+                    if (BuildConfig.DEBUG) {
+                        Logger.debug("Read Paykit backup revision duration='${started.elapsedNow()}'", context = TAG)
+                    }
                 }
             },
             readStateRevision = { handle.stateRevision() },

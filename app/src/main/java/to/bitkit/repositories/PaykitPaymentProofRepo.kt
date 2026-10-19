@@ -1416,14 +1416,17 @@ class PaykitPaymentProofRepo @Inject constructor(
             )
             Logger.info("Queued a Paykit payment proof for private delivery", context = TAG)
         }
-        runSuspendCatching {
-            paykitSdkService.processOutboundPrivateMessages(
-                proof.requestId.counterparty,
-                PaykitSdkOperationLock.Priority.Interactive,
-                expectedIdentity = proof.identity,
-            )
-        }.onFailure {
-            Logger.warn("Retained Paykit payment proof for private delivery", it, context = TAG)
+        // Submission has durably queued the proof; transport does not need the local proof-state lock.
+        deliveryScope.launch {
+            runSuspendCatching {
+                paykitSdkService.processOutboundPrivateMessages(
+                    proof.requestId.counterparty,
+                    PaykitSdkOperationLock.Priority.Background,
+                    expectedIdentity = proof.identity,
+                )
+            }.onFailure {
+                Logger.warn("Retained Paykit payment proof for private delivery", it, context = TAG)
+            }
         }
         if (proof.kind != PaykitPaymentProofKind.Usdt) {
             runSuspendCatching {
