@@ -8073,7 +8073,11 @@ data class ContactPaymentContext(
     fun initialUsdtSubscriptionPayment(at: Instant): PaykitRequestPayment? {
         val request = incomingPaymentRequest ?: return null
         if (!isInitialSubscriptionPayment || request.billingPeriod == null || request.isExpired(at)) return null
-        if (endpoints.isEmpty() || endpoints.any { it.methodId != MethodId.UsdtArbitrum }) return null
+        if (request.acceptedPaymentEndpointIdentifiers.toSet() != setOf(MethodId.UsdtArbitrum.rawValue) ||
+            endpoints.isEmpty() || endpoints.any { it.methodId != MethodId.UsdtArbitrum }
+        ) {
+            return null
+        }
         val unchangedAmount = when (request.amount.asset) {
             PaykitAsset.USDT -> request.pricing.conversion == null
             PaykitAsset.USD -> {

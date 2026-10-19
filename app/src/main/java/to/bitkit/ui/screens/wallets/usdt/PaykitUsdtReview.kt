@@ -140,7 +140,7 @@ fun PaykitUsdtReview(
     }
 }
 
-private suspend fun preparePayment(viewModel: UsdtViewModel, app: AppViewModel, uiState: SendUiState) {
+internal suspend fun preparePayment(viewModel: UsdtViewModel, app: AppViewModel, uiState: SendUiState) {
     val automaticPayment = app.takeInitialUsdtSubscriptionAuthorization()
     if (automaticPayment || viewModel.state.value.quote == null) {
         viewModel.quote(

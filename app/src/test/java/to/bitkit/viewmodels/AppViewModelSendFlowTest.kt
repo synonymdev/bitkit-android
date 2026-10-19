@@ -10352,6 +10352,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertNull(payment.initialUsdtSubscriptionPayment(now + 61.seconds))
             assertNull(payment.copy(isInitialSubscriptionPayment = false).initialUsdtSubscriptionPayment(now))
             assertNull(
+                payment.copy(
+                    incomingPaymentRequest = request.copy(
+                        acceptedPaymentEndpointIdentifiers = listOf(
+                            endpoint.methodId.rawValue,
+                            MethodId.P2wpkh.rawValue,
+                        )
+                    )
+                ).initialUsdtSubscriptionPayment(now)
+            )
+            assertNull(
                 payment.copy(endpoints = listOf(endpoint, endpoint.copy(methodId = MethodId.P2wpkh)))
                     .initialUsdtSubscriptionPayment(now)
             )
@@ -10378,6 +10388,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(SendRoute.UsdtReview, (sut.currentSheet.value as? Sheet.Send)?.route)
         assertTrue(sut.takeInitialUsdtSubscriptionAuthorization())
+        assertFalse(sut.takeInitialUsdtSubscriptionAuthorization())
+        verify(paykitUsdtPayments, never()).send(any(), any(), any())
+    }
+
+    @Test
+    fun `mixed accepted methods still require selection when only usdt resolves`() = test {
+        val now = Clock.System.now()
+        val endpoint = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", null, null, "")
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 5u),
+            billingPeriod = PaykitBillingPeriod(now, now + 3600.seconds),
+            pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("usdt", "1")))),
+            acceptedPaymentEndpointIdentifiers = listOf(endpoint.methodId.rawValue, MethodId.P2wpkh.rawValue),
+        )
+        sut.openContactPayment(
+            endpoint.value,
+            testPublicKey,
+            incomingPaymentRequest = request,
+            endpoints = listOf(endpoint),
+            isInitialSubscriptionPayment = true,
+        )
+        advanceUntilIdle()
+        assertEquals(SendRoute.Amount, (sut.currentSheet.value as? Sheet.Send)?.route)
         assertFalse(sut.takeInitialUsdtSubscriptionAuthorization())
         verify(paykitUsdtPayments, never()).send(any(), any(), any())
     }
