@@ -10,9 +10,10 @@
     again at the end, so remember it. Enter a wrong PIN exactly once: exhausting attempts leads to
     the forgot-PIN wallet reset, and never tap the Reset button.
 
-    Read the navigation-bar top edge from the NavigationBar window frame in
-    `adb shell dumpsys window windows`, or from the bottom of the screen minus the navigation-bar
-    inset. The Reset button carries no tag; find it in `android layout` by its text. On iOS, compare
+    The navigation-bar top edge is the screen height (`adb shell wm size`) minus the bottom
+    `navigationBars` inset that `adb shell dumpsys window windows` reports. `android layout` gives
+    the Reset button no bounds and no tag, so read its bounds from `adb shell uiautomator dump`. With
+    no biometrics enrolled, the biometrics Skip button exposes only its text. On iOS, compare
     the button frame from `snapshot-ui` against the home indicator safe area instead.
   </description>
   <actions>
@@ -22,23 +23,23 @@
     <action>Tap Enable PIN (tag "EnablePin")</action>
     <action>Enter a 4-digit PIN with the number pad (tags "N0"–"N9")</action>
     <action>Re-enter the same 4-digit PIN to confirm it</action>
-    <action>On the biometrics screen, tap Skip (tag "SkipButton")</action>
+    <action>On the biometrics screen, tap Skip</action>
     <action>Tap OK (tag "OK")</action>
     <action>Run adb shell input keyevent KEYCODE_HOME and wait 3 seconds</action>
     <action>Run adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity</action>
-    <action>Verify the PIN pad is visible (testTag "PinPad")</action>
+    <action>Verify the PIN pad is visible with the text "Please enter your PIN code" and keys (tag "N1")</action>
     <action>Enter one wrong 4-digit PIN</action>
     <action>Verify the attempts text (tag "AttemptsRemaining") reads "... attempts remaining. Forgot your PIN?"</action>
     <action>Tap the attempts text (tag "AttemptsRemaining")</action>
     <action>Verify the "Forgot PIN?" sheet is visible (tag "ForgotPIN")</action>
-    <action>Verify the bottom bound of the "Reset (Requires Recovery Phrase)" button is above the navigation-bar top edge</action>
+    <action>Verify from `adb shell uiautomator dump` that the bottom bound of the "Reset (Requires Recovery Phrase)" button is above the navigation-bar top edge</action>
     <action>Take a screenshot and verify the gesture handle does not overlap the Reset button</action>
-    <action>Press back and verify the PIN pad is visible again (testTag "PinPad")</action>
+    <action>Press back and verify the PIN pad is visible again with keys (tag "N1")</action>
     <action>Enter the PIN chosen above and verify the wallet home screen is visible (testTag "Send")</action>
     <action>Tap the menu button (tag "HeaderMenu") and tap Settings (tag "DrawerSettings")</action>
     <action>Tap the Security tab (tag "Tab-security")</action>
     <action>Tap PIN Code (tag "PINCode")</action>
-    <action>Tap Disable PIN (tag "DisablePin") and enter the PIN chosen above on the disable sheet (tag "DisablePIN")</action>
+    <action>Tap Disable PIN (tag "DisablePin") and enter the PIN chosen above on the "Disable PIN" screen</action>
     <action>Verify the PIN Code row (tag "PINCode") shows "Disabled"</action>
   </actions>
 </journey>
