@@ -313,6 +313,23 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `received proposal to pay without per-payment or monthly limits is never presented or accepted`() = test {
+        val expiryOnly = fixtures.record(
+            localRole = AllowanceLocalRole.ALLOWER,
+            state = AllowanceLifecycleState.PROPOSED,
+            proposedByMe = false,
+            terms = fixtures.terms(perPaymentMaximum = null, monthlyLimit = null, expiresAt = "2027-09-24T12:00:00Z"),
+        )
+        records = listOf(expiryOnly)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(expiryOnly)
+        sut.activate(identity)
+
+        assertNull(sut.proposalForPresentation())
+        assertTrue(sut.accept(ALLOWANCE_ID).isFailure)
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
     fun `answering fails when nothing in the entry awaits an answer`() = test {
         records = listOf(fixtures.record())
         sut.activate(identity)

@@ -48,6 +48,10 @@ class PaykitAllowanceOnchainSendError(
     cause: Throwable,
 ) : AppError(cause)
 
+/** An automatic on-chain payment whose fee would exceed the amount it pays. */
+class PaykitAllowanceFeeTooHighError(feeSats: ULong, amountSats: ULong) :
+    AppError("Fee '$feeSats' exceeds the allowance payment '$amountSats'")
+
 /** The side effects of paying one request, kept apart so the admission logic is testable without a node. */
 @Singleton
 @Suppress("TooManyFunctions")
@@ -113,7 +117,8 @@ class PaykitAllowancePayer @Inject constructor(
     suspend fun isOnchainSendBlocked(): Boolean =
         runSuspendCatching { lightningRepo.currentOnchainSendAttempt()?.blocksNextSend == true }.getOrDefault(true)
 
-    suspend fun payLightning(bolt11: String, sats: ULong?): Result<String> = lightningRepo.payInvoice(bolt11, sats)
+    suspend fun payLightning(bolt11: String, sats: ULong?, paymentDeadlineAt: Instant?): Result<String> =
+        lightningRepo.payInvoice(bolt11, sats, paymentDeadlineAt, onBeforeSend = { true })
 
     /**
      * Sends at the medium fee rate, bound to [request] like a manual payment of it. A failure is a
@@ -125,6 +130,14 @@ class PaykitAllowancePayer @Inject constructor(
         sats: ULong,
         payerIdentity: String,
     ): Result<OnchainSendOutcome> {
+        // The SDK ledger counts the request amount only, so a fee above it would spend outside the user's limits.
+        val fee = lightningRepo.calculateTotalFee(sats, address, TransactionSpeed.Medium).getOrElse {
+            return Result.failure(PaykitAllowanceOnchainSendError(isDefinitelyNotBroadcast = true, cause = it))
+        }
+        if (fee > sats) {
+            val error = PaykitAllowanceFeeTooHighError(feeSats = fee, amountSats = sats)
+            return Result.failure(PaykitAllowanceOnchainSendError(isDefinitelyNotBroadcast = true, cause = error))
+        }
         var sendAttempted = false
         val result = lightningRepo.sendOnChain(
             address = address,
@@ -598,7 +611,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             throw it
         }
         val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
-        payer.payLightning(payment.endpoint.value, sats).onFailure {
+        payer.payLightning(payment.endpoint.value, sats, request.submissionDeadline(null)).onFailure {
             // Only an error that proves the payment never left releases the reservation; anything else stays open.
             if (payer.failLightningPayment(paymentHash, it)) {
                 failUnsent(request, payment, attemptId, identity)
@@ -777,7 +790,10 @@ class PaykitAllowanceExecutor @Inject constructor(
             record(prepared.attemptId, PaymentOutcome.FAILED, identity)
             return null
         }
-        setStage(Stage.SUBMITTED, prepared.attemptId, identity)
+        // An on-chain send marks nothing before it broadcasts, so recovery must not read its attempt as never sent.
+        val isOnchain = PaykitPaymentProofKind.fromPaymentEndpointIdentifier(paymentEndpointIdentifier) ==
+            PaykitPaymentProofKind.Onchain
+        setStage(if (isOnchain) Stage.SENDING else Stage.SUBMITTED, prepared.attemptId, identity)
         Logger.info("Reported a manual payment to the allowance ledger", context = TAG)
         return prepared.attemptId
     }

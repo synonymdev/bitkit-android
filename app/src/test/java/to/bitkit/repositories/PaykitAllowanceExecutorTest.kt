@@ -224,7 +224,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(payer.captureOnchainPayer(any())).thenReturn(Result.success(PAYER_IDENTITY))
         whenever(payer.isOnchainSendBlocked()).thenReturn(false)
         whenever(payer.markOnchainPaymentStarted(any(), any(), any(), any())).thenReturn(Result.success(Unit))
-        whenever(payer.payLightning(any(), anyOrNull())).thenReturn(Result.success(PAYMENT_HASH))
+        whenever(payer.payLightning(any(), anyOrNull(), anyOrNull())).thenReturn(Result.success(PAYMENT_HASH))
         whenever(payer.payOnchain(any(), any(), any(), any())).thenReturn(Result.success(OnchainSendOutcome.Accepted(TXID)))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
         whenever(payer.lightningPaymentStatus(any())).thenAnswer { nodeStatuses[it.getArgument<String>(0)] }
@@ -273,7 +273,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             fixtures.lightningIdentifier,
             PAYMENT_APP_ID,
         )
-        order.verify(payer).payLightning(eq(INVOICE), isNull())
+        order.verify(payer).payLightning(eq(INVOICE), isNull(), anyOrNull())
         verify(sdk, never()).recordPaymentOutcome(any())
         assertEquals(listOf(PaykitAllowanceTime.format(fixtures.now)), evaluatedTrustedTimes)
         assertEquals(listOf(ALLOWANCE_ID), selections.map { it.allowanceId })
@@ -295,7 +295,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     @Test
     fun `node settlement that arrives before the send call returns is kept`() = test {
         sut.activate(identity)
-        whenever(payer.payLightning(any(), anyOrNull())).doSuspendableAnswer {
+        whenever(payer.payLightning(any(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
             sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = true)
             Result.success(PAYMENT_HASH)
         }
@@ -314,7 +314,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
-        verify(payer).payLightning(eq(INVOICE), eq(1_000uL))
+        verify(payer).payLightning(eq(INVOICE), eq(1_000uL), anyOrNull())
     }
 
     @Test
@@ -338,6 +338,26 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
         verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
         verifyNoInteractions(payer)
+    }
+
+    @Test
+    fun `allowance without per-payment and monthly limits never pays automatically`() = test {
+        val request = fixtures.paymentRequest(amountSats = 50_000_000uL)
+        val unbounded = fixtures.allowance(perPaymentMaxSats = null, monthlyLimitSats = null, monthlyAnchor = null)
+
+        val result = sut.autoPay(request, listOf(unbounded), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `automatic lightning payment carries the request's submission deadline`() = test {
+        val request = fixtures.paymentRequest()
+
+        sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        verify(payer).payLightning(any(), anyOrNull(), eq(request.submissionDeadline(null)))
     }
 
     @Test
@@ -386,7 +406,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
         verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -404,7 +424,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val scope = PaymentRequestScope(request.counterparty, request.paymentRequestId)
         verify(sdk).markPaymentManualOnly(PaymentOccurrence(scope, billingPeriod = null))
         verify(sdk, never()).beginPaymentExecution(any(), any())
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
         assertEquals(emptyList(), sut.localState(identity).journal)
         assertEquals(listOf(limitReached), events)
     }
@@ -420,7 +440,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(listOf(Stage.FAILED), sut.localState(identity).journal.map { it.stage })
         verify(payer, never()).consumePaymentList(any(), any())
         verify(payer, never()).prepareProof(any(), any(), any(), anyOrNull())
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -435,7 +455,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(payer).cancelProofPreparation(request)
         verify(payer).releasePaymentList(eq(request.counterparty), any())
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -448,7 +468,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
         verify(sdk, never()).beginPaymentExecution(any(), any())
         verify(payer, never()).consumePaymentList(any(), any())
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -461,12 +481,12 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
         verify(payer).discardLightningProof(PAYMENT_HASH)
         verify(payer).releasePaymentList(any(), any())
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
     }
 
     @Test
     fun `lightning send failure releases only a payment that never left`() = test {
-        whenever(payer.payLightning(any(), anyOrNull())).thenReturn(Result.failure(TestAllowanceError("send")))
+        whenever(payer.payLightning(any(), anyOrNull(), anyOrNull())).thenReturn(Result.failure(TestAllowanceError("send")))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true, false)
 
         val first = sut.autoPay(fixtures.paymentRequest(id = "request-1"), listOf(fixtures.allowance()), identity)
@@ -598,7 +618,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             listOf(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, PAYMENT_HASH)),
             events.filterIsInstance<PaykitAllowanceEvent.PaidAutomatically>(),
         )
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
         verify(payer, never()).payOnchain(any(), any(), any(), any())
     }
 
@@ -664,7 +684,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             ),
             sut.localState(identity).journal.associate { it.attemptId to it.stage },
         )
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
         verify(payer, never()).payOnchain(any(), any(), any(), any())
         verify(payer, never()).resolve(any(), any())
         assertEquals(emptyList(), reconciliations)
@@ -729,6 +749,30 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     // endregion
 
     // region Manual payments
+
+    @Test
+    fun `recovery never fails a manual on-chain payment that may have left before the kill`() = test {
+        sut.activate(identity)
+        val attemptId = checkNotNull(sut.beginManualPayment(fixtures.paymentRequest(), fixtures.onchainIdentifier).getOrThrow())
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(attemptId, PaymentExecutionStatus.SUBMITTED)),
+        )
+        val restarted = PaykitAllowanceExecutor(
+            ioDispatcher = testDispatcher,
+            paykitSdkService = sdk,
+            store = PaykitAllowanceStore(keychain),
+            payer = payer,
+            clock = clock,
+            accountingAmount = { _, _ -> fixtures.accountingAmount("0.00001") },
+        )
+
+        restarted.recover(identity)
+
+        assertEquals(
+            emptyList(),
+            recordedOutcomes.filter { it.attemptId == attemptId && it.outcome == PaymentOutcome.FAILED },
+        )
+    }
 
     @Test
     fun `manual payment fails when the request is already recorded`() = test {
@@ -856,7 +900,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             ),
             reconciliation.outcomes,
         )
-        verify(payer, never()).payLightning(any(), anyOrNull())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull())
         verify(payer, never()).payOnchain(any(), any(), any(), any())
     }
 
