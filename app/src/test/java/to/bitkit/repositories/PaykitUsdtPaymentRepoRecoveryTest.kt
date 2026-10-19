@@ -175,6 +175,57 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed retry remains payable only when non-submission is established`() = test {
+        for (historyReadable in listOf(true, false)) {
+            stored = null
+            val repo = repo()
+            val terms = request.payment(MethodId.UsdtArbitrum, clock.now())
+            stubStoredTransfer(Result.success(null))
+            repo.prepare(context(), quote, amount, terms).getOrThrow()
+            stubSend(Result.success(mock()))
+            repo.send(quote).getOrThrow()
+            stubStoredTransfer(Result.success(mock { on { status }.thenReturn(UsdtTransferStatus.FAILED) }))
+            repo.reconcile().getOrThrow()
+            val retry = quote.copy(id = "retry")
+            repo.prepare(context(), retry, amount, terms).getOrThrow()
+            assertTrue(repo.protectedPaymentAttempts(identity).getOrThrow().isEmpty())
+            val result = repo.send(retry) {
+                assertTrue(repo.protectedPaymentAttempts(identity).getOrThrow().isNotEmpty())
+                if (!historyReadable) stubStoredTransfer(Result.failure(UsdtException.Storage("unreadable history")))
+                throw PaykitPaymentRequestError.RequestUnavailable
+            }
+            assertTrue(result.isFailure)
+            assertEquals(historyReadable, repo.protectedPaymentAttempts(identity).getOrThrow().isEmpty())
+        }
+    }
+
+    @Test
+    fun `restore protects another wallet until its owner can be resolved`() = test {
+        val endpoint = PaykitUsdt.endpoint(address)
+        val repo = repo()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        val restored = repo.backupSnapshot().attempts.single().copy(wallet = "restored-wallet", paymentStarted = true)
+        stored = null
+        repo.restoreBackup(PaykitUsdtStateBackup(listOf(restored), emptyList()))
+        whenever(sdk.identityStatus(any())).thenReturn(null)
+        repo.reconcile().getOrThrow()
+        assertEquals(listOf(restored), repo.protectedPaymentAttempts(identity).getOrThrow())
+        whenever(sdk.identityStatus(any())).thenReturn(
+            IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        )
+        whenever(usdt.paymentEndpoint()).thenReturn(Result.failure(UsdtException.InvalidCredentials()))
+        assertTrue(repo.reconcile().isFailure)
+        assertEquals(listOf(restored), repo.protectedPaymentAttempts(identity).getOrThrow())
+        whenever(usdt.paymentEndpoint()).thenReturn(Result.success(endpoint))
+        repo.reconcile().getOrThrow()
+        assertTrue(repo.protectedPaymentAttempts(identity).getOrThrow().isEmpty())
+        repo.resetForWipe()
+        assertTrue(repo.attempts.value.isEmpty())
+        assertTrue(repo.receipts.value.isEmpty())
+        assertEquals(listOf(restored), repo.protectedPaymentAttempts(identity).getOrThrow())
+    }
+
+    @Test
     fun `restored attempts all protect the same request regardless of order`() = test {
         val terms = request.payment(MethodId.UsdtArbitrum, clock.now())
         for (status in listOf(

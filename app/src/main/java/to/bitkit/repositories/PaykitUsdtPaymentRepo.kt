@@ -209,6 +209,8 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     suspend fun restoreBackup(backup: PaykitUsdtStateBackup) = withContext(ioDispatcher) {
         mutex.withLock {
             stateGeneration++
+            activeWallet = null
+            activeIdentity = null
             unboundAttempts.update { emptyList() }
             _resumableRequests.update { emptySet() }
             val state = load()
@@ -231,6 +233,18 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         }
     }
 
+    suspend fun resetForWipe() = withContext(ioDispatcher) {
+        mutex.withLock {
+            stateGeneration++
+            activeWallet = null
+            activeIdentity = null
+            unboundAttempts.update { emptyList() }
+            _resumableRequests.update { emptySet() }
+            publish(State())
+            _paymentRequestStateVersion.update { it + 1 }
+        }
+    }
+
     suspend fun send(
         quote: UsdtQuote,
         submissionDeadline: Instant? = null,
@@ -243,8 +257,9 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                 stateGeneration++
             }
             var sent = false
+            var wasResumable = false
             try {
-                setPaymentStarted(quote.id, true).getOrThrow()
+                wasResumable = setPaymentStarted(quote.id, true).getOrThrow()
                 usdt.send(quote, submissionDeadline, beforeSend).getOrThrow()
                 sent = true
             } finally {
@@ -252,7 +267,9 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                     try {
                         if (!sent) {
                             val history = storedTransfer(quote.id)
-                            if (history.isSuccess && history.getOrNull() == null) setPaymentStarted(quote.id, false)
+                            if (history.isSuccess && history.getOrNull() == null) {
+                                setPaymentStarted(quote.id, false, wasResumable)
+                            }
                         }
                     } finally {
                         mutex.withLock { sending = false }
@@ -263,7 +280,11 @@ class PaykitUsdtPaymentRepo @Inject constructor(
         }
     }
 
-    private suspend fun setPaymentStarted(quoteId: String, started: Boolean): Result<Unit> = withContext(ioDispatcher) {
+    private suspend fun setPaymentStarted(
+        quoteId: String,
+        started: Boolean,
+        resumable: Boolean = false,
+    ): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {
             mutex.withLock {
                 val state = load()
@@ -277,7 +298,11 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                         }
                     )
                 )
-                if (started) _resumableRequests.update { it - setOfNotNull(attempt.requestId) }
+                val requestId = attempt.requestId
+                val wasResumable = requestId in _resumableRequests.value
+                if (started) _resumableRequests.update { it - setOfNotNull(requestId) }
+                if (!started && resumable) _resumableRequests.update { it + setOfNotNull(requestId) }
+                wasResumable
             }
         }
     }
@@ -408,7 +433,6 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                         throw PaykitPaymentRequestError.OperationInProgress
                     }
                     unboundAttempts.update { emptyList() }
-                    _resumableRequests.update { emptySet() }
                     save(
                         state.copy(
                             attempts = state.attempts.filterNot {
