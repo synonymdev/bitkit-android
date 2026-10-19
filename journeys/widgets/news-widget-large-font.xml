@@ -1,0 +1,28 @@
+<journey name="news widget time at large font">
+  <description>
+    At the largest font scale the Bitcoin Headlines widget on Home keeps its time ("4 months ago")
+    on one line at the right of the source row, and a long source name ("Cypherpunk Cogitations")
+    is cut with an ellipsis instead of pushing the time into a one-character column. At the normal
+    font scale the row looks as before: source on the left, time on the right.
+
+    Precondition: onboarded dev wallet, widgets enabled, widgets intro already seen, online so the
+    headlines feed loads. The headline shown comes from the live feed, so the source name may be
+    short; the time checks hold either way, and the ellipsis check applies only when the source and
+    time do not fit side by side.
+
+    Read the row from `android layout`: "source_text", "time_text" and "source_row" carry the
+    bounds. One line of BodySSB at font scale 2.0 is about 60 px tall on a 480 dpi screen, so a
+    "time_text" height over twice that means it wrapped.
+  </description>
+  <actions>
+    <action>Tap the menu icon (tag "HeaderMenu") and tap "Widgets"</action>
+    <action>If no Bitcoin Headlines widget is on Home, tap "Add Widget", tap the "Bitcoin Headlines" card (tag "WidgetListItem-news"), tap "Save Widget" and go back to Home</action>
+    <action>Scroll Home until the Bitcoin Headlines widget's source row (tag "source_row") is visible</action>
+    <action>Verify the source (tag "source_text") is at the left of the row and the time (tag "time_text") at the right, each on one line</action>
+    <action>Run `adb shell settings put system font_scale 2.0`</action>
+    <action>Scroll Home until the source row (tag "source_row") is visible again</action>
+    <action>Verify the time (tag "time_text") is on one line, ends with "ago", and its right bound matches the right bound of "source_row"</action>
+    <action>Verify the source (tag "source_text") is on one line and ends at least 8 dp left of the time's left bound; when the source is long, verify from a screenshot that it ends with an ellipsis</action>
+    <action>Run `adb shell settings put system font_scale 1.0`</action>
+  </actions>
+</journey>
