@@ -448,6 +448,7 @@ class AppViewModel @Inject constructor(
         }
         pendingUsdtAction = onEnabled
         pendingUsdtCancel = onCancel
+        timedSheetManager.onSheetShown()
         showUsdtEnablePrompt = true
     }
 
@@ -675,11 +676,7 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
-                if (sheetType != null) {
-                    if (!isHighPrioritySheet(_currentSheet.value)) {
-                        showSheet(Sheet.TimedSheet(sheetType))
-                    }
-                } else {
+                if (sheetType == null) {
                     val shouldFlush = _currentSheet.value is Sheet.TimedSheet
                     _currentSheet.update { current ->
                         if (current is Sheet.TimedSheet) null else current
@@ -6597,7 +6594,9 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        if (shouldShow()) _transactionSheet.update { details }
+        if (!shouldShow()) return@launch
+        timedSheetManager.onSheetShown()
+        _transactionSheet.update { details }
     }
 
     fun hideNewTransactionSheet() {
@@ -6704,6 +6703,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun showSheet(sheetType: Sheet) {
+        timedSheetManager.onSheetShown()
         if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
         val previousJob = sheetTransitionJob
         transitionSheet = sheetType
@@ -7828,7 +7828,17 @@ class AppViewModel @Inject constructor(
         acc.replace(regex, "")
     }
 
-    fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
+    fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered(
+        canShowSheet = ::canShowTimedSheet,
+        showSheet = { showSheet(Sheet.TimedSheet(it)) },
+    )
+
+    private fun canShowTimedSheet() = _currentSheet.value == null &&
+        sheetTransitionJob?.isActive != true &&
+        paymentRequestSheetTransitionJob?.isActive != true &&
+        _transactionSheet.value == NewTransactionSheetDetails.EMPTY &&
+        !showUsdtEnablePrompt &&
+        !_isCriticalUpdateRequired.value
 
     fun onAppResumed() {
         viewModelScope.launch {
