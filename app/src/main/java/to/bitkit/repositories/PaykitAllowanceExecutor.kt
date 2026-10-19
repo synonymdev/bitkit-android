@@ -30,6 +30,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.safe
 import to.bitkit.repositories.PaykitAllowanceLocalState.JournalEntry
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
@@ -85,8 +86,12 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<Unit> =
         paymentProofRepo.associateLightningPayment(request, paymentHash, paymentEndpointIdentifier, paymentAppId)
 
-    suspend fun payLightning(bolt11: String, sats: ULong?, paymentDeadlineAt: Instant?): Result<String> =
-        lightningRepo.payInvoice(bolt11, sats, paymentDeadlineAt, onBeforeSend = { true })
+    suspend fun payLightning(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        maxTotalRoutingFeeMsat: ULong,
+    ): Result<String> = lightningRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) { true }
 
     /** Clears the proof when [error] proves the payment never left; returns whether it did. */
     suspend fun failLightningPayment(paymentHash: String, error: Throwable): Boolean =
@@ -134,6 +139,9 @@ class PaykitAllowanceExecutor @Inject constructor(
     companion object {
         private const val TAG = "PaykitAllowanceExecutor"
         private const val MAX_JOURNAL_ENTRIES = 200
+
+        /** 1% of each paid sat (1 000 msat) may go to routing fees on an automatic payment. */
+        private const val MAX_ROUTING_FEE_MSAT_PER_SAT = 10uL
         private val SETTLEABLE_STAGES = setOf(Stage.SUBMITTED, Stage.SENDING, Stage.SENT, Stage.UNKNOWN)
     }
 
@@ -532,7 +540,9 @@ class PaykitAllowanceExecutor @Inject constructor(
             throw it
         }
         val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
-        payer.payLightning(payment.endpoint.value, sats, request.submissionDeadline(null)).onFailure {
+        // Routing fees fall outside the allowance's accounting, so they are capped at 1% of the requested amount.
+        val maxRoutingFeeMsat = amountSats.safe() * MAX_ROUTING_FEE_MSAT_PER_SAT.safe()
+        payer.payLightning(payment.endpoint.value, sats, request.submissionDeadline(null), maxRoutingFeeMsat).onFailure {
             // Only an error that proves the payment never left releases the reservation; anything else stays open,
             // and the node's payment event records its outcome.
             if (payer.failLightningPayment(paymentHash, it)) {
