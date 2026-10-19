@@ -26,6 +26,7 @@ esac
 output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols-$build_number.zip"
 output_dir=$(dirname "$output")
 dependency_symbols_dir="app/build/intermediates/native-debug-symbol-artifacts"
+shipped_dir="app/build/outputs/bitkit/$variant"
 required_libs="libbitkitcore.so libldk_node.so libpaykit.so libvss_rust_client_ffi.so"
 archive_symbol_suffixes=".dbg .sym"
 
@@ -120,6 +121,54 @@ validate_symbol_tree() {
     done
 }
 
+build_id() {
+    "$readelf_bin" -n "$1" | awk '/Build ID:/ { print $3; exit }'
+}
+
+# Symbols only symbolicate the exact binary they were built with, so every shipped native library
+# must carry the same Build ID as its symbol file.
+validate_symbols_match_shipped_libs() {
+    root="$1"
+    shipped_root=$(make_tmp_dir)
+    checked=0
+
+    for artifact in "$shipped_dir"/*.aab "$shipped_dir"/*.apk; do
+        if [ ! -f "$artifact" ]; then
+            continue
+        fi
+
+        artifact_dir="$shipped_root/$(basename "$artifact")"
+        mkdir -p "$artifact_dir"
+        unzip -q "$artifact" 'lib/*/*.so' 'base/lib/*/*.so' -d "$artifact_dir" 2>/dev/null || true
+
+        for abi in arm64-v8a armeabi-v7a; do
+            for lib_name in $required_libs; do
+                for shipped in "$artifact_dir/lib/$abi/$lib_name" "$artifact_dir/base/lib/$abi/$lib_name"; do
+                    if [ ! -f "$shipped" ]; then
+                        continue
+                    fi
+
+                    shipped_id=$(build_id "$shipped")
+                    symbols_id=$(build_id "$root/$abi/$lib_name")
+                    if [ -z "$shipped_id" ] || [ "$shipped_id" != "$symbols_id" ]; then
+                        echo "Native debug symbols do not match '$artifact' for '$abi/$lib_name'." >&2
+                        echo "Shipped Build ID '${shipped_id:-none}', symbols Build ID '${symbols_id:-none}'." >&2
+                        echo "Build without -PuseMavenLocal so dependencies and their symbols come from the same published release." >&2
+                        exit 1
+                    fi
+                    checked=$((checked + 1))
+                done
+            done
+        done
+    done
+
+    if [ "$checked" -eq 0 ]; then
+        echo "No '$variant' APK or AAB with native libraries found in '$shipped_dir'." >&2
+        echo "Run './gradlew assembleMainnetRelease bundleMainnetRelease' before creating release symbols." >&2
+        exit 1
+    fi
+}
+
 extract_archive_lib() {
     archive="$1"
     tmp_dir="$2"
@@ -205,12 +254,14 @@ validate_output_zip() {
     done
 
     validate_symbol_tree "$tmp_dir"
+    validate_symbols_match_shipped_libs "$tmp_dir"
 }
 
 create_output_zip_from_tree() {
     root="$1"
 
     validate_symbol_tree "$root"
+    validate_symbols_match_shipped_libs "$root"
 
     mkdir -p "$output_dir"
     rm -f "$output_dir"/native-debug-symbols*.zip
