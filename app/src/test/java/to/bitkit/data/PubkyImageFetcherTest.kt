@@ -384,7 +384,6 @@ class PubkyImageFetcherTest : BaseUnitTest() {
 
     private fun FetchResult?.bytes() = (this as SourceFetchResult).source.use { it.source().readByteArray() }
 
-    @Suppress("LongParameterList")
     private class DiskCacheWriteCase(
         val name: String,
         val image: ByteArray = IMAGE_BYTES,

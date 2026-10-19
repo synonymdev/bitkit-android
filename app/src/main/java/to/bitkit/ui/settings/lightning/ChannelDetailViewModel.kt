@@ -35,7 +35,6 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class ChannelDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

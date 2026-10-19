@@ -69,7 +69,6 @@ class HealthRepo @Inject constructor(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private fun computeHealthState(internetHealth: HealthState, lightningState: LightningState): AppHealthState {
         val isOnline = internetHealth == HealthState.READY
         val nodeLifecycleState = lightningState.nodeLifecycleState

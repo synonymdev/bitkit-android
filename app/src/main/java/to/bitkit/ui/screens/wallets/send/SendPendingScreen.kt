@@ -81,7 +81,12 @@ fun SendPendingScreen(
     viewModel: SendPendingViewModel,
     walletId: String = WalletScope.default,
     refusalReason: String? = null,
-    retryOriginal: suspend (OnchainSendAttempt, ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Result<OnchainSendOutcome>,
+    retryOriginal:
+    suspend (
+        OnchainSendAttempt,
+        ULong,
+        suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit
+    ) -> Result<OnchainSendOutcome>,
     onRecovered: (String, Long) -> Unit,
     savedStateHandle: SavedStateHandle,
     onNavigateToPin: () -> Unit,
@@ -250,18 +255,24 @@ private fun RecoveryAuthorization(
                     SelectionContainer { BodyM(approval.receipt.address, color = Colors.White64) }
                     BalanceHeaderView(sats = approval.receipt.amountSats.toLong())
                     VerticalSpacer(16.dp)
-                    BodyM(stringResource(R.string.wallet__send_fee_total)
-                        .replace("{feeSats}", requireNotNull(approval.receipt.miningFeeSats).toString()))
+                    BodyM(
+                        stringResource(R.string.wallet__send_fee_total)
+                            .replace("{feeSats}", requireNotNull(approval.receipt.miningFeeSats).toString())
+                    )
                     BodyM("${approval.receipt.feeRateSatsPerVByte} " + stringResource(R.string.common__sat_vbyte))
                 }
             },
             confirmButton = {
-                PrimaryButton(text = stringResource(R.string.wallet__send_pending__retry_authorize),
-                    onClick = { viewModel.answerRecoveryApproval(true) })
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__send_pending__retry_authorize),
+                    onClick = { viewModel.answerRecoveryApproval(true) }
+                )
             },
             dismissButton = {
-                SecondaryButton(text = stringResource(R.string.common__cancel),
-                    onClick = { viewModel.answerRecoveryApproval(false) })
+                SecondaryButton(
+                    text = stringResource(R.string.common__cancel),
+                    onClick = { viewModel.answerRecoveryApproval(false) }
+                )
             },
         )
         is RecoveryApproval.Release -> AppAlertDialog(
@@ -292,8 +303,12 @@ private fun RecoveryAuthorization(
             RecoveryFeeDialog(original, feeInput, { feeInput = it }, { showFeeApproval = false }) { rate ->
                 showFeeApproval = false
                 retryOriginal(rate) { receipt, warnings ->
-                    viewModel.approveRecoveryFee(receipt, warnings, isPinEnabled && pinForPayments,
-                        isBiometricEnabled && isBiometrySupported)
+                    viewModel.approveRecoveryFee(
+                        receipt,
+                        warnings,
+                        isPinEnabled && pinForPayments,
+                        isBiometricEnabled && isBiometrySupported
+                    )
                 }
             }
         }

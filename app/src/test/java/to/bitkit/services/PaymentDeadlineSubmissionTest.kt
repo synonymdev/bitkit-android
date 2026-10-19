@@ -10,14 +10,13 @@ import kotlinx.coroutines.withContext
 import org.junit.Test
 import org.lightningdevkit.ldknode.Node
 import org.mockito.Mockito.mockStatic
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
-import org.mockito.kotlin.mock
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.async.ServiceQueue
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
@@ -46,7 +45,15 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
         for (isMax in listOf(false, true)) {
             now = deadline - 1.nanoseconds
             val result = async {
-                runCatching { service.prepareOnchainSend("address", 1uL, 1uL, isMaxAmount = isMax, paymentDeadlineAt = deadline) }
+                runCatching {
+                    service.prepareOnchainSend(
+                        "address",
+                        1uL,
+                        1uL,
+                        isMaxAmount = isMax,
+                        paymentDeadlineAt = deadline,
+                    )
+                }
             }
             now = deadline + 1.nanoseconds
             runCurrent()
@@ -83,8 +90,14 @@ class PaymentDeadlineSubmissionTest : BaseUnitTest() {
         val payment = mock<org.lightningdevkit.ldknode.OnchainPayment>()
         val native = mock<org.lightningdevkit.ldknode.PreparedOnchainSend>()
         whenever(node.onchainPayment()).thenReturn(payment)
-        whenever(payment.prepareSendToAddress(org.mockito.kotlin.eq("address"), org.mockito.kotlin.eq(1uL),
-            org.mockito.kotlin.any(), org.mockito.kotlin.isNull())).thenReturn(native)
+        whenever(
+            payment.prepareSendToAddress(
+                org.mockito.kotlin.eq("address"),
+                org.mockito.kotlin.eq(1uL),
+                org.mockito.kotlin.any(),
+                org.mockito.kotlin.isNull()
+            )
+        ).thenReturn(native)
         whenever(native.txid()).thenReturn("ab".repeat(32))
         whenever(native.inputs()).thenReturn(listOf(org.lightningdevkit.ldknode.OutPoint("11".repeat(32), 0u)))
         whenever(native.recipientAmountSats()).thenReturn(1uL)

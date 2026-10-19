@@ -30,7 +30,7 @@ import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Suppress("SwallowedException", "MagicNumber", "TooGenericExceptionCaught")
+@Suppress("SwallowedException")
 @Singleton
 class Crypto @Inject constructor() {
     companion object {

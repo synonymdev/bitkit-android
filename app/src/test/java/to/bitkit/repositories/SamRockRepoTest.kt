@@ -376,7 +376,7 @@ class SamRockRepoTest : BaseUnitTest() {
         assertTrue(envelope.success == true)
         assertEquals("ok", envelope.message)
         assertTrue(envelope.result?.results?.get("BTC")?.success == true)
-        assertEquals("registered", envelope.result?.results?.get("BTC")?.message)
+        assertEquals("registered", envelope.result.results.get("BTC")?.message)
     }
 
     @Test

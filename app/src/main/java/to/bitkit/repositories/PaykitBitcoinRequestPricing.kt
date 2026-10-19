@@ -17,7 +17,6 @@ internal object PaykitBitcoinRequestPricing {
 
     data class BitcoinPayment(val amountSats: ULong, val endpointIdentifiers: List<String>)
 
-    @Suppress("ReturnCount")
     fun bitcoinPayment(terms: PaymentRequestTerms, endpoints: List<String>): BitcoinPayment? {
         val rates = (terms.conversion as? PaymentConversion.Fixed)?.rates ?: return null
         if (rates.isEmpty() || rates.distinctBy { it.asset }.size != rates.size) return null

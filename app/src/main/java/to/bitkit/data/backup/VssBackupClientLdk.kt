@@ -22,7 +22,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("TooManyFunctions")
 @Singleton
 class VssBackupClientLdk @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,

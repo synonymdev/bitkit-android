@@ -114,7 +114,6 @@ fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = h
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UsdtWalletScreen(
@@ -264,8 +263,11 @@ fun UsdtWalletScreen(
                             viewModel.edit()
                         },
                         onAmountChange = {
-                            amount = it
-                            maximumAmount = null
+                            if (amount != it) {
+                                viewModel.edit()
+                                amount = it
+                                maximumAmount = null
+                            }
                         },
                         onRecipientContinue = { value ->
                             viewModel.validateRecipient(value, destination) { request ->

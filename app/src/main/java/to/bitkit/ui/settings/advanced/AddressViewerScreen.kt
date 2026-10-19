@@ -353,7 +353,7 @@ private fun AddressItem(
     }
 }
 
-@Suppress("SpellCheckingInspection", "MagicNumber")
+@Suppress("SpellCheckingInspection")
 @Preview
 @Composable
 private fun Preview() {

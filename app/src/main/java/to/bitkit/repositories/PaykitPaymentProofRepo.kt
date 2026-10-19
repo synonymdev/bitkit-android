@@ -112,7 +112,6 @@ data class PaykitOnchainPaymentProofResolution(
 )
 
 @Singleton
-@Suppress("TooManyFunctions")
 class PaykitPaymentProofRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val paykitSdkService: PaykitSdkService,
@@ -197,9 +196,11 @@ class PaykitPaymentProofRepo @Inject constructor(
                 val currentProofs = loadProofs()
                 if (currentProofs.any {
                         it.isStartedFor(proof.identity, request.id) ||
-                            (PubkyPublicKeyFormat.matches(it.identity, proof.identity) &&
-                                PubkyPublicKeyFormat.matches(it.requestId.counterparty, request.counterparty) &&
-                                it.hardwareSignedTransaction != null && !it.onchainAcceptanceVerified)
+                            (
+                                PubkyPublicKeyFormat.matches(it.identity, proof.identity) &&
+                                    PubkyPublicKeyFormat.matches(it.requestId.counterparty, request.counterparty) &&
+                                    it.hardwareSignedTransaction != null && !it.onchainAcceptanceVerified
+                                )
                     }
                 ) {
                     throw PaykitPaymentRequestError.OperationInProgress
@@ -578,7 +579,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             completeOnchainPayment(request, txid, proof.paymentEndpointIdentifier, proof.paymentAppId)
         }
 
-    @Suppress("LongParameterList")
+    @Suppress("CyclomaticComplexMethod")
     suspend fun completeOnchainPayment(
         request: PaykitPaymentRequest,
         txid: String,
@@ -599,7 +600,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         val hasCandidateFamily = attempt?.candidateTxids?.isNotEmpty() == true
         fun hasPositiveEvidence(proof: PendingPaykitPaymentProof): Boolean =
             if (hasCandidateFamily) {
-                attempt.matchesPositiveShopProof(proof) && attempt?.txid.equals(txid, ignoreCase = true)
+                attempt.matchesPositiveShopProof(proof) && attempt.txid.equals(txid, ignoreCase = true)
             } else {
                 acceptedOutcome != null ||
                     (attempt.matchesPositiveShopProof(proof) && attempt?.txid.equals(txid, ignoreCase = true))
@@ -615,7 +616,8 @@ class PaykitPaymentProofRepo @Inject constructor(
         val original = runSuspendCatching {
             operationMutex.withLock {
                 loadProofs().lastOrNull {
-                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id && it.paymentAppId == paymentAppId &&
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id &&
+                        it.paymentAppId == paymentAppId &&
                         it.paymentEndpointIdentifier == paymentEndpointIdentifier &&
                         it.kind == PaykitPaymentProofKind.Onchain && it.paymentStarted && it.proofData == null &&
                         (
@@ -811,7 +813,6 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     // All captured payment fields are required to keep this hint bound to the original signed receipt.
-    @Suppress("LongParameterList", "CyclomaticComplexMethod")
     suspend fun markHardwareRefusedForNavigation(
         requestId: PaykitPaymentRequestId,
         walletId: String,
@@ -948,7 +949,8 @@ class PaykitPaymentProofRepo @Inject constructor(
                     val proof = proofs[index]
                     PubkyPublicKeyFormat.matches(proof.identity, originalIdentity) &&
                         proof.requestId == requestId && proof.onchainWalletId == walletId &&
-                        proof.kind == PaykitPaymentProofKind.Onchain && proof.paymentStarted && !proof.hardwareDispatchDenied
+                        proof.kind == PaykitPaymentProofKind.Onchain && proof.paymentStarted &&
+                        !proof.hardwareDispatchDenied
                 } ?: return@runSuspendCatching false
                 val original = proofs[index]
                 if ((original.paymentIdentifier != null && !original.paymentIdentifier.equals(txid, true)) ||
@@ -961,7 +963,13 @@ class PaykitPaymentProofRepo @Inject constructor(
                 proofs[index] = pending
                 persist(proofs)
                 reconcileHardwareOnchainProof(pending, awaitDelivery = false)
-            }.onFailure { Logger.warn("Failed to retain or observe the original hardware Shop payment", it, context = TAG) }
+            }.onFailure {
+                Logger.warn(
+                    "Failed to retain or observe the original hardware Shop payment",
+                    it,
+                    context = TAG
+                )
+            }
                 .getOrDefault(false)
         }
     }
@@ -1158,7 +1166,9 @@ class PaykitPaymentProofRepo @Inject constructor(
 
                 proofs.forEach { proof ->
                     runSuspendCatching { reconcileProof(proof, payments, attempt, proof in activityReady) }
-                        .onSuccess { if (it && proof.onchainWalletId == WalletScope.default) completedShopTxid = attempt?.txid }
+                        .onSuccess {
+                            if (it && proof.onchainWalletId == WalletScope.default) completedShopTxid = attempt?.txid
+                        }
                         .onFailure {
                             Logger.warn(
                                 "Failed to reconcile a pending Paykit payment proof",
@@ -1193,7 +1203,9 @@ class PaykitPaymentProofRepo @Inject constructor(
             proof.kind == PaykitPaymentProofKind.Onchain && proof.proofData != null -> {
                 if (!proof.paymentStarted || !proof.proofData.isHex(HASH_BYTE_COUNT) ||
                     !proof.paymentIdentifier.equals(proof.proofData, ignoreCase = true)
-                ) return false
+                ) {
+                    return false
+                }
                 if (proof.onchainWalletId != WalletScope.default) return reconcileCompletedHardwareProof(proof)
                 if (proof.onchainAcceptanceVerified != true) {
                     if (!attempt.matchesPositiveShopProof(proof)) return false
@@ -1263,7 +1275,9 @@ class PaykitPaymentProofRepo @Inject constructor(
         val index = proofs.indexOf(proof)
         if (index < 0) return false
         val completed = proof.copy(
-            paymentIdentifier = txid.lowercase(), proofData = txid.lowercase(), onchainAcceptanceVerified = true,
+            paymentIdentifier = txid.lowercase(),
+            proofData = txid.lowercase(),
+            onchainAcceptanceVerified = true,
         )
         proofs[index] = completed
         val retained = persistAndSubmit(listOf(completed), proofs)
@@ -1603,7 +1617,6 @@ internal fun PendingPaykitPaymentProof.retainedSignedHardwareReceipt(): HwFundin
     return HwFundingSignedTx(raw, hardwareMiningFeeSats, hardwareFeeRate, hardwareTotalSpent)
 }
 
-@Suppress("CyclomaticComplexMethod")
 internal fun PendingPaykitPaymentProof.isReopenableHardwareReceipt(identity: String): Boolean =
     PubkyPublicKeyFormat.matches(this.identity, identity) && kind == PaykitPaymentProofKind.Onchain &&
         paymentStarted && onchainWalletId != WalletScope.default && hardwareDispatchAttempted == true &&

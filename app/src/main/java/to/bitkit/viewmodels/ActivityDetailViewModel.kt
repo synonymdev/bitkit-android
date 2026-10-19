@@ -37,7 +37,6 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("LongParameterList", "TooManyFunctions")
 @HiltViewModel
 class ActivityDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

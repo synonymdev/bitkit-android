@@ -76,7 +76,6 @@ fun Long.toLocalizedTimestamp(locale: Locale = Locale.getDefault()): String {
     return formatter.format(date)
 }
 
-@Suppress("LongMethod")
 @OptIn(ExperimentalTime::class)
 fun Long.toRelativeTimeString(
     locale: Locale = Locale.getDefault(),

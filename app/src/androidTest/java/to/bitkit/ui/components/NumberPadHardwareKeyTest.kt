@@ -1,10 +1,15 @@
 package to.bitkit.ui.components
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import dagger.hilt.android.testing.HiltAndroidRule
@@ -122,20 +127,32 @@ class NumberPadHardwareKeyTest {
     }
 
     @Test
-    fun whenPadDisabled_shouldSwallowHardwareKeys() {
+    fun whenPadDisabled_shouldIgnoreAllInput() {
+        val enabled = mutableStateOf(false)
+        var cleared = false
         composeTestRule.setContent {
             AppThemeSurface {
                 NumberPad(
                     onPress = { pressed += it },
-                    enabled = false,
+                    enabled = enabled.value,
+                    onDeleteLongPress = { cleared = true },
                 )
             }
         }
         composeTestRule.waitForIdle()
 
         composeTestRule.onRoot().performKeyInput { pressKey(Key.Five) }
-        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("N5").performClick()
+        composeTestRule.onNodeWithTag("NRemove").performTouchInput { longClick() }
+        composeTestRule.runOnIdle {
+            assertEquals(emptyList(), pressed)
+            assertEquals(false, cleared)
+            enabled.value = true
+        }
 
-        assertEquals(emptyList(), pressed)
+        composeTestRule.onNodeWithTag("N5").performClick()
+        composeTestRule.runOnIdle { assertEquals(listOf("5"), pressed) }
+        composeTestRule.onNodeWithTag("NRemove").performTouchInput { longClick() }
+        composeTestRule.runOnIdle { assertEquals(true, cleared) }
     }
 }
