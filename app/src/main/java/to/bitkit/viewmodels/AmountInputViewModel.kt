@@ -33,7 +33,6 @@ import java.text.NumberFormat
 import java.util.Locale
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class AmountInputViewModel @Inject constructor(
     private val amountInputHandler: AmountInputHandler,
@@ -221,7 +220,6 @@ class AmountInputViewModel @Inject constructor(
         return if (isModern && isBtc) 0 else (if (isBtc) CLASSIC_DECIMALS else FIAT_DECIMALS)
     }
 
-    @Suppress("NestedBlockDepth")
     fun getPlaceholder(currencyState: CurrencyState): String {
         val primaryDisplay = currencyState.primaryDisplay
         val isModern = currencyState.displayUnit.isModern()
@@ -293,7 +291,6 @@ class AmountInputViewModel @Inject constructor(
         }
     }
 
-    @Suppress("ReturnCount")
     private fun formatFiatGroupingOnly(text: String): String {
         // Remove any existing grouping separators for parsing
         val cleanText = text.replace(",", "")

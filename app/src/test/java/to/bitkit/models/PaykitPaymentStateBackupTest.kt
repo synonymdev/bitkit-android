@@ -16,6 +16,7 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 class PaykitPaymentStateBackupTest {
+    @Suppress("MaxLineLength")
     @Test
     fun `proofs without an app id remain readable without inventing provenance`() {
         WalletScope.pushTestOverride("wallet0").use {
@@ -33,6 +34,7 @@ class PaykitPaymentStateBackupTest {
             assertFalse(backup.restored().onchainAcceptanceVerified)
         }
     }
+
     @Test
     fun `shared active operation survives payment backup reader writer roundtrip`() {
         val wire = """
@@ -115,7 +117,9 @@ class PaykitPaymentStateBackupTest {
             val verifiedBackup = PaykitPaymentStateBackup.Proof(verifiedProof)
             val verifiedJson = Json.encodeToString(verifiedBackup)
             assertContains(verifiedJson, "\"onchainAcceptanceVerified\":true")
-            assertTrue(Json.decodeFromString<PaykitPaymentStateBackup.Proof>(verifiedJson).restored().onchainAcceptanceVerified)
+            assertTrue(
+                Json.decodeFromString<PaykitPaymentStateBackup.Proof>(verifiedJson).restored().onchainAcceptanceVerified
+            )
 
             val hardwareProof = restored.copy(onchainWalletId = "hardware-wallet")
             val hardwareBackup = PaykitPaymentStateBackup.Proof(hardwareProof)

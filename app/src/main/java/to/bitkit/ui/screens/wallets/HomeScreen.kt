@@ -222,7 +222,6 @@ private val CALCULATOR_LIFT_SPEC = spring<Float>(
 )
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun HomeScreen(
     isRefreshing: Boolean,
@@ -412,7 +411,6 @@ fun HomeScreen(
     )
 }
 
-@Suppress("CyclomaticComplexMethod", "MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun Content(
@@ -626,7 +624,6 @@ private fun UsdtHomeRefreshEffect() {
 private fun usdtHeadlineSats(balance: ULong?, visible: Boolean, rate: PaykitExchangeRate?): Long? =
     if (visible && balance != 0uL) balance?.let { usdtDisplaySats(usdtFormatAmount(it), rate) } else 0L
 
-@Suppress("MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WalletPage(
@@ -916,7 +913,6 @@ private fun WidgetsPage(
     )
 }
 
-@Suppress("CyclomaticComplexMethod", "MagicNumber", "LongMethod")
 @Composable
 private fun WidgetsPageContent(
     homeUiState: HomeUiState,
@@ -1197,7 +1193,6 @@ private fun hasWidgetContent(type: WidgetType, state: HomeUiState): Boolean = wh
     WidgetType.SUGGESTIONS -> state.suggestions.isNotEmpty()
 }
 
-@Suppress("CyclomaticComplexMethod", "LongMethod")
 @Composable
 private fun WidgetCardContent(
     widget: WidgetWithPosition,

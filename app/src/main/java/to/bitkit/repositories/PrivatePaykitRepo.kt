@@ -73,7 +73,6 @@ import kotlin.time.Instant as KotlinInstant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @Singleton
-@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 class PrivatePaykitRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val paykitSdkService: PaykitSdkService,
@@ -498,12 +497,20 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
 
-    suspend fun removePublishedEndpointsForCleanup(context: String): Result<Unit> = withContext(serializedDispatcher) {
+    suspend fun removePublishedEndpointsForCleanup(context: String): Result<Unit> =
+        removePublishedEndpointsForCleanup(context, deferAppSync = false)
+
+    suspend fun removePublishedEndpointsForCleanup(
+        context: String,
+        deferAppSync: Boolean,
+    ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             updateContactSharingCleanupPending(true)
             removePublishedEndpoints().getOrThrow()
-            syncPaykitAppAfterCleanup().getOrThrow()
-            updateContactSharingCleanupPending(false)
+            if (!deferAppSync) {
+                syncPaykitAppAfterCleanup().getOrThrow()
+                updateContactSharingCleanupPending(false)
+            }
         }.onFailure {
             updateContactSharingCleanupPending(true)
             Logger.warn("Failed to remove private Paykit endpoints during '$context'", it, context = TAG)
@@ -557,7 +564,6 @@ class PrivatePaykitRepo @Inject constructor(
         result
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun consumePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,

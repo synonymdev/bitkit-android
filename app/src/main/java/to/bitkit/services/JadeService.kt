@@ -36,7 +36,6 @@ import com.synonym.bitkitcore.finalizePsbt as coreFinalizePsbt
  * Thin wrapper over bitkit-core's `jade*` functions. Every call runs on [ServiceQueue.CORE], whose
  * single thread also serialises the vendors' blocking Bluetooth scans against each other.
  */
-@Suppress("TooManyFunctions")
 @Singleton
 class JadeService @Inject constructor(
     private val transport: JadeTransport,

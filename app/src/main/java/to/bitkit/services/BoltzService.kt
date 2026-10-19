@@ -36,7 +36,6 @@ import javax.inject.Singleton
  * Bitcoin and Lightning). A Hilt singleton that bridges the [BoltzEventListener] callback to a
  * [SharedFlow]; swap keys are re-derived from the wallet mnemonic on demand, never persisted.
  */
-@Suppress("TooManyFunctions")
 @Singleton
 class BoltzService @Inject constructor(
     private val keychain: Keychain,

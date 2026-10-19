@@ -148,7 +148,10 @@ class ActivityServiceTest : BaseUnitTest() {
                 native.`when`<Any?> { getTags.invoke(null, WALLET_ID, ACTIVITY_ID) }.thenAnswer { tags }
                 native.`when`<Any?> {
                     addTags.invoke(null, WALLET_ID, ACTIVITY_ID, listOf("original"))
-                }.thenAnswer { tags = tags + "original"; Unit }
+                }.thenAnswer {
+                    tags = tags + "original"
+                    Unit
+                }
                 native.`when`<Any?> { upsertMetadata.invoke(null, any(List::class.java)) }.thenAnswer {
                     val updated = it.getArgument<List<PreActivityMetadata>>(0)
                     metadata = metadata.map { row ->

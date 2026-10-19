@@ -17,8 +17,8 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
-import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.ActiveOnchainAttemptBackup
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.WalletScope
 import to.bitkit.services.LightningService
 import to.bitkit.utils.AppError
@@ -67,7 +67,6 @@ data class OnchainPreparedReceipt(
 )
 
 @Serializable
-@Suppress("LongParameterList")
 data class OnchainSendAttempt(
     val walletId: String,
     val attemptId: String,
@@ -210,7 +209,6 @@ class OnchainSendAttemptStore @Inject constructor(
         mutex.withLock { releaseInterruptedUnsubmittedPreparation(load(lightningService.currentWalletIndex)) }
     }
 
-    @Suppress("LongParameterList")
     suspend fun admit(
         walletId: String,
         requestId: PaykitPaymentRequestId?,
@@ -281,7 +279,9 @@ class OnchainSendAttemptStore @Inject constructor(
         if (current == null || current.attemptId in inFlightPreparations || current.restoredFromBackup ||
             current.walletId != WalletScope.default || current.requestId != null ||
             current.evidence != OnchainSendEvidence.Pending || current.initialDispatchAttempted
-        ) return current
+        ) {
+            return current
+        }
         keychain.delete(KEY, current.walletIndex)
         _backupStateVersion.update { it + 1 }
         return null
@@ -432,16 +432,24 @@ class OnchainSendAttemptStore @Inject constructor(
                 }
                 if (candidate !in current.candidateTxids ||
                     current.hasPositiveEvidence && current.txid.equals(candidate, ignoreCase = true)
-                ) return@withLock
+                ) {
+                    return@withLock
+                }
                 check(current.candidateTxids.containsAll(original.candidateTxids))
-                persist(current.copy(
-                    txid = if (current.hasPositiveEvidence) current.txid else original.txid,
-                    evidence = if (current.hasPositiveEvidence) current.evidence else original.evidence,
-                    refusalReason = if (current.hasPositiveEvidence) current.refusalReason else original.refusalReason,
-                    candidateTxids = current.candidateTxids - candidate,
-                    candidateFeeRates = current.candidateFeeRates - candidate,
-                    candidateMiningFees = current.candidateMiningFees - candidate,
-                ))
+                persist(
+                    current.copy(
+                        txid = if (current.hasPositiveEvidence) current.txid else original.txid,
+                        evidence = if (current.hasPositiveEvidence) current.evidence else original.evidence,
+                        refusalReason = if (current.hasPositiveEvidence) {
+                            current.refusalReason
+                        } else {
+                            original.refusalReason
+                        },
+                        candidateTxids = current.candidateTxids - candidate,
+                        candidateFeeRates = current.candidateFeeRates - candidate,
+                        candidateMiningFees = current.candidateMiningFees - candidate,
+                    )
+                )
             }
         }
 
@@ -460,7 +468,9 @@ class OnchainSendAttemptStore @Inject constructor(
             require(txid.lowercase() in current.candidateTxids)
             val firstSubmission = !current.initialDispatchAttempted
             if (!firstSubmission) {
-                persist(current.copy(txid = txid.lowercase(), evidence = OnchainSendEvidence.Pending, refusalReason = null))
+                persist(
+                    current.copy(txid = txid.lowercase(), evidence = OnchainSendEvidence.Pending, refusalReason = null)
+                )
             }
             try {
                 broadcast {
@@ -474,16 +484,21 @@ class OnchainSendAttemptStore @Inject constructor(
                 // The native queue checks the deadline before the durable dispatch boundary.
                 // Any earlier submission or imported backup remains uncertain and guarded.
                 if (!firstSubmission || loadWithRetainedAccepted(walletIndex)?.initialDispatchAttempted != false ||
-                    current.restoredFromBackup || current.evidence != OnchainSendEvidence.Pending || current.candidateTxids.size != 1
-                ) throw error
-                persist(current.copy(
-                    txid = null,
-                    originalInputs = null,
-                    candidateTxids = emptyList(),
-                    candidateFeeRates = emptyMap(),
-                    candidateMiningFees = emptyMap(),
-                    preparationPending = current.requestId != null,
-                ))
+                    current.restoredFromBackup || current.evidence != OnchainSendEvidence.Pending ||
+                    current.candidateTxids.size != 1
+                ) {
+                    throw error
+                }
+                persist(
+                    current.copy(
+                        txid = null,
+                        originalInputs = null,
+                        candidateTxids = emptyList(),
+                        candidateFeeRates = emptyMap(),
+                        candidateMiningFees = emptyMap(),
+                        preparationPending = current.requestId != null,
+                    )
+                )
                 // Shop proof cleanup still precedes guard deletion through the existing preparation path.
                 throw OnchainSendNotDispatchedError(error)
             } finally {
@@ -521,7 +536,9 @@ class OnchainSendAttemptStore @Inject constructor(
             }
         }
 
-    suspend fun releaseBeforeDispatch(attemptId: String, walletIndex: Int) = withContext(ioDispatcher + NonCancellable) {
+    suspend fun releaseBeforeDispatch(attemptId: String, walletIndex: Int) = withContext(
+        ioDispatcher + NonCancellable
+    ) {
         mutex.withLock {
             inFlightPreparations -= attemptId
             val current = loadWithRetainedAccepted(walletIndex)
@@ -538,17 +555,23 @@ class OnchainSendAttemptStore @Inject constructor(
         withContext(ioDispatcher + NonCancellable) {
             mutex.withLock {
                 val current = loadWithRetainedAccepted(walletIndex)
-                check(current?.attemptId == attemptId && walletIndex == lightningService.currentWalletIndex &&
-                    current.hasPositiveEvidence && current.txid.equals(txid, true))
+                check(
+                    current?.attemptId == attemptId && walletIndex == lightningService.currentWalletIndex &&
+                        current.hasPositiveEvidence && current.txid.equals(txid, true)
+                )
                 val followup = requireNotNull(current.backupFollowup)
-                persist(current.copy(
-                    backupFollowup = followup.copy(feeSats = feeSats.toString()),
-                    verifiedWinningFeeSats = feeSats,
-                ))
+                persist(
+                    current.copy(
+                        backupFollowup = followup.copy(feeSats = feeSats.toString()),
+                        verifiedWinningFeeSats = feeSats,
+                    )
+                )
             }
         }
 
-    suspend fun markLocalFollowupComplete(attemptId: String, walletIndex: Int) = withContext(ioDispatcher + NonCancellable) {
+    suspend fun markLocalFollowupComplete(attemptId: String, walletIndex: Int) = withContext(
+        ioDispatcher + NonCancellable
+    ) {
         mutex.withLock {
             val current = loadWithRetainedAccepted(walletIndex)
             if (current?.attemptId == attemptId && current.hasPositiveEvidence) {
@@ -647,9 +670,14 @@ class OnchainSendAttemptStore @Inject constructor(
         val value = keychain.loadString(KEY, walletIndex) ?: return null
         return runCatching {
             Json.decodeFromString<OnchainSendAttempt>(value).also { attempt ->
-                require(attempt.walletId.isNotBlank() && attempt.attemptId.isNotBlank() && attempt.walletIndex == walletIndex)
-                require(attempt.evidence == OnchainSendEvidence.Pending ||
-                    attempt.txid?.matches(Regex("[0-9a-fA-F]{64}")) == true)
+                require(
+                    attempt.walletId.isNotBlank() && attempt.attemptId.isNotBlank() &&
+                        attempt.walletIndex == walletIndex
+                )
+                require(
+                    attempt.evidence == OnchainSendEvidence.Pending ||
+                        attempt.txid?.matches(Regex("[0-9a-fA-F]{64}")) == true
+                )
                 require(!attempt.localFollowupComplete || attempt.hasPositiveEvidence)
                 require(attempt.candidateTxids.distinct().size == attempt.candidateTxids.size)
                 require(attempt.candidateTxids.all { it.matches(Regex("[0-9a-f]{64}")) })

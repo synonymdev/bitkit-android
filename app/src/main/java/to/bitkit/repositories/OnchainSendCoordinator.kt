@@ -1,6 +1,5 @@
 package to.bitkit.repositories
 
-import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -8,11 +7,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import kotlin.time.Instant
 
 /** Rust converts sat/vB to sat/kwu by multiplying by 250; validate before the unchecked FFI factory. */
 object OnchainRecoveryFeeRate {
     // Match the normal custom-fee field and iOS ceiling.
-    val maximum: ULong = 999uL
+    const val maximum: ULong = 999uL
 
     fun isValid(rate: ULong): Boolean = rate > 0uL && rate <= maximum
 
@@ -38,7 +38,11 @@ class PreparedOnchainSend(
 /** Recovery always uses the original actual recipient amount and exact inputs, including an initial Max send. */
 interface OnchainPreparedSender {
     suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend
-    suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant? = null): PreparedOnchainSend
+    suspend fun prepareRecovery(
+        attempt: OnchainSendAttempt,
+        feeRateSatsPerVByte: ULong,
+        paymentDeadlineAt: Instant? = null
+    ): PreparedOnchainSend
 }
 
 /** Thin boundary for the additive native prepare API, implemented in LightningService once matching bindings exist. */
@@ -84,7 +88,11 @@ class OnchainPreparedSenderAdapter(
         return prepared
     }
 
-    override suspend fun prepareRecovery(attempt: OnchainSendAttempt, feeRateSatsPerVByte: ULong, paymentDeadlineAt: Instant?): PreparedOnchainSend {
+    override suspend fun prepareRecovery(
+        attempt: OnchainSendAttempt,
+        feeRateSatsPerVByte: ULong,
+        paymentDeadlineAt: Instant?,
+    ): PreparedOnchainSend {
         val inputs = requireNotNull(attempt.originalInputs)
         require(inputs.isNotEmpty() && inputs.distinct().size == inputs.size)
         return native.prepareFixed(
@@ -204,7 +212,9 @@ class OnchainSendCoordinator(
                 store.discardUnsubmittedRetryCandidate(recoveryOriginal, prepared.receipt.txid)
             }
             val winner = runSuspendCatching { store.current() }.getOrNull()
-            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId && winner.hasPositiveEvidence) {
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
+                winner.hasPositiveEvidence
+            ) {
                 return OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
             }
             throw OnchainSendPendingError(error, prepared.receipt.txid)
@@ -213,7 +223,9 @@ class OnchainSendCoordinator(
             store.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex)
         }.getOrElse { error ->
             val winner = runSuspendCatching { store.currentDurable() }.getOrNull()
-            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId && winner.hasPositiveEvidence) {
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
+                winner.hasPositiveEvidence
+            ) {
                 return OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
             }
             throw OnchainSendPendingError(error, outcome.txid)

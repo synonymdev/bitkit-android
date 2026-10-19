@@ -3,6 +3,7 @@ package to.bitkit.ui.settings.advanced
 import android.content.Context
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -27,6 +28,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val settingsStore: SettingsStore = mock()

@@ -88,7 +88,6 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
-@Suppress("LargeClass")
 class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     companion object {
         private const val CONTACT_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
@@ -2361,6 +2360,73 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(
             cacheData.value.contacts.values.all { !it.hasPublishedPrivatePaymentList },
         )
+    }
+
+    @Test
+    fun `profile deletion withdraws private lists without an intermediate registry sync`() = test {
+        cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
+        sut = createSut()
+
+        sut.removePublishedEndpointsForCleanup("profile deletion", deferAppSync = true).getOrThrow()
+
+        verify(paykitSdkService).clearPrivatePaymentLists(listOf(CONTACT_KEY))
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+        assertTrue(cacheData.value.contacts.isEmpty())
+        assertTrue(cacheData.value.cleanupPending)
+
+        sut.closeAndClear().getOrThrow()
+        assertFalse(cacheData.value.cleanupPending)
+    }
+
+    @Test
+    fun `interrupted profile deletion retries registry sync from persisted cleanup state`() = test {
+        sut.removePublishedEndpointsForCleanup("profile deletion", deferAppSync = true).getOrThrow()
+        assertTrue(cacheData.value.cleanupPending)
+        sut = createSut()
+        whenever(publicPaykitRepo.syncPaykitApp()).thenReturn(Result.failure(AppError("Offline")))
+
+        assertTrue(sut.retryPendingEndpointRemoval(emptyList()).isFailure)
+        assertTrue(cacheData.value.cleanupPending)
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+
+        whenever(publicPaykitRepo.syncPaykitApp()).thenReturn(Result.success(Unit))
+        sut.retryPendingEndpointRemoval(emptyList()).getOrThrow()
+        assertFalse(cacheData.value.cleanupPending)
+        verify(publicPaykitRepo, times(2)).syncPaykitApp()
+    }
+
+    @Test
+    fun `cancelled profile withdrawal preserves cleanup for retry`() = test {
+        cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
+        sut = createSut()
+        val started = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY))).doSuspendableAnswer {
+            started.complete(Unit)
+            awaitCancellation()
+        }
+        val cleanup = async { sut.removePublishedEndpointsForCleanup("profile deletion", deferAppSync = true) }
+        started.await()
+        cleanup.cancel()
+        assertFailsWith<CancellationException> { cleanup.await() }
+
+        assertTrue(cacheData.value.cleanupPending)
+        assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList)
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+    }
+
+    @Test
+    fun `deferred registry sync does not acknowledge undelivered private withdrawals`() = test {
+        cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
+        sut = createSut()
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(listOf(CONTACT_KEY))
+
+        val result = sut.removePublishedEndpointsForCleanup("profile deletion", deferAppSync = true)
+
+        assertTrue(result.isFailure)
+        assertTrue(cacheData.value.cleanupPending)
+        assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList)
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+        sut.closeAndClear().getOrThrow()
     }
 
     @Test

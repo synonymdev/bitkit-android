@@ -503,7 +503,6 @@ class ProfileViewModelTest : BaseUnitTest() {
         }
     }
 
-    @Suppress("LongParameterList")
     private fun createSut(
         profile: PubkyProfile? = null,
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),

@@ -61,7 +61,6 @@ class PaykitReceivedPaymentContactsTest {
 
         fun payload(value: String) = "{\"value\":\"$value\"}"
 
-        @Suppress("LongParameterList")
         fun receivedRequest(
             counterparty: String = BUYER,
             role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYEE,

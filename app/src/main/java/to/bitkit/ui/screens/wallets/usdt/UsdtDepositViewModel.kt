@@ -39,8 +39,8 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
         }
     }
 
-    fun clearAmountError() {
-        _state.update { it.copy(error = null, amountLimits = null) }
+    fun clearError() {
+        _state.update { it.copy(error = null, amountLimits = null, refundError = null) }
     }
 
     fun prepare(amount: String) = viewModelScope.launch {
@@ -59,6 +59,7 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
                     it.copy(
                         history = true,
                         detail = null,
+                        refundError = null,
                         deposits = (
                             if (offset == 0u) {
                                 page.deposits
@@ -115,6 +116,7 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
                 offset = pageOffsets[detail.deposit.id] ?: it.offset,
                 message = if (detail.providerStatus in listOf("completed", "refunded")) null else it.message,
                 error = null,
+                refundError = if (it.detail?.deposit?.id == detail.deposit.id) it.refundError else null,
             )
         }
     }
@@ -123,7 +125,7 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
         if (_state.value.busy) return true
         return when {
             _state.value.detail != null -> {
-                _state.update { it.copy(detail = null, message = null) }
+                _state.update { it.copy(detail = null, message = null, refundError = null) }
                 true
             }
             _state.value.history -> {
@@ -139,7 +141,8 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
         if (detail.deposit.id != id || !detail.canRefund || detail.deposit.network.depositNetwork() != network) {
             return@launch
         }
-        operation {
+        clearError()
+        operation(onFailure = { error -> _state.update { it.copy(refundError = error.messageResource()) } }) {
             repo.refundDeposit(id, offset, address, network).onSuccess {
                 _state.update {
                     it.copy(
@@ -159,18 +162,18 @@ class UsdtDepositViewModel @Inject constructor(private val repo: UsdtDepositRepo
         }
     }
 
-    private suspend fun operation(block: suspend () -> Result<*>) {
+    private suspend fun operation(
+        onFailure: (Throwable) -> Unit = { error ->
+            _state.update {
+                it.copy(error = error.messageResource(), amountLimits = error as? UsdtException.DepositAmountOutOfRange)
+            }
+        },
+        block: suspend () -> Result<*>,
+    ) {
         if (_state.value.busy) return
         _state.update { it.copy(busy = true, error = null, amountLimits = null) }
         try {
-            block().onFailure { error ->
-                _state.update {
-                    it.copy(
-                        error = error.messageResource(),
-                        amountLimits = error as? UsdtException.DepositAmountOutOfRange,
-                    )
-                }
-            }
+            block().onFailure(onFailure)
         } finally {
             _state.update { it.copy(busy = false) }
         }
@@ -189,6 +192,7 @@ data class DepositUiState(
     val detail: UsdtDepositDetail? = null,
     val busy: Boolean = false,
     val error: Int? = null,
+    val refundError: Int? = null,
     val amountLimits: UsdtException.DepositAmountOutOfRange? = null,
     val message: Int? = null,
 )

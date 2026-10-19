@@ -132,7 +132,6 @@ private fun Content(
     }
 }
 
-@Suppress("TooGenericExceptionCaught")
 @Composable
 fun OrderDetailScreen(
     orderItem: Routes.OrderDetail,

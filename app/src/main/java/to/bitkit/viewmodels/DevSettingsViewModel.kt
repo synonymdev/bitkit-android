@@ -45,7 +45,6 @@ data class LegacyRnRecoveryUiState(
     val error: String? = null,
 )
 
-@Suppress("TooManyFunctions", "LongParameterList")
 @HiltViewModel
 class DevSettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

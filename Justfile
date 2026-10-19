@@ -188,7 +188,7 @@ test target="" value="":
     {{ if target == "" { gradle + " testDevDebugUnitTest" } else if target == "android" { gradle + " connectedDevDebugAndroidTest" } else if target == "file" { if value == "" { error("usage: just test file PATTERN") } else { gradle + " testDevDebugUnitTest --tests '" + value + "'" } } else if target == "lane" { if value == "" { error("usage: just test lane LANE") } else { gradle + " connectedDevDebug" + value + "AndroidTest" } } else { error("usage: just test [file PATTERN|android|lane LANE]") } }}
 
 lint target="":
-    {{ if target == "" { gradle + " detekt --rerun-tasks" } else if target == "baseline" { gradle + " detektBaseline --rerun-tasks" } else { error("usage: just lint [baseline]") } }}
+    {{ if target == "" { gradle + " detekt --rerun-tasks && " + gradle + " lintDevDebug" } else if target == "baseline" { gradle + " updateLintBaselineDevDebug" } else { error("usage: just lint [baseline]") } }}
 
 format:
     {{ gradle }} detekt --auto-correct --rerun-tasks
