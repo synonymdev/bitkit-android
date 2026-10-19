@@ -29,6 +29,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.UsdtPreference
+import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPublicContactPaymentResolution
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
@@ -99,7 +100,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `optional USDT endpoint failure preserves bitcoin publication and propagates cancellation`() = test {
+    fun `USDT preparation failure defers publication until recovery or explicit disable`() = test {
         walletState.value = WalletState(onchainAddress = "bc1ptest")
         settingsFlow.value = SettingsData(
             sharesPublicPaykitEndpoints = true,
@@ -109,11 +110,25 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             usdtPreference = UsdtPreference.ENABLED,
         )
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
+        assertTrue(sut.syncCurrentPublishedEndpoints().isFailure)
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any(), any()) }
+
+        val address = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
+        val usdt = Endpoint(
+            methodId = MethodId.UsdtArbitrum,
+            value = address,
+            rawPayload = """{"chain_id":"42161","token":"${PaykitUsdt.TOKEN}","value":"$address"}""",
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(usdt))
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        settingsFlow.value = settingsFlow.value.copy(publicPaykitUsdtEnabled = false)
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         val endpoints = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture(), any()) }
-        assertEquals(listOf(MethodId.P2tr), endpoints.firstValue.map { it.methodId })
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(endpoints.capture(), any()) }
+        assertEquals(listOf(MethodId.P2tr, MethodId.UsdtArbitrum), endpoints.firstValue.map { it.methodId })
+        assertEquals(listOf(MethodId.P2tr), endpoints.secondValue.map { it.methodId })
 
+        settingsFlow.value = settingsFlow.value.copy(publicPaykitUsdtEnabled = true)
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
         assertFailsWith<CancellationException> { sut.syncCurrentPublishedEndpoints() }
     }

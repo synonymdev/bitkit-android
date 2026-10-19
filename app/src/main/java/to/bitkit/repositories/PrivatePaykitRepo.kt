@@ -1699,12 +1699,7 @@ class PrivatePaykitRepo @Inject constructor(
             val settings = settingsStore.data.first()
             val endpoints = mutableListOf<Endpoint>()
             if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings, usdtRepo.state.value)) {
-                usdtRepo.paymentEndpoint()
-                    .onSuccess { endpoints += it }
-                    .onFailure {
-                        if (it is CancellationException) throw it
-                        Logger.warn("Failed to prepare private Paykit USDT endpoint", it, context = TAG)
-                    }
+                endpoints += usdtRepo.paymentEndpoint().getOrThrow()
             }
             if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
                 val reservedAddress = addressReservationRepo.currentOrRotatedAddress(
@@ -1729,6 +1724,7 @@ class PrivatePaykitRepo @Inject constructor(
                         rawPayload = PublicPaykitRepo.serializePayload(invoice.bolt11),
                     )
                 }.onFailure {
+                    if (it !is PrivatePaykitError.RouteHintsUnavailable) throw it
                     Logger.warn(
                         "Failed to prepare private Paykit invoice for '${redacted(publicKey)}'",
                         it,

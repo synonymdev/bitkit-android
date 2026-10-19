@@ -407,7 +407,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `private bitcoin publication survives optional USDT failure but cancellation propagates`() = test {
+    fun `private publication defers USDT failure and retries fresh endpoints`() = test {
         settingsData.value = SettingsData(
             publicPaykitUsdtEnabled = true,
             usdtPreference = UsdtPreference.ENABLED,
@@ -418,10 +418,27 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
         sut.setContactPreparationActive(false)
+        assertTrue(sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).isFailure)
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+
+        val address = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
+        val usdt = Endpoint(
+            methodId = MethodId.UsdtArbitrum,
+            value = address,
+            rawPayload = """{"chain_id":"42161","token":"${PaykitUsdt.TOKEN}","value":"$address"}""",
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(usdt))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+        settingsData.value = settingsData.value.copy(publicPaykitUsdtEnabled = false)
         sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
         val updates = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
-        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(updates.capture(), eq(false))
-        assertEquals(listOf(MethodId.P2wpkh.rawValue), updates.firstValue.single().reservations.map { it.identifier })
+        verify(paykitSdkService, times(2)).syncPrivatePaymentListsWithReservations(updates.capture(), eq(false))
+        assertEquals(
+            listOf(MethodId.UsdtArbitrum.rawValue, MethodId.P2wpkh.rawValue),
+            updates.firstValue.single().reservations.map { it.identifier },
+        )
+        assertEquals(listOf(MethodId.P2wpkh.rawValue), updates.secondValue.single().reservations.map { it.identifier })
+        settingsData.value = settingsData.value.copy(publicPaykitUsdtEnabled = true)
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
         assertFailsWith<CancellationException> {
             sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
@@ -2734,6 +2751,31 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, times(3)).syncPrivatePaymentListsWithReservations(publications.capture(), eq(false))
         assertEquals(CONTACT_KEY, publications.secondValue.single().counterparty)
         assertEquals(MethodId.Bolt11.rawValue, publications.secondValue.single().reservations.single().identifier)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `private Lightning preparation failure does not publish a partial replacement`() = test {
+        preparePrivateLightningContact()
+        settingsData.update { it.copy(publicPaykitOnchainEnabled = true) }
+        clearInvocations(paykitSdkService)
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+            .thenReturn(Result.failure(AppError("invoice unavailable")))
+        sut.refreshKnownSavedContactEndpoints("channel ready", forceRefreshLightning = true).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+
+        val refreshedInvoice = "lnbcrt1refreshed"
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+            .thenReturn(Result.success(refreshedInvoice))
+        whenever(coreService.decode(refreshedInvoice))
+            .thenReturn(Scanner.Lightning(lightningInvoice(refreshedInvoice, byteArrayOf(8, 8, 8))))
+        sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
+        runCurrent()
+        val publication = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(publication.capture(), eq(false))
+        val invoices = publication.firstValue.single().reservations.filter { it.identifier == MethodId.Bolt11.rawValue }
+        assertEquals(PublicPaykitRepo.serializePayload(refreshedInvoice), invoices.single().payload)
         sut.closeAndClear()
     }
 
