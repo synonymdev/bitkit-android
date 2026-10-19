@@ -2,6 +2,7 @@ package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -14,6 +15,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -62,6 +64,7 @@ fun MoneyCell(
     showBitcoinSymbol: Boolean = true,
     fiatReplacement: String? = null,
     maxAmountLines: Int = Int.MAX_VALUE,
+    maxStatusWidth: Dp = Dp.Unspecified,
 ) {
     val currencies = LocalCurrencies.current
     val primaryUnit = currencies.primaryDisplay
@@ -93,13 +96,22 @@ fun MoneyCell(
         modifier = modifier,
     ) {
         primary?.let { text ->
-            BodyMSB(
-                text = (if (primaryIsReplaced) text else "$prefix$text").withAccent(accentColor = Colors.White64),
-                textAlign = TextAlign.End,
-                maxLines = if (primaryIsReplaced) Int.MAX_VALUE else maxAmountLines,
-                overflow = amountOverflow,
-                modifier = Modifier.testTag("MoneyPrimary"),
-            )
+            if (primaryIsReplaced) {
+                CaptionB(
+                    text = text,
+                    color = Colors.White64,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.widthIn(max = maxStatusWidth).testTag("MoneyPrimary")
+                )
+            } else {
+                BodyMSB(
+                    text = "$prefix$text".withAccent(accentColor = Colors.White64),
+                    textAlign = TextAlign.End,
+                    maxLines = maxAmountLines,
+                    overflow = amountOverflow,
+                    modifier = Modifier.testTag("MoneyPrimary")
+                )
+            }
         }
         secondary?.let { text ->
             CaptionB(
@@ -108,7 +120,9 @@ fun MoneyCell(
                 textAlign = TextAlign.End,
                 maxLines = if (secondaryIsReplaced) Int.MAX_VALUE else maxAmountLines,
                 overflow = amountOverflow,
-                modifier = Modifier.testTag("MoneySecondary"),
+                modifier = Modifier
+                    .widthIn(max = if (secondaryIsReplaced) maxStatusWidth else Dp.Unspecified)
+                    .testTag("MoneySecondary")
             )
         }
     }

@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.PaykitAmount
@@ -48,6 +50,7 @@ import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.AppThemeSurface
+import java.util.Locale
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -56,8 +59,20 @@ import kotlin.time.Instant
 
 @ComposeUi
 class PaymentRequestsScreenTest {
+    private val originalLocale = Locale.getDefault()
+
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    @Before
+    fun setup() {
+        Locale.setDefault(Locale.US)
+    }
+
+    @After
+    fun teardown() {
+        Locale.setDefault(originalLocale)
+    }
 
     @Test
     fun detailsDisablePayWhilePreparationIsPending() {
@@ -361,6 +376,66 @@ class PaymentRequestsScreenTest {
             assertTrue(results.isNotEmpty())
             assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation")
         }
+    }
+
+    @Test
+    fun longAmountUsesAvailableCardWidthAtLargeText() {
+        val asset = mutableStateOf(PaykitAsset.BTC)
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                    Box(Modifier.width(320.dp)) {
+                        PaymentRequestCard(
+                            request = request().copy(amount = PaykitAmount(asset.value, 1_000_000u)),
+                            contact = PubkyProfile.forDisplay(request().counterparty, "Alice", imageUrl = null),
+                        )
+                    }
+                }
+            }
+        }
+        for ((value, text) in listOf(PaykitAsset.BTC to "₿ 1 000 000", PaykitAsset.USD to "$10,000.00")) {
+            composeTestRule.runOnIdle { asset.value = value }
+            val results = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            assertTrue(results.isNotEmpty())
+            assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation")
+            assertTrue(results.single().lineCount == 1)
+        }
+    }
+
+    @Test
+    fun bitcoinReceiptStatusUsesCaptionInBothUnitSettings() {
+        val primary = mutableStateOf(PrimaryDisplay.FIAT)
+        val status = "Płatność zweryfikowana · 4,12485 USDT"
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface(CurrencyState(primaryDisplay = primary.value)) {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                    Box(Modifier.width(360.dp)) {
+                        PaymentRequestCard(
+                            request = request().copy(amount = PaykitAmount(PaykitAsset.BTC, 5_000u)),
+                            contact = PubkyProfile.forDisplay(request().counterparty, "Alice", imageUrl = null),
+                            fiatStatus = status,
+                        )
+                    }
+                }
+            }
+        }
+        val layouts = PrimaryDisplay.entries.map { value ->
+            composeTestRule.runOnIdle { primary.value = value }
+            val results = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(status).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            results.single().also { layout ->
+                assertFalse(layout.hasVisualOverflow)
+                val wordStart = status.indexOf("zweryfikowana")
+                val wordEnd = wordStart + "zweryfikowana".lastIndex
+                assertTrue(layout.getLineForOffset(wordStart) == layout.getLineForOffset(wordEnd))
+            }
+        }
+        assertTrue(layouts.first().layoutInput.style.fontSize == layouts.last().layoutInput.style.fontSize)
     }
 
     private fun setOutgoingRequestContent(primaryDisplay: PrimaryDisplay) {
