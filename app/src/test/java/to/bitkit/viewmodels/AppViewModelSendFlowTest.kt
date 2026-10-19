@@ -123,6 +123,8 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkySwapNetwork
+import to.bitkit.models.PubkySwapProvider
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
@@ -183,6 +185,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
+import to.bitkit.repositories.PubkySwapRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayCompletionKind
@@ -271,6 +274,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val activityService = mock<ActivityService>()
     private val keychain = mock<Keychain>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val pubkySwapRepo = mock<PubkySwapRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val paymentSubmissionActive = MutableStateFlow(false)
@@ -826,6 +830,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
+        pubkySwapRepo = pubkySwapRepo,
         timeSource = testDispatcher.scheduler.timeSource,
     )
 
@@ -3916,6 +3921,71 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         verify(coreService, never()).decode(any())
     }
+
+    @Test
+    fun `scan Pubky swap provider link opens the connect sheet without core decode`() = test {
+        sut.onScanResult(pubkySwapLink())
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkySwapConnect(PUBKY_SWAP_PROVIDER), sut.currentSheet.value)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `scan Pubky swap provider link for another network shows a mismatch toast`() = test {
+        sut.onScanResult(pubkySwapLink(network = "bitcoin"))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(check { assertEquals("PubkySwapInvalidConnectionToast", it.testTag) })
+        verify(context).getString(R.string.pubky_swap__network_mismatch_text)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `scan malformed Pubky swap provider link shows an invalid link toast`() = test {
+        sut.onScanResult("pubkyswap://connect?pubky=${PUBKY_SWAP_PROVIDER.publicKey}")
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(check { assertEquals("PubkySwapInvalidConnectionToast", it.testTag) })
+        verify(context).getString(R.string.pubky_swap__invalid_link_text)
+    }
+
+    @Test
+    fun `hardware send rejects a Pubky swap provider link`() = test {
+        whenever(context.getString(R.string.hardware__send_onchain_only_title)).thenReturn("On-chain only")
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        sut.onScanResult(pubkySwapLink())
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(check { assertEquals("On-chain only", it.title) })
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+    }
+
+    @Test
+    fun `home resume reopens a swap provider kept during profile setup`() = test {
+        pubkyPublicKey.value = PUBKY_IDENTITY
+        whenever(pubkySwapRepo.takePendingConnection()).thenReturn(PUBKY_SWAP_PROVIDER)
+
+        sut.onHomeResumed()
+
+        assertEquals(Sheet.PubkySwapConnect(PUBKY_SWAP_PROVIDER), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `home resume keeps a swap provider until the profile is set up`() = test {
+        sut.onHomeResumed()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkySwapRepo, never()).takePendingConnection()
+    }
+
+    private fun pubkySwapLink(network: String = "regtest") =
+        "pubkyswap://connect?pubky=${PUBKY_SWAP_PROVIDER.publicKey}&network=$network"
 
     @Test
     fun `Bitkit SamRock deeplink opens BTCPay connection sheet without core decode`() = test {
@@ -13887,6 +13957,11 @@ private const val SAMROCK_SETUP_URL =
 
 /** Stands in for the epoch second a seed restore began. */
 private const val RESTORE_STARTED_AT = 1_700_000_000L
+private const val PUBKY_IDENTITY = "pubky8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
+private val PUBKY_SWAP_PROVIDER = PubkySwapProvider(
+    publicKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy",
+    network = PubkySwapNetwork.REGTEST,
+)
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"

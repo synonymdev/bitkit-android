@@ -138,6 +138,7 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyContactLink
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.PubkySwapProvider
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.models.Suggestion
@@ -202,6 +203,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
+import to.bitkit.repositories.PubkySwapRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayPaymentFailedError
@@ -291,6 +293,7 @@ class AppViewModel @Inject constructor(
     private val coreService: CoreService,
     private val nodeServiceFgState: NodeServiceFgState,
     private val pubkyRepo: PubkyRepo,
+    private val pubkySwapRepo: PubkySwapRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
@@ -4202,6 +4205,11 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
+        if (PubkySwapProvider.isProtocolUrl(input)) {
+            handlePubkySwapConnection(input)
+            return@withContext
+        }
+
         if (PubkyAuthRequest.isProtocolUrl(input)) {
             clearActiveContactPaymentContext(
                 failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
@@ -4388,6 +4396,35 @@ class AppViewModel @Inject constructor(
             description = context.getString(descriptionRes),
             testTag = "BTCPayInvalidSetupToast",
         )
+    }
+
+    private suspend fun handlePubkySwapConnection(input: String) {
+        if (activeHardwareWalletId != null) {
+            rejectHardwarePaymentTarget()
+            return
+        }
+        clearActiveContactPaymentContext(
+            failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+        )
+        val provider = PubkySwapProvider.parse(input)
+        val isNetworkSupported = Env.isSwapSupported && provider?.network?.boltzNetwork != null
+        val errorRes = when {
+            provider == null -> R.string.pubky_swap__invalid_link_text
+            !isNetworkSupported -> R.string.pubky_swap__unsupported_network_text
+            !provider.network.matches(Env.network) -> R.string.pubky_swap__network_mismatch_text
+            else -> null
+        }
+        if (provider == null || errorRes != null) {
+            hideSheet()
+            toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.pubky_swap__unsupported_title),
+                description = errorRes?.let(context::getString),
+                testTag = "PubkySwapInvalidConnectionToast",
+            )
+            return
+        }
+        showSheet(Sheet.PubkySwapConnect(provider))
     }
 
     private suspend fun handleNonPaymentScan(action: suspend () -> Unit) {
@@ -6632,7 +6669,8 @@ class AppViewModel @Inject constructor(
 
     fun onScannerSheetResult(data: String) {
         val handler = scanResultHandler
-        val shouldHandleAsProtocol = SamRockSetupRequest.isProtocolUrl(data.removeLightningSchemes())
+        val shouldHandleAsProtocol = SamRockSetupRequest.isProtocolUrl(data.removeLightningSchemes()) ||
+            PubkySwapProvider.isProtocolUrl(data)
         scanResultHandler = null
         hideSheet(shouldFlushDeferredScan = false)
         if (handler != null && !shouldHandleAsProtocol) {
@@ -6935,7 +6973,8 @@ class AppViewModel @Inject constructor(
         when {
             isUsdtPaymentInput(text.trim()) ->
                 isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
-            else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
+            SamRockSetupRequest.isProtocolUrl(text) || PubkySwapProvider.isProtocolUrl(text) -> true
+            else -> runSuspendCatching { coreService.decode(text) }.isSuccess
         }
     }
 
@@ -7685,7 +7724,8 @@ class AppViewModel @Inject constructor(
         sheet is Sheet.BTCPayConnection ||
         sheet is Sheet.LnurlAuth ||
         sheet is Sheet.Pin ||
-        sheet is Sheet.PubkyAuth
+        sheet is Sheet.PubkyAuth ||
+        sheet is Sheet.PubkySwapConnect
 
     fun discardPendingPubkyImport() {
         viewModelScope.launch {
@@ -7839,11 +7879,17 @@ class AppViewModel @Inject constructor(
     fun onHomeResumed() {
         checkTimedSheets()
         hwWalletRepo.onAppForegrounded()
+        resumePendingSwapConnection()
         viewModelScope.launch {
             if (isPaymentRequestPollingStopped.value) return@launch
             refreshIncomingPaykitPaymentRequests(onlyWhileActive = true)
             if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
         }
+    }
+
+    private fun resumePendingSwapConnection() {
+        if (pubkyRepo.publicKey.value == null || currentSheet.value != null) return
+        pubkySwapRepo.takePendingConnection()?.let { showSheet(Sheet.PubkySwapConnect(it)) }
     }
 
     fun onLeftHome() = timedSheetManager.onHomeScreenExited()

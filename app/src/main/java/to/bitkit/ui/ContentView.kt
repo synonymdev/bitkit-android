@@ -222,6 +222,7 @@ import to.bitkit.ui.sheets.GiftSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
+import to.bitkit.ui.sheets.PubkySwapConnectSheet
 import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.SendSheet
@@ -279,6 +280,7 @@ fun ContentView(
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val scope = rememberCoroutineScope()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val context = LocalContext.current
@@ -650,6 +652,20 @@ fun ContentView(
                         )
 
                         is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
+                        is Sheet.PubkySwapConnect -> PubkySwapConnectSheet(
+                            sheet = sheet,
+                            viewModel = hiltViewModel(),
+                            onDismiss = { appViewModel.hideSheet() },
+                            onSetUpProfile = {
+                                appViewModel.hideSheet()
+                                scope.launch {
+                                    navController.navigateToProfile(
+                                        settingsViewModel.pubkyIdentityExists,
+                                        hasSeenProfileIntro,
+                                    )
+                                }
+                            },
+                        )
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         is Sheet.QrScanner -> QrScanningSheet(sheet, appViewModel)
                         is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(

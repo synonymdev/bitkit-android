@@ -32,6 +32,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
+import to.bitkit.models.PubkySwapProvider
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitSubscriptionId
@@ -101,6 +102,7 @@ sealed interface Sheet {
         val showBackButton: Boolean = true,
     ) : Sheet
     data class PubkyAuth(val authUrl: String) : Sheet
+    data class PubkySwapConnect(val provider: PubkySwapProvider) : Sheet
 
     data class TimedSheet(val type: TimedSheetType) : Sheet
 }
