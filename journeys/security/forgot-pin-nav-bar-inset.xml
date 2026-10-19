@@ -13,8 +13,8 @@
     The navigation-bar top edge is the screen height (`adb shell wm size`) minus the bottom
     `navigationBars` inset that `adb shell dumpsys window windows` reports. `android layout` gives
     the Reset button no bounds and no tag, so read its bounds from `adb shell uiautomator dump`. With
-    no biometrics enrolled, the biometrics Skip button exposes only its text. On iOS, compare
-    the button frame from `snapshot-ui` against the home indicator safe area instead.
+    no biometrics enrolled, the biometrics Skip button exposes only its text. Android only; see the
+    cross-platform table in `journeys/README.md`.
   </description>
   <actions>
     <action>Tap the menu button (tag "HeaderMenu") and tap Settings (tag "DrawerSettings")</action>
