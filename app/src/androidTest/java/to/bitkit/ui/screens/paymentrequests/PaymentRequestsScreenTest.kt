@@ -51,6 +51,7 @@ import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.AppThemeSurface
 import java.util.Locale
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -329,13 +330,14 @@ class PaymentRequestsScreenTest {
     @Test
     fun longReceiptStatusKeepsContactAndExactAmountReadable() {
         val status = "Płatność zweryfikowana · 0.001647 USDT"
+        val asset = mutableStateOf(PaykitAsset.USDT)
         composeTestRule.setContent {
             PaymentRequestsTestSurface {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
                     Box(Modifier.width(320.dp)) {
                         PaymentRequestCard(
-                            request = request().copy(amount = PaykitAmount(PaykitAsset.USDT, 1_647u)),
+                            request = request().copy(amount = PaykitAmount(asset.value, 1_647u)),
                             contact = PubkyProfile.forDisplay(request().counterparty, "Alice", imageUrl = null),
                             fiatStatus = status,
                         )
@@ -343,12 +345,19 @@ class PaymentRequestsScreenTest {
                 }
             }
         }
-        for (text in listOf("Alice", status)) {
-            val results = mutableListOf<TextLayoutResult>()
-            composeTestRule.onNodeWithText(text).assertIsDisplayed()
-                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
-            assertTrue(results.isNotEmpty())
-            assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation")
+        for (denomination in listOf(PaykitAsset.USDT, PaykitAsset.BTC)) {
+            composeTestRule.runOnIdle { asset.value = denomination }
+            for (text in listOf("Alice", status)) {
+                val results = mutableListOf<TextLayoutResult>()
+                composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                    .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+                val layout = results.single()
+                assertFalse(layout.hasVisualOverflow, "$text must fit without truncation")
+                for (word in text.split(' ')) {
+                    val start = text.indexOf(word)
+                    assertEquals(layout.getLineForOffset(start), layout.getLineForOffset(start + word.length - 1))
+                }
+            }
         }
     }
 

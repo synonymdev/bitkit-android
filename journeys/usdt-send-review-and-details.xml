@@ -1,5 +1,5 @@
 <journey name="usdt send review and details">
-  <description>Use an onboarded wallet with USDT, a fresh BTC/USD rate, an owned recipient and existing sent/received activity. Quotes require the service with MAX support. No payment is submitted.</description>
+  <description>Use an onboarded wallet with USDT, a fresh BTC/USD rate, owned EVM and Solana recipients and existing sent/received activity. Save a linked contact that advertises Bitcoin, Lightning and USDT receiving methods. Have an unpaid one-time request and a due subscription payment from that contact, each permitting USDT. Pair a hardware wallet for the hardware-option check. Use the local USDT fixture for funding, controlled quotes and submitted-payment states. Quotes require the service with MAX support. No payment is submitted.</description>
   <actions>
     <action>Enable USDT in the introductory sheet or Settings, General, Payments before starting this flow.</action>
     <action>Open USDT Send and enter the owned recipient. On Amount, verify the BTC equivalent above the dollar amount, 32-point gap before Available balance, USDT badge, MAX and network pill. Enter a six-decimal amount and verify no precision is lost. With a large available balance and BNB Smart Chain selected, verify both values remain fully readable; the controls may wrap onto a second row.</action>

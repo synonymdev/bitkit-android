@@ -1,14 +1,12 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.ui.theme.Colors
@@ -50,7 +48,7 @@ fun PaykitAmountCell(
     status: String? = null,
     showBitcoinSymbol: Boolean = true,
     maxAmountLines: Int = Int.MAX_VALUE,
-    maxStatusWidth: Dp = Dp.Unspecified,
+    statusModifier: Modifier = Modifier,
 ) {
     if (amount.asset == PaykitAsset.BTC) {
         MoneyCell(
@@ -59,7 +57,7 @@ fun PaykitAmountCell(
             showBitcoinSymbol = showBitcoinSymbol,
             fiatReplacement = status,
             maxAmountLines = maxAmountLines,
-            maxStatusWidth = maxStatusWidth,
+            statusModifier = statusModifier,
             modifier = modifier
         )
     } else {
@@ -82,7 +80,7 @@ fun PaykitAmountCell(
                     text = it,
                     color = Colors.White64,
                     textAlign = TextAlign.End,
-                    modifier = Modifier.widthIn(max = maxStatusWidth)
+                    modifier = statusModifier
                 )
             }
         }
