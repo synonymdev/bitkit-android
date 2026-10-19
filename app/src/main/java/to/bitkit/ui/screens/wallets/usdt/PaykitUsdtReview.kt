@@ -52,6 +52,7 @@ fun PaykitUsdtReview(
         onDispose { app.updatePaykitUsdtBusy(false) }
     }
     var details by remember { mutableStateOf(false) }
+    var automaticPayment by remember { mutableStateOf(false) }
     val back = {
         if (!paymentActive) {
             if (state.submitted) onDone() else onBack()
@@ -66,13 +67,11 @@ fun PaykitUsdtReview(
         }
     }
     LaunchedEffect(Unit) {
-        preparePayment(viewModel, app, uiState)
+        preparePayment(viewModel, app, uiState) { automaticPayment = it }
     }
     LaunchedEffect(state.submitted, lifecycle) {
-        if (state.submitted) {
-            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                reconcileSubmittedPayment(viewModel, app)
-            }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            reconcileSubmittedPayment(viewModel, app)
         }
     }
     BackHandler { if (state.authenticationRequired) viewModel.cancelAuthentication() else back() }
@@ -116,6 +115,7 @@ fun PaykitUsdtReview(
                         onPageChange = { back() },
                         onBack = back,
                         onReview = {
+                            automaticPayment = false
                             viewModel.quote(
                                 requireNotNull(uiState.usdtRecipient),
                                 uiState.paykitAmount,
@@ -123,6 +123,7 @@ fun PaykitUsdtReview(
                             )
                         },
                         onConfirm = {
+                            automaticPayment = false
                             viewModel.confirm()
                         },
                         onDone = onDone,
@@ -135,13 +136,19 @@ fun PaykitUsdtReview(
                     )
                 }
             }
-            AutoPayOverlay(isVisible = state.busy, content = autoPayContent)
+            AutoPayOverlay(isVisible = automaticPayment && state.busy, content = autoPayContent)
         }
     }
 }
 
-internal suspend fun preparePayment(viewModel: UsdtViewModel, app: AppViewModel, uiState: SendUiState) {
+internal suspend fun preparePayment(
+    viewModel: UsdtViewModel,
+    app: AppViewModel,
+    uiState: SendUiState,
+    onAutomaticPayment: (Boolean) -> Unit = {},
+) {
     val automaticPayment = app.takeInitialUsdtSubscriptionAuthorization()
+    onAutomaticPayment(automaticPayment)
     if (automaticPayment || viewModel.state.value.quote == null) {
         viewModel.quote(
             requireNotNull(uiState.usdtRecipient),
@@ -153,6 +160,7 @@ internal suspend fun preparePayment(viewModel: UsdtViewModel, app: AppViewModel,
 }
 
 private suspend fun reconcileSubmittedPayment(viewModel: UsdtViewModel, app: AppViewModel) {
+    if (!viewModel.state.value.submitted) return
     viewModel.waitForTransfer()
     while (viewModel.wallet.value.transfers.any {
             it.id == viewModel.state.value.quote?.id && it.status == UsdtTransferStatus.PENDING

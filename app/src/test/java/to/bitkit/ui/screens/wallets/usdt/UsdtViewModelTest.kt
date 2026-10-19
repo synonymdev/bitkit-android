@@ -55,8 +55,10 @@ class UsdtViewModelTest : BaseUnitTest() {
         val uiState = SendUiState(usdtRecipient = quote.recipient, paykitAmount = "1")
         val ready = CompletableDeferred<Result<UsdtQuote>>()
         whenever(repo.quote(any(), any(), any(), any())).doSuspendableAnswer { ready.await() }
-        val preparation = launch { preparePayment(viewModel, app, uiState) }
+        var automaticPayment = false
+        val preparation = launch { preparePayment(viewModel, app, uiState) { automaticPayment = it } }
         advanceUntilIdle()
+        assertTrue(automaticPayment)
         assertFalse(viewModel.state.value.authenticationRequired)
         verify(repo, never()).send(any(), anyOrNull(), any())
         ready.complete(Result.success(quote))
@@ -64,7 +66,8 @@ class UsdtViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(viewModel.state.value.authenticationRequired)
         viewModel.cancelAuthentication()
-        preparePayment(viewModel, app, uiState)
+        preparePayment(viewModel, app, uiState) { automaticPayment = it }
+        assertFalse(automaticPayment)
         advanceUntilIdle()
         assertFalse(viewModel.state.value.authenticationRequired)
         verify(repo, times(1)).quote(any(), any(), any(), any())
@@ -79,6 +82,31 @@ class UsdtViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(viewModel.state.value.submitted)
         verify(repo, times(1)).send(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `manual initial subscription preparation never shows automatic progress or authorizes`() = test {
+        val viewModel = createViewModel()
+        val app = mock<AppViewModel>()
+        whenever(app.takeInitialUsdtSubscriptionAuthorization()).thenReturn(false)
+        val uiState = SendUiState(
+            usdtRecipient = quote.recipient,
+            paykitAmount = "1",
+            isInitialSubscriptionPayment = true,
+        )
+        val ready = CompletableDeferred<Result<UsdtQuote>>()
+        whenever(repo.quote(any(), any(), any(), any())).doSuspendableAnswer { ready.await() }
+        var automaticPayment = true
+        val preparation = launch { preparePayment(viewModel, app, uiState) { automaticPayment = it } }
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.busy)
+        assertFalse(automaticPayment)
+        ready.complete(Result.success(quote))
+        preparation.join()
+        advanceUntilIdle()
+        assertEquals(quote, viewModel.state.value.quote)
+        assertFalse(viewModel.state.value.authenticationRequired)
+        verify(repo, never()).send(any(), anyOrNull(), any())
     }
 
     @Test
