@@ -114,6 +114,7 @@ class PaymentRequestAmountLocaleTest {
         }
         for ((width, screenHeight) in listOf(320 to 520, 375 to 520, 320 to 640, 375 to 640)) {
             for (scale in listOf(1f, 1.6f)) {
+                var bitcoinPositions = emptyList<Float>()
                 for (asset in listOf(PaykitAsset.BTC, PaykitAsset.USD)) {
                     composeTestRule.runOnIdle {
                         height.value = screenHeight
@@ -129,6 +130,20 @@ class PaymentRequestAmountLocaleTest {
                     assertEquals(divider.right, control.right, 1f)
                     assertTrue(actions.top >= amount.bottom && actions.top - amount.bottom <= 34f)
                     assertTrue(divider.top >= actions.bottom)
+                    val positions = listOf(
+                        actions.top,
+                        divider.top,
+                        composeTestRule.onNodeWithTag("N1").fetchSemanticsNode().boundsInRoot.top,
+                        composeTestRule.onNodeWithTag("N0").fetchSemanticsNode().boundsInRoot.top,
+                    )
+                    if (asset == PaykitAsset.BTC) {
+                        bitcoinPositions = positions
+                    } else {
+                        composeTestRule.onNodeWithTag("PaymentRequestAmountUnit").assertDoesNotExist()
+                        bitcoinPositions.zip(positions).forEach { (bitcoin, usd) ->
+                            assertEquals(bitcoin, usd, 1f, "Controls must not move when denomination changes")
+                        }
+                    }
                     val continueButton = composeTestRule.onNodeWithTag("PaymentRequestAmountContinue")
                         .fetchSemanticsNode().boundsInRoot
                     assertTrue(continueButton.height >= 112f, "Continue must be fully visible")

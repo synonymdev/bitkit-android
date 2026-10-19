@@ -37,10 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -195,46 +197,50 @@ internal fun PaymentRequestAmountContent(
         )
         Column(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp)) {
             VerticalSpacer(16.dp)
-            if (asset == PaykitAsset.BTC) {
-                NumberPadTextField(
-                    viewModel = amountInputViewModel,
-                    modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountField")
-                )
-            } else {
-                NumberPadAmountText(
-                    value = dollars.ifEmpty { "0" }.replace('.', decimalSeparator),
-                    symbol = "$",
-                    modifier = Modifier.testTag("PaymentRequestAmountField")
-                )
+            PaymentRequestDenominationLayout(asset, Alignment.Bottom) { displayAsset ->
+                if (displayAsset == PaykitAsset.BTC) {
+                    NumberPadTextField(
+                        viewModel = amountInputViewModel,
+                        modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountField")
+                    )
+                } else {
+                    NumberPadAmountText(
+                        value = dollars.ifEmpty { "0" }.replace('.', decimalSeparator),
+                        symbol = "$",
+                        modifier = Modifier.testTag("PaymentRequestAmountField")
+                    )
+                }
             }
             VerticalSpacer(16.dp)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountActions"),
-            ) {
-                PaymentRequestAssetSelector(
-                    asset = asset,
-                    amount = entered,
-                    allowedAssets = allowedAssets,
-                    conversion = conversion,
-                    onConverted = {
-                        asset = it.asset
-                        if (it.asset == PaykitAsset.BTC) {
-                            amountInputViewModel.setSats(it.atomic.toLong(), currencies)
-                        } else {
-                            dollars = if (it.atomic == 0uL) "" else it.value
-                        }
-                        conversionError = false
-                    },
-                    onUnavailable = { conversionError = true },
-                )
-                if (asset == PaykitAsset.BTC) {
-                    UnitButton(
-                        onClick = { amountInputViewModel.switchUnit(currencies) },
-                        color = Colors.Brand,
-                        modifier = Modifier.testTag("PaymentRequestAmountUnit")
+            PaymentRequestDenominationLayout(asset, Alignment.Top) { displayAsset ->
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountActions"),
+                ) {
+                    PaymentRequestAssetSelector(
+                        asset = asset,
+                        amount = entered,
+                        allowedAssets = allowedAssets,
+                        conversion = conversion,
+                        onConverted = {
+                            asset = it.asset
+                            if (it.asset == PaykitAsset.BTC) {
+                                amountInputViewModel.setSats(it.atomic.toLong(), currencies)
+                            } else {
+                                dollars = if (it.atomic == 0uL) "" else it.value
+                            }
+                            conversionError = false
+                        },
+                        onUnavailable = { conversionError = true },
                     )
+                    if (displayAsset == PaykitAsset.BTC) {
+                        UnitButton(
+                            onClick = { amountInputViewModel.switchUnit(currencies) },
+                            color = Colors.Brand,
+                            modifier = Modifier.testTag("PaymentRequestAmountUnit")
+                        )
+                    }
                 }
             }
             if (conversionError) {
@@ -281,6 +287,29 @@ internal fun PaymentRequestAmountContent(
                 modifier = Modifier.testTag("PaymentRequestAmountContinue"),
             )
             VerticalSpacer(16.dp)
+        }
+    }
+}
+
+@Composable
+private fun PaymentRequestDenominationLayout(
+    asset: PaykitAsset,
+    verticalAlignment: Alignment.Vertical,
+    content: @Composable (PaykitAsset) -> Unit,
+) {
+    Layout(content = {
+        Box(modifier = if (asset == PaykitAsset.BTC) Modifier else Modifier.clearAndSetSemantics {}) {
+            content(PaykitAsset.BTC)
+        }
+        Box(modifier = if (asset == PaykitAsset.USD) Modifier else Modifier.clearAndSetSemantics {}) {
+            content(PaykitAsset.USD)
+        }
+    }) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints.copy(minHeight = 0)) }
+        val height = placeables.maxOf { it.height }
+        val visible = placeables[if (asset == PaykitAsset.BTC) 0 else 1]
+        layout(placeables.maxOf { it.width }, height) {
+            visible.placeRelative(0, verticalAlignment.align(visible.height, height))
         }
     }
 }
