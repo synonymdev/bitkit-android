@@ -29,6 +29,25 @@ class UsdtService @Inject constructor(
 ) {
     private var wallet: UsdtWallet? = null
     private var credentialFingerprint: ByteArray? = null
+    private var addressFingerprint: ByteArray? = null
+    private var cachedPaymentAddress: String? = null
+
+    @get:Synchronized
+    val paymentAddress: String
+        get() {
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: throw UsdtException.InvalidCredentials()
+            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+            val fingerprint = MessageDigest.getInstance("SHA-256")
+                .digest("${mnemonic.length}:$mnemonic${passphrase.orEmpty()}".encodeToByteArray())
+            if (addressFingerprint?.contentEquals(fingerprint) == true) cachedPaymentAddress?.let { return it }
+            cachedPaymentAddress = null
+            addressFingerprint = null
+            return usdtAddress(mnemonic, passphrase).also {
+                cachedPaymentAddress = it
+                addressFingerprint = fingerprint
+            }
+        }
 
     @Synchronized
     fun wallet(requiresNetwork: Boolean = true): UsdtWallet {
@@ -109,6 +128,8 @@ class UsdtService @Inject constructor(
         wallet?.close()
         wallet = null
         credentialFingerprint = null
+        addressFingerprint = null
+        cachedPaymentAddress = null
         val directory = File(Env.bitkitCoreStoragePath(0))
         if (!directory.exists()) return
         val files = directory.listFiles() ?: throw IOException("Cannot read USDT storage")
