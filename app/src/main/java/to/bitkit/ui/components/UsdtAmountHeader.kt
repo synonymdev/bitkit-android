@@ -13,6 +13,7 @@ import to.bitkit.repositories.paykitRate
 import to.bitkit.ui.LocalCurrencies
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -33,7 +34,7 @@ internal fun UsdtAmountHeader(
         isBitcoinPrimary = false,
         smallRowText = btc ?: "USDT",
         smallRowSymbol = if (btc != null) BITCOIN_SYMBOL else null,
-        largeRowText = displayAmount ?: amount,
+        largeRowText = displayAmount ?: usdtInputAmount(amount),
         largeRowSymbol = "$",
         largeRowPrefix = prefix,
         showSymbol = true,
@@ -44,6 +45,9 @@ internal fun UsdtAmountHeader(
         modifier = modifier.fillMaxWidth()
     )
 }
+
+internal fun usdtInputAmount(amount: String, locale: Locale = Locale.getDefault()): String =
+    amount.replace('.', DecimalFormatSymbols.getInstance(locale).decimalSeparator)
 
 private const val USDT_CENT = 10_000uL
 
