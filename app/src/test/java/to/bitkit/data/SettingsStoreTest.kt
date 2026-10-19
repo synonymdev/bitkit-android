@@ -12,6 +12,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.PubkySwapNetwork
+import to.bitkit.models.PubkySwapProvider
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -106,5 +108,23 @@ class SettingsStoreTest : BaseUnitTest() {
         assertTrue(sut.restoreFromBackup(backup).isSuccess)
 
         assertEquals(900L, sut.data.first().restoreSyncedBlockHeight)
+    }
+
+    @Test
+    fun `pubky swap provider persists until it is cleared or settings reset`() = test {
+        val provider = PubkySwapProvider(
+            publicKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy",
+            network = PubkySwapNetwork.REGTEST,
+        )
+
+        sut.setPubkySwapProvider(provider)
+        assertEquals(provider, SettingsStore(context).pubkySwapProvider.first())
+
+        sut.setPubkySwapProvider(null)
+        assertNull(sut.pubkySwapProvider.first())
+
+        sut.setPubkySwapProvider(provider)
+        sut.reset()
+        assertNull(sut.pubkySwapProvider.first())
     }
 }

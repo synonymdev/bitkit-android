@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,8 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.PubkySwapNetwork
+import to.bitkit.models.PubkySwapProvider
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
@@ -48,6 +51,13 @@ class SettingsStore @Inject constructor(
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
     }
     val subscriptionClockOffsetDays: Flow<Int> = localStore.data.map { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] ?: 0 }
+
+    /** The connected Pubky swap provider. Kept on this device only, so a restored wallet scans it again. */
+    val pubkySwapProvider: Flow<PubkySwapProvider?> = localStore.data.map {
+        val publicKey = it[PUBKY_SWAP_PROVIDER_KEY] ?: return@map null
+        val network = it[PUBKY_SWAP_NETWORK_KEY]?.let(PubkySwapNetwork::fromWireValue) ?: return@map null
+        PubkySwapProvider(publicKey, network)
+    }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
@@ -118,6 +128,18 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] = days }
     }
 
+    suspend fun setPubkySwapProvider(value: PubkySwapProvider?) {
+        localStore.edit {
+            if (value == null) {
+                it.remove(PUBKY_SWAP_PROVIDER_KEY)
+                it.remove(PUBKY_SWAP_NETWORK_KEY)
+            } else {
+                it[PUBKY_SWAP_PROVIDER_KEY] = value.publicKey
+                it[PUBKY_SWAP_NETWORK_KEY] = value.network.wireValue
+            }
+        }
+    }
+
     suspend fun addLastUsedTag(newTag: String) {
         store.updateData { currentSettings ->
             val combinedTags = (listOf(newTag) + currentSettings.lastUsedTags).distinct()
@@ -152,6 +174,8 @@ class SettingsStore @Inject constructor(
         private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
         private val SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("subscription_clock_offset_days")
+        private val PUBKY_SWAP_PROVIDER_KEY = stringPreferencesKey("pubky_swap_provider")
+        private val PUBKY_SWAP_NETWORK_KEY = stringPreferencesKey("pubky_swap_network")
     }
 }
 
