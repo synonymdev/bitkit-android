@@ -132,6 +132,8 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         whenever(usdtPayments.verifiedReceipts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.protectedPaymentAttempts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.paymentRequestStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(usdtPayments.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         sut = PaykitPaymentRequestRepo(
@@ -1185,6 +1187,32 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertEquals(PaymentRequestLifecycleState.PROOF_SUBMITTED, paid.lifecycleState)
         assertEquals(PaykitPaymentProofKind.Lightning, paid.paymentProofKind)
         assertEquals(1, sut.subscriptions.value.single { it.isCreatedByUser }.receivedPaymentRequests().size)
+    }
+
+    @Test
+    fun `usdt protection hides only its subscription billing period`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)),
+        )
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val started = PaykitUsdtAttempt(
+            "quote",
+            "wallet",
+            LOCAL_IDENTITY,
+            COUNTERPARTY,
+            requestId = request.id,
+            billingPeriod = request.billingPeriod,
+            paymentStarted = true,
+        )
+        whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY)).thenReturn(Result.success(listOf(started)))
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertFalse(sut.isSubscriptionNotificationHandled(request.id, LOCAL_IDENTITY))
+        advanceTimeBy(32 * 24 * 60 * 60 * 1000L)
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertTrue(sut.pendingRequests.value.isNotEmpty())
+        assertTrue(sut.pendingRequests.value.all { it.id != request.id })
     }
 
     @Test

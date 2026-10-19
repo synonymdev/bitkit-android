@@ -317,6 +317,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     private val proofStateVersion = MutableStateFlow(0L)
+    private val usdtStateVersion = MutableStateFlow(0L)
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
     private val nonCanonicalTestPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
@@ -653,6 +654,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { usdtRepo.refresh(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { paykitUsdtPayments.reconcile() }.thenReturn(Result.success(Unit))
         whenever(paykitUsdtPayments.receipts).thenReturn(MutableStateFlow(emptyList()))
+        whenever(paykitUsdtPayments.paymentRequestStateVersion).thenReturn(usdtStateVersion)
+        whenever(paykitUsdtPayments.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever { paykitUsdtPayments.send(any(), anyOrNull(), any()) }.doSuspendableAnswer {
             val beforeSend = it.getArgument<suspend () -> Unit>(2)
             runCatching { beforeSend() }
@@ -10384,6 +10387,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         ordinaryPayment()
         assertFalse(paymentSubmissionActive.value)
         verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
+    }
+
+    @Test
+    fun `usdt changes refresh requests after active submission finishes`() = test {
+        pubkyPublicKey.value = testPublicKey
+        enablePaykitUi()
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+        paymentSubmissionActive.value = true
+        repeat(3) {
+            usdtStateVersion.value++
+            runCurrent()
+        }
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        paymentSubmissionActive.value = false
+        runCurrent()
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
     }
 
     @Test
