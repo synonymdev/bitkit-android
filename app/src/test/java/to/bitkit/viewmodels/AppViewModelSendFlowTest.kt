@@ -13501,6 +13501,169 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `fixed dollar request opens confirmation without amount entry or automatic payment`() = test {
+        enablePaykitUi()
+        usdtEnabled.value = false
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val endpoint = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 250u),
+            pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00001")))),
+            acceptedPaymentEndpointIdentifiers = listOf(endpoint.methodId.rawValue),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        assertEquals(request, (sut.currentSheet.value as? Sheet.Send)?.preparingRequest)
+        resolution.complete(
+            Result.success(PublicPaykitPaymentResult.Opened(endpoint.value, endpoints = listOf(endpoint)))
+        )
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(2_500uL, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+        assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+        verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `fixed dollar request keeps asset selection only when USDT is enabled`() = test {
+        val bitcoin = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val usdt = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
+        val endpoints = listOf(bitcoin, usdt)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 250u),
+            pricing = PaykitRequestPricing(
+                PaymentConversion.Fixed(
+                    listOf(ConversionRate("btc", "0.00001"), ConversionRate("usdt", "1")),
+                )
+            ),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        for (enabled in listOf(false, true)) {
+            usdtEnabled.value = enabled
+            runCurrent()
+            sut.openContactPayment(
+                REGTEST_ADDRESS,
+                testPublicKey,
+                incomingPaymentRequest = request,
+                endpoints = endpoints,
+            )
+            advanceUntilIdle()
+            assertEquals(Sheet.Send(if (enabled) SendRoute.Amount else SendRoute.Confirm), sut.currentSheet.value)
+            assertEquals(2_500uL, sut.sendUiState.value.amount)
+            assertFalse(sut.sendUiState.value.isAmountInputValid)
+            assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
+            sut.hideSheet()
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun `fixed dollar confirmation binds quoted terms before authorized payment`() = test {
+        val endpoint = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 250u),
+            pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00001")))),
+        )
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        stubSuccessfulOnchainSend(REGTEST_ADDRESS, 2_500u)
+
+        sut.openContactPayment(REGTEST_ADDRESS, testPublicKey, privateContext, request, endpoints = listOf(endpoint))
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        verify(paykitPaymentRequestRepo, never()).accept(request)
+        confirmCurrentPayment()
+
+        verify(paykitPaymentProofRepo).prepare(
+            eq(request),
+            eq(MethodId.P2wpkh.rawValue),
+            eq("bitkit"),
+            eq(PaykitPaymentProofKind.Onchain),
+            eq(request.payment(MethodId.P2wpkh, Clock.System.now())),
+        )
+        verify(paykitPaymentRequestRepo).accept(request)
+        verify(paykitPaymentProofRepo).completeOnchainPayment(any(), eq("txid"), any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `dollar request without conversion terms cannot enter confirmation`() = test {
+        val endpoint = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val request = paymentRequest().copy(amount = PaykitAmount(PaykitAsset.USD, 250u))
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        sut.openContactPayment(
+            REGTEST_ADDRESS,
+            testPublicKey,
+            incomingPaymentRequest = request,
+            endpoints = listOf(endpoint),
+        )
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
+        assertTrue(sut.sendUiState.value.paykitRateUnavailable)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        verify(paykitPaymentRequestRepo, never()).accept(request)
+    }
+
+    @Test
+    fun `quoted LNURL requests retain minimum amount admission before confirmation`() = test {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1request",
+            callback = "https://example.com/pay",
+            minSendable = 1_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val endpoint = Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = "")
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(coreService.decode(lnurl.uri)).thenReturn(Scanner.LnurlPay(lnurl))
+        for ((cents, route) in listOf(50uL to SendRoute.Amount, 250uL to SendRoute.Confirm)) {
+            val request = paymentRequest().copy(
+                amount = PaykitAmount(PaykitAsset.USD, cents),
+                pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00001")))),
+                acceptedPaymentEndpointIdentifiers = listOf(endpoint.methodId.rawValue),
+            )
+            sut.openContactPayment(
+                lnurl.uri,
+                testPublicKey,
+                incomingPaymentRequest = request,
+                endpoints = listOf(endpoint),
+            )
+            advanceUntilIdle()
+            assertEquals(Sheet.Send(route), sut.currentSheet.value)
+            assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            verify(paykitPaymentRequestRepo, never()).accept(request)
+            sut.hideSheet()
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
     fun `automatic USDT request finishes preparation and admits amount continue`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey

@@ -1548,8 +1548,16 @@ class AppViewModel @Inject constructor(
                 if (!ownsPaymentRequestPreparation(preparation)) return true
             }
             if (reopenRetainedHardwarePayment(request, generation, preparation)) return true
+            val started = timeSource.markNow()
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
-            return finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
+            val resolvedAfter = started.elapsedNow()
+            val result = finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
+            Logger.debug(
+                "Paykit request preparation: resolveMs=${resolvedAfter.inWholeMilliseconds} " +
+                    "setupMs=${(started.elapsedNow() - resolvedAfter).inWholeMilliseconds}",
+                context = TAG,
+            )
+            return result
         } finally {
             if (scheduledScan?.contactPaymentContext?.incomingPaymentRequest?.id != request.id &&
                 paymentRequestPresentationRetryJobs[request.id]?.isActive != true
@@ -3560,7 +3568,20 @@ class AppViewModel @Inject constructor(
         }
         refreshPaykitRequestAmount()
         updateCanSwitchWallet()
-        navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+        if (!openBitcoinRequestConfirmation(fromMainScanner)) {
+            navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+        }
+    }
+
+    private suspend fun openBitcoinRequestConfirmation(fromMainScanner: Boolean): Boolean {
+        if (activeIncomingPaymentRequest() == null || _sendUiState.value.usdtRecipient != null) return false
+        if (!reviewPaykitAmount()) return false
+        val lnurl = _sendUiState.value.lnurl as? LnurlParams.LnurlPay
+        if (lnurl != null && _sendUiState.value.amount < lnurl.data.minSendableSat()) return false
+        navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
+        refreshOnchainSendIfNeeded()
+        estimateLightningRoutingFeesIfNeeded()
+        return true
     }
 
     private fun prefersUsdt(
