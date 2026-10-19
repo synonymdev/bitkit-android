@@ -400,6 +400,8 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
+    private val _transactionSheet = MutableStateFlow(NewTransactionSheetDetails.EMPTY)
+    val transactionSheet = _transactionSheet.asStateFlow()
     val pendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
@@ -688,8 +690,13 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            combine(currentSheet, isAuthenticated, showForgotPinSheet) { sheet, authenticated, forgotPin ->
-                sheet == null && authenticated && !forgotPin
+            combine(
+                currentSheet,
+                isAuthenticated,
+                showForgotPinSheet,
+                transactionSheet,
+            ) { sheet, authenticated, forgotPin, receipt ->
+                sheet == null && authenticated && !forgotPin && receipt == NewTransactionSheetDetails.EMPTY
             }.collect {
                 if (it && !isUsdtIntroPresented && usdtSheet.shouldShow()) {
                     timedSheetManager.reevaluate()
@@ -6578,9 +6585,6 @@ class AppViewModel @Inject constructor(
 
     // region TxSheet
     private var _isTransactionSheetEnabled = true
-
-    private val _transactionSheet = MutableStateFlow(NewTransactionSheetDetails.EMPTY)
-    val transactionSheet = _transactionSheet.asStateFlow()
 
     private val _successSendUiState = MutableStateFlow(
         NewTransactionSheetDetails(

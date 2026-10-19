@@ -8489,16 +8489,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `transaction receipt also defers the USDT reminder without consuming it`() = test {
+    fun `unseen USDT intro retries after a transaction receipt closes`() = test {
         val sheet = useRealTimedSheets()
         val receipt = NewTransactionSheetDetails(
             type = NewTransactionSheetType.ONCHAIN,
             direction = NewTransactionSheetDirection.RECEIVED,
             paymentHashOrTxId = "received-tx",
         )
+        sut.checkTimedSheets()
+        advanceTimeBy(1000)
         sut.showTransactionSheet(receipt)
         runCurrent()
-        sut.checkTimedSheets()
         advanceTimeBy(2100)
         runCurrent()
 
@@ -8507,10 +8508,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(sheet, never()).onShown()
 
         sut.hideNewTransactionSheet()
-        sut.checkTimedSheets()
-        advanceTimeBy(2100)
+        runCurrent()
+        advanceTimeBy(1000)
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        advanceTimeBy(1100)
         runCurrent()
         assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
     }
 
     @Test
