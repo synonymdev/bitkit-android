@@ -36,7 +36,9 @@ Some internal libraries are distributed via GitHub Packages. Configure credentia
      - `gpr.user=YOUR_GITHUB_USERNAME`
      - `gpr.key=YOUR_GITHUB_TOKEN`
 
-Gradle ignores `~/.m2` by default. To test a dependency you published with `publishToMavenLocal`, build with `-PuseMavenLocal=true` (`paykit-android` and `bitkit-core-android` always resolve from GitHub Packages); never ship or symbolicate a build made that way, because its native libraries differ from the published AAR and its debug symbols.
+Gradle ignores `~/.m2` by default. To test dependencies you published with `publishToMavenLocal`, select them with `-PuseMavenLocal=ldk-node,vss` (comma-separated). Available names are `ldk-node`, `vss`, `bitkit-core` and `paykit`, mapping to `com.synonym:ldk-node-android`, `com.synonym:vss-client-android`, `com.synonym:bitkit-core-android` and `com.synonym:paykit-android`. Only the selected modules can resolve from local Maven; all others use the configured remote repositories.
+
+`-PuseMavenLocal=true` selects LDK and VSS; `false` or omitting the property disables local Maven. Unknown names fail the build. Never ship a build with local dependencies or symbolicate it with published debug symbols, because its native libraries may differ from the published AARs. For a local Bitkit Core AAR without publishing to Maven local, use [`bitkitCoreAar`](docs/usdt.md).
 
 See also:
 - [bitkit-core android bindings](https://github.com/synonymdev/bitkit-core/tree/master/bindings/android#installation)
