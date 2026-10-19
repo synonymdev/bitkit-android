@@ -13,6 +13,7 @@ import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PaykitUsdtPaymentRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
@@ -48,6 +49,7 @@ class WipeWalletUseCase @Inject constructor(
     private val migrationService: MigrationService,
     private val paykitSdkService: PaykitSdkService,
     private val usdtRepo: UsdtRepo,
+    private val paykitUsdtPaymentRepo: PaykitUsdtPaymentRepo,
 ) {
     private val wipeMutex = Mutex()
 
@@ -99,6 +101,7 @@ class WipeWalletUseCase @Inject constructor(
         step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }
         step("wipe Pubky local state") { pubkyRepo.wipeLocalState() }
         val keychainWiped = step("wipe USDT and keychain") { usdtRepo.wipe { keychain.wipe() } }
+        if (keychainWiped) paykitUsdtPaymentRepo.resetForWipe()
         step("delete FCM token") { firebaseMessaging.deleteToken() }
         step("wipe core data") { coreService.wipeData() }
         step("clear database") { db.clearAllTables() }
