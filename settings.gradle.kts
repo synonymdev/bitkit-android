@@ -36,10 +36,14 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        mavenLocal {
-            content {
-                excludeModule("com.synonym", "paykit-android")
-                excludeModule("com.synonym", "bitkit-core-android")
+        // Opt in with -PuseMavenLocal=true to test locally published builds; release coordinates otherwise
+        // resolve from GitHub Packages, so native libraries match their published debug symbols.
+        if (providers.gradleProperty("useMavenLocal").orNull == "true") {
+            mavenLocal {
+                content {
+                    excludeModule("com.synonym", "paykit-android")
+                    excludeModule("com.synonym", "bitkit-core-android")
+                }
             }
         }
         google()
