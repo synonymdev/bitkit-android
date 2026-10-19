@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.BroadcastException
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.ConversionRate
 import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentConversionQuoteRecord
@@ -69,6 +70,7 @@ import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
+import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.wallets.send.HwSendRequest
@@ -202,8 +204,18 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(0L, testScheduler.currentTime - started)
         verify(lightningRepo).completeAcceptedShopFollowup(request.id, txid)
-        paymentProofRepo(PaykitPaymentProofStore(diskKeychain)).reconcile()
+        runCurrent()
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        assertTrue(file.exists())
+        advanceUntilIdle()
+        assertEquals(5.seconds.inWholeMilliseconds, testScheduler.currentTime - started)
         assertFalse(file.exists())
+        verify(paykitSdkService).processOutboundPrivateMessages(
+            COUNTERPARTY,
+            PaykitSdkOperationLock.Priority.Interactive,
+            LOCAL_IDENTITY,
+        )
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
     }
 
     @Test
@@ -520,7 +532,11 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofCaptor.lastValue,
         )
         assertTrue(storedProofs.isEmpty())
-        verify(paykitSdkService).processPendingPrivateMessages()
+        verify(paykitSdkService).processOutboundPrivateMessages(
+            COUNTERPARTY,
+            PaykitSdkOperationLock.Priority.Interactive,
+            LOCAL_IDENTITY,
+        )
     }
 
     @Test
@@ -673,6 +689,54 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.completeLightningPayment(PAYMENT_HASH, "01".repeat(32))
 
         assertNull(storedProofs.single().proofData)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+    }
+
+    @Test
+    fun `already queued proof retries only its recipient after delivery failure`() = test {
+        val existingProofJson = mock<PrivateJsonObject> {
+            on { exportText() } doReturn """{"type":"${PaykitPaymentProofKind.Lightning.type}","data":"$PREIMAGE"}"""
+        }
+        val existingProof = mock<PaymentProofRecord> {
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+            on { paymentAppId } doReturn "bitkit"
+            on { proof } doReturn existingProofJson
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord(listOf(existingProof))))
+        var deliveryAttempts = 0
+        whenever(
+            paykitSdkService.processOutboundPrivateMessages(
+                COUNTERPARTY,
+                PaykitSdkOperationLock.Priority.Interactive,
+                LOCAL_IDENTITY,
+            )
+        )
+            .doSuspendableAnswer {
+                if (++deliveryAttempts == 1) throw AppError("delivery unavailable")
+                OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+            }
+        val proof = PendingPaykitPaymentProof(
+            identity = LOCAL_IDENTITY,
+            requestId = paymentRequest(MethodId.Bolt11.rawValue).id,
+            paymentEndpointIdentifier = MethodId.Bolt11.rawValue,
+            paymentAppId = "bitkit",
+            kind = PaykitPaymentProofKind.Lightning,
+            paymentStarted = true,
+            paymentIdentifier = PAYMENT_HASH,
+            proofData = PREIMAGE,
+        )
+        storedProofs = listOf(proof)
+        val repo = paymentProofRepo()
+
+        assertTrue(repo.submit(proof).getOrThrow())
+        assertTrue(repo.submit(proof).getOrThrow())
+
+        verify(paykitSdkService, times(2)).processOutboundPrivateMessages(
+            COUNTERPARTY,
+            PaykitSdkOperationLock.Priority.Interactive,
+            LOCAL_IDENTITY,
+        )
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
         verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
     }
 

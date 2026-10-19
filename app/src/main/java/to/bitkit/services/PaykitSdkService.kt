@@ -113,6 +113,7 @@ import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -120,6 +121,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import kotlin.time.TimeSource
 
 data class PaykitPreparedPrivateContactPayment(
     val resolution: PaykitPrivateContactPaymentResolution,
@@ -963,10 +965,10 @@ class PaykitSdkService @Inject constructor(
         var report: OutboundPrivateSendReport?
         do {
             if (deferDuringPayment) isPaymentSubmissionActive.first { !it }
-            report = operationLock.withLock(priority) {
+            report = measuredOperation("processOutboundPrivateMessages", priority) {
                 if (deferDuringPayment) {
                     check(runtimeGeneration == generation) { "Paykit runtime changed before peer delivery" }
-                    if (isPaymentSubmissionActive.value) return@withLock null
+                    if (isPaymentSubmissionActive.value) return@measuredOperation null
                 }
                 withStateRevisionTracking { handle ->
                     if (expectedIdentity != null) {
@@ -1032,7 +1034,7 @@ class PaykitSdkService @Inject constructor(
         priority: Priority,
     ): List<PaymentRequestRecord> {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return measuredOperation("allPaymentRequests", priority) {
             withPaykitKey { handle ->
                 if (expectedIdentity != null) {
                     val identity = completeSdkCall { handle.identityStatus() }?.publicKey
@@ -1059,7 +1061,7 @@ class PaykitSdkService @Inject constructor(
 
     internal suspend fun identityStatus(priority: Priority): IdentityStatus? {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return measuredOperation("identityStatus", priority) {
             withPaykitKey { completeSdkCall { it.identityStatus() } }
         }
     }
@@ -1121,7 +1123,7 @@ class PaykitSdkService @Inject constructor(
         expectedProposalStreamItemId: ULong,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock(Priority.Interactive) {
+        return measuredOperation("acceptPaymentRequest", Priority.Interactive) {
             withStateRevisionTracking { handle ->
                 completeSdkCall {
                     handle.claimAndAcceptPaymentRequest(counterparty, paymentRequestId, expectedProposalStreamItemId)
@@ -1132,7 +1134,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun claimPaymentRequestForExecution(counterparty: String, paymentRequestId: String): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock(Priority.Interactive) {
+        return measuredOperation("claimPaymentRequestForExecution", Priority.Interactive) {
             withStateRevisionTracking {
                 completeSdkCall { it.claimPaymentRequestForExecution(counterparty, paymentRequestId) }
             }
@@ -1149,7 +1151,7 @@ class PaykitSdkService @Inject constructor(
         conversionQuoteId: String? = null,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return measuredOperation("submitPaymentProof") {
             withStateRevisionTracking { handle ->
                 completeSdkCall {
                     handle.submitPaymentProof(
@@ -1475,8 +1477,31 @@ class PaykitSdkService @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
+    private suspend fun <T> measuredOperation(
+        name: String,
+        priority: Priority = Priority.Ordered,
+        operation: suspend () -> T,
+    ): T {
+        val trace = UUID.randomUUID()
+        val started = TimeSource.Monotonic.markNow()
+        return operationLock.withLock(priority) {
+            val queue = started.elapsedNow()
+            val admitted = TimeSource.Monotonic.markNow()
+            try {
+                operation()
+            } finally {
+                Logger.debug(
+                    "Finished Paykit operation '$name' trace='$trace' queue='$queue' work='${admitted.elapsedNow()}'",
+                    context = TAG,
+                )
+            }
+        }
+    }
+
     private suspend fun <T> withPaykitKey(block: suspend (PaykitSdk) -> T): T {
+        val started = TimeSource.Monotonic.markNow()
         refreshPaykitKey()
+        Logger.debug("Prepared Paykit key duration='${started.elapsedNow()}'", context = TAG)
         return runSuspendCatching { block(handle()) }
             .onFailure(::invalidatePaykitKeyIfNeeded)
             .getOrThrow()
@@ -1491,9 +1516,14 @@ class PaykitSdkService @Inject constructor(
     private suspend fun <T> withStateRevisionTracking(block: suspend (PaykitSdk) -> T): T = withPaykitKey { handle ->
         withPaykitBackupStateTracking(
             readRevision = {
-                runSuspendCatching { completeSdkCall { handle.backupStateRevision() } }
-                    .onFailure(::invalidatePaykitKeyIfNeeded)
-                    .getOrThrow()
+                val started = TimeSource.Monotonic.markNow()
+                try {
+                    runSuspendCatching { completeSdkCall { handle.backupStateRevision() } }
+                        .onFailure(::invalidatePaykitKeyIfNeeded)
+                        .getOrThrow()
+                } finally {
+                    Logger.debug("Read Paykit backup revision duration='${started.elapsedNow()}'", context = TAG)
+                }
             },
             readStateRevision = { handle.stateRevision() },
             readObservedSnapshot = {

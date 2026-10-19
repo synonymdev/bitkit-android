@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -32,6 +33,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import to.bitkit.async.appScope
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
@@ -41,6 +43,7 @@ import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitRequestPayment
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
+import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -127,6 +130,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
+    private val deliveryScope = appScope(ioDispatcher, TAG)
 
     // Process-local activity handoffs only; restored proofs must reconstruct their activity.
     private val observedHardwareProofs = mutableSetOf<PendingPaykitPaymentProof>()
@@ -1411,14 +1415,15 @@ class PaykitPaymentProofRepo @Inject constructor(
                 billingPeriod = proof.billingPeriod,
             )
             Logger.info("Queued a Paykit payment proof for private delivery", context = TAG)
-            runSuspendCatching { paykitSdkService.processPendingPrivateMessages() }
-                .onFailure {
-                    Logger.warn(
-                        "Paykit payment proof remains queued for private delivery",
-                        it,
-                        context = TAG,
-                    )
-                }
+        }
+        runSuspendCatching {
+            paykitSdkService.processOutboundPrivateMessages(
+                proof.requestId.counterparty,
+                PaykitSdkOperationLock.Priority.Interactive,
+                expectedIdentity = proof.identity,
+            )
+        }.onFailure {
+            Logger.warn("Retained Paykit payment proof for private delivery", it, context = TAG)
         }
         if (proof.kind != PaykitPaymentProofKind.Usdt) {
             runSuspendCatching {
@@ -1485,7 +1490,18 @@ class PaykitPaymentProofRepo @Inject constructor(
                     context = TAG,
                 )
             }.isSuccess
-        if (didPersist && !awaitDelivery) return true
+        if (didPersist && !awaitDelivery) {
+            deliveryScope.launch {
+                operationMutex.withLock {
+                    runSuspendCatching {
+                        for (proof in completedProofs) {
+                            if (proof in loadProofs()) submitReady(proof)
+                        }
+                    }.onFailure { Logger.warn("Failed to queue a Paykit payment proof", it, context = TAG) }
+                }
+            }
+            return true
+        }
         var hasUndeliveredProof = false
         completedProofs.forEach { proof ->
             val wasDelivered = runSuspendCatching { submitReady(proof) }
