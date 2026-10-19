@@ -3277,7 +3277,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `loadSavingsSwapQuote defaults to max transferable within limits and spendable balance`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
-        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        whenever(boltzService.reverseLimits()).thenReturn(reverseLimits())
 
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
@@ -3298,7 +3298,7 @@ class TransferViewModelTest : BaseUnitTest() {
     fun `loadSavingsSwapQuote falls back to close when below the swap minimum`() = test {
         whenever(context.getString(R.string.lightning__savings_confirm__amount_too_low)).thenReturn(TOO_LOW)
         balanceState.value = BalanceState(maxSendLightningSats = SWAP_MIN - 1uL)
-        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        whenever(boltzService.reverseLimits()).thenReturn(reverseLimits())
 
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
@@ -3319,7 +3319,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `loadSavingsSwapQuote falls back to close when the limits fetch fails`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
-        whenever(boltzService.reverseLimits(anyOrNull())).thenAnswer { throw AppError(BOLTZ_ERROR) }
+        whenever(boltzService.reverseLimits()).thenAnswer { throw AppError(BOLTZ_ERROR) }
 
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
@@ -3340,7 +3340,7 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
-        verify(boltzService, never()).reverseLimits(anyOrNull())
+        verify(boltzService, never()).reverseLimits()
 
         sut.onTransferToSavingsConfirm(emptyList())
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
@@ -3355,7 +3355,7 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
-        verify(boltzService, never()).reverseLimits(anyOrNull())
+        verify(boltzService, never()).reverseLimits()
 
         sut.onTransferToSavingsConfirm(emptyList())
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
@@ -3364,7 +3364,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `onTransferToSavingsConfirm swaps when a quote is ready and closes when the user opts out`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
-        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        whenever(boltzService.reverseLimits()).thenReturn(reverseLimits())
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
 
@@ -3393,7 +3393,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `onSwapAmountChange clamps to the allowed range and reprices`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
-        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        whenever(boltzService.reverseLimits()).thenReturn(reverseLimits())
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
 
@@ -3471,7 +3471,7 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
-        verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
+        verify(boltzService).createReverseSwap(any(), any())
         verify(lightningRepo).payInvoice(any(), anyOrNull())
     }
 
@@ -3515,15 +3515,15 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
-        verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
+        verify(boltzService).createReverseSwap(any(), any())
         verify(lightningRepo).payInvoice(any(), anyOrNull())
     }
 
     private suspend fun stubSavingsSwapHappyPath() {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
-        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        whenever(boltzService.reverseLimits()).thenReturn(reverseLimits())
         whenever(lightningRepo.newAddress()).thenReturn(Result.success(CLAIM_ADDRESS))
-        whenever(boltzService.createReverseSwap(any(), any(), anyOrNull(), anyOrNull()))
+        whenever(boltzService.createReverseSwap(any(), any()))
             .thenReturn(reverseSwapResponse())
         whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.success(PAYMENT_ID))
     }

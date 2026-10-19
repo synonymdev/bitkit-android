@@ -61,11 +61,10 @@ internal object Env {
         }
 
     /**
-     * Whether LN -> onchain swaps can reach a Boltz backend. Boltz only serves a public API on
-     * mainnet: its testnet deployment is deprecated and regtest resolves to a local backend that
-     * no build of ours can reach. Elsewhere the transfer to savings closes a channel instead.
+     * Whether swaps can run on this network. They run through a Pubky swap provider the user connects, which
+     * Bitkit supports on mainnet and regtest. Elsewhere the transfer to savings closes a channel instead.
      */
-    val isSwapSupported get() = network == Network.BITCOIN
+    val isSwapSupported get() = network == Network.BITCOIN || network == Network.REGTEST
 
     const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
     const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
@@ -236,6 +235,20 @@ internal object Env {
 
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
+    }
+
+    /**
+     * Storage of the Pubky swaps one identity runs with one provider on one network.
+     *
+     * Output format:
+     *
+     * `appStoragePath/pubky-swaps/identity/network/provider`
+     *
+     * It is kept outside the wallet storage so a wallet wipe leaves pending swap recovery data in place.
+     */
+    fun pubkySwapStoragePath(identity: String, network: String, provider: String): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        return Path(appStoragePath, "pubky-swaps", identity, network, provider).toFile().ensureDir().path
     }
 
     /**
