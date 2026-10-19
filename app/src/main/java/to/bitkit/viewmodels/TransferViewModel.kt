@@ -69,6 +69,7 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ChannelProviderRepo
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.HoldInvoicePayment
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletMismatchError
@@ -76,6 +77,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainTransferContext
+import to.bitkit.repositories.PubkySwapRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -108,6 +110,7 @@ class TransferViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val boltzService: BoltzService,
+    private val pubkySwapRepo: PubkySwapRepo,
     private val currencyRepo: CurrencyRepo,
     private val clock: Clock,
 ) : ViewModel() {
@@ -1680,9 +1683,9 @@ class TransferViewModel @Inject constructor(
             _savingsSwapState.update { it.copy(isLoading = true) }
             awaitNodeRunning()
 
-            // Bounded so a hanging Boltz request cannot leave the confirm swipe stuck loading.
+            // Bounded so a hanging provider request cannot leave the confirm swipe stuck loading.
             val limits = withTimeoutOrNull(SWAP_QUOTE_TIMEOUT) {
-                runSuspendCatching { boltzService.reverseLimits() }
+                pubkySwapRepo.reverseLimits()
                     .onFailure { Logger.error("Failed to load reverse swap limits", it, context = TAG) }
                     .getOrNull()
             }
@@ -1770,8 +1773,8 @@ class TransferViewModel @Inject constructor(
     /**
      * Execute the LN -> onchain swap: derive a fresh claim address, create the swap,
      * pay the returned hold invoice over Lightning, then wait for the on-chain claim.
-     * The claim is auto-broadcast by the updates stream as soon as the lockup hits the
-     * mempool, so a timeout here is not a failure; the swap completes in the background.
+     * The claim is auto-broadcast by the updates stream once the provider's lockup can be
+     * claimed, so a timeout here is not a failure; the swap completes in the background.
      */
     private suspend fun executeSavingsSwap(): SavingsSwapResult {
         val amount = pendingSwapAmountSat.takeIf { it > 0uL }
@@ -1781,11 +1784,11 @@ class TransferViewModel @Inject constructor(
 
         return runSuspendCatching {
             val claimAddress = lightningRepo.newAddress().getOrThrow()
-            val swap = boltzService.createReverseSwap(amountSat = amount, claimAddress = claimAddress)
-            Logger.info("Created savings transfer swap ${swap.id}", context = TAG)
+            val swap = pubkySwapRepo.createReverseSwap(amountSat = amount, claimAddress = claimAddress).getOrThrow()
+            Logger.info("Created savings transfer swap '${swap.id}'", context = TAG)
 
             coroutineScope {
-                // Whichever resolves first wins: an on-chain claim, a Boltz error, or a Lightning
+                // Whichever resolves first wins: an on-chain claim, a swap error, or a Lightning
                 // routing failure. The losing watcher is cancelled so this scope can return.
                 val outcome = CompletableDeferred<SavingsSwapResult>()
 
@@ -1796,21 +1799,22 @@ class TransferViewModel @Inject constructor(
                     outcome.complete(awaitSwapClaim(swap.id))
                 }
 
-                // Pay the hold invoice (amount is encoded). It stays pending until Boltz
+                // Pay the hold invoice (amount is encoded). It stays pending until the provider
                 // locks funds on-chain and we claim them, which is the expected happy path.
-                val paymentHash = lightningRepo.payInvoice(bolt11 = swap.invoice).getOrThrow()
+                val payment = pubkySwapRepo.payHoldInvoice(swap.id, swap.invoice).getOrThrow()
 
-                // payInvoice returns as soon as the HTLC is dispatched, and a hold invoice never
-                // settles until Boltz claims, so nothing else notices a payment that fails to route.
-                // Watch for it so an unroutable payment surfaces as an error instead of idling into
-                // the claim timeout and reporting a settling transfer that never completes.
-                val failure = launch {
-                    outcome.complete(awaitPaymentFailure(paymentHash))
+                // The payment returns as soon as the HTLC is dispatched, and a hold invoice never
+                // settles until the provider claims, so nothing else notices a payment that fails to
+                // route. Watch for it so an unroutable payment surfaces as an error instead of idling
+                // into the claim timeout and reporting a settling transfer that never completes.
+                // A payment that had already started is left to the claim watcher alone.
+                val failure = (payment as? HoldInvoicePayment.Dispatched)?.let {
+                    launch { outcome.complete(awaitPaymentFailure(it.paymentHash)) }
                 }
 
                 outcome.await().also {
                     claim.cancel()
-                    failure.cancel()
+                    failure?.cancel()
                 }
             }
         }.getOrElse { e ->
