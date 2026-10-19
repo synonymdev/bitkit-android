@@ -61,7 +61,7 @@ The same limits are passed to bitkit-core, which checks them again.
 For a payment of `R` sats to an address, the provider locks `L = R + claim fee` onchain, and Bitkit pays a hold invoice of `I = L + base fee + floor(L * fee ppm / 1,000,000) + lockup fee`. The claim transaction sends exactly `R` to the address and spends the rest as its fee. Bitkit computes these amounts itself so they match the provider's pricing exactly.
 
 Before a swap is created:
-- The quote is priced again with fresh terms. Changed terms show the new fees instead of creating the swap.
+- The quote is priced again with fresh terms. Changed amounts show the new fees instead of creating the swap. Providers reissue their offer with a new id, and so a new pair hash, without changing their fees, so only the amounts are compared and the swap is created against the fresh offer.
 - The amount must be above dust and within the provider limits, and the invoice must fit the spending balance minus a routing reserve.
 
 After creation, the returned lockup amount and invoice amount must match the quote, or nothing is paid.

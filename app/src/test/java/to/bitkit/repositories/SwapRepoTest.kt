@@ -180,6 +180,20 @@ class SwapRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `createSendSwap uses a reissued offer whose amounts are unchanged`() = test {
+        whenever { boltzService.sendTerms() }.thenReturn(TERMS.copy(pairHash = "reissued"))
+        whenever { boltzService.createSendSwap(any(), any(), any(), any()) }.thenReturn(sendSwap())
+
+        assertEquals(sendSwap(), sut.createSendSwap(ADDRESS, QUOTE).getOrThrow())
+        verify(boltzService).createSendSwap(
+            invoiceSat = QUOTE.invoiceSat,
+            recipientSat = QUOTE.recipientSat,
+            claimAddress = ADDRESS,
+            pairHash = "reissued",
+        )
+    }
+
+    @Test
     fun `createSendSwap rejects a swap with a different lockup`() = test {
         whenever { boltzService.createSendSwap(any(), any(), any(), any()) }
             .thenReturn(sendSwap(onchainAmountSat = QUOTE.lockupSat - 1uL))

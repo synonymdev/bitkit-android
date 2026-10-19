@@ -73,21 +73,22 @@ class SwapRepo @Inject constructor(
     }
 
     /**
-     * Creates the swap for [quote] after pricing it again with fresh terms. Changed terms fail with
-     * [SwapQuoteExpiredError] carrying the new quote, without creating a swap. The created swap is checked against
-     * the quote before it is returned, so its hold invoice is never paid for different amounts.
+     * Creates the swap for [quote] after pricing it again with fresh terms. Changed amounts fail with
+     * [SwapQuoteExpiredError] carrying the new quote, without creating a swap. A reissued offer with the same amounts
+     * is used as is, since its pair hash changes with every offer id. The created swap is checked against the quote
+     * before it is returned, so its hold invoice is never paid for different amounts.
      */
     suspend fun createSendSwap(address: String, quote: SwapSendQuote): Result<ReverseSwapResponse> =
         withContext(ioDispatcher) {
             runSuspendCatching {
                 val fresh = pricing(terms(forceRefresh = true).getOrThrow()).checkedQuote(quote.recipientSat)
                     .getOrThrow()
-                if (fresh != quote) throw SwapQuoteExpiredError(fresh)
+                if (fresh.copy(pairHash = quote.pairHash) != quote) throw SwapQuoteExpiredError(fresh)
                 val swap = boltzService.createSendSwap(
-                    invoiceSat = quote.invoiceSat,
-                    recipientSat = quote.recipientSat,
+                    invoiceSat = fresh.invoiceSat,
+                    recipientSat = fresh.recipientSat,
                     claimAddress = address,
-                    pairHash = quote.pairHash,
+                    pairHash = fresh.pairHash,
                 )
                 val invoiceMsat = invoiceAmountReader.amountMsat(swap.invoice)
                 if (swap.onchainAmountSat != quote.lockupSat || invoiceMsat != quote.invoiceSat * 1_000uL) {
