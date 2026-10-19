@@ -1548,8 +1548,16 @@ class AppViewModel @Inject constructor(
                 if (!ownsPaymentRequestPreparation(preparation)) return true
             }
             if (reopenRetainedHardwarePayment(request, generation, preparation)) return true
+            val started = timeSource.markNow()
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
-            return finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
+            val resolvedAfter = started.elapsedNow()
+            val result = finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
+            Logger.debug(
+                "Paykit request preparation: resolveMs=${resolvedAfter.inWholeMilliseconds} " +
+                    "dispatchMs=${(started.elapsedNow() - resolvedAfter).inWholeMilliseconds}",
+                context = TAG,
+            )
+            return result
         } finally {
             if (scheduledScan?.contactPaymentContext?.incomingPaymentRequest?.id != request.id &&
                 paymentRequestPresentationRetryJobs[request.id]?.isActive != true
@@ -3555,7 +3563,28 @@ class AppViewModel @Inject constructor(
         }
         refreshPaykitRequestAmount()
         updateCanSwitchWallet()
-        navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+        if (!openBitcoinRequestConfirmation(fromMainScanner)) {
+            navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+        }
+    }
+
+    private suspend fun openBitcoinRequestConfirmation(fromMainScanner: Boolean): Boolean {
+        if (activeIncomingPaymentRequest() == null || _sendUiState.value.usdtRecipient != null) return false
+        if (!bindBitcoinRequestTerms()) return false
+        navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
+        refreshOnchainSendIfNeeded()
+        estimateLightningRoutingFeesIfNeeded()
+        return true
+    }
+
+    private suspend fun bindBitcoinRequestTerms(): Boolean {
+        val state = _sendUiState.value
+        if (state.paykitUsesUsdt) return false
+        val lnurl = state.lnurl as? LnurlParams.LnurlPay
+        if (state.payMethod == SendMethod.LIGHTNING && lnurl != null && state.amount < lnurl.data.minSendableSat()) {
+            return false
+        }
+        return reviewPaykitAmount()
     }
 
     private fun prefersUsdt(
@@ -3690,13 +3719,19 @@ class AppViewModel @Inject constructor(
         val current = _sendUiState.value
         if (current.isRetainedHardwarePayment) return
         val nextSource = nextFundingSource(current, requested) ?: return
-        sendStateGeneration++
+        val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
+        val generation = ++sendStateGeneration
         onchainSendRefreshJob?.cancel()
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
             paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
+            if (canReviewInPlace) {
+                paykitPaymentTerms = null
+                paykitReviewedAmount = null
+                setSendEffect(SendEffect.NavigateToAmount)
+            }
             return
         } catch (_: PaykitAmountError) {
             _sendUiState.update { it.copy(paykitRateUnavailable = false) }
@@ -3716,6 +3751,7 @@ class AppViewModel @Inject constructor(
             )
         }
         selectFundingSource(nextSource, current)
+        if (sendStateGeneration != generation) return
         _sendUiState.update {
             it.copy(
                 isAmountInputValid = if (it.paykitUsesUsdt) {
@@ -3728,8 +3764,22 @@ class AppViewModel @Inject constructor(
             )
         }
         updateCanSwitchWallet()
-        reviewPaykitMethodChange(current)
+        reviewFundingSourceChange(current, canReviewInPlace)
     }
+
+    private suspend fun reviewFundingSourceChange(previous: SendUiState, rebindBitcoinTerms: Boolean) {
+        if (rebindBitcoinTerms && previous.paykitMethod() != _sendUiState.value.paykitMethod()) {
+            paykitPaymentTerms = null
+            paykitReviewedAmount = null
+            if (bindBitcoinRequestTerms()) return
+        }
+        reviewPaykitMethodChange(previous)
+    }
+
+    private fun canRebindBitcoinRequestTerms(state: SendUiState, source: SendFundingSource): Boolean =
+        paykitPaymentTerms != null && paykitReviewedAmount != null && !state.paykitUsesUsdt &&
+            state.hardwareWalletId == null &&
+            (source == SendFundingSource.Savings || source == SendFundingSource.Spending)
 
     private fun nextFundingSource(current: SendUiState, requested: SendFundingSource?): SendFundingSource? {
         val sources = availableFundingSources(current).filter { requested != null || it != SendFundingSource.Usdt }
