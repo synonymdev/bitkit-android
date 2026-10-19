@@ -6,6 +6,12 @@ This file provides guidance to Codex, Claude Code, and Cursor when working with 
 
 Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
+### Review Findings
+
+When addressing review feedback on any PR, release PRs included, PR babysitters and the author's agent keep the PR in scope:
+- Fix in the PR only critical and HIGH findings and reachable correctness bugs. MEDIUM findings are a judgment call.
+- PR babysitters re-triage each LOW or non-blocking finding. If it is still LOW and not a reachable correctness bug, they defer it and leave the code unchanged: file an issue in the next release's milestone, add an Out of Scope bullet linking the issue and the thread (see `.agents/commands/pr.md`), reply in the thread `out of scope: tracked in #N, because …`, and resolve it.
+
 ## Build Commands
 
 ```sh

@@ -27,6 +27,7 @@ import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
+import java.text.DecimalFormatSymbols
 
 @Composable
 internal fun ColumnScope.UsdtReceiveAmountContent(
@@ -49,6 +50,7 @@ internal fun ColumnScope.UsdtReceiveAmountContent(
     BoxWithConstraints(contentAlignment = Alignment.BottomCenter, modifier = Modifier.weight(1f).fillMaxWidth()) {
         NumberPad(
             type = NumberPadType.DECIMAL,
+            decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
             availableHeight = maxHeight,
             enabled = !busy,
             onDeleteLongPress = { onAmount("") },

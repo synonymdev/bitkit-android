@@ -157,7 +157,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
             }
         },
         onAmount = {
-            if (draftAmount != it) deposits.clearAmountError()
+            if (draftAmount != it) deposits.clearError()
             draftAmount = it
         },
         onCreate = {

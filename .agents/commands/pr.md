@@ -122,9 +122,13 @@ This PR adds support for...
 - Exception: for refactoring PRs (1:10 ratio of functionality to code changes), more technical detail is ok
 
 **Out of Scope (`#### Out of Scope`, a subsection at the end of `### Description`):**
-- Required for `feat`, `fix`, and `refactor` PRs: one bullet per item the PR deliberately leaves out, with the file or area it covers when there is one (`path/or/area: item`); `None.` when nothing is left out
-- Not needed for version bumps, changelog-only changes, dependency bumps, and release PRs; other `chore`, `docs`, and `test` PRs include it at the author's discretion
-- Derive candidates from commit messages, linked issues, and review discussion (deferred follow-ups, adjacent behaviour left unchanged); ask the user when unsure
+- The section guards the PR's scope: it keeps the PR contained to what it is meant to address, so it does not grow with every related finding. Only critical and HIGH findings and reachable correctness bugs widen the scope; MEDIUM findings are a judgment call
+- Required for `feat`, `fix`, and `refactor` PRs: one bullet per item the PR deliberately leaves out, with the file or area it covers when there is one (`path/or/area: item`); `None.` when nothing adjacent is held back
+- Not needed for version bumps, changelog-only changes, dependency bumps, and release PRs; other `chore`, `docs`, and `test` PRs include it at the author's discretion. Any PR that defers a review finding carries the section, release PRs included
+- When writing the PR, think about the separate things that could come up in it (adjacent bugs, edge cases, cleanups, behaviour left unchanged) and list the ones it deliberately won't touch. List only items a reviewer could plausibly expect this PR to change; unrelated work stays out
+- File an issue for each item that is real work and link it on the bullet; with `--dry`, leave such items unfiled in the saved description and file and link their issues only when the PR is created
+- Add each deferred review finding as a bullet linking its issue and its review thread (see Review Findings in `AGENTS.md`)
+- Derive candidates from commit messages, linked issues, and review discussion; ask the user when unsure
 - Reviewers, human and automated, read the bullets as the author's non-goals
 
 **Custom Instructions (if provided):**

@@ -6,6 +6,23 @@ import kotlin.test.assertFailsWith
 
 class PaykitAmountTest {
     @Test
+    fun `editor amounts keep cents and exact sub-cent precision without changing wire amounts`() {
+        for ((asset, value, expected) in listOf(
+            Triple(PaykitAsset.USD, "150.50", "150.50"),
+            Triple(PaykitAsset.USDT, "150.50", "150.50"),
+            Triple(PaykitAsset.USDT, "1", "1.00"),
+            Triple(PaykitAsset.USDT, "0.000001", "0.000001"),
+            Triple(PaykitAsset.USDT, "18446744073709.551615", "18446744073709.551615"),
+            Triple(PaykitAsset.BTC, "0.00000001", "0.00000001"),
+        )) {
+            val amount = PaykitAmount.parse(asset, value)
+            assertEquals(expected, amount.inputValue)
+            assertEquals(amount, PaykitAmount.parseInput(asset, amount.inputValue))
+        }
+        assertEquals("150.5", PaykitAmount.parse(PaykitAsset.USDT, "150.50").value)
+    }
+
+    @Test
     fun `editing conversion preserves the original across repeated toggles and resets on edits`() {
         val converter = PaykitAmountConversion()
         val rate = PaykitExchangeRate("65432.10", now)

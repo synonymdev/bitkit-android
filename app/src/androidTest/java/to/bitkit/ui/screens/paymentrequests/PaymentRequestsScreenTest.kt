@@ -3,6 +3,7 @@
 package to.bitkit.ui.screens.paymentrequests
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -331,31 +332,35 @@ class PaymentRequestsScreenTest {
     fun longReceiptStatusKeepsContactAndExactAmountReadable() {
         val status = "Płatność zweryfikowana · 0.001647 USDT"
         val asset = mutableStateOf(PaykitAsset.USDT)
+        val fontScale = mutableStateOf(1.3f)
         composeTestRule.setContent {
             PaymentRequestsTestSurface {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
-                    Box(Modifier.width(320.dp)) {
+                CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale.value)) {
+                    Box(Modifier.width(320.dp).padding(horizontal = 16.dp)) {
                         PaymentRequestCard(
                             request = request().copy(amount = PaykitAmount(asset.value, 1_647u)),
-                            contact = PubkyProfile.forDisplay(request().counterparty, "Alice", imageUrl = null),
+                            contact = PubkyProfile.forDisplay(request().counterparty, "Maria", imageUrl = null),
                             fiatStatus = status,
                         )
                     }
                 }
             }
         }
-        for (denomination in listOf(PaykitAsset.USDT, PaykitAsset.BTC)) {
-            composeTestRule.runOnIdle { asset.value = denomination }
-            for (text in listOf("Alice", status)) {
-                val results = mutableListOf<TextLayoutResult>()
-                composeTestRule.onNodeWithText(text).assertIsDisplayed()
-                    .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
-                val layout = results.single()
-                assertFalse(layout.hasVisualOverflow, "$text must fit without truncation")
-                for (word in text.split(' ')) {
-                    val start = text.indexOf(word)
-                    assertEquals(layout.getLineForOffset(start), layout.getLineForOffset(start + word.length - 1))
+        for (scale in listOf(1.3f, 2f)) {
+            composeTestRule.runOnIdle { fontScale.value = scale }
+            for (denomination in listOf(PaykitAsset.USDT, PaykitAsset.USD, PaykitAsset.BTC)) {
+                composeTestRule.runOnIdle { asset.value = denomination }
+                for (text in listOf("Maria", status)) {
+                    val results = mutableListOf<TextLayoutResult>()
+                    composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                        .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+                    val layout = results.single()
+                    assertFalse(layout.hasVisualOverflow, "$text must fit without truncation")
+                    for (word in text.split(' ')) {
+                        val start = text.indexOf(word)
+                        assertEquals(layout.getLineForOffset(start), layout.getLineForOffset(start + word.length - 1))
+                    }
                 }
             }
         }
@@ -368,7 +373,7 @@ class PaymentRequestsScreenTest {
             PaymentRequestsTestSurface {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
-                    Box(Modifier.width(375.dp)) {
+                    Box(Modifier.width(375.dp).padding(horizontal = 16.dp)) {
                         PaymentRequestCard(
                             request = request().copy(amount = PaykitAmount(PaykitAsset.USD, 200u)),
                             contact = PubkyProfile.forDisplay(request().counterparty, name, imageUrl = null),
@@ -394,7 +399,7 @@ class PaymentRequestsScreenTest {
             PaymentRequestsTestSurface {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
-                    Box(Modifier.width(320.dp)) {
+                    Box(Modifier.width(320.dp).padding(horizontal = 16.dp)) {
                         PaymentRequestCard(
                             request = request().copy(amount = PaykitAmount(asset.value, 1_000_000u)),
                             contact = PubkyProfile.forDisplay(request().counterparty, "Alice", imageUrl = null),

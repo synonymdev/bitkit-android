@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -599,28 +600,34 @@ internal fun PaymentRequestCard(
             .clickableAlpha(enabled = onClick != null) { onClick?.invoke() }
             .testTag("PaymentRequestRow-${request.paymentRequestId}")
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(16.dp)
         ) {
-            if (request.showsPaymentRailIcon(isOutgoingPayment)) {
-                PaymentRailIcon(request = request, paymentWasSent = request.paymentWasSent(isOutgoingPayment))
-            } else {
-                PubkyContactAvatar(profile = displayContact, size = 40.dp)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                BodyMSB(
-                    text = title ?: displayContact.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                BodyS(
-                    text = subtitle,
-                    color = Colors.White64,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f).width(IntrinsicSize.Min).align(Alignment.CenterVertically)
+            ) {
+                if (request.showsPaymentRailIcon(isOutgoingPayment)) {
+                    PaymentRailIcon(request = request, paymentWasSent = request.paymentWasSent(isOutgoingPayment))
+                } else {
+                    PubkyContactAvatar(profile = displayContact, size = 40.dp)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    BodyMSB(
+                        text = title ?: displayContact.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    BodyS(
+                        text = subtitle,
+                        color = Colors.White64,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             PaykitAmountCell(
                 amount = request.amount,
@@ -628,7 +635,7 @@ internal fun PaymentRequestCard(
                 showBitcoinSymbol = showBitcoinSymbol,
                 status = paymentRequestAmountStatus(request, receipt, fiatStatus),
                 maxAmountLines = 1,
-                statusModifier = Modifier.width(IntrinsicSize.Min),
+                statusModifier = Modifier.width(IntrinsicSize.Max),
             )
         }
         if (onPay != null || onDismiss != null) {

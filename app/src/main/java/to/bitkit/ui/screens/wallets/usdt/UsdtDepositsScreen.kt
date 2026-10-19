@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -112,7 +114,10 @@ internal fun UsdtDepositsScreen(
             address = address,
             hideBalance = settings.hideBalance,
             onBack = back,
-            onAddress = { address = it },
+            onAddress = {
+                address = it
+                deposits.clearError()
+            },
             onDetail = { scope.launch { deposits.detail(it) } },
             onHistory = { deposits.back() },
             onMore = deposits::more,
@@ -254,7 +259,7 @@ internal fun UsdtDepositsContent(
                         BodyMSB(detail.deposit.asset)
                     }
                     if (showDetails) {
-                        UsdtDepositTechnicalDetails(detail, address, state.busy, onAddress)
+                        UsdtDepositTechnicalDetails(detail, address, state.busy, state.refundError, onAddress)
                     } else {
                         UsdtDepositSummary(detail)
                     }
@@ -305,7 +310,12 @@ private fun UsdtDepositDetailActions(
     onRefund: () -> Unit,
     onToggleDetails: () -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        maxItemsInEachRow = if (LocalDensity.current.fontScale > 1.3f) 1 else 2,
+        modifier = Modifier.fillMaxWidth()
+    ) {
         if (showDetails && canRefund) {
             PrimaryButton(
                 text = stringResource(R.string.usdt__deposit_refund_action),
@@ -454,6 +464,7 @@ private fun UsdtDepositTechnicalDetails(
     detail: UsdtDepositDetail,
     address: String,
     busy: Boolean,
+    refundError: Int?,
     onAddress: (String) -> Unit,
 ) {
     DepositField(R.string.wallet__activity_tx_id, detail.deposit.sourceTx)
@@ -478,6 +489,9 @@ private fun UsdtDepositTechnicalDetails(
             placeholder = stringResource(R.string.usdt__deposit_refund_address).replace("{network}", network),
             modifier = Modifier.fillMaxWidth().testTag("UsdtRefundAddress")
         )
+        refundError?.let {
+            BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtRefundError"))
+        }
     } else {
         UsdtDepositSummary(detail)
     }

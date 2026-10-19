@@ -97,6 +97,7 @@ import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
+import java.text.DecimalFormatSymbols
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("CyclomaticComplexMethod")
@@ -312,13 +313,15 @@ internal fun UsdtNetworkButton(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.height(28.dp).background(Colors.White.copy(alpha = 0.01f), RoundedCornerShape(12.dp))
+        modifier = Modifier.heightIn(
+            min = 28.dp
+        ).background(Colors.White.copy(alpha = 0.01f), RoundedCornerShape(12.dp))
             .border(1.dp, Colors.White16, RoundedCornerShape(12.dp))
             .clickable(enabled = onChange != null && destinations.size > 1) { onChange?.invoke() }
             .padding(horizontal = 12.dp, vertical = 6.dp).testTag("UsdtNetwork")
     ) {
         Icon(painterResource(R.drawable.usdt_network), null, tint = Colors.Usdt, modifier = Modifier.size(16.dp))
-        CaptionB(destination.label, color = Colors.White64, maxLines = 1, letterSpacing = 0.sp, lineHeight = 13.sp)
+        CaptionB(destination.label, color = Colors.White64, letterSpacing = 0.sp, lineHeight = 13.sp)
     }
 }
 
@@ -333,46 +336,53 @@ private fun UsdtRecipientContent(
 ) {
     val context = LocalContext.current
     var emptyClipboard by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
-        UsdtNetwork(destination, onNetworkClick, destinations)
-        if (!LocalInspectionMode.current) {
-            QrScanningScreen(
-                showsGradientBackground = false,
-                permissionDescription = stringResource(R.string.usdt__camera_permission_description),
-                permissionAccentColor = Colors.Usdt,
-                onScanSuccess = { it.text?.trim()?.let(onRecipientContinue) },
-                modifier = Modifier.weight(1f)
-            )
-        } else { FillHeight() }
-        RectangleButton(
-            label = stringResource(R.string.wallet__payment_request_paste),
-            icon = R.drawable.ic_clipboard_text,
-            iconTint = Colors.Usdt,
-            modifier = Modifier.testTag("UsdtPaste")
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val contentHeight = maxHeight
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).heightIn(min = contentHeight)
         ) {
-            val value = context.getClipboardText()?.trim()
-            if (value.isNullOrBlank()) {
-                emptyClipboard = true
-            } else {
-                emptyClipboard = false
-                onRecipientContinue(value)
+            UsdtNetwork(destination, onNetworkClick, destinations)
+            if (!LocalInspectionMode.current) {
+                QrScanningScreen(
+                    showsGradientBackground = false,
+                    isEmbedded = true,
+                    permissionDescription = stringResource(R.string.usdt__camera_permission_description),
+                    permissionAccentColor = Colors.Usdt,
+                    onScanSuccess = { it.text?.trim()?.let(onRecipientContinue) },
+                    modifier = Modifier.testTag("UsdtScanner")
+                )
+            } else { FillHeight() }
+            RectangleButton(
+                label = stringResource(R.string.wallet__payment_request_paste),
+                icon = R.drawable.ic_clipboard_text,
+                iconTint = Colors.Usdt,
+                modifier = Modifier.testTag("UsdtPaste")
+            ) {
+                val value = context.getClipboardText()?.trim()
+                if (value.isNullOrBlank()) {
+                    emptyClipboard = true
+                } else {
+                    emptyClipboard = false
+                    onRecipientContinue(value)
+                }
             }
+            RectangleButton(
+                label = stringResource(R.string.wallet__recipient_manual),
+                icon = R.drawable.ic_pencil_simple,
+                iconTint = Colors.Usdt,
+                modifier = Modifier.testTag("UsdtManual")
+            ) { onPageChange(UsdtPage.MANUAL) }
+            error?.let {
+                BodyS(
+                    stringResource(it),
+                    color = Colors.Brand,
+                    modifier = Modifier.testTag("UsdtRecipientError")
+                )
+            }
+            if (emptyClipboard) BodyS(stringResource(R.string.wallet__send_clipboard_empty_text), color = Colors.Brand)
+            BodyS(stringResource(R.string.usdt__network_warning), color = Colors.White64)
         }
-        RectangleButton(
-            label = stringResource(R.string.wallet__recipient_manual),
-            icon = R.drawable.ic_pencil_simple,
-            iconTint = Colors.Usdt,
-            modifier = Modifier.testTag("UsdtManual")
-        ) { onPageChange(UsdtPage.MANUAL) }
-        error?.let {
-            BodyS(
-                stringResource(it),
-                color = Colors.Brand,
-                modifier = Modifier.testTag("UsdtRecipientError")
-            )
-        }
-        if (emptyClipboard) BodyS(stringResource(R.string.wallet__send_clipboard_empty_text), color = Colors.Brand)
-        BodyS(stringResource(R.string.usdt__network_warning), color = Colors.White64)
     }
 }
 
@@ -431,7 +441,11 @@ private fun UsdtAmountContent(
         UsdtAmountHeader(amount.ifEmpty { "0" }, modifier = Modifier.testTag("UsdtAmount"))
         VerticalSpacer(32.dp)
         state.error?.let {
-            BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
+            BodyS(
+                state.errorMessage(it),
+                color = Colors.Brand,
+                modifier = Modifier.testTag("UsdtError")
+            )
             VerticalSpacer(16.dp)
         }
         FlowRow(
@@ -495,6 +509,7 @@ private fun UsdtAmountContent(
         BoxWithConstraints(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth()) {
             NumberPad(
                 type = NumberPadType.DECIMAL,
+                decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
                 availableHeight = maxHeight,
                 enabled = !state.busy && amountEditable,
                 onDeleteLongPress = { onAmountChange("") },
@@ -555,7 +570,11 @@ private fun UsdtConfirmation(
                         )
                     }
                     state.error?.let {
-                        BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
+                        BodyS(
+                            state.errorMessage(it),
+                            color = Colors.Brand,
+                            modifier = Modifier.testTag("UsdtError")
+                        )
                     }
                     UsdtReviewDetailsButton(showDetails) { showDetails = !showDetails }
                 }
@@ -754,3 +773,7 @@ private fun Preview2() {
         }
     }
 }
+
+@Composable
+private fun UsdtSendState.errorMessage(resource: Int): String =
+    errorAmount?.let { stringResource(resource, it) } ?: stringResource(resource)

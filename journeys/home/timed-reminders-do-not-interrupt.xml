@@ -1,0 +1,24 @@
+<journey name="timed reminders do not interrupt">
+  <description>
+    Optional reminders must not replace an open scanner or another sheet, and a blocked reminder
+    must remain eligible for a later Home visit. Use an onboarded test wallet with PIN disabled
+    and a reminder that has not appeared in this app session. The USDT intro requires a configured build and an
+    undecided USDT preference. Alternatively, use an unverified backup on a wallet with a positive
+    balance and no backup-reminder dismissal within 24 hours. Grant camera permission beforehand.
+    Do not resolve or dismiss the chosen reminder before testing: displaying it consumes its
+    session queue entry, and dismissing the backup reminder starts a 24-hour cooldown. Relaunch
+    between independent cases without changing the wallet's eligibility. No payment is submitted.
+    Both platforms defer until a later Home visit rather than scheduling a reminder immediately
+    when the scanner closes. Android also resumes Home after a camera permission request or
+    background/foreground cycle; iOS uses its own primary-screen lifecycle and explicit rechecks.
+  </description>
+  <actions>
+    <action>Relaunch the app. As soon as Home appears, open Scan in the bottom bar within two seconds, before the eligible reminder appears.</action>
+    <action>Keep the scanner open for at least ten seconds. Verify it stays visible and no USDT intro, backup reminder or other optional reminder replaces it. If the app-update check is still waiting for the network, wait for that check to finish too.</action>
+    <action>With the scanner still open, background the app and return. Wait at least ten seconds, and verify the scanner remains open without an optional reminder.</action>
+    <action>With the scanner still open, background the app and return again. Close the scanner within one second of returning and stay on Home for at least five seconds. Verify the scanner closes normally and the deferred reminder does not immediately appear.</action>
+    <action>Open Settings, then return to Home without opening another sheet. Verify an eligible reminder appears after the settling delay, proving it was deferred rather than consumed while the scanner was open.</action>
+    <action>Without accepting or declining the reminder, terminate the app. Relaunch and immediately open Receive before the reminder appears. Leave Receive open for at least ten seconds and verify no optional reminder replaces it.</action>
+    <action>Close Receive, visit Settings and return to Home. Verify an eligible reminder can still appear, and resolve it normally.</action>
+  </actions>
+</journey>

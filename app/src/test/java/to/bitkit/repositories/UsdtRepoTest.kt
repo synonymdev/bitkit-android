@@ -17,6 +17,7 @@ import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.services.UsdtService
@@ -36,6 +37,36 @@ class UsdtRepoTest : BaseUnitTest() {
 
     private fun quote(expiresAt: ULong = ULong.MAX_VALUE): UsdtQuote = mock {
         on { this.expiresAt }.thenReturn(expiresAt)
+    }
+
+    @Test
+    fun `quote rate limits pause manual payment retries and refresh until the cooldown expires`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("sender")
+        whenever(wallet.quoteMaxTransfer("recipient", UsdtDestination.ARBITRUM))
+            .thenThrow(UsdtException.RateLimited()).thenReturn(quote())
+        val repo = UsdtRepo(service, testDispatcher, clock)
+        assertTrue(
+            repo.quoteMaximum("recipient", UsdtDestination.ARBITRUM).exceptionOrNull() is UsdtException.RateLimited
+        )
+        now += 59.seconds
+        assertTrue(
+            repo.quote("recipient", "1", UsdtDestination.ARBITRUM).exceptionOrNull() is UsdtException.RateLimited
+        )
+        assertTrue(
+            repo.quoteMaximum("recipient", UsdtDestination.ARBITRUM).exceptionOrNull() is UsdtException.RateLimited
+        )
+        assertTrue(
+            repo.send(quote()) { error("Submission must not start during cooldown") }
+                .exceptionOrNull() is UsdtException.RateLimited
+        )
+        assertTrue(repo.refresh(true, force = true).exceptionOrNull() is UsdtException.RateLimited)
+        verify(wallet, times(1)).quoteMaxTransfer("recipient", UsdtDestination.ARBITRUM)
+        now += 1.seconds
+        assertTrue(repo.quoteMaximum("recipient", UsdtDestination.ARBITRUM).isSuccess)
+        verify(wallet, times(2)).quoteMaxTransfer("recipient", UsdtDestination.ARBITRUM)
     }
 
     @Test

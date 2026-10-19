@@ -8,6 +8,14 @@ import kotlin.test.assertNull
 
 class UsdtDisplayTest {
     @Test
+    fun `amount input uses the local separator and preserves precision and trailing zeros`() {
+        assertEquals("150,50", usdtInputAmount("150.50", Locale.GERMANY))
+        assertEquals("0,000001", usdtInputAmount("0.000001", Locale.GERMANY))
+        assertEquals("150.50", usdtInputAmount("150.50", Locale.US))
+        assertEquals("1,", usdtInputAmount("1.", Locale.GERMANY))
+    }
+
+    @Test
     fun `exact amounts preserve token precision and locale separators`() {
         assertEquals("4.996", usdtExactAmount(4_996_000u, Locale.US))
         assertEquals("1,234567", usdtExactAmount(1_234_567u, Locale.GERMANY))
