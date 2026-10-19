@@ -8282,17 +8282,79 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `Home resume while the scanner is open does not consume the USDT reminder`() = test {
+    fun `closing the scanner shortly after Home resumes keeps the USDT reminder queued`() = test {
         val sheet = useRealTimedSheets()
         sut.showScannerSheet()
         runCurrent()
         sut.checkTimedSheets()
-        advanceTimeBy(2100)
+        advanceTimeBy(1000)
         runCurrent()
 
         assertTrue(sut.currentSheet.value is Sheet.QrScanner)
         verify(sheet, never()).shouldShow()
         verify(sheet, never()).onShown()
+
+        sut.hideSheet()
+        advanceTimeBy(2100)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).shouldShow()
+        verify(sheet, never()).onShown()
+
+        sut.checkTimedSheets()
+        advanceTimeBy(2100)
+        runCurrent()
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
+    }
+
+    @Test
+    fun `scan processing blocks a pending reminder until a later Home visit`() = test {
+        val sheet = useRealTimedSheets()
+        val bolt11 = "lnbcrt1slowreminderscan"
+        val finishScan = CompletableDeferred<Unit>()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+            finishScan.await()
+            Scanner.Lightning(lightningInvoice(bolt11, 500u))
+        }
+
+        sut.checkTimedSheets()
+        sut.onScanResult(bolt11)
+        advanceTimeBy(3000)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).shouldShow()
+        verify(sheet, never()).onShown()
+
+        finishScan.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+
+        sut.hideSheet()
+        runCurrent()
+        sut.checkTimedSheets()
+        advanceTimeBy(2100)
+        runCurrent()
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
+    }
+
+    @Test
+    fun `queued locked scan blocks timed sheet presentation`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        runCurrent()
+        val canShowSheet = argumentCaptor<() -> Boolean>()
+        sut.checkTimedSheets()
+        verify(timedSheetManager).onHomeScreenEntered(canShowSheet.capture(), any())
+        assertTrue(canShowSheet.firstValue())
+
+        sut.onScanResult("lnbcrt1queuedreminderscan")
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        assertFalse(canShowSheet.firstValue())
     }
 
     @Test

@@ -20,6 +20,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.TimedSheetType
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -38,7 +39,7 @@ class TimedSheetManagerTest : BaseUnitTest() {
         canShowSheet = { canShowSheet },
         showSheet = {
             shownSheets.add(it)
-            sut.onSheetShown()
+            sut.cancelPendingCheck()
         },
     )
 
@@ -205,11 +206,11 @@ class TimedSheetManagerTest : BaseUnitTest() {
 
         enterHome()
         testScope.advanceTimeBy(1000)
-        sut.onSheetShown()
+        sut.cancelPendingCheck()
         testScope.advanceTimeBy(3000)
 
         assertNull(sut.currentSheet.value)
-        assertEquals(emptyList(), shownSheets)
+        assertTrue(shownSheets.isEmpty())
         verify(sheet, never()).shouldShow()
         verify(sheet, never()).onShown()
         verify(sheet, never()).onDismissed()
@@ -220,7 +221,7 @@ class TimedSheetManagerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resuming Home with another sheet open keeps every reminder queued`() = test {
+    fun `closing a sheet shortly after Home resumes keeps every reminder queued`() = test {
         for (type in TimedSheetType.entries) {
             val sheet = mock<TimedSheetItem> {
                 on { this.type } doReturn type
@@ -231,7 +232,7 @@ class TimedSheetManagerTest : BaseUnitTest() {
             canShowSheet = false
 
             enterHome()
-            testScope.advanceTimeBy(2100)
+            testScope.advanceTimeBy(1000)
             assertNull(sut.currentSheet.value)
             verify(sheet, never()).shouldShow()
             verify(sheet, never()).onShown()
@@ -267,7 +268,7 @@ class TimedSheetManagerTest : BaseUnitTest() {
         testScope.runCurrent()
 
         assertNull(sut.currentSheet.value)
-        assertEquals(emptyList(), shownSheets)
+        assertTrue(shownSheets.isEmpty())
         verify(sheet, never()).onShown()
 
         canShowSheet = true
@@ -290,12 +291,12 @@ class TimedSheetManagerTest : BaseUnitTest() {
 
         enterHome()
         testScope.advanceTimeBy(2100)
-        sut.onSheetShown()
+        sut.cancelPendingCheck()
         finishCheck.complete(true)
         testScope.runCurrent()
 
         assertNull(sut.currentSheet.value)
-        assertEquals(emptyList(), shownSheets)
+        assertTrue(shownSheets.isEmpty())
         verify(sheet, never()).onShown()
 
         enterHome()
@@ -322,6 +323,6 @@ class TimedSheetManagerTest : BaseUnitTest() {
         testScope.advanceTimeBy(3100)
 
         assertEquals(listOf(TimedSheetType.USDT), shownSheets)
-        assertEquals(true, finishedShowing.isCompleted)
+        assertTrue(finishedShowing.isCompleted)
     }
 }

@@ -448,7 +448,7 @@ class AppViewModel @Inject constructor(
         }
         pendingUsdtAction = onEnabled
         pendingUsdtCancel = onCancel
-        timedSheetManager.onSheetShown()
+        timedSheetManager.cancelPendingCheck()
         showUsdtEnablePrompt = true
     }
 
@@ -6595,7 +6595,7 @@ class AppViewModel @Inject constructor(
         }
 
         if (!shouldShow()) return@launch
-        timedSheetManager.onSheetShown()
+        timedSheetManager.cancelPendingCheck()
         _transactionSheet.update { details }
     }
 
@@ -6703,7 +6703,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun showSheet(sheetType: Sheet) {
-        timedSheetManager.onSheetShown()
+        timedSheetManager.cancelPendingCheck()
         if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
         val previousJob = sheetTransitionJob
         transitionSheet = sheetType
@@ -7838,6 +7838,7 @@ class AppViewModel @Inject constructor(
         paymentRequestSheetTransitionJob?.isActive != true &&
         _transactionSheet.value == NewTransactionSheetDetails.EMPTY &&
         !showUsdtEnablePrompt &&
+        !isScanPendingOrActive() &&
         !_isCriticalUpdateRequired.value
 
     fun onAppResumed() {

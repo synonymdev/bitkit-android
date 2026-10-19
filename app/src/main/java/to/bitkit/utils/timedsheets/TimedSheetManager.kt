@@ -42,8 +42,10 @@ class TimedSheetManager(private val scope: CoroutineScope) {
         canShowSheet: () -> Boolean,
         showSheet: (TimedSheetType) -> Unit,
     ) {
+        cancelPendingCheck()
+        if (!canShowSheet()) return
+
         Logger.debug("User entered home screen, starting timer", context = TAG)
-        checkJob?.cancel()
         checkJob = scope.launch {
             delay(CHECK_DELAY)
             checkAndShowNextSheet(canShowSheet, showSheet)
@@ -55,9 +57,7 @@ class TimedSheetManager(private val scope: CoroutineScope) {
         cancelPendingCheck()
     }
 
-    fun onSheetShown() = cancelPendingCheck()
-
-    private fun cancelPendingCheck() {
+    fun cancelPendingCheck() {
         checkJob?.cancel()
         checkJob = null
     }
@@ -80,7 +80,7 @@ class TimedSheetManager(private val scope: CoroutineScope) {
     ) {
         if (!canShowSheet()) return
 
-        Logger.debug("Registered sheets: ${registeredSheets.map { it.type.name }}")
+        Logger.debug("Registered sheets: ${registeredSheets.map { it.type.name }}", context = TAG)
         for (sheet in registeredSheets.toList()) {
             val shouldShow = sheet.shouldShow()
             currentCoroutineContext().ensureActive()
